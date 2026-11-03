@@ -1,6 +1,8 @@
 # Auto-generated client for Appwrite v0.9.3
 # Source: https://api.apis.guru/v2/specs/appwrite.io/server/0.9.3/openapi.json
-# Auth: --token flag or $env.APPWRITE_TOKEN
+# Auth (JWT): --token-jwt flag or $env.APPWRITE_JWT_TOKEN
+# Auth (Project): --token-project flag or $env.APPWRITE_PROJECT_TOKEN
+# Auth (Key): --token-key flag or $env.APPWRITE_KEY_TOKEN
 
 const BASE_URL = "https://appwrite.io/v1"
 
@@ -12,10 +14,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-appwrite-jwt" => { {scheme: $scheme, headers: {X-Appwrite-JWT: $token_val}, query: "", location: "header"} }
-    "x-appwrite-key" => { {scheme: $scheme, headers: {X-Appwrite-Key: $token_val}, query: "", location: "header"} }
-    "x-appwrite-locale" => { {scheme: $scheme, headers: {X-Appwrite-Locale: $token_val}, query: "", location: "header"} }
-    "x-appwrite-project" => { {scheme: $scheme, headers: {X-Appwrite-Project: $token_val}, query: "", location: "header"} }
+    "x-appwrite-jwt" => { {scheme: $scheme, headers: {"X-Appwrite-JWT": $token_val}, query: "", location: "header"} }
+    "x-appwrite-key" => { {scheme: $scheme, headers: {"X-Appwrite-Key": $token_val}, query: "", location: "header"} }
+    "x-appwrite-locale" => { {scheme: $scheme, headers: {"X-Appwrite-Locale": $token_val}, query: "", location: "header"} }
+    "x-appwrite-project" => { {scheme: $scheme, headers: {"X-Appwrite-Project": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -162,7 +164,7 @@ def auth-scheme-completer [] { ["x-appwrite-jwt" "x-appwrite-key" "x-appwrite-lo
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-jwt" "token-project" "token-key"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -867,10 +869,11 @@ export def "avatars-get-favicon" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # Website URL which you want to fetch the favicon from. (format: url)
+  --url: string # Website URL which you want to fetch the favicon from. (required, format: url)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/avatars/favicon" $qp $auth.query)
   let accept_val = "application/json"
@@ -945,12 +948,13 @@ export def "avatars-get-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # Image URL which you want to crop. (format: url)
+  --url: string # Image URL which you want to crop. (required, format: url)
   --width: int # Resize preview image width, Pass an integer between 0 to 2000. (format: int32, default: 400)
   --height: int # Resize preview image height, Pass an integer between 0 to 2000. (format: int32, default: 400)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/avatars/image" $qp $auth.query)
   let accept_val = "application/json"
@@ -984,11 +988,11 @@ export def "avatars-get-initials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # Full Name. When empty, current user name or email will be used. Max length: 128 chars. (default: )
+  --name: string # Full Name. When empty, current user name or email will be used. Max length: 128 chars. (default: "")
   --width: int # Image width. Pass an integer between 0 to 2000. Defaults to 100. (format: int32, default: 500)
   --height: int # Image height. Pass an integer between 0 to 2000. Defaults to 100. (format: int32, default: 500)
-  --color: string # Changes text color. By default a random color will be picked and stay will persistent to the given name. (default: )
-  --background: string # Changes background color. By default a random color will be picked and stay will persistent to the given name. (default: )
+  --color: string # Changes text color. By default a random color will be picked and stay will persistent to the given name. (default: "")
+  --background: string # Changes background color. By default a random color will be picked and stay will persistent to the given name. (default: "")
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -1025,13 +1029,14 @@ export def "avatars-get-qr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --text: string # Plain text to be converted to QR code image.
+  --text: string # Plain text to be converted to QR code image. (required)
   --size: int # QR code size. Pass an integer between 0 to 1000. Defaults to 400. (format: int32, default: 400)
   --margin: int # Margin from edge. Pass an integer between 0 to 10. Defaults to 1. (format: int32, default: 1)
   --download: oneof<nothing, bool> # Return resulting image with 'Content-Disposition: attachment ' headers for the browser to start downloading it. Pass 0 for no header, or 1 for otherwise. Default value is set to 0. (default: false)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "margin" $margin "scalar") (serialize-qp "download" $download "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/avatars/qr" $qp $auth.query)
   let accept_val = "application/json"
@@ -1064,7 +1069,7 @@ export def "database-list-collections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search: string # Search term to filter your list results. Max length: 256 chars. (default: )
+  --search: string # Search term to filter your list results. Max length: 256 chars. (default: "")
   --limit: int # Results limit value. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
@@ -1264,10 +1269,10 @@ export def "database-list-documents" [
   --filters: list<string> # Array of filter strings. Each filter is constructed from a key name, comparison operator (=, !=, >, <, <=, >=) and a value. You can also use a dot (.) separator in attribute names to filter by child document attributes. Examples: 'name=John Doe' or 'category.$id>=5bed2d152c362'. (default: [])
   --limit: int # Maximum number of documents to return in response. Use this value to manage pagination. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
   --offset: int # Offset value. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
-  --order-field: string # Document field that results will be sorted by. (default: )
+  --order-field: string # Document field that results will be sorted by. (default: "")
   --order-type: string # Order direction. Possible values are DESC for descending order, or ASC for ascending order. (default: ASC)
   --order-cast: string # Order field type casting. Possible values are int, string, date, time or datetime. The database will attempt to cast the order field to the value you pass here. The default value is a string. (default: string)
-  --search: string # Search query. Enter any free text search. The database will try to find a match against all document attributes and children. Max length: 256 chars. (default: )
+  --search: string # Search query. Enter any free text search. The database will try to find a match against all document attributes and children. Max length: 256 chars. (default: "")
 ]: nothing -> record<documents: table<_collection: string, _id: string, _permissions: record>, sum: int> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -1473,7 +1478,7 @@ export def "functions-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search: string # Search term to filter your list results. Max length: 256 chars. (default: )
+  --search: string # Search term to filter your list results. Max length: 256 chars. (default: "")
   --limit: int # Results limit value. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
@@ -1675,7 +1680,7 @@ export def "functions-list-executions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search: string # Search term to filter your list results. Max length: 256 chars. (default: )
+  --search: string # Search term to filter your list results. Max length: 256 chars. (default: "")
   --limit: int # Results limit value. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
@@ -1836,7 +1841,7 @@ export def "functions-list-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search: string # Search term to filter your list results. Max length: 256 chars. (default: )
+  --search: string # Search term to filter your list results. Max length: 256 chars. (default: "")
   --limit: int # Results limit value. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
@@ -1889,8 +1894,8 @@ export def "functions-create-tag" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2649,7 +2654,7 @@ export def "storage-list-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search: string # Search term to filter your list results. Max length: 256 chars. (default: )
+  --search: string # Search term to filter your list results. Max length: 256 chars. (default: "")
   --limit: int # Results limit value. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
@@ -2701,8 +2706,8 @@ export def "storage-create-file" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2891,12 +2896,12 @@ export def "storage-get-file-preview" [
   --gravity: string # Image crop gravity. Can be one of center,top-left,top,top-right,left,right,bottom-left,bottom,bottom-right (default: center)
   --quality: int # Preview image quality. Pass an integer between 0 to 100. Defaults to 100. (format: int32, default: 100)
   --border-width: int # Preview image border in pixels. Pass an integer between 0 to 100. Defaults to 0. (format: int32, default: 0)
-  --border-color: string # Preview image border color. Use a valid HEX color, no # is needed for prefix. (default: )
+  --border-color: string # Preview image border color. Use a valid HEX color, no # is needed for prefix. (default: "")
   --border-radius: int # Preview image border radius in pixels. Pass an integer between 0 to 4000. (format: int32, default: 0)
   --opacity: float # Preview image opacity. Only works with images having an alpha channel (like png). Pass a number between 0 to 1. (format: float, default: 1)
   --rotation: int # Preview image rotation in degrees. Pass an integer between 0 and 360. (format: int32, default: 0)
-  --background: string # Preview image background color. Only works with transparent images (png). Use a valid HEX color, no # is needed for prefix. (default: )
-  --output: string # Output format type (jpeg, jpg, png, gif and webp). (default: )
+  --background: string # Preview image background color. Only works with transparent images (png). Use a valid HEX color, no # is needed for prefix. (default: "")
+  --output: string # Output format type (jpeg, jpg, png, gif and webp). (default: "")
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -2971,7 +2976,7 @@ export def "teams-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search: string # Search term to filter your list results. Max length: 256 chars. (default: )
+  --search: string # Search term to filter your list results. Max length: 256 chars. (default: "")
   --limit: int # Results limit value. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
@@ -3167,7 +3172,7 @@ export def "teams-get-memberships" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search: string # Search term to filter your list results. Max length: 256 chars. (default: )
+  --search: string # Search term to filter your list results. Max length: 256 chars. (default: "")
   --limit: int # Results limit value. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
@@ -3376,7 +3381,7 @@ export def "users-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search: string # Search term to filter your list results. Max length: 256 chars. (default: )
+  --search: string # Search term to filter your list results. Max length: 256 chars. (default: "")
   --limit: int # Results limit value. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
@@ -3799,6 +3804,7 @@ export def "users-update-verification" [
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/verification") $auth.query)
   let req_body = {"emailVerification": $email_verification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "emailVerification") == null) { error make --unspanned { msg: "required body field 'emailVerification' missing: pass --email-verification or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

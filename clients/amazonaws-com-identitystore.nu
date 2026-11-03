@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -160,14 +160,15 @@ export def "create-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  identity_store_id: any
-  --display-name: any
-  --description: any
-]: any -> record<GroupId: record, IdentityStoreId: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  identity_store_id: string # The globally unique identifier for the identity store.
+  --display-name: string # A string containing the name of the group. This value is commonly displayed when the group is referenced. "Administrator" and "AWSAdministrators" are reserved names and can't be used for users or groups. (format: password)
+  --description: string # A string containing the description of the group. (format: password)
+]: any -> record<GroupId: string, IdentityStoreId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.CreateGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "DisplayName": $display_name, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -193,6 +194,7 @@ export def "create-group" [
 #
 # POST /
 # operationId: CreateGroupMembership
+# --MemberId shape: {UserId?: string}
 export def "create-group-membership" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -210,14 +212,15 @@ export def "create-group-membership" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  identity_store_id: any
-  group_id: any
-  member_id: any
-]: any -> record<MembershipId: record, IdentityStoreId: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  identity_store_id: string # The globally unique identifier for the identity store.
+  group_id: string # The identifier for a group in the identity store.
+  member_id: record # An object containing the identifier of a group member. — shape: {UserId?: string}
+]: any -> record<MembershipId: string, IdentityStoreId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.CreateGroupMembership")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "GroupId": $group_id, "MemberId": $member_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -243,6 +246,10 @@ export def "create-group-membership" [
 #
 # POST /
 # operationId: CreateUser
+# --Name shape: {Formatted?: string, FamilyName?: string, GivenName?: string, MiddleName?: string, HonorificPrefix?: string, HonorificSuffix?: string}
+# --Emails item shape: {Value?: string, Type?: string, Primary?: bool}
+# --Addresses item shape: {StreetAddress?: string, Locality?: string, Region?: string, PostalCode?: string, Country?: string, Formatted?: string, Type?: string, Primary?: bool}
+# --PhoneNumbers item shape: {Value?: string, Type?: string, Primary?: bool}
 export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -260,25 +267,26 @@ export def "create-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  identity_store_id: any
-  --user-name: any
-  --name: any
-  --display-name: any
-  --nick-name: any
-  --profile-url: any
-  --emails: any
-  --addresses: any
-  --phone-numbers: any
-  --user-type: any
-  --title: any
-  --preferred-language: any
-  --locale: any
-  --timezone: any
-]: any -> record<UserId: record, IdentityStoreId: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  identity_store_id: string # The globally unique identifier for the identity store.
+  --user-name: string # A unique string used to identify the user. The length limit is 128 characters. This value can consist of letters, accented characters, symbols, numbers, and punctuation. This value is specified at the time the user is created and stored as an attribute of the user object in the identity store. "Administrator" and "AWSAdministrators" are reserved names and can't be used for users or groups. (format: password)
+  --name: record # The full name of the user. — shape: {Formatted?: string, FamilyName?: string, GivenName?: string, MiddleName?: string, HonorificPrefix?: string, HonorificSuffix?: string}
+  --display-name: string # A string containing the name of the user. This value is typically formatted for display when the user is referenced. For example, "John Doe." (format: password)
+  --nick-name: string # A string containing an alternate name for the user. (format: password)
+  --profile-url: string # A string containing a URL that might be associated with the user. (format: password)
+  --emails: list # A list of Email objects containing email addresses associated with the user. — item shape: {Value?: string, Type?: string, Primary?: bool}
+  --addresses: list # A list of Address objects containing addresses associated with the user. — item shape: {StreetAddress?: string, Locality?: string, Region?: string, PostalCode?: string, Country?: string, Formatted?: string, Type?: string, Primary?: bool}
+  --phone-numbers: list # A list of PhoneNumber objects containing phone numbers associated with the user. — item shape: {Value?: string, Type?: string, Primary?: bool}
+  --user-type: string # A string indicating the type of user. Possible values are left unspecified. The value can vary based on your specific use case. (format: password)
+  --title: string # A string containing the title of the user. Possible values are left unspecified. The value can vary based on your specific use case. (format: password)
+  --preferred-language: string # A string containing the preferred language of the user. For example, "American English" or "en-us." (format: password)
+  --locale: string # A string containing the geographical region or location of the user. (format: password)
+  --timezone: string # A string containing the time zone of the user. (format: password)
+]: any -> record<UserId: string, IdentityStoreId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.CreateUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "UserName": $user_name, "Name": $name, "DisplayName": $display_name, "NickName": $nick_name, "ProfileUrl": $profile_url, "Emails": $emails, "Addresses": $addresses, "PhoneNumbers": $phone_numbers, "UserType": $user_type, "Title": $title, "PreferredLanguage": $preferred_language, "Locale": $locale, "Timezone": $timezone} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -321,13 +329,14 @@ export def "delete-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  identity_store_id: any
-  group_id: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  identity_store_id: string # The globally unique identifier for the identity store.
+  group_id: string # The identifier for a group in the identity store.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.DeleteGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "GroupId": $group_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -370,13 +379,14 @@ export def "delete-group-membership" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  identity_store_id: any
-  membership_id: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  identity_store_id: string # The globally unique identifier for the identity store.
+  membership_id: string # The identifier for a GroupMembership in an identity store.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.DeleteGroupMembership")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "MembershipId": $membership_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -419,13 +429,14 @@ export def "delete-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  identity_store_id: any
-  user_id: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  identity_store_id: string # The globally unique identifier for the identity store.
+  user_id: string # The identifier for a user in the identity store.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.DeleteUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "UserId": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -468,13 +479,14 @@ export def "describe-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  identity_store_id: any
-  group_id: any
-]: any -> record<GroupId: record, DisplayName: record, ExternalIds: record, Description: record, IdentityStoreId: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  identity_store_id: string # The globally unique identifier for the identity store, such as d-1234567890. In this example, d- is a fixed prefix, and 1234567890 is a randomly generated string that contains numbers and lower case letters. This value is generated at the time that a new identity store is created.
+  group_id: string # The identifier for a group in the identity store.
+]: any -> record<GroupId: string, DisplayName: string, ExternalIds: table<Issuer: string, Id: string>, Description: string, IdentityStoreId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.DescribeGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "GroupId": $group_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -517,13 +529,14 @@ export def "describe-group-membership" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  identity_store_id: any
-  membership_id: any
-]: any -> record<IdentityStoreId: record, MembershipId: record, GroupId: record, MemberId: record<UserId: record>> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  identity_store_id: string # The globally unique identifier for the identity store.
+  membership_id: string # The identifier for a GroupMembership in an identity store.
+]: any -> record<IdentityStoreId: string, MembershipId: string, GroupId: string, MemberId: record<UserId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.DescribeGroupMembership")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "MembershipId": $membership_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -566,13 +579,14 @@ export def "describe-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  identity_store_id: any
-  user_id: any
-]: any -> record<UserName: record, UserId: record, ExternalIds: record, Name: record<Formatted: record, FamilyName: record, GivenName: record, MiddleName: record, HonorificPrefix: record, HonorificSuffix: record>, DisplayName: record, NickName: record, ProfileUrl: record, Emails: record, Addresses: record, PhoneNumbers: record, UserType: record, Title: record, PreferredLanguage: record, Locale: record, Timezone: record, IdentityStoreId: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  identity_store_id: string # The globally unique identifier for the identity store, such as d-1234567890. In this example, d- is a fixed prefix, and 1234567890 is a randomly generated string that contains numbers and lower case letters. This value is generated at the time that a new identity store is created.
+  user_id: string # The identifier for a user in the identity store.
+]: any -> record<UserName: string, UserId: string, ExternalIds: table<Issuer: string, Id: string>, Name: record<Formatted: string, FamilyName: string, GivenName: string, MiddleName: string, HonorificPrefix: string, HonorificSuffix: string>, DisplayName: string, NickName: string, ProfileUrl: string, Emails: table<Value: string, Type: string, Primary: bool>, Addresses: table<StreetAddress: string, Locality: string, Region: string, PostalCode: string, Country: string, Formatted: string, Type: string, Primary: bool>, PhoneNumbers: table<Value: string, Type: string, Primary: bool>, UserType: string, Title: string, PreferredLanguage: string, Locale: string, Timezone: string, IdentityStoreId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.DescribeUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "UserId": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -598,6 +612,7 @@ export def "describe-user" [
 #
 # POST /
 # operationId: GetGroupId
+# --AlternateIdentifier shape: {ExternalId?: record, UniqueAttribute?: record}
 export def "get-group-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -615,13 +630,14 @@ export def "get-group-id" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  identity_store_id: any
-  alternate_identifier: any
-]: any -> record<GroupId: record, IdentityStoreId: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  identity_store_id: string # The globally unique identifier for the identity store.
+  alternate_identifier: record # A unique identifier for a user or group that is not the primary identifier. This value can be an identifier from an external identity provider (IdP) that is associated with the user, the group, or a unique attribute. — shape: {ExternalId?: record, UniqueAttribute?: record}
+]: any -> record<GroupId: string, IdentityStoreId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.GetGroupId")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "AlternateIdentifier": $alternate_identifier} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -647,6 +663,7 @@ export def "get-group-id" [
 #
 # POST /
 # operationId: GetGroupMembershipId
+# --MemberId shape: {UserId?: string}
 export def "get-group-membership-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -664,14 +681,15 @@ export def "get-group-membership-id" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  identity_store_id: any
-  group_id: any
-  member_id: any
-]: any -> record<MembershipId: record, IdentityStoreId: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  identity_store_id: string # The globally unique identifier for the identity store.
+  group_id: string # The identifier for a group in the identity store.
+  member_id: record # An object containing the identifier of a group member. — shape: {UserId?: string}
+]: any -> record<MembershipId: string, IdentityStoreId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.GetGroupMembershipId")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "GroupId": $group_id, "MemberId": $member_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -697,6 +715,7 @@ export def "get-group-membership-id" [
 #
 # POST /
 # operationId: GetUserId
+# --AlternateIdentifier shape: {ExternalId?: record, UniqueAttribute?: record}
 export def "get-user-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -714,13 +733,14 @@ export def "get-user-id" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  identity_store_id: any
-  alternate_identifier: any
-]: any -> record<UserId: record, IdentityStoreId: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  identity_store_id: string # The globally unique identifier for the identity store.
+  alternate_identifier: record # A unique identifier for a user or group that is not the primary identifier. This value can be an identifier from an external identity provider (IdP) that is associated with the user, the group, or a unique attribute. — shape: {ExternalId?: record, UniqueAttribute?: record}
+]: any -> record<UserId: string, IdentityStoreId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.GetUserId")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "AlternateIdentifier": $alternate_identifier} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -746,6 +766,7 @@ export def "get-user-id" [
 #
 # POST /
 # operationId: IsMemberInGroups
+# --MemberId shape: {UserId?: string}
 export def "is-member-in-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -763,14 +784,15 @@ export def "is-member-in-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  identity_store_id: any
-  member_id: any
-  group_ids: any
-]: any -> record<Results: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  identity_store_id: string # The globally unique identifier for the identity store.
+  member_id: record # An object containing the identifier of a group member. — shape: {UserId?: string}
+  group_ids: list<string> # A list of identifiers for groups in the identity store.
+]: any -> record<Results: table<GroupId: string, MemberId: record, MembershipExists: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.IsMemberInGroups")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "MemberId": $member_id, "GroupIds": $group_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -815,15 +837,16 @@ export def "list-group-memberships" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  identity_store_id: any
-  group_id: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<GroupMemberships: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  identity_store_id: string # The globally unique identifier for the identity store.
+  group_id: string # The identifier for a group in the identity store.
+  --max-results-body: int # The maximum number of results to be returned per request. This parameter is used in all List requests to specify how many results to return in one page. (body field)
+  --next-token-body: string # The pagination token used for the ListUsers, ListGroups and ListGroupMemberships API operations. This value is generated by the identity store service. It is returned in the API response if the total results are more than the size of one page. This token is also returned when it is used in the API request to search for the next page. (body field)
+]: any -> record<GroupMemberships: table<IdentityStoreId: string, MembershipId: string, GroupId: string, MemberId: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.ListGroupMemberships")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "GroupId": $group_id, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -850,6 +873,7 @@ export def "list-group-memberships" [
 #
 # POST /
 # operationId: ListGroupMembershipsForMember
+# --MemberId shape: {UserId?: string}
 export def "list-group-memberships-for-member" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -869,15 +893,16 @@ export def "list-group-memberships-for-member" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  identity_store_id: any
-  member_id: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<GroupMemberships: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  identity_store_id: string # The globally unique identifier for the identity store.
+  member_id: record # An object containing the identifier of a group member. — shape: {UserId?: string}
+  --max-results-body: int # The maximum number of results to be returned per request. This parameter is used in the ListUsers and ListGroups requests to specify how many results to return in one page. The length limit is 50 characters. (body field)
+  --next-token-body: string # The pagination token used for the ListUsers, ListGroups, and ListGroupMemberships API operations. This value is generated by the identity store service. It is returned in the API response if the total results are more than the size of one page. This token is also returned when it is used in the API request to search for the next page. (body field)
+]: any -> record<GroupMemberships: table<IdentityStoreId: string, MembershipId: string, GroupId: string, MemberId: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.ListGroupMembershipsForMember")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "MemberId": $member_id, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -904,6 +929,7 @@ export def "list-group-memberships-for-member" [
 #
 # POST /
 # operationId: ListGroups
+# --Filters item shape: {AttributePath: string, AttributeValue: string}
 export def "list-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -923,15 +949,16 @@ export def "list-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  identity_store_id: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-  --filters: any
-]: any -> record<Groups: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  identity_store_id: string # The globally unique identifier for the identity store, such as d-1234567890. In this example, d- is a fixed prefix, and 1234567890 is a randomly generated string that contains numbers and lower case letters. This value is generated at the time that a new identity store is created.
+  --max-results-body: int # The maximum number of results to be returned per request. This parameter is used in the ListUsers and ListGroups requests to specify how many results to return in one page. The length limit is 50 characters. (body field)
+  --next-token-body: string # The pagination token used for the ListUsers and ListGroups API operations. This value is generated by the identity store service. It is returned in the API response if the total results are more than the size of one page. This token is also returned when it is used in the API request to search for the next page. (body field)
+  --filters: list # A list of Filter objects, which is used in the ListUsers and ListGroups requests.Using filters with ListGroups API is deprecated, please use GetGroupId API instead. — item shape: {AttributePath: string, AttributeValue: string}
+]: any -> record<Groups: table<GroupId: string, DisplayName: string, ExternalIds: list, Description: string, IdentityStoreId: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.ListGroups")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "MaxResults": $max_results_body, "NextToken": $next_token_body, "Filters": $filters} | compact
@@ -958,6 +985,7 @@ export def "list-groups" [
 #
 # POST /
 # operationId: ListUsers
+# --Filters item shape: {AttributePath: string, AttributeValue: string}
 export def "list-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -977,15 +1005,16 @@ export def "list-users" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  identity_store_id: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-  --filters: any
-]: any -> record<Users: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  identity_store_id: string # The globally unique identifier for the identity store, such as d-1234567890. In this example, d- is a fixed prefix, and 1234567890 is a randomly generated string that contains numbers and lower case letters. This value is generated at the time that a new identity store is created.
+  --max-results-body: int # The maximum number of results to be returned per request. This parameter is used in the ListUsers and ListGroups requests to specify how many results to return in one page. The length limit is 50 characters. (body field)
+  --next-token-body: string # The pagination token used for the ListUsers and ListGroups API operations. This value is generated by the identity store service. It is returned in the API response if the total results are more than the size of one page. This token is also returned when it is used in the API request to search for the next page. (body field)
+  --filters: list # A list of Filter objects, which is used in the ListUsers and ListGroups requests. Using filters with ListUsers API is deprecated, please use GetGroupId API instead. — item shape: {AttributePath: string, AttributeValue: string}
+]: any -> record<Users: table<UserName: string, UserId: string, ExternalIds: list, Name: record, DisplayName: string, NickName: string, ProfileUrl: string, Emails: list, Addresses: list, PhoneNumbers: list, UserType: string, Title: string, PreferredLanguage: string, Locale: string, Timezone: string, IdentityStoreId: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.ListUsers")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "MaxResults": $max_results_body, "NextToken": $next_token_body, "Filters": $filters} | compact
@@ -1012,6 +1041,7 @@ export def "list-users" [
 #
 # POST /
 # operationId: UpdateGroup
+# --Operations item shape: {AttributePath: string, AttributeValue?: record}
 export def "update-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1029,14 +1059,15 @@ export def "update-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  identity_store_id: any
-  group_id: any
-  operations: any
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  identity_store_id: string # The globally unique identifier for the identity store.
+  group_id: string # The identifier for a group in the identity store.
+  operations: list # A list of AttributeOperation objects to apply to the requested group. These operations might add, replace, or remove an attribute. — item shape: {AttributePath: string, AttributeValue?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.UpdateGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "GroupId": $group_id, "Operations": $operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1062,6 +1093,7 @@ export def "update-group" [
 #
 # POST /
 # operationId: UpdateUser
+# --Operations item shape: {AttributePath: string, AttributeValue?: record}
 export def "update-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1079,14 +1111,15 @@ export def "update-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  identity_store_id: any
-  user_id: any
-  operations: any
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  identity_store_id: string # The globally unique identifier for the identity store.
+  user_id: string # The identifier for a user in the identity store.
+  operations: list # A list of AttributeOperation objects to apply to the requested user. These operations might add, replace, or remove an attribute. — item shape: {AttributePath: string, AttributeValue?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIdentityStore.UpdateUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityStoreId": $identity_store_id, "UserId": $user_id, "Operations": $operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

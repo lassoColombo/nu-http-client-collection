@@ -1,4 +1,4 @@
-# Auto-generated client for Google Slides API vv1
+# Auto-generated client for Google Slides API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/slides/v1/openapi.json
 # Auth: --token flag or $env.GOOGLE_SLIDES_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -150,8 +140,8 @@ export def commands []: nothing -> table {
 # --slides item shape: {layoutProperties?: record, masterProperties?: record, notesProperties?: record, objectId?: string, pageElements?: list, pageProperties?: record, pageType?: "SLIDE"|"MASTER"|"LAYOUT"|"NOTES"|"NOTES_MASTER", revisionId?: string, slideProperties?: record}
 export def "slides-presentations-create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -180,7 +170,7 @@ export def "slides-presentations-create" [
   --title: string # The title of the presentation.
 ]: any -> record<layouts: table<layoutProperties: record, masterProperties: record, notesProperties: record, objectId: string, pageElements: list, pageProperties: record, pageType: string, revisionId: string, slideProperties: record>, locale: string, masters: table<layoutProperties: record, masterProperties: record, notesProperties: record, objectId: string, pageElements: list, pageProperties: record, pageType: string, revisionId: string, slideProperties: record>, notesMaster: record<layoutProperties: record<displayName: string, masterObjectId: string, name: string>, masterProperties: record<displayName: string>, notesProperties: record<speakerNotesObjectId: string>, objectId: string, pageElements: list<record>, pageProperties: record<colorScheme: record, pageBackgroundFill: record>, pageType: string, revisionId: string, slideProperties: record<isSkipped: bool, layoutObjectId: string, masterObjectId: string, notesPage: any>>, pageSize: record<height: record<magnitude: float, unit: string>, width: record<magnitude: float, unit: string>>, presentationId: string, revisionId: string, slides: table<layoutProperties: record, masterProperties: record, notesProperties: record, objectId: string, pageElements: list, pageProperties: record, pageType: string, revisionId: string, slideProperties: record>, title: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SLIDES_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SLIDES_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/presentations" $qp $auth.query)
@@ -209,8 +199,8 @@ export def "slides-presentations-create" [
 export def "slides-presentations-get" [
   presentation_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -229,7 +219,7 @@ export def "slides-presentations-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<layouts: table<layoutProperties: record, masterProperties: record, notesProperties: record, objectId: string, pageElements: list, pageProperties: record, pageType: string, revisionId: string, slideProperties: record>, locale: string, masters: table<layoutProperties: record, masterProperties: record, notesProperties: record, objectId: string, pageElements: list, pageProperties: record, pageType: string, revisionId: string, slideProperties: record>, notesMaster: record<layoutProperties: record<displayName: string, masterObjectId: string, name: string>, masterProperties: record<displayName: string>, notesProperties: record<speakerNotesObjectId: string>, objectId: string, pageElements: list<record>, pageProperties: record<colorScheme: record, pageBackgroundFill: record>, pageType: string, revisionId: string, slideProperties: record<isSkipped: bool, layoutObjectId: string, masterObjectId: string, notesPage: any>>, pageSize: record<height: record<magnitude: float, unit: string>, width: record<magnitude: float, unit: string>>, presentationId: string, revisionId: string, slides: table<layoutProperties: record, masterProperties: record, notesProperties: record, objectId: string, pageElements: list, pageProperties: record, pageType: string, revisionId: string, slideProperties: record>, title: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SLIDES_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SLIDES_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($presentation_id | is-empty) { error make --unspanned { msg: "path parameter 'presentationId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -258,8 +248,8 @@ export def "slides-presentations-pages-get" [
   presentation_id: string
   page_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -278,7 +268,7 @@ export def "slides-presentations-pages-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<layoutProperties: record<displayName: string, masterObjectId: string, name: string>, masterProperties: record<displayName: string>, notesProperties: record<speakerNotesObjectId: string>, objectId: string, pageElements: table<description: string, elementGroup: record, image: record, line: record, objectId: string, shape: record, sheetsChart: record, size: record, table: record, title: string, transform: record, video: record, wordArt: record>, pageProperties: record<colorScheme: record<colors: list>, pageBackgroundFill: record<propertyState: string, solidFill: record, stretchedPictureFill: record>>, pageType: string, revisionId: string, slideProperties: record<isSkipped: bool, layoutObjectId: string, masterObjectId: string, notesPage: any>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SLIDES_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SLIDES_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($presentation_id | is-empty) { error make --unspanned { msg: "path parameter 'presentationId' must be non-empty" } }
   if ($page_object_id | is-empty) { error make --unspanned { msg: "path parameter 'pageObjectId' must be non-empty" } }
@@ -308,8 +298,8 @@ export def "slides-presentations-pages-get-thumbnail" [
   presentation_id: string
   page_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -330,7 +320,7 @@ export def "slides-presentations-pages-get-thumbnail" [
   --thumbnail-properties-mime-type: string@thumbnail-properties-mime-type-completer # The optional mime type of the thumbnail image. If you don't specify the mime type, the mime type defaults to PNG.
   --thumbnail-properties-thumbnail-size: string@thumbnail-properties-thumbnail-size-completer # The optional thumbnail image size. If you don't specify the size, the server chooses a default size of the image.
 ]: nothing -> record<contentUrl: string, height: int, width: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SLIDES_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SLIDES_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($presentation_id | is-empty) { error make --unspanned { msg: "path parameter 'presentationId' must be non-empty" } }
   if ($page_object_id | is-empty) { error make --unspanned { msg: "path parameter 'pageObjectId' must be non-empty" } }
@@ -361,8 +351,8 @@ export def "slides-presentations-pages-get-thumbnail" [
 export def "slides-presentations-batch-update" [
   presentation_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -384,7 +374,7 @@ export def "slides-presentations-batch-update" [
   --write-control: record # Provides control over how write requests are executed. — shape: {requiredRevisionId?: string}
 ]: any -> record<presentationId: string, replies: table<createImage: record, createLine: record, createShape: record, createSheetsChart: record, createSlide: record, createTable: record, createVideo: record, duplicateObject: record, groupObjects: record, replaceAllShapesWithImage: record, replaceAllShapesWithSheetsChart: record, replaceAllText: record>, writeControl: record<requiredRevisionId: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SLIDES_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SLIDES_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($presentation_id | is-empty) { error make --unspanned { msg: "path parameter 'presentationId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"

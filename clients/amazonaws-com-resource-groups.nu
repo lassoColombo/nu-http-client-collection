@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -142,8 +142,8 @@ export def commands []: nothing -> table {
 #
 # POST /groups
 # operationId: CreateGroup
-# --ResourceQuery shape: {Type?: any, Query?: any}
-# --Configuration item shape: {Type: any, Parameters?: any}
+# --ResourceQuery shape: {Type?: "TAG_FILTERS_1_0"|"CLOUDFORMATION_STACK_1_0", Query?: string}
+# --Configuration item shape: {Type: string, Parameters?: list}
 export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -163,10 +163,10 @@ export def "create-group" [
   --x-amz-signed-headers: string
   name: string # The name of the group, which is the identifier of the group in other operations. You can't change the name of a resource group after you create it. A resource group name can consist of letters, numbers, hyphens, periods, and underscores. The name cannot start with AWS or aws; these are reserved. A resource group name must be unique within each Amazon Web Services Region in your Amazon Web Services account.
   --description: string # The description of the resource group. Descriptions can consist of letters, numbers, hyphens, underscores, periods, and spaces.
-  --resource-query: record # The query you can use to define a resource group or a search for resources. A ResourceQuery specifies both a query Type and a Query string as JSON string objects. See the examples section for example JSON strings. For more information about creating a resource group with a resource query, see Build queries and groups in Resource Groups (https://docs.aws.amazon.com/ARG/latest/userguide/gettingstarted-query.html) in the Resource Groups User Guide When you combine all of the elements together into a single string, any double quotes that are embedded inside another double quote pair must be escaped by preceding the embedded double quote with a backslash character (\). For example, a complete ResourceQuery parameter must be formatted like the following CLI parameter example: --resource-query '{"Type":"TAG_FILTERS_1_0","Query":"{\"ResourceTypeFilters\":[\"AWS::AllSupported\"],\"TagFilters\":[{\"Key\":\"Stage\",\"Values\":[\"Test\"]}]}"}' In the preceding example, all of the double quote characters in the value part of the Query element must be escaped because the value itself is surrounded by double quotes. For more information, see Quoting strings (https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters-quoting-strings.html) in the Command Line Interface User Guide. For the complete list of resource types that you can use in the array value for ResourceTypeFilters, see Resources you can use with Resource Groups and Tag Editor (https://docs.aws.amazon.com/ARG/latest/userguide/supported-resources.html) in the Resource Groups User Guide. For example: "ResourceTypeFilters":["AWS::S3::Bucket", "AWS::EC2::Instance"] — shape: {Type?: any, Query?: any}
+  --resource-query: record # The query you can use to define a resource group or a search for resources. A ResourceQuery specifies both a query Type and a Query string as JSON string objects. See the examples section for example JSON strings. For more information about creating a resource group with a resource query, see Build queries and groups in Resource Groups (https://docs.aws.amazon.com/ARG/latest/userguide/gettingstarted-query.html) in the Resource Groups User Guide When you combine all of the elements together into a single string, any double quotes that are embedded inside another double quote pair must be escaped by preceding the embedded double quote with a backslash character (\). For example, a complete ResourceQuery parameter must be formatted like the following CLI parameter example: --resource-query '{"Type":"TAG_FILTERS_1_0","Query":"{\"ResourceTypeFilters\":[\"AWS::AllSupported\"],\"TagFilters\":[{\"Key\":\"Stage\",\"Values\":[\"Test\"]}]}"}' In the preceding example, all of the double quote characters in the value part of the Query element must be escaped because the value itself is surrounded by double quotes. For more information, see Quoting strings (https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters-quoting-strings.html) in the Command Line Interface User Guide. For the complete list of resource types that you can use in the array value for ResourceTypeFilters, see Resources you can use with Resource Groups and Tag Editor (https://docs.aws.amazon.com/ARG/latest/userguide/supported-resources.html) in the Resource Groups User Guide. For example: "ResourceTypeFilters":["AWS::S3::Bucket", "AWS::EC2::Instance"] — shape: {Type?: "TAG_FILTERS_1_0"|"CLOUDFORMATION_STACK_1_0", Query?: string}
   --tags: record # The tags to add to the group. A tag is key-value pair string.
-  --configuration: list # A configuration associates the resource group with an Amazon Web Services service and specifies how the service can interact with the resources in the group. A configuration is an array of GroupConfigurationItem elements. For details about the syntax of service configurations, see Service configurations for Resource Groups (https://docs.aws.amazon.com/ARG/latest/APIReference/about-slg.html). A resource group can contain either a Configuration or a ResourceQuery, but not both. — item shape: {Type: any, Parameters?: any}
-]: any -> record<Group: record<GroupArn: record, Name: record, Description: record>, ResourceQuery: record<Type: record, Query: record>, Tags: record, GroupConfiguration: record<Configuration: record, ProposedConfiguration: record, Status: record, FailureReason: record>> {
+  --configuration: list # A configuration associates the resource group with an Amazon Web Services service and specifies how the service can interact with the resources in the group. A configuration is an array of GroupConfigurationItem elements. For details about the syntax of service configurations, see Service configurations for Resource Groups (https://docs.aws.amazon.com/ARG/latest/APIReference/about-slg.html). A resource group can contain either a Configuration or a ResourceQuery, but not both. — item shape: {Type: string, Parameters?: list}
+]: any -> record<Group: record<GroupArn: string, Name: string, Description: string>, ResourceQuery: record<Type: string, Query: string>, Tags: record, GroupConfiguration: record<Configuration: list<record>, ProposedConfiguration: list<record>, Status: string, FailureReason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -214,7 +214,7 @@ export def "delete-group" [
   --x-amz-signed-headers: string
   --group-name: string # Deprecated - don't use this parameter. Use Group instead.
   --group: string # The name or the ARN of the resource group to delete.
-]: any -> record<Group: record<GroupArn: record, Name: record, Description: record>> {
+]: any -> record<Group: record<GroupArn: string, Name: string, Description: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -260,7 +260,7 @@ export def "get-account-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AccountSettings: record<GroupLifecycleEventsDesiredStatus: record, GroupLifecycleEventsStatus: record, GroupLifecycleEventsStatusMessage: record>> {
+]: nothing -> record<AccountSettings: record<GroupLifecycleEventsDesiredStatus: string, GroupLifecycleEventsStatus: string, GroupLifecycleEventsStatusMessage: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/get-account-settings" $auth.query)
@@ -305,7 +305,7 @@ export def "get-group" [
   --x-amz-signed-headers: string
   --group-name: string # Deprecated - don't use this parameter. Use Group instead.
   --group: string # The name or the ARN of the resource group to retrieve.
-]: any -> record<Group: record<GroupArn: record, Name: record, Description: record>> {
+]: any -> record<Group: record<GroupArn: string, Name: string, Description: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -352,7 +352,7 @@ export def "get-group-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --group: string # The name or the ARN of the resource group for which you want to retrive the service configuration.
-]: any -> record<GroupConfiguration: record<Configuration: record, ProposedConfiguration: record, Status: record, FailureReason: record>> {
+]: any -> record<GroupConfiguration: record<Configuration: list<record>, ProposedConfiguration: list<record>, Status: string, FailureReason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -400,7 +400,7 @@ export def "get-group-query" [
   --x-amz-signed-headers: string
   --group-name: string # Don't use this parameter. Use Group instead.
   --group: string # The name or the ARN of the resource group to query.
-]: any -> record<GroupQuery: record<GroupName: record, ResourceQuery: record<Type: record, Query: record>>> {
+]: any -> record<GroupQuery: record<GroupName: string, ResourceQuery: record<Type: string, Query: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -447,7 +447,7 @@ export def "get-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, Tags: record> {
+]: nothing -> record<Arn: string, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'Arn' must be non-empty" } }
@@ -493,7 +493,7 @@ export def "tag" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: record # The tags to add to the specified resource group. A tag is a string-to-string map of key-value pairs.
-]: any -> record<Arn: record, Tags: record> {
+]: any -> record<Arn: string, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -542,7 +542,7 @@ export def "untag" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   keys: list<string> # The keys of the tags to be removed.
-]: any -> record<Arn: record, Keys: record> {
+]: any -> record<Arn: string, Keys: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -591,7 +591,7 @@ export def "group-resources" [
   --x-amz-signed-headers: string
   group: string # The name or the ARN of the resource group to add resources to.
   resource_arns: list<string> # The list of ARNs of the resources to be added to the group.
-]: any -> record<Succeeded: record, Failed: record, Pending: record> {
+]: any -> record<Succeeded: list<string>, Failed: table<ResourceArn: string, ErrorMessage: string, ErrorCode: string>, Pending: table<ResourceArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -620,7 +620,7 @@ export def "group-resources" [
 #
 # POST /list-group-resources
 # operationId: ListGroupResources
-# --Filters item shape: {Name: any, Values: any}
+# --Filters item shape: {Name: "resource-type", Values: list<string>}
 export def "list-group-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -642,10 +642,10 @@ export def "list-group-resources" [
   --x-amz-signed-headers: string
   --group-name: string # Deprecated - don't use this parameter. Use the Group request field instead.
   --group: string # The name or the ARN of the resource group
-  --filters: list # Filters, formatted as ResourceFilter objects, that you want to apply to a ListGroupResources operation. Filters the results to include only those of the specified resource types. resource-type - Filter resources by their type. Specify up to five resource types in the format AWS::ServiceCode::ResourceType. For example, AWS::EC2::Instance, or AWS::S3::Bucket. When you specify a resource-type filter for ListGroupResources, Resource Groups validates your filter resource types against the types that are defined in the query associated with the group. For example, if a group contains only S3 buckets because its query specifies only that resource type, but your resource-type filter includes EC2 instances, AWS Resource Groups does not filter for EC2 instances. In this case, a ListGroupResources request returns a BadRequestException error with a message similar to the following: The resource types specified as filters in the request are not valid. The error includes a list of resource types that failed the validation because they are not part of the query associated with the group. This validation doesn't occur when the group query specifies AWS::AllSupported, because a group based on such a query can contain any of the allowed resource types for the query type (tag-based or Amazon CloudFront stack-based queries). — item shape: {Name: any, Values: any}
+  --filters: list # Filters, formatted as ResourceFilter objects, that you want to apply to a ListGroupResources operation. Filters the results to include only those of the specified resource types. resource-type - Filter resources by their type. Specify up to five resource types in the format AWS::ServiceCode::ResourceType. For example, AWS::EC2::Instance, or AWS::S3::Bucket. When you specify a resource-type filter for ListGroupResources, Resource Groups validates your filter resource types against the types that are defined in the query associated with the group. For example, if a group contains only S3 buckets because its query specifies only that resource type, but your resource-type filter includes EC2 instances, AWS Resource Groups does not filter for EC2 instances. In this case, a ListGroupResources request returns a BadRequestException error with a message similar to the following: The resource types specified as filters in the request are not valid. The error includes a list of resource types that failed the validation because they are not part of the query associated with the group. This validation doesn't occur when the group query specifies AWS::AllSupported, because a group based on such a query can contain any of the allowed resource types for the query type (tag-based or Amazon CloudFront stack-based queries). — item shape: {Name: "resource-type", Values: list<string>}
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that the service might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value provided by a previous call's NextToken response to indicate where the output should continue from. (body field)
-]: any -> record<Resources: record, ResourceIdentifiers: record, NextToken: record, QueryErrors: record> {
+]: any -> record<Resources: table<Identifier: record, Status: record>, ResourceIdentifiers: table<ResourceArn: string, ResourceType: string>, NextToken: string, QueryErrors: table<ErrorCode: string, Message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -675,7 +675,7 @@ export def "list-group-resources" [
 #
 # POST /groups-list
 # operationId: ListGroups
-# --Filters item shape: {Name: any, Values: any}
+# --Filters item shape: {Name: "resource-type"|"configuration-type", Values: list<string>}
 export def "list-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -697,8 +697,8 @@ export def "list-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filters: list # Filters, formatted as GroupFilter objects, that you want to apply to a ListGroups operation. resource-type - Filter the results to include only those of the specified resource types. Specify up to five resource types in the format AWS::ServiceCode::ResourceType . For example, AWS::EC2::Instance, or AWS::S3::Bucket. configuration-type - Filter the results to include only those groups that have the specified configuration types attached. The current supported values are: AWS::EC2::CapacityReservationPool AWS::EC2::HostManagement — item shape: {Name: any, Values: any}
-]: any -> record<GroupIdentifiers: record, Groups: record, NextToken: record> {
+  --filters: list # Filters, formatted as GroupFilter objects, that you want to apply to a ListGroups operation. resource-type - Filter the results to include only those of the specified resource types. Specify up to five resource types in the format AWS::ServiceCode::ResourceType . For example, AWS::EC2::Instance, or AWS::S3::Bucket. configuration-type - Filter the results to include only those groups that have the specified configuration types attached. The current supported values are: AWS::EC2::CapacityReservationPool AWS::EC2::HostManagement — item shape: {Name: "resource-type"|"configuration-type", Values: list<string>}
+]: any -> record<GroupIdentifiers: table<GroupName: string, GroupArn: string>, Groups: table<GroupArn: string, Name: string, Description: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -728,7 +728,7 @@ export def "list-groups" [
 #
 # POST /put-group-configuration
 # operationId: PutGroupConfiguration
-# --Configuration item shape: {Type: any, Parameters?: any}
+# --Configuration item shape: {Type: string, Parameters?: list}
 export def "put-group-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -747,7 +747,7 @@ export def "put-group-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --group: string # The name or ARN of the resource group with the configuration that you want to update.
-  --configuration: list # The new configuration to associate with the specified group. A configuration associates the resource group with an Amazon Web Services service and specifies how the service can interact with the resources in the group. A configuration is an array of GroupConfigurationItem elements. For information about the syntax of a service configuration, see Service configurations for Resource Groups (https://docs.aws.amazon.com/ARG/latest/APIReference/about-slg.html). A resource group can contain either a Configuration or a ResourceQuery, but not both. — item shape: {Type: any, Parameters?: any}
+  --configuration: list # The new configuration to associate with the specified group. A configuration associates the resource group with an Amazon Web Services service and specifies how the service can interact with the resources in the group. A configuration is an array of GroupConfigurationItem elements. For information about the syntax of a service configuration, see Service configurations for Resource Groups (https://docs.aws.amazon.com/ARG/latest/APIReference/about-slg.html). A resource group can contain either a Configuration or a ResourceQuery, but not both. — item shape: {Type: string, Parameters?: list}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -777,7 +777,7 @@ export def "put-group-configuration" [
 #
 # POST /resources/search
 # operationId: SearchResources
-# --ResourceQuery shape: {Type?: any, Query?: any}
+# --ResourceQuery shape: {Type?: "TAG_FILTERS_1_0"|"CLOUDFORMATION_STACK_1_0", Query?: string}
 export def "search-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -797,10 +797,10 @@ export def "search-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  resource_query: record # The query you can use to define a resource group or a search for resources. A ResourceQuery specifies both a query Type and a Query string as JSON string objects. See the examples section for example JSON strings. For more information about creating a resource group with a resource query, see Build queries and groups in Resource Groups (https://docs.aws.amazon.com/ARG/latest/userguide/gettingstarted-query.html) in the Resource Groups User Guide When you combine all of the elements together into a single string, any double quotes that are embedded inside another double quote pair must be escaped by preceding the embedded double quote with a backslash character (\). For example, a complete ResourceQuery parameter must be formatted like the following CLI parameter example: --resource-query '{"Type":"TAG_FILTERS_1_0","Query":"{\"ResourceTypeFilters\":[\"AWS::AllSupported\"],\"TagFilters\":[{\"Key\":\"Stage\",\"Values\":[\"Test\"]}]}"}' In the preceding example, all of the double quote characters in the value part of the Query element must be escaped because the value itself is surrounded by double quotes. For more information, see Quoting strings (https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters-quoting-strings.html) in the Command Line Interface User Guide. For the complete list of resource types that you can use in the array value for ResourceTypeFilters, see Resources you can use with Resource Groups and Tag Editor (https://docs.aws.amazon.com/ARG/latest/userguide/supported-resources.html) in the Resource Groups User Guide. For example: "ResourceTypeFilters":["AWS::S3::Bucket", "AWS::EC2::Instance"] — shape: {Type?: any, Query?: any}
+  resource_query: record # The query you can use to define a resource group or a search for resources. A ResourceQuery specifies both a query Type and a Query string as JSON string objects. See the examples section for example JSON strings. For more information about creating a resource group with a resource query, see Build queries and groups in Resource Groups (https://docs.aws.amazon.com/ARG/latest/userguide/gettingstarted-query.html) in the Resource Groups User Guide When you combine all of the elements together into a single string, any double quotes that are embedded inside another double quote pair must be escaped by preceding the embedded double quote with a backslash character (\). For example, a complete ResourceQuery parameter must be formatted like the following CLI parameter example: --resource-query '{"Type":"TAG_FILTERS_1_0","Query":"{\"ResourceTypeFilters\":[\"AWS::AllSupported\"],\"TagFilters\":[{\"Key\":\"Stage\",\"Values\":[\"Test\"]}]}"}' In the preceding example, all of the double quote characters in the value part of the Query element must be escaped because the value itself is surrounded by double quotes. For more information, see Quoting strings (https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters-quoting-strings.html) in the Command Line Interface User Guide. For the complete list of resource types that you can use in the array value for ResourceTypeFilters, see Resources you can use with Resource Groups and Tag Editor (https://docs.aws.amazon.com/ARG/latest/userguide/supported-resources.html) in the Resource Groups User Guide. For example: "ResourceTypeFilters":["AWS::S3::Bucket", "AWS::EC2::Instance"] — shape: {Type?: "TAG_FILTERS_1_0"|"CLOUDFORMATION_STACK_1_0", Query?: string}
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that the service might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value provided by a previous call's NextToken response to indicate where the output should continue from. (body field)
-]: any -> record<ResourceIdentifiers: record, NextToken: record, QueryErrors: record> {
+]: any -> record<ResourceIdentifiers: table<ResourceArn: string, ResourceType: string>, NextToken: string, QueryErrors: table<ErrorCode: string, Message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -849,7 +849,7 @@ export def "ungroup-resources" [
   --x-amz-signed-headers: string
   group: string # The name or the ARN of the resource group from which to remove the resources.
   resource_arns: list<string> # The ARNs of the resources to be removed from the group.
-]: any -> record<Succeeded: record, Failed: record, Pending: record> {
+]: any -> record<Succeeded: list<string>, Failed: table<ResourceArn: string, ErrorMessage: string, ErrorCode: string>, Pending: table<ResourceArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -896,7 +896,7 @@ export def "update-account-settings" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --group-lifecycle-events-desired-status: string@group-lifecycle-events-desired-status-completer # Specifies whether you want to turn group lifecycle events (https://docs.aws.amazon.com/ARG/latest/userguide/monitor-groups.html) on or off.
-]: any -> record<AccountSettings: record<GroupLifecycleEventsDesiredStatus: record, GroupLifecycleEventsStatus: record, GroupLifecycleEventsStatusMessage: record>> {
+]: any -> record<AccountSettings: record<GroupLifecycleEventsDesiredStatus: string, GroupLifecycleEventsStatus: string, GroupLifecycleEventsStatusMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -945,7 +945,7 @@ export def "update-group" [
   --group-name: string # Don't use this parameter. Use Group instead.
   --group: string # The name or the ARN of the resource group to modify.
   --description: string # The new description that you want to update the resource group with. Descriptions can contain letters, numbers, hyphens, underscores, periods, and spaces.
-]: any -> record<Group: record<GroupArn: record, Name: record, Description: record>> {
+]: any -> record<Group: record<GroupArn: string, Name: string, Description: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -974,7 +974,7 @@ export def "update-group" [
 #
 # POST /update-group-query
 # operationId: UpdateGroupQuery
-# --ResourceQuery shape: {Type?: any, Query?: any}
+# --ResourceQuery shape: {Type?: "TAG_FILTERS_1_0"|"CLOUDFORMATION_STACK_1_0", Query?: string}
 export def "update-group-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -994,8 +994,8 @@ export def "update-group-query" [
   --x-amz-signed-headers: string
   --group-name: string # Don't use this parameter. Use Group instead.
   --group: string # The name or the ARN of the resource group to query.
-  resource_query: record # The query you can use to define a resource group or a search for resources. A ResourceQuery specifies both a query Type and a Query string as JSON string objects. See the examples section for example JSON strings. For more information about creating a resource group with a resource query, see Build queries and groups in Resource Groups (https://docs.aws.amazon.com/ARG/latest/userguide/gettingstarted-query.html) in the Resource Groups User Guide When you combine all of the elements together into a single string, any double quotes that are embedded inside another double quote pair must be escaped by preceding the embedded double quote with a backslash character (\). For example, a complete ResourceQuery parameter must be formatted like the following CLI parameter example: --resource-query '{"Type":"TAG_FILTERS_1_0","Query":"{\"ResourceTypeFilters\":[\"AWS::AllSupported\"],\"TagFilters\":[{\"Key\":\"Stage\",\"Values\":[\"Test\"]}]}"}' In the preceding example, all of the double quote characters in the value part of the Query element must be escaped because the value itself is surrounded by double quotes. For more information, see Quoting strings (https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters-quoting-strings.html) in the Command Line Interface User Guide. For the complete list of resource types that you can use in the array value for ResourceTypeFilters, see Resources you can use with Resource Groups and Tag Editor (https://docs.aws.amazon.com/ARG/latest/userguide/supported-resources.html) in the Resource Groups User Guide. For example: "ResourceTypeFilters":["AWS::S3::Bucket", "AWS::EC2::Instance"] — shape: {Type?: any, Query?: any}
-]: any -> record<GroupQuery: record<GroupName: record, ResourceQuery: record<Type: record, Query: record>>> {
+  resource_query: record # The query you can use to define a resource group or a search for resources. A ResourceQuery specifies both a query Type and a Query string as JSON string objects. See the examples section for example JSON strings. For more information about creating a resource group with a resource query, see Build queries and groups in Resource Groups (https://docs.aws.amazon.com/ARG/latest/userguide/gettingstarted-query.html) in the Resource Groups User Guide When you combine all of the elements together into a single string, any double quotes that are embedded inside another double quote pair must be escaped by preceding the embedded double quote with a backslash character (\). For example, a complete ResourceQuery parameter must be formatted like the following CLI parameter example: --resource-query '{"Type":"TAG_FILTERS_1_0","Query":"{\"ResourceTypeFilters\":[\"AWS::AllSupported\"],\"TagFilters\":[{\"Key\":\"Stage\",\"Values\":[\"Test\"]}]}"}' In the preceding example, all of the double quote characters in the value part of the Query element must be escaped because the value itself is surrounded by double quotes. For more information, see Quoting strings (https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters-quoting-strings.html) in the Command Line Interface User Guide. For the complete list of resource types that you can use in the array value for ResourceTypeFilters, see Resources you can use with Resource Groups and Tag Editor (https://docs.aws.amazon.com/ARG/latest/userguide/supported-resources.html) in the Resource Groups User Guide. For example: "ResourceTypeFilters":["AWS::S3::Bucket", "AWS::EC2::Instance"] — shape: {Type?: "TAG_FILTERS_1_0"|"CLOUDFORMATION_STACK_1_0", Query?: string}
+]: any -> record<GroupQuery: record<GroupName: string, ResourceQuery: record<Type: string, Query: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

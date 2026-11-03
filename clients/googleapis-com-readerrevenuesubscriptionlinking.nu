@@ -1,4 +1,4 @@
-# Auto-generated client for Reader Revenue Subscription Linking API vv1
+# Auto-generated client for Reader Revenue Subscription Linking API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/readerrevenuesubscriptionlinking/v1/openapi.json
 # Auth: --token flag or $env.READER_REVENUE_SUBSCRIPTION_LINKING_API_TOKEN
 

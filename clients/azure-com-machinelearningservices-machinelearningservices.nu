@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -158,10 +158,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
 ]: nothing -> record<value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.MachineLearningServices/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -196,12 +197,13 @@ export def "quotas-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, limit: int, name: record, type: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MachineLearningServices/locations/{location}/Quotas") $qp $auth.query)
   let accept_val = "application/json"
@@ -237,7 +239,7 @@ export def "quotas-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
   --value: list # The list for update quota. — item shape: {id?: string, limit?: int, type?: string, unit?: "Count"}
 ]: any -> record<nextLink: string, value: table<id: string, limit: int, status: string, type: string, unit: string>> {
   let input = $in
@@ -245,6 +247,7 @@ export def "quotas-update" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MachineLearningServices/locations/{location}/updateQuotas") $qp $auth.query)
   let req_body = {"value": $value} | compact
@@ -281,13 +284,14 @@ export def "usages-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
   --expand-children: string # Specifies if detailed usages of child resources are required.
 ]: nothing -> record<nextLink: string, value: table<currentValue: int, id: string, limit: int, name: record, type: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "expandChildren" $expand_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MachineLearningServices/locations/{location}/usages") $qp $auth.query)
   let accept_val = "application/json"
@@ -322,12 +326,13 @@ export def "virtual-machine-sizes-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
 ]: nothing -> record<amlCompute: table<family: string, gpus: int, lowPriorityCapable: bool, maxResourceVolumeMB: int, memoryGB: float, name: string, osVhdSizeMB: int, premiumIO: bool, vCPUs: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MachineLearningServices/locations/{location}/vmSizes") $qp $auth.query)
   let accept_val = "application/json"
@@ -361,12 +366,13 @@ export def "workspaces-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
   --skiptoken: string # Continuation token for pagination.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, identity: record, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MachineLearningServices/workspaces") $qp $auth.query)
   let accept_val = "application/json"
@@ -401,13 +407,14 @@ export def "workspaces-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
   --skiptoken: string # Continuation token for pagination.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, identity: record, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces") $qp $auth.query)
   let accept_val = "application/json"
@@ -443,13 +450,14 @@ export def "workspaces-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
-]: nothing -> record<error: record<code: string, details: list<record>, message: string>> {
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -485,13 +493,14 @@ export def "workspaces-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
-]: nothing -> record<properties: record<applicationInsights: string, containerRegistry: string, creationTime: string, description: string, discoveryUrl: string, friendlyName: string, keyVault: string, provisioningState: string, storageAccount: string, workspaceId: string>> {
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
+]: nothing -> record<properties: record<applicationInsights: string, containerRegistry: string, creationTime: string, description: string, discoveryUrl: string, friendlyName: string, keyVault: string, provisioningState: string, storageAccount: string, workspaceId: string>, id: string, identity: record<principalId: string, tenantId: string, type: string>, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -528,16 +537,17 @@ export def "workspaces-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
   --properties: any # The parameters for updating the properties of a machine learning workspace. — shape: {description?: string, friendlyName?: string}
   --tags: record # The resource tags for the machine learning workspace.
-]: any -> record<properties: record<applicationInsights: string, containerRegistry: string, creationTime: string, description: string, discoveryUrl: string, friendlyName: string, keyVault: string, provisioningState: string, storageAccount: string, workspaceId: string>> {
+]: any -> record<properties: record<applicationInsights: string, containerRegistry: string, creationTime: string, description: string, discoveryUrl: string, friendlyName: string, keyVault: string, provisioningState: string, storageAccount: string, workspaceId: string>, id: string, identity: record<principalId: string, tenantId: string, type: string>, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -577,18 +587,19 @@ export def "workspaces-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
   --properties: record # The properties of a machine learning workspace. — shape: {applicationInsights?: string, containerRegistry?: string, description?: string, discoveryUrl?: string, friendlyName?: string, keyVault?: string, storageAccount?: string}
   --identity: any # Identity for the resource. — shape: {type?: "SystemAssigned"}
   --location: string # Specifies the location of the resource.
   --tags: record # Contains resource tags defined as key/value pairs.
-]: any -> record<properties: record<applicationInsights: string, containerRegistry: string, creationTime: string, description: string, discoveryUrl: string, friendlyName: string, keyVault: string, provisioningState: string, storageAccount: string, workspaceId: string>> {
+]: any -> record<properties: record<applicationInsights: string, containerRegistry: string, creationTime: string, description: string, discoveryUrl: string, friendlyName: string, keyVault: string, provisioningState: string, storageAccount: string, workspaceId: string>, id: string, identity: record<principalId: string, tenantId: string, type: string>, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "identity": $identity, "location": $location, "tags": $tags} | compact
@@ -626,14 +637,15 @@ export def "machine-learning-compute-list-by-workspace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
   --skiptoken: string # Continuation token for pagination.
-]: nothing -> record<nextLink: string, value: list<record>> {
+]: nothing -> record<nextLink: string, value: table<id: string, identity: record, location: string, name: string, tags: record, type: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/computes") $qp $auth.query)
   let accept_val = "application/json"
@@ -670,15 +682,17 @@ export def "machine-learning-compute-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
-  --underlying-resource-action: string@underlying-resource-action-completer # Delete the underlying compute if 'Delete', or detach the underlying compute from workspace if 'Detach'.
-]: nothing -> record<error: record<code: string, details: list<record>, message: string>> {
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
+  --underlying-resource-action: string@underlying-resource-action-completer # Delete the underlying compute if 'Delete', or detach the underlying compute from workspace if 'Detach'. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($compute_name | is-empty) { error make --unspanned { msg: "path parameter 'computeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($underlying_resource_action == null) { error make --unspanned { msg: "required query parameter 'underlyingResourceAction' missing: pass --underlying-resource-action" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "underlyingResourceAction" $underlying_resource_action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), compute_name: (encode-path-segment $compute_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/computes/{compute_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -715,14 +729,15 @@ export def "machine-learning-compute-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
-]: nothing -> record {
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
+]: nothing -> record<id: string, identity: record<principalId: string, tenantId: string, type: string>, location: string, name: string, tags: record, type: string, properties: record<computeLocation: string, computeType: string, createdOn: string, description: string, isAttachedCompute: bool, modifiedOn: string, provisioningErrors: list<record>, provisioningState: string, resourceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($compute_name | is-empty) { error make --unspanned { msg: "path parameter 'computeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), compute_name: (encode-path-segment $compute_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/computes/{compute_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -760,9 +775,9 @@ export def "machine-learning-compute-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
   --properties: any # The properties of a amlCompute that need to be updated. — shape: {scaleSettings?: record}
-]: any -> record {
+]: any -> record<id: string, identity: record<principalId: string, tenantId: string, type: string>, location: string, name: string, tags: record, type: string, properties: record<computeLocation: string, computeType: string, createdOn: string, description: string, isAttachedCompute: bool, modifiedOn: string, provisioningErrors: list<record>, provisioningState: string, resourceId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -770,6 +785,7 @@ export def "machine-learning-compute-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($compute_name | is-empty) { error make --unspanned { msg: "path parameter 'computeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), compute_name: (encode-path-segment $compute_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/computes/{compute_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -810,12 +826,12 @@ export def "machine-learning-compute-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
   --identity: any # Identity for the resource. — shape: {type?: "SystemAssigned"}
   --location: string # Specifies the location of the resource.
   --tags: record # Contains resource tags defined as key/value pairs.
   --properties: record # Machine Learning compute object. — shape: {computeLocation?: string, computeType: "AKS"|"AmlCompute"|"DataFactory"|"VirtualMachine"|"HDInsight"|"Databricks"|"DataLakeAnalytics", description?: string, resourceId?: string}
-]: any -> record {
+]: any -> record<id: string, identity: record<principalId: string, tenantId: string, type: string>, location: string, name: string, tags: record, type: string, properties: record<computeLocation: string, computeType: string, createdOn: string, description: string, isAttachedCompute: bool, modifiedOn: string, provisioningErrors: list<record>, provisioningState: string, resourceId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -823,6 +839,7 @@ export def "machine-learning-compute-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($compute_name | is-empty) { error make --unspanned { msg: "path parameter 'computeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), compute_name: (encode-path-segment $compute_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/computes/{compute_name}") $qp $auth.query)
   let req_body = {"identity": $identity, "location": $location, "tags": $tags, "properties": $properties} | compact
@@ -861,7 +878,7 @@ export def "machine-learning-compute-list-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
 ]: nothing -> record<computeType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -869,6 +886,7 @@ export def "machine-learning-compute-list-keys" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($compute_name | is-empty) { error make --unspanned { msg: "path parameter 'computeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), compute_name: (encode-path-segment $compute_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/computes/{compute_name}/listKeys") $qp $auth.query)
   let accept_val = "application/json"
@@ -905,7 +923,7 @@ export def "machine-learning-compute-list-nodes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
 ]: nothing -> record<computeType: string, nextLink: string, nodes: table<nodeId: string, nodeState: string, port: float, privateIpAddress: string, publicIpAddress: string, runId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -913,6 +931,7 @@ export def "machine-learning-compute-list-nodes" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($compute_name | is-empty) { error make --unspanned { msg: "path parameter 'computeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), compute_name: (encode-path-segment $compute_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/computes/{compute_name}/listNodes") $qp $auth.query)
   let accept_val = "application/json"
@@ -948,13 +967,14 @@ export def "workspaces-list-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
 ]: nothing -> record<appInsightsInstrumentationKey: string, containerRegistryCredentials: record<location: string, passwords: list<record>, username: string>, userStorageKey: string, userStorageResourceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/listKeys") $qp $auth.query)
   let accept_val = "application/json"
@@ -990,13 +1010,14 @@ export def "workspaces-resync-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of Azure Machine Learning resource provider API.
-]: nothing -> record<error: record<code: string, details: list<record>, message: string>> {
+  --api-version: string # Version of Azure Machine Learning resource provider API. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/resyncKeys") $qp $auth.query)
   let accept_val = "application/json"

@@ -1,6 +1,7 @@
 # Auto-generated client for Master Data API - v2 v1.0
 # Source: https://api.apis.guru/v2/specs/vtex.local/Master-Data-API-/1.0/openapi.json
-# Auth: --token flag or $env.MASTER_DATA_API_V2_TOKEN
+# Auth (appKey): --token-appkey flag or $env.MASTER_DATA_API_V2_APPKEY_TOKEN
+# Auth (appToken): --token-apptoken flag or $env.MASTER_DATA_API_V2_APPTOKEN_TOKEN
 
 const BASE_URL = "https://vtex.local"
 
@@ -12,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {X-VTEX-API-AppKey: $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {X-VTEX-API-AppToken: $token_val}, query: "", location: "header"} }
+    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
+    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -132,7 +133,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-new-customer-address" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -168,8 +169,8 @@ export def "create-new-customer-address" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --schema: string # Name of the schema the document to be created needs to be compliant with. (e.g. schema)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   --address-name: string # Address name. (nullable, e.g. My house)
   --address-type: string # Type of address. For example, `Residential` or `Pickup`, among others. (nullable, e.g. residential)
   --city: string # City of the shipping address. (nullable, e.g. Rio de Janeiro)
@@ -226,8 +227,8 @@ export def "delete-customer-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> record<Href: string, Id: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTER_DATA_API_V2_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTER_DATA_API_V2_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -267,8 +268,8 @@ export def "update-customer-address" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --schema: string # Name of the schema the document to be created needs to be compliant with. (e.g. schema)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   --address-name: string # Address name. (nullable, e.g. My house)
   --address-type: string # Type of address. For example, `Residential` or `Pickup`, among others. (nullable, e.g. residential)
   --city: string # City of the shipping address. (nullable, e.g. Rio de Janeiro)
@@ -326,8 +327,8 @@ export def "create-new-customer-profilev2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --schema: string # Name of the schema the document to be created needs to be compliant with. (e.g. schema)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   --document: string # Client document. (nullable, e.g. 12345678900)
   --document-type: string # Client document type. (nullable, e.g. CPF)
   --email: string # Client email address. (nullable, e.g. clark.kent@examplemail.com)
@@ -380,8 +381,8 @@ export def "delete-customer-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> record<Href: string, Id: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTER_DATA_API_V2_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTER_DATA_API_V2_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -421,8 +422,8 @@ export def "update-customer-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --schema: string # Name of the schema the document to be created needs to be compliant with. (e.g. schema)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   --document: string # Client document. (nullable, e.g. 12345678900)
   --document-type: string # Client document type. (nullable, e.g. CPF)
   --email: string # Client email address. (nullable, e.g. clark.kent@examplemail.com)
@@ -477,8 +478,8 @@ export def "createorupdatepartialdocument" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --schema: string # Name of the schema the document to be created needs to be compliant with. (e.g. schema)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   --body: record
 ]: any -> record<Href: string, Id: string> {
   let input = $in
@@ -525,8 +526,8 @@ export def "createnewdocument" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --schema: string # Name of the schema the document to be created needs to be compliant with. (e.g. schema)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   --body: record
 ]: any -> record<Href: string, Id: string> {
   let input = $in
@@ -573,8 +574,8 @@ export def "deletedocument" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTER_DATA_API_V2_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTER_DATA_API_V2_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -615,8 +616,8 @@ export def "getdocument" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> record<accountId: string, accountName: string, dataEntityId: string, id: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTER_DATA_API_V2_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTER_DATA_API_V2_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -657,9 +658,9 @@ export def "updatepartialdocument" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: string # Filter specification. (e.g. firstName is not null.)
+  --where: string # Filter specification. (e.g. firstName is not null.)
   --schema: string # Name of the schema the document to be created needs to be compliant with. (e.g. schema)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   --body: record
 ]: any -> record<Href: string, Id: string> {
   let input = $in
@@ -667,7 +668,7 @@ export def "updatepartialdocument" [
   let base = ($base_url | default $BASE_URL)
   if ($data_entity_name | is-empty) { error make --unspanned { msg: "path parameter 'dataEntityName' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "_where" $qp_where "scalar") (serialize-qp "_schema" $schema "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "_where" $where "scalar") (serialize-qp "_schema" $schema "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name), id: (encode-path-segment $id)} | format pattern "/api/dataentities/{data_entity_name}/documents/{id}") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -678,7 +679,7 @@ export def "updatepartialdocument" [
   let req = {
     method: "patch"
     url: $full_url
-    query: ({"_where": $qp_where, "_schema": $schema} | compact)
+    query: ({"_where": $where, "_schema": $schema} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -705,9 +706,9 @@ export def "updateentiredocument" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: string # Filter specification. (e.g. firstName is not null.)
+  --where: string # Filter specification. (e.g. firstName is not null.)
   --schema: string # Name of the schema the document to be created needs to be compliant with. (e.g. schema)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   --body: record
 ]: any -> record<Href: string, Id: string> {
   let input = $in
@@ -715,7 +716,7 @@ export def "updateentiredocument" [
   let base = ($base_url | default $BASE_URL)
   if ($data_entity_name | is-empty) { error make --unspanned { msg: "path parameter 'dataEntityName' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "_where" $qp_where "scalar") (serialize-qp "_schema" $schema "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "_where" $where "scalar") (serialize-qp "_schema" $schema "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name), id: (encode-path-segment $id)} | format pattern "/api/dataentities/{data_entity_name}/documents/{id}") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -726,7 +727,7 @@ export def "updateentiredocument" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"_where": $qp_where, "_schema": $schema} | compact)
+    query: ({"_where": $where, "_schema": $schema} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -753,7 +754,7 @@ export def "validatedocumentbyclusters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   --body: string
 ]: any -> any {
   let input = $in
@@ -800,8 +801,8 @@ export def "listversions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --load: oneof<nothing, bool> # If true, return all the fields in each version of the document (default: true)
   --fields: string # If `load` is true, the response will return only these specific fields (default: id,dataEntityId,isNewsletterOptIn,createdBy)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> table<date: string, document: record, id: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTER_DATA_API_V2_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTER_DATA_API_V2_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -844,8 +845,8 @@ export def "getversion" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> record<author: string, document: record<accountId: string, accountName: string, carttag: string, checkouttag: string, dataEntityId: string, departmentVisitedTag: record<DisplayValue: string, Scores: record>, email: string, followers: list<string>, id: string, rclastsession: string, rclastsessiondate: string>, id: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTER_DATA_API_V2_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTER_DATA_API_V2_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -888,8 +889,8 @@ export def "putversion" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> record<Href: string, Id: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTER_DATA_API_V2_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTER_DATA_API_V2_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -930,7 +931,7 @@ export def "getindices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTER_DATA_API_V2_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTER_DATA_API_V2_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -980,6 +981,7 @@ export def "putindices" [
   let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name)} | format pattern "/api/dataentities/{data_entity_name}/indices") $auth.query)
   let req_body = {"fields": $fields, "multiple": $multiple, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "multiple") == null) { error make --unspanned { msg: "required body field 'multiple' missing: pass --multiple or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1012,7 +1014,7 @@ export def "deleteindexbyname" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTER_DATA_API_V2_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTER_DATA_API_V2_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1053,7 +1055,7 @@ export def "getindexbyname" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTER_DATA_API_V2_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTER_DATA_API_V2_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1093,7 +1095,7 @@ export def "getschemas" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTER_DATA_API_V2_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTER_DATA_API_V2_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1133,7 +1135,7 @@ export def "deleteschemabyname" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTER_DATA_API_V2_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTER_DATA_API_V2_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1174,7 +1176,7 @@ export def "getschemabyname" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTER_DATA_API_V2_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTER_DATA_API_V2_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1259,18 +1261,19 @@ export def "scrolldocuments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Value of the header `X-VTEX-MD-TOKEN` returned in your first request. Send its value in this query string in the subsequent requests. The token has a timeout of 10 minutes, which refreshes after each new request. (default: {tokenValueExample})
   --fields: string # Fields that should be returned by document. Separate fields' names with commas. For example `_fields=email,firstName,document`. You can also use `_all` to fetch all fields. (default: email,firstName,document)
-  --qp-where: string # Filter specification. (e.g. firstName is not null.)
+  --where: string # Filter specification. (e.g. firstName is not null.)
   --schema: string # Name of the schema the document to be created needs to be compliant with. (e.g. schema)
   --keyword: string # String to search. Use quotes for a partial query. For example, `_keyword=Maria` or `_keyword="Maria"`. (e.g. String to search)
-  --qp-sort: string # Sets sorting mode in two parts. The first part is the name of the field you want to sort by. In the second part, use `ASC` for ascending or `DESC` for descending. (default: firstName ASC)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --rest-range: string # Defines the collection of documents to be returned. A range within the collection limited by 100 documents per query. (e.g. resources=0-10)
+  --sort: string # Sets sorting mode in two parts. The first part is the name of the field you want to sort by. In the second part, use `ASC` for ascending or `DESC` for descending. (default: firstName ASC)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --rest-range: string # Defines the collection of documents to be returned. A range within the collection limited by 100 documents per query. (required, e.g. resources=0-10)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTER_DATA_API_V2_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTER_DATA_API_V2_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($data_entity_name | is-empty) { error make --unspanned { msg: "path parameter 'dataEntityName' must be non-empty" } }
-  let qp = [(serialize-qp "_token" $qp_token "scalar") (serialize-qp "_fields" $fields "scalar") (serialize-qp "_where" $qp_where "scalar") (serialize-qp "_schema" $schema "scalar") (serialize-qp "_keyword" $keyword "scalar") (serialize-qp "_sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($rest_range == null) { error make --unspanned { msg: "required header parameter 'REST-Range' missing: pass --rest-range" } }
+  let qp = [(serialize-qp "_token" $qp_token "scalar") (serialize-qp "_fields" $fields "scalar") (serialize-qp "_where" $where "scalar") (serialize-qp "_schema" $schema "scalar") (serialize-qp "_keyword" $keyword "scalar") (serialize-qp "_sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name)} | format pattern "/api/dataentities/{data_entity_name}/scroll") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1279,7 +1282,7 @@ export def "scrolldocuments" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"_token": $qp_token, "_fields": $fields, "_where": $qp_where, "_schema": $schema, "_keyword": $keyword, "_sort": $qp_sort} | compact)
+    query: ({"_token": $qp_token, "_fields": $fields, "_where": $where, "_schema": $schema, "_keyword": $keyword, "_sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1306,18 +1309,19 @@ export def "searchdocuments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Fields that should be returned by document. Separate fields' names with commas. For example `_fields=email,firstName,document`. You can also use `_all` to fetch all fields. (default: email,firstName,document)
-  --qp-where: string # Filter specification. (e.g. firstName is not null.)
+  --where: string # Filter specification. (e.g. firstName is not null.)
   --schema: string # Name of the schema the document to be created needs to be compliant with. (e.g. schema)
   --keyword: string # String to search. Use quotes for a partial query. For example, `_keyword=Maria` or `_keyword="Maria"`. (e.g. String to search)
-  --qp-sort: string # Sets sorting mode in two parts. The first part is the name of the field you want to sort by. In the second part, use `ASC` for ascending or `DESC` for descending. (default: firstName ASC)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --rest-range: string # Defines the collection of documents to be returned. A range within the collection limited by 100 documents per query. (e.g. resources=0-10)
+  --sort: string # Sets sorting mode in two parts. The first part is the name of the field you want to sort by. In the second part, use `ASC` for ascending or `DESC` for descending. (default: firstName ASC)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --rest-range: string # Defines the collection of documents to be returned. A range within the collection limited by 100 documents per query. (required, e.g. resources=0-10)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTER_DATA_API_V2_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTER_DATA_API_V2_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($data_entity_name | is-empty) { error make --unspanned { msg: "path parameter 'dataEntityName' must be non-empty" } }
-  let qp = [(serialize-qp "_fields" $fields "scalar") (serialize-qp "_where" $qp_where "scalar") (serialize-qp "_schema" $schema "scalar") (serialize-qp "_keyword" $keyword "scalar") (serialize-qp "_sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($rest_range == null) { error make --unspanned { msg: "required header parameter 'REST-Range' missing: pass --rest-range" } }
+  let qp = [(serialize-qp "_fields" $fields "scalar") (serialize-qp "_where" $where "scalar") (serialize-qp "_schema" $schema "scalar") (serialize-qp "_keyword" $keyword "scalar") (serialize-qp "_sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name)} | format pattern "/api/dataentities/{data_entity_name}/search") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1326,7 +1330,7 @@ export def "searchdocuments" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"_fields": $fields, "_where": $qp_where, "_schema": $schema, "_keyword": $keyword, "_sort": $qp_sort} | compact)
+    query: ({"_fields": $fields, "_where": $where, "_schema": $schema, "_keyword": $keyword, "_sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null

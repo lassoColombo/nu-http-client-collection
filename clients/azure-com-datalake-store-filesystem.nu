@@ -153,16 +153,19 @@ export def "file-system-concurrent-append" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --append-mode: string@append-mode-completer # Indicates the concurrent append call should create the file if it doesn't exist or just open the existing file for append
-  --op: string@op-completer # The constant value for the operation.
+  --op: string@op-completer # The constant value for the operation. (required)
   --sync-flag: string@sync-flag-completer # Optionally indicates what to do after completion of the concurrent append. DATA indicates that more data will be sent immediately by the client, the file handle should remain open/locked, and file metadata (including file length, last modified time) should NOT get updated. METADATA indicates that more data will be sent immediately by the client, the file handle should remain open/locked, and file metadata should get updated. CLOSE indicates that the client is done sending data, the file handle should be closed/unlocked, and file metadata should get updated. (default: DATA)
-  --api-version: string # Client Api Version.
-  --transfer-encoding: string@transfer-encoding-completer # Indicates the data being sent to the server is being streamed in chunks.
+  --api-version: string # Client Api Version. (required)
+  --transfer-encoding: string@transfer-encoding-completer # Indicates the data being sent to the server is being streamed in chunks. (required)
   --body: any
-]: any -> record<remoteException: record<exception: string, javaClassName: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
+  let op = ($op | default "CONCURRENTAPPEND")
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let transfer_encoding = ($transfer_encoding | default "chunked")
   let qp = [(serialize-qp "appendMode" $append_mode "scalar") (serialize-qp "op" $op "scalar") (serialize-qp "syncFlag" $sync_flag "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/WebHdfsExt/{path}") $qp $auth.query)
   let req_body = $body
@@ -200,14 +203,17 @@ export def "file-system-set-file-expiry" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --expiry-option: string@expiry-option-completer # Indicates the type of expiration to use for the file: 1. NeverExpire: ExpireTime is ignored. 2. RelativeToNow: ExpireTime is an integer in milliseconds representing the expiration date relative to when file expiration is updated. 3. RelativeToCreationDate: ExpireTime is an integer in milliseconds representing the expiration date relative to file creation. 4. Absolute: ExpireTime is an integer in milliseconds, as a Unix timestamp relative to 1/1/1970 00:00:00.
+  --expiry-option: string@expiry-option-completer # Indicates the type of expiration to use for the file: 1. NeverExpire: ExpireTime is ignored. 2. RelativeToNow: ExpireTime is an integer in milliseconds representing the expiration date relative to when file expiration is updated. 3. RelativeToCreationDate: ExpireTime is an integer in milliseconds representing the expiration date relative to file creation. 4. Absolute: ExpireTime is an integer in milliseconds, as a Unix timestamp relative to 1/1/1970 00:00:00. (required)
   --expire-time: int # The time that the file will expire, corresponding to the ExpiryOption that was set. (format: int64)
-  --op: string@op-completer-1 # The constant value for the operation.
-  --api-version: string # Client Api Version.
-]: nothing -> record<remoteException: record<exception: string, javaClassName: string, message: string>> {
+  --op: string@op-completer-1 # The constant value for the operation. (required)
+  --api-version: string # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
+  if ($expiry_option == null) { error make --unspanned { msg: "required query parameter 'expiryOption' missing: pass --expiry-option" } }
+  let op = ($op | default "SETEXPIRY")
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "expiryOption" $expiry_option "scalar") (serialize-qp "expireTime" $expire_time "scalar") (serialize-qp "op" $op "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/WebHdfsExt/{path}") $qp $auth.query)
   let accept_val = "application/json"
@@ -241,13 +247,16 @@ export def "file-system-check-access" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fsaction: string # File system operation read/write/execute in string form, matching regex pattern '[rwx-]{3}'
-  --op: string@op-completer-2 # The constant value for the operation.
-  --api-version: string # Client Api Version.
-]: nothing -> record<remoteException: record<exception: string, javaClassName: string, message: string>> {
+  --fsaction: string # File system operation read/write/execute in string form, matching regex pattern '[rwx-]{3}' (required)
+  --op: string@op-completer-2 # The constant value for the operation. (required)
+  --api-version: string # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
+  if ($fsaction == null) { error make --unspanned { msg: "required query parameter 'fsaction' missing: pass --fsaction" } }
+  let op = ($op | default "CHECKACCESS")
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "fsaction" $fsaction "scalar") (serialize-qp "op" $op "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/webhdfs/v1/{path}") $qp $auth.query)
   let accept_val = "application/json"

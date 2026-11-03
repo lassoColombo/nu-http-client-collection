@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -1935,20 +1935,20 @@ export def "get-positions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --device-id: int # _deviceId_ is optional, but requires the _from_ and _to_ parameters when used
-  --qp-from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
-  --qp-to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
+  --from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
+  --to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
   --id: int # To fetch one or more positions. Multiple params can be passed like `id=31&id=42`
 ]: nothing -> table<accuracy: float, address: string, altitude: float, attributes: record, course: float, deviceId: int, deviceTime: string, fixTime: string, id: int, latitude: float, longitude: float, network: record, outdated: bool, protocol: string, serverTime: string, speed: float, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deviceId" $device_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "deviceId" $device_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/positions" $qp $auth.query)
   let accept_val = ($accept | default "application/gpx+xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"deviceId": $device_id, "from": $qp_from, "to": $qp_to, "id": $id} | compact)
+    query: ({"deviceId": $device_id, "from": $from, "to": $to, "id": $id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1976,19 +1976,21 @@ export def "get-reports-events" [
   --device-id: list<int>
   --group-id: list<int>
   --type: list<string> # % can be used to return events of all types
-  --qp-from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
-  --qp-to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
+  --from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
+  --to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
 ]: nothing -> table<attributes: record, deviceId: int, eventTime: string, geofenceId: int, id: int, maintenanceId: int, positionId: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deviceId" $device_id "multi") (serialize-qp "groupId" $group_id "multi") (serialize-qp "type" $type "csv") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "deviceId" $device_id "multi") (serialize-qp "groupId" $group_id "multi") (serialize-qp "type" $type "csv") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/events" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"deviceId": $device_id, "groupId": $group_id, "type": $type, "from": $qp_from, "to": $qp_to} | compact)
+    query: ({"deviceId": $device_id, "groupId": $group_id, "type": $type, "from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2015,19 +2017,21 @@ export def "get-reports-route" [
   --accept: string@accept-completer-1 # Response content type
   --device-id: list<int>
   --group-id: list<int>
-  --qp-from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
-  --qp-to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
+  --from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
+  --to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
 ]: nothing -> table<accuracy: float, address: string, altitude: float, attributes: record, course: float, deviceId: int, deviceTime: string, fixTime: string, id: int, latitude: float, longitude: float, network: record, outdated: bool, protocol: string, serverTime: string, speed: float, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deviceId" $device_id "multi") (serialize-qp "groupId" $group_id "multi") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "deviceId" $device_id "multi") (serialize-qp "groupId" $group_id "multi") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/route" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"deviceId": $device_id, "groupId": $group_id, "from": $qp_from, "to": $qp_to} | compact)
+    query: ({"deviceId": $device_id, "groupId": $group_id, "from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2054,19 +2058,21 @@ export def "get-reports-stops" [
   --accept: string@accept-completer-1 # Response content type
   --device-id: list<int>
   --group-id: list<int>
-  --qp-from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
-  --qp-to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
+  --from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
+  --to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
 ]: nothing -> table<address: string, deviceId: int, deviceName: string, duration: int, endTime: string, engineHours: int, lat: float, lon: float, spentFuel: float, startTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deviceId" $device_id "multi") (serialize-qp "groupId" $group_id "multi") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "deviceId" $device_id "multi") (serialize-qp "groupId" $group_id "multi") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/stops" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"deviceId": $device_id, "groupId": $group_id, "from": $qp_from, "to": $qp_to} | compact)
+    query: ({"deviceId": $device_id, "groupId": $group_id, "from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2093,19 +2099,21 @@ export def "get-reports-summary" [
   --accept: string@accept-completer-1 # Response content type
   --device-id: list<int>
   --group-id: list<int>
-  --qp-from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
-  --qp-to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
+  --from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
+  --to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
 ]: nothing -> table<averageSpeed: float, deviceId: int, deviceName: string, distance: float, engineHours: int, maxSpeed: float, spentFuel: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deviceId" $device_id "multi") (serialize-qp "groupId" $group_id "multi") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "deviceId" $device_id "multi") (serialize-qp "groupId" $group_id "multi") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/summary" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"deviceId": $device_id, "groupId": $group_id, "from": $qp_from, "to": $qp_to} | compact)
+    query: ({"deviceId": $device_id, "groupId": $group_id, "from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2132,19 +2140,21 @@ export def "get-reports-trips" [
   --accept: string@accept-completer-1 # Response content type
   --device-id: list<int>
   --group-id: list<int>
-  --qp-from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
-  --qp-to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
+  --from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
+  --to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
 ]: nothing -> table<averageSpeed: float, deviceId: int, deviceName: string, distance: float, driverName: string, driverUniqueId: int, duration: int, endAddress: string, endLat: float, endLon: float, endTime: string, maxSpeed: float, spentFuel: float, startAddress: string, startLat: float, startLon: float, startTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deviceId" $device_id "multi") (serialize-qp "groupId" $group_id "multi") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "deviceId" $device_id "multi") (serialize-qp "groupId" $group_id "multi") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/trips" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"deviceId": $device_id, "groupId": $group_id, "from": $qp_from, "to": $qp_to} | compact)
+    query: ({"deviceId": $device_id, "groupId": $group_id, "from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2361,19 +2371,21 @@ export def "get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
-  --qp-to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
+  --from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
+  --to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
 ]: nothing -> table<activeDevices: int, activeUsers: int, captureTime: string, messagesReceived: int, messagesStored: int, requests: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/statistics" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-ibm-client-id" => { {scheme: $scheme, headers: {X-IBM-Client-Id: $token_val}, query: "", location: "header"} }
+    "x-ibm-client-id" => { {scheme: $scheme, headers: {"X-IBM-Client-Id": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -218,7 +218,7 @@ export def "add-to-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --index: string # Index position for operation (leave blank to specify end of collection)
-  input: list<string> # Collection of values or objects to modify
+  --body-input: list<string> # Collection of values or objects to modify
   --item: string # Item (for multiple items, leave blank and use Items)
   --items: list<string> # Items (Collection, for a single item leave blank and use Item)
 ]: any -> record<result: list<string>> {
@@ -226,8 +226,9 @@ export def "add-to-collection" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/AddToCollection" $auth.query)
-  let req_body = {"index": $index, "input": $input, "item": $item, "items": $items} | compact
+  let req_body = {"index": $index, "input": $body_input, "item": $item, "items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -259,14 +260,16 @@ export def "csv-to-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --header: oneof<nothing, bool> # Include header row (default: true)
-  input: string # CSV string
+  --body-input: string # CSV string
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CSVtoJSON" $auth.query)
-  let req_body = {"header": $header, "input": $input} | compact
+  let req_body = {"header": $header, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "header") == null) { error make --unspanned { msg: "required body field 'header' missing: pass --header or pipe a record" } }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -298,14 +301,15 @@ export def "calculate-absolute" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: float # Numeric value to calculate
+  --body-input: float # Numeric value to calculate
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateAbsolute" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -337,15 +341,16 @@ export def "calculate-addition" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: float # Numeric value
+  --body-input: float # Numeric value
   value: float # Addend, subtrahend, factor, divisor or radicand
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateAddition" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input, "value": $value} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -377,14 +382,15 @@ export def "calculate-average" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: list<float> # Colllection of values to calculate
+  --body-input: list<float> # Colllection of values to calculate
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateAverage" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -416,14 +422,15 @@ export def "calculate-cosine" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: float # Numeric value to calculate
+  --body-input: float # Numeric value to calculate
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateCosine" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -455,15 +462,16 @@ export def "calculate-division" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: float # Numeric value
+  --body-input: float # Numeric value
   value: float # Addend, subtrahend, factor, divisor or radicand
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateDivision" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input, "value": $value} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -495,14 +503,15 @@ export def "calculate-logarithm" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: float # Numeric value to calculate
+  --body-input: float # Numeric value to calculate
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateLogarithm" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -534,14 +543,15 @@ export def "calculate-median" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: list<float> # Colllection of values to calculate
+  --body-input: list<float> # Colllection of values to calculate
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateMedian" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -572,15 +582,16 @@ export def "calculate-min-max" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: list<float> # Colllection of values to calculate
+  --body-input: list<float> # Colllection of values to calculate
   type: string@type-completer # Minimum or Maximum (default: Minimum)
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateMinMax" $auth.query)
-  let req_body = {"input": $input, "type": $type} | compact
+  let req_body = {"input": $body_input, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -612,15 +623,16 @@ export def "calculate-modulo" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: float # Numeric value
+  --body-input: float # Numeric value
   value: float # Addend, subtrahend, factor, divisor or radicand
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateModulo" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input, "value": $value} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -652,15 +664,16 @@ export def "calculate-multiplication" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: float # Numeric value
+  --body-input: float # Numeric value
   value: float # Addend, subtrahend, factor, divisor or radicand
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateMultiplication" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input, "value": $value} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -692,15 +705,16 @@ export def "calculate-nth-root" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: float # Numeric value
+  --body-input: float # Numeric value
   value: float # Addend, subtrahend, factor, divisor or radicand
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateNthRoot" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input, "value": $value} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -732,15 +746,16 @@ export def "calculate-power" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: float # Number to raise
+  --body-input: float # Number to raise
   power: float # Power
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculatePower" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input, "power": $power} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input, "power": $power} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -772,14 +787,15 @@ export def "calculate-sine" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: float # Numeric value to calculate
+  --body-input: float # Numeric value to calculate
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateSine" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -811,14 +827,15 @@ export def "calculate-square-root" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: float # Numeric value to calculate
+  --body-input: float # Numeric value to calculate
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateSquareRoot" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -850,15 +867,16 @@ export def "calculate-subtraction" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: float # Numeric value
+  --body-input: float # Numeric value
   value: float # Addend, subtrahend, factor, divisor or radicand
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateSubtraction" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input, "value": $value} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -890,14 +908,15 @@ export def "calculate-sum" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: list<float> # Colllection of values to calculate
+  --body-input: list<float> # Colllection of values to calculate
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateSum" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -929,14 +948,15 @@ export def "calculate-tangent" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: float # Numeric value to calculate
+  --body-input: float # Numeric value to calculate
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateTangent" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -968,14 +988,15 @@ export def "calculate-variance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: list<float> # Colllection of values to calculate
+  --body-input: list<float> # Colllection of values to calculate
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CalculateVariance" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1006,16 +1027,17 @@ export def "collection-contains-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: list<float> # Collection of strings to search
-  --body-match: float # Number to match
+  --body-input: list<float> # Collection of strings to search
+  match: float # Number to match
   --type: string@type-completer-1 # Type of number - integer or decimal (default: Integer)
 ]: any -> record<item: float, items: list<float>, status: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CollectionContainsNumber" $auth.query)
-  let req_body = {"input": $input, "match": $body_match, "type": $type} | compact
+  let req_body = {"input": $body_input, "match": $match, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1047,16 +1069,17 @@ export def "collection-contains-string" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ignorecase: string@ignorecase-completer # Ignore case when performing comparison
-  input: list<string> # Collection of strings to search
-  --body-match: string # Text to match
+  --body-input: list<string> # Collection of strings to search
+  match: string # Text to match
   --trim: string@trim-completer # Trim white space from comparison string
 ]: any -> record<item: string, items: list<string>, status: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CollectionContainsString" $auth.query)
-  let req_body = {"ignorecase": $ignorecase, "input": $input, "match": $body_match, "trim": $trim} | compact
+  let req_body = {"ignorecase": $ignorecase, "input": $body_input, "match": $match, "trim": $trim} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1088,16 +1111,17 @@ export def "collection-ends-with-string" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ignorecase: string@ignorecase-completer # Ignore case when performing comparison
-  input: list<string> # Collection of strings to search
-  --body-match: string # Text to match
+  --body-input: list<string> # Collection of strings to search
+  match: string # Text to match
   --trim: string@trim-completer # Trim white space from comparison string
 ]: any -> record<item: string, items: list<string>, status: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CollectionEndsWithString" $auth.query)
-  let req_body = {"ignorecase": $ignorecase, "input": $input, "match": $body_match, "trim": $trim} | compact
+  let req_body = {"ignorecase": $ignorecase, "input": $body_input, "match": $match, "trim": $trim} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1129,16 +1153,17 @@ export def "collection-starts-with-string" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ignorecase: string@ignorecase-completer # Ignore case when performing comparison
-  input: list<string> # Collection of strings to search
-  --body-match: string # Text to match
+  --body-input: list<string> # Collection of strings to search
+  match: string # Text to match
   --trim: string@trim-completer # Trim white space from comparison string
 ]: any -> record<item: string, items: list<string>, status: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CollectionStartsWithString" $auth.query)
-  let req_body = {"ignorecase": $ignorecase, "input": $input, "match": $body_match, "trim": $trim} | compact
+  let req_body = {"ignorecase": $ignorecase, "input": $body_input, "match": $match, "trim": $trim} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1169,15 +1194,16 @@ export def "collection-to-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: list<string> # Collection containing strings to convert
+  --body-input: list<string> # Collection containing strings to convert
   name: string # Collection name
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CollectionToJSON" $auth.query)
-  let req_body = {"input": $input, "name": $name} | compact
+  let req_body = {"input": $body_input, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1209,15 +1235,16 @@ export def "collection-to-xml" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   child: string # Name of child XML node(s)
-  input: list<string> # Collection containing strings to convert
+  --body-input: list<string> # Collection containing strings to convert
   root: string # Name of root XML node
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CollectionToXML" $auth.query)
-  let req_body = {"child": $child, "input": $input, "root": $root} | compact
+  let req_body = {"child": $child, "input": $body_input, "root": $root} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1249,7 +1276,7 @@ export def "compare-strings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   compare: string # Comparison string
-  input: string # Original string
+  --body-input: string # Original string
   lower: string@lower-completer # Convert strings to lowercase before comparison
   trim: string@trim-completer # Trim strings before comparison
 ]: any -> record<result: string> {
@@ -1257,8 +1284,9 @@ export def "compare-strings" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CompareStrings" $auth.query)
-  let req_body = {"compare": $compare, "input": $input, "lower": $lower, "trim": $trim} | compact
+  let req_body = {"compare": $compare, "input": $body_input, "lower": $lower, "trim": $trim} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1290,15 +1318,16 @@ export def "contains-string" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   find: string # Text to match
-  input: string # Text to search
+  --body-input: string # Text to search
   lower: string@lower-completer # Convert strings to lowercase
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ContainsString" $auth.query)
-  let req_body = {"find": $find, "input": $input, "lower": $lower} | compact
+  let req_body = {"find": $find, "input": $body_input, "lower": $lower} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1329,16 +1358,17 @@ export def "convert-angle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: float
-  --body-source: string@source-completer
+  --body-input: float
+  source: string@source-completer
   target: string@target-completer
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertAngle" $auth.query)
-  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = {"input": $body_input, "source": $source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1369,16 +1399,17 @@ export def "convert-area" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: float
-  --body-source: string@source-completer-1
+  --body-input: float
+  source: string@source-completer-1
   target: string@target-completer-1
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertArea" $auth.query)
-  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = {"input": $body_input, "source": $source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1410,14 +1441,15 @@ export def "convert-case" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   alphacase: string@alphacase-completer # Case of conversion result
-  input: string # String containing the text to convert
+  --body-input: string # String containing the text to convert
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertCase" $auth.query)
-  let req_body = {"alphacase": $alphacase, "input": $input} | compact
+  let req_body = {"alphacase": $alphacase, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1448,16 +1480,17 @@ export def "convert-currency" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: float # Amount to convert
-  --body-source: string@source-completer-2 # default: USD
+  --body-input: float # Amount to convert
+  source: string@source-completer-2 # default: USD
   target: string@target-completer-2
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertCurrency" $auth.query)
-  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = {"input": $body_input, "source": $source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1488,16 +1521,17 @@ export def "convert-distance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: float
-  --body-source: string@source-completer-3
+  --body-input: float
+  source: string@source-completer-3
   target: string@target-completer-3
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertDistance" $auth.query)
-  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = {"input": $body_input, "source": $source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1528,16 +1562,17 @@ export def "convert-duration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: float
-  --body-source: string@source-completer-4
+  --body-input: float
+  source: string@source-completer-4
   target: string@target-completer-4
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertDuration" $auth.query)
-  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = {"input": $body_input, "source": $source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1568,16 +1603,17 @@ export def "convert-energy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: float
-  --body-source: string@source-completer-5
+  --body-input: float
+  source: string@source-completer-5
   target: string@target-completer-5
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertEnergy" $auth.query)
-  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = {"input": $body_input, "source": $source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1620,8 +1656,8 @@ export def "convert-image" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "image/bmp")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1650,16 +1686,17 @@ export def "convert-power" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: float
-  --body-source: string@source-completer-6
+  --body-input: float
+  source: string@source-completer-6
   target: string@target-completer-6
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertPower" $auth.query)
-  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = {"input": $body_input, "source": $source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1690,16 +1727,17 @@ export def "convert-speed" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: float
-  --body-source: string@source-completer-7
+  --body-input: float
+  source: string@source-completer-7
   target: string@target-completer-7
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertSpeed" $auth.query)
-  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = {"input": $body_input, "source": $source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1730,16 +1768,17 @@ export def "convert-temperature" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: float
-  --body-source: string@source-completer-8
+  --body-input: float
+  source: string@source-completer-8
   target: string@target-completer-8
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertTemperature" $auth.query)
-  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = {"input": $body_input, "source": $source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1770,16 +1809,17 @@ export def "convert-volume" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: float
-  --body-source: string@source-completer-9
+  --body-input: float
+  source: string@source-completer-9
   target: string@target-completer-9
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertVolume" $auth.query)
-  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = {"input": $body_input, "source": $source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1810,16 +1850,17 @@ export def "convert-weight" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: float
-  --body-source: string@source-completer-10
+  --body-input: float
+  source: string@source-completer-10
   target: string@target-completer-10
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConvertWeight" $auth.query)
-  let req_body = {"input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = {"input": $body_input, "source": $source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1850,14 +1891,15 @@ export def "count-collection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: list<string> # Collection of items to count
+  --body-input: list<string> # Collection of items to count
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CountCollection" $auth.query)
-  let req_body = {"input": $input} | compact
+  let req_body = {"input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1902,8 +1944,8 @@ export def "crop-image" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "image/bmp")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1972,14 +2014,15 @@ export def "date-time-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   culture: string@culture-completer # Language culture (default: en-US)
-  input: string # Source date and time
+  --body-input: string # Source date and time
 ]: any -> record<DayOfWeek: float, DayOfYear: float, MinutesInDay: float, SecondsInDay: float, Ticks: float, WeekOfYear: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DateTimeInfo" $auth.query)
-  let req_body = {"culture": $culture, "input": $input} | compact
+  let req_body = {"culture": $culture, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2010,13 +2053,13 @@ export def "decode-string" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-source: string # Encoded string variable or text value
+  source: string # Encoded string variable or text value
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DecodeString" $auth.query)
-  let req_body = {"source": $body_source} | compact
+  let req_body = {"source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2048,13 +2091,13 @@ export def "encode-string" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-source: string # String variable or text value
+  source: string # String variable or text value
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/EncodeString" $auth.query)
-  let req_body = {"source": $body_source} | compact
+  let req_body = {"source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2096,8 +2139,8 @@ export def "file-to-string" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2126,16 +2169,17 @@ export def "filter-collection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: list<string> # Collection of strings to filter
+  --body-input: list<string> # Collection of strings to filter
   keywords: string # Keywords (separate multiple values with commas)
-  --body-match: string@match-completer # Match type (default: Any)
+  match: string@match-completer # Match type (default: Any)
 ]: any -> record<result: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/FilterCollection" $auth.query)
-  let req_body = {"input": $input, "keywords": $keywords, "match": $body_match} | compact
+  let req_body = {"input": $body_input, "keywords": $keywords, "match": $match} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2177,8 +2221,8 @@ export def "flip-image" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2207,15 +2251,16 @@ export def "format-currency" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: float # Amount to format
+  --body-input: float # Amount to format
   target: string@target-completer-2
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/FormatCurrency" $auth.query)
-  let req_body = {"input": $input, "target": $target} | compact
+  let req_body = {"input": $body_input, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2248,14 +2293,15 @@ export def "format-date-time" [
   --dry-run(-n) # Return the request that would be sent without executing it
   culture: string@culture-completer # Language culture (default: en-US)
   format: string # Output format
-  input: string # Source date and time
+  --body-input: string # Source date and time
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/FormatDateTime" $auth.query)
-  let req_body = {"culture": $culture, "format": $format, "input": $input} | compact
+  let req_body = {"culture": $culture, "format": $format, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2325,14 +2371,15 @@ export def "generate-hash" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   algorithm: string@algorithm-completer # Hash algorithm
-  input: string # Hash source string
+  --body-input: string # Hash source string
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GenerateHash" $auth.query)
-  let req_body = {"algorithm": $algorithm, "input": $input} | compact
+  let req_body = {"algorithm": $algorithm, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2363,15 +2410,16 @@ export def "generate-qr-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: string # Text value(s) (vertical bar delimited by type)
+  --body-input: string # Text value(s) (vertical bar delimited by type)
   payload: string@payload-completer # Payload type (default: Plain Text (string))
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GenerateQRCode" $auth.query)
-  let req_body = {"input": $input, "payload": $payload} | compact
+  let req_body = {"input": $body_input, "payload": $payload} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2403,7 +2451,7 @@ export def "json-to-csv" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --header: oneof<nothing, bool> # Include header row (default: true)
-  input: string # JSON array object
+  --body-input: string # JSON array object
   --omit: string # Columns to omit (comma separated)
   --order: string # Column order (comma separated)
 ]: any -> record<result: string> {
@@ -2411,8 +2459,10 @@ export def "json-to-csv" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/JSONtoCSV" $auth.query)
-  let req_body = {"header": $header, "input": $input, "omit": $omit, "order": $order} | compact
+  let req_body = {"header": $header, "input": $body_input, "omit": $omit, "order": $order} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "header") == null) { error make --unspanned { msg: "required body field 'header' missing: pass --header or pipe a record" } }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2446,7 +2496,7 @@ export def "json-to-html" [
   --alternate: string # Alternate header row markup
   --attributes: string # Optional table attributes (single quoted values)
   --header: oneof<nothing, bool> # Include header row (default: true)
-  input: string # JSON array object
+  --body-input: string # JSON array object
   --omit: string # Columns to omit (comma separated)
   --order: string # Column order (comma separated)
 ]: any -> record<result: string> {
@@ -2454,8 +2504,10 @@ export def "json-to-html" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/JSONtoHTML" $auth.query)
-  let req_body = {"alternate": $alternate, "attributes": $attributes, "header": $header, "input": $input, "omit": $omit, "order": $order} | compact
+  let req_body = {"alternate": $alternate, "attributes": $attributes, "header": $header, "input": $body_input, "omit": $omit, "order": $order} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "header") == null) { error make --unspanned { msg: "required body field 'header' missing: pass --header or pipe a record" } }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2486,15 +2538,16 @@ export def "json-to-xml" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: string # JSON array object
+  --body-input: string # JSON array object
   root: string # Name of root node
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/JSONtoXML" $auth.query)
-  let req_body = {"input": $input, "root": $root} | compact
+  let req_body = {"input": $body_input, "root": $root} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2525,7 +2578,7 @@ export def "join-strings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: list<string> # Collection of strings to be joined
+  --body-input: list<string> # Collection of strings to be joined
   lower: string@lower-completer # Convert strings in collection to lowercase
   separator: string # Separator character
   trim: string@trim-completer # Trim strings in collection
@@ -2534,8 +2587,9 @@ export def "join-strings" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/JoinStrings" $auth.query)
-  let req_body = {"input": $input, "lower": $lower, "separator": $separator, "trim": $trim} | compact
+  let req_body = {"input": $body_input, "lower": $lower, "separator": $separator, "trim": $trim} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2605,15 +2659,16 @@ export def "query-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: string # XML or JSON string
+  --body-input: string # XML or JSON string
   query: string # XPath or JSONPath query
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/QueryJSON" $auth.query)
-  let req_body = {"input": $input, "query": $query} | compact
+  let req_body = {"input": $body_input, "query": $query} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2644,15 +2699,16 @@ export def "query-xml" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: string # XML or JSON string
+  --body-input: string # XML or JSON string
   query: string # XPath or JSONPath query
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/QueryXML" $auth.query)
-  let req_body = {"input": $input, "query": $query} | compact
+  let req_body = {"input": $body_input, "query": $query} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2723,7 +2779,7 @@ export def "redact-string" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --regex: string # Regular expression pattern for matching strings
-  --body-source: string # String containing the complete text
+  source: string # String containing the complete text
   --value: string # Individual string to redact
   --values: list<string> # Collection of strings to redact
 ]: any -> record<result: string> {
@@ -2731,7 +2787,7 @@ export def "redact-string" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/RedactString" $auth.query)
-  let req_body = {"regex": $regex, "source": $body_source, "value": $value, "values": $values} | compact
+  let req_body = {"regex": $regex, "source": $source, "value": $value, "values": $values} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2764,7 +2820,7 @@ export def "remove-from-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --index: string # Index position for operation (leave blank to specify end of collection)
-  input: list<string> # Collection of values or objects to modify
+  --body-input: list<string> # Collection of values or objects to modify
   --item: string # Item (for multiple items, leave blank and use Items)
   --items: list<string> # Items (Collection, for a single item leave blank and use Item)
 ]: any -> record<result: list<string>> {
@@ -2772,8 +2828,9 @@ export def "remove-from-collection" [
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/RemoveFromCollection" $auth.query)
-  let req_body = {"index": $index, "input": $input, "item": $item, "items": $items} | compact
+  let req_body = {"index": $index, "input": $body_input, "item": $item, "items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2805,14 +2862,14 @@ export def "replace-string" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   replacement: string # Replacement text
-  --body-source: string # String containing the text to be replaced
+  source: string # String containing the text to be replaced
   value: string # Text to replace
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ReplaceString" $auth.query)
-  let req_body = {"replacement": $replacement, "source": $body_source, "value": $value} | compact
+  let req_body = {"replacement": $replacement, "source": $source, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2845,16 +2902,17 @@ export def "replace-values-in-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   ignore_case: string@ignore-case-completer # Ignore case (default: true)
-  input: list<string> # Collection of strings
-  --body-match: string # Match value
+  --body-input: list<string> # Collection of strings
+  match: string # Match value
   replacement: string # Replacement value
 ]: any -> record<result: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ReplaceValuesInCollection" $auth.query)
-  let req_body = {"ignoreCase": $ignore_case, "input": $input, "match": $body_match, "replacement": $replacement} | compact
+  let req_body = {"ignoreCase": $ignore_case, "input": $body_input, "match": $match, "replacement": $replacement} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2900,8 +2958,8 @@ export def "resize-image" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "image/bmp")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2941,8 +2999,8 @@ export def "rotate-image" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2972,14 +3030,15 @@ export def "round-number" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: float # Numeric value to calculate
+  --body-input: float # Numeric value to calculate
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/RoundNumber" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3010,13 +3069,13 @@ export def "shorten-link" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-source: string # String variable or text value
+  source: string # String variable or text value
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ShortenLink" $auth.query)
-  let req_body = {"source": $body_source} | compact
+  let req_body = {"source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3048,15 +3107,16 @@ export def "sort-collection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: list<string> # Collection of strings to sort
+  --body-input: list<string> # Collection of strings to sort
   order: string@order-completer # Sort order (default: Ascending)
 ]: any -> record<result: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/SortCollection" $auth.query)
-  let req_body = {"input": $input, "order": $order} | compact
+  let req_body = {"input": $body_input, "order": $order} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3098,8 +3158,8 @@ export def "speech-to-text" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -3129,15 +3189,16 @@ export def "split-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --index: string # Index location to split (leave empty to use Match value)
-  input: list<string> # Collection of items to split
-  --body-match: string # String to match (explicit, case-insensitive, leave empty to use Index)
+  --body-input: list<string> # Collection of items to split
+  --match: string # String to match (explicit, case-insensitive, leave empty to use Index)
 ]: any -> record<result1: list<string>, result2: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/SplitCollection" $auth.query)
-  let req_body = {"index": $index, "input": $input, "match": $body_match} | compact
+  let req_body = {"index": $index, "input": $body_input, "match": $match} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3169,14 +3230,15 @@ export def "split-string" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   characters: string # One or more characters that will be used to split the text
-  input: string # Text to split
+  --body-input: string # Text to split
 ]: any -> record<data: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/SplitString" $auth.query)
-  let req_body = {"characters": $characters, "input": $input} | compact
+  let req_body = {"characters": $characters, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3208,14 +3270,15 @@ export def "standard-deviation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
-  input: list<float> # Colllection of values to calculate
+  --body-input: list<float> # Colllection of values to calculate
 ]: any -> record<result: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/StandardDeviation" $auth.query)
-  let req_body = {"decimals": $decimals, "input": $input} | compact
+  let req_body = {"decimals": $decimals, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3289,14 +3352,15 @@ export def "string-to-file" [
   --accept: string@accept-completer-1 # Response content type
   extension: string@extension-completer # File extension (default: TXT)
   filename: string # Name of file (without extension)
-  input: string # Text string (body of file)
+  --body-input: string # Text string (body of file)
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/StringToFile" $auth.query)
-  let req_body = {"extension": $extension, "filename": $filename, "input": $input} | compact
+  let req_body = {"extension": $extension, "filename": $filename, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3367,15 +3431,16 @@ export def "translate-string" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: string # String containing the text to be translated
+  --body-input: string # String containing the text to be translated
   language: string@language-completer-1 # Translation language
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/TranslateString" $auth.query)
-  let req_body = {"input": $input, "language": $language} | compact
+  let req_body = {"input": $body_input, "language": $language} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3406,14 +3471,14 @@ export def "trim-string" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-source: string # String containing the text to be trimmed
+  source: string # String containing the text to be trimmed
   type: string@type-completer-3 # Type of white space to remove
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/TrimString" $auth.query)
-  let req_body = {"source": $body_source, "type": $type} | compact
+  let req_body = {"source": $source, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3445,13 +3510,13 @@ export def "url-decode" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-source: string # Encoded string variable or text value
+  source: string # Encoded string variable or text value
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/URLDecode" $auth.query)
-  let req_body = {"source": $body_source} | compact
+  let req_body = {"source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3483,13 +3548,13 @@ export def "url-encode" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-source: string # String variable or text value
+  source: string # String variable or text value
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/URLEncode" $auth.query)
-  let req_body = {"source": $body_source} | compact
+  let req_body = {"source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3521,13 +3586,13 @@ export def "validate-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-source: string # String variable or text value
+  source: string # String variable or text value
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ValidateEmail" $auth.query)
-  let req_body = {"source": $body_source} | compact
+  let req_body = {"source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3561,14 +3626,15 @@ export def "verify-hash" [
   --dry-run(-n) # Return the request that would be sent without executing it
   algorithm: string@algorithm-completer # Hash algorithm
   hash: string # Hashed result
-  input: string # Original source string
+  --body-input: string # Original source string
 ]: any -> record<result: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/VerifyHash" $auth.query)
-  let req_body = {"algorithm": $algorithm, "hash": $hash, "input": $input} | compact
+  let req_body = {"algorithm": $algorithm, "hash": $hash, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3615,8 +3681,8 @@ export def "watermark-image" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -3646,16 +3712,17 @@ export def "world-time" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Display format (defaults to 'yyyy-MM-dd HH:mm:ss')
-  input: string # Source date and time
-  --body-source: string@source-completer-11 # default: GMT Standard Time - (GMT) Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London
+  --body-input: string # Source date and time
+  source: string@source-completer-11 # default: GMT Standard Time - (GMT) Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London
   target: string@target-completer-11 # default: GMT Standard Time - (GMT) Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/WorldTime" $auth.query)
-  let req_body = {"format": $format, "input": $input, "source": $body_source, "target": $target} | compact
+  let req_body = {"format": $format, "input": $body_input, "source": $source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3686,14 +3753,15 @@ export def "xml-to-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  input: string # XML string
+  --body-input: string # XML string
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/XMLtoJSON" $auth.query)
-  let req_body = {"input": $input} | compact
+  let req_body = {"input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

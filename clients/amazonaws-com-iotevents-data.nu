@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # POST /alarms/acknowledge
 # operationId: BatchAcknowledgeAlarm
-# --acknowledgeActionRequests item shape: {requestId: any, alarmModelName: any, keyValue?: any, note?: any}
+# --acknowledgeActionRequests item shape: {requestId: string, alarmModelName: string, keyValue?: string, note?: string}
 export def "batch-acknowledge-alarm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -146,8 +146,8 @@ export def "batch-acknowledge-alarm" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  acknowledge_action_requests: list # The list of acknowledge action requests. You can specify up to 10 requests per operation. — item shape: {requestId: any, alarmModelName: any, keyValue?: any, note?: any}
-]: any -> record<errorEntries: record> {
+  acknowledge_action_requests: list # The list of acknowledge action requests. You can specify up to 10 requests per operation. — item shape: {requestId: string, alarmModelName: string, keyValue?: string, note?: string}
+]: any -> record<errorEntries: table<requestId: string, errorCode: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -176,7 +176,7 @@ export def "batch-acknowledge-alarm" [
 #
 # POST /detectors/delete
 # operationId: BatchDeleteDetector
-# --detectors item shape: {messageId: any, detectorModelName: any, keyValue?: any}
+# --detectors item shape: {messageId: string, detectorModelName: string, keyValue?: string}
 export def "batch-delete-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,8 +194,8 @@ export def "batch-delete-detector" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  detectors: list # The list of one or more detectors to be deleted. — item shape: {messageId: any, detectorModelName: any, keyValue?: any}
-]: any -> record<batchDeleteDetectorErrorEntries: record> {
+  detectors: list # The list of one or more detectors to be deleted. — item shape: {messageId: string, detectorModelName: string, keyValue?: string}
+]: any -> record<batchDeleteDetectorErrorEntries: table<messageId: string, errorCode: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -224,7 +224,7 @@ export def "batch-delete-detector" [
 #
 # POST /alarms/disable
 # operationId: BatchDisableAlarm
-# --disableActionRequests item shape: {requestId: any, alarmModelName: any, keyValue?: any, note?: any}
+# --disableActionRequests item shape: {requestId: string, alarmModelName: string, keyValue?: string, note?: string}
 export def "batch-disable-alarm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -242,8 +242,8 @@ export def "batch-disable-alarm" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  disable_action_requests: list # The list of disable action requests. You can specify up to 10 requests per operation. — item shape: {requestId: any, alarmModelName: any, keyValue?: any, note?: any}
-]: any -> record<errorEntries: record> {
+  disable_action_requests: list # The list of disable action requests. You can specify up to 10 requests per operation. — item shape: {requestId: string, alarmModelName: string, keyValue?: string, note?: string}
+]: any -> record<errorEntries: table<requestId: string, errorCode: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -272,7 +272,7 @@ export def "batch-disable-alarm" [
 #
 # POST /alarms/enable
 # operationId: BatchEnableAlarm
-# --enableActionRequests item shape: {requestId: any, alarmModelName: any, keyValue?: any, note?: any}
+# --enableActionRequests item shape: {requestId: string, alarmModelName: string, keyValue?: string, note?: string}
 export def "batch-enable-alarm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -290,8 +290,8 @@ export def "batch-enable-alarm" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  enable_action_requests: list # The list of enable action requests. You can specify up to 10 requests per operation. — item shape: {requestId: any, alarmModelName: any, keyValue?: any, note?: any}
-]: any -> record<errorEntries: record> {
+  enable_action_requests: list # The list of enable action requests. You can specify up to 10 requests per operation. — item shape: {requestId: string, alarmModelName: string, keyValue?: string, note?: string}
+]: any -> record<errorEntries: table<requestId: string, errorCode: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -320,7 +320,7 @@ export def "batch-enable-alarm" [
 #
 # POST /inputs/messages
 # operationId: BatchPutMessage
-# --messages item shape: {messageId: any, inputName: any, payload: any, timestamp?: any}
+# --messages item shape: {messageId: string, inputName: string, payload: string, timestamp?: record}
 export def "batch-put-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -338,8 +338,8 @@ export def "batch-put-message" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  messages: list # The list of messages to send. Each message has the following format: '{ "messageId": "string", "inputName": "string", "payload": "string"}' — item shape: {messageId: any, inputName: any, payload: any, timestamp?: any}
-]: any -> record<BatchPutMessageErrorEntries: record> {
+  messages: list # The list of messages to send. Each message has the following format: '{ "messageId": "string", "inputName": "string", "payload": "string"}' — item shape: {messageId: string, inputName: string, payload: string, timestamp?: record}
+]: any -> record<BatchPutMessageErrorEntries: table<messageId: string, errorCode: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -368,7 +368,7 @@ export def "batch-put-message" [
 #
 # POST /alarms/reset
 # operationId: BatchResetAlarm
-# --resetActionRequests item shape: {requestId: any, alarmModelName: any, keyValue?: any, note?: any}
+# --resetActionRequests item shape: {requestId: string, alarmModelName: string, keyValue?: string, note?: string}
 export def "batch-reset-alarm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -386,8 +386,8 @@ export def "batch-reset-alarm" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  reset_action_requests: list # The list of reset action requests. You can specify up to 10 requests per operation. — item shape: {requestId: any, alarmModelName: any, keyValue?: any, note?: any}
-]: any -> record<errorEntries: record> {
+  reset_action_requests: list # The list of reset action requests. You can specify up to 10 requests per operation. — item shape: {requestId: string, alarmModelName: string, keyValue?: string, note?: string}
+]: any -> record<errorEntries: table<requestId: string, errorCode: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -416,7 +416,7 @@ export def "batch-reset-alarm" [
 #
 # POST /alarms/snooze
 # operationId: BatchSnoozeAlarm
-# --snoozeActionRequests item shape: {requestId: any, alarmModelName: any, keyValue?: any, note?: any, snoozeDuration: any}
+# --snoozeActionRequests item shape: {requestId: string, alarmModelName: string, keyValue?: string, note?: string, snoozeDuration: int}
 export def "batch-snooze-alarm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -434,8 +434,8 @@ export def "batch-snooze-alarm" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  snooze_action_requests: list # The list of snooze action requests. You can specify up to 10 requests per operation. — item shape: {requestId: any, alarmModelName: any, keyValue?: any, note?: any, snoozeDuration: any}
-]: any -> record<errorEntries: record> {
+  snooze_action_requests: list # The list of snooze action requests. You can specify up to 10 requests per operation. — item shape: {requestId: string, alarmModelName: string, keyValue?: string, note?: string, snoozeDuration: int}
+]: any -> record<errorEntries: table<requestId: string, errorCode: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -464,7 +464,7 @@ export def "batch-snooze-alarm" [
 #
 # POST /detectors
 # operationId: BatchUpdateDetector
-# --detectors item shape: {messageId: any, detectorModelName: any, keyValue?: any, state: any}
+# --detectors item shape: {messageId: string, detectorModelName: string, keyValue?: string, state: record}
 export def "batch-update-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -482,8 +482,8 @@ export def "batch-update-detector" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  detectors: list # The list of detectors (instances) to update, along with the values to update. — item shape: {messageId: any, detectorModelName: any, keyValue?: any, state: any}
-]: any -> record<batchUpdateDetectorErrorEntries: record> {
+  detectors: list # The list of detectors (instances) to update, along with the values to update. — item shape: {messageId: string, detectorModelName: string, keyValue?: string, state: record}
+]: any -> record<batchUpdateDetectorErrorEntries: table<messageId: string, errorCode: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -531,7 +531,7 @@ export def "describe-alarm" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<alarm: record<alarmModelName: record, alarmModelVersion: record, keyValue: record, alarmState: record<stateName: record, ruleEvaluation: record, customerAction: record, systemEvent: record>, severity: record, creationTime: record, lastUpdateTime: record>> {
+]: nothing -> record<alarm: record<alarmModelName: string, alarmModelVersion: string, keyValue: string, alarmState: record<stateName: string, ruleEvaluation: record, customerAction: record, systemEvent: record>, severity: int, creationTime: string, lastUpdateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($alarm_model_name | is-empty) { error make --unspanned { msg: "path parameter 'alarmModelName' must be non-empty" } }
@@ -578,7 +578,7 @@ export def "describe-detector" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<detector: record<detectorModelName: record, keyValue: record, detectorModelVersion: record, state: record<stateName: record, variables: record, timers: record>, creationTime: record, lastUpdateTime: record>> {
+]: nothing -> record<detector: record<detectorModelName: string, keyValue: string, detectorModelVersion: string, state: record<stateName: string, variables: list, timers: list>, creationTime: string, lastUpdateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_model_name | is-empty) { error make --unspanned { msg: "path parameter 'detectorModelName' must be non-empty" } }
@@ -626,7 +626,7 @@ export def "list-alarms" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<alarmSummaries: record, nextToken: record> {
+]: nothing -> record<alarmSummaries: table<alarmModelName: string, alarmModelVersion: string, keyValue: string, stateName: string, creationTime: string, lastUpdateTime: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($alarm_model_name | is-empty) { error make --unspanned { msg: "path parameter 'alarmModelName' must be non-empty" } }
@@ -675,7 +675,7 @@ export def "list-detectors" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<detectorSummaries: record, nextToken: record> {
+]: nothing -> record<detectorSummaries: table<detectorModelName: string, keyValue: string, detectorModelVersion: string, state: record, creationTime: string, lastUpdateTime: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_model_name | is-empty) { error make --unspanned { msg: "path parameter 'detectorModelName' must be non-empty" } }

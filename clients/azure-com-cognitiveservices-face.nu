@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -208,7 +208,7 @@ export def "face-list-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
-]: nothing -> table<faceListId: string, persistedFaces: list<record>> {
+]: nothing -> table<faceListId: string, persistedFaces: list<record>, recognitionModel: string, name: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
@@ -244,7 +244,7 @@ export def "face-list-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($face_list_id | is-empty) { error make --unspanned { msg: "path parameter 'faceListId' must be non-empty" } }
@@ -281,7 +281,7 @@ export def "face-list-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
-]: nothing -> record<faceListId: string, persistedFaces: table<persistedFaceId: string, userData: string>> {
+]: nothing -> record<faceListId: string, persistedFaces: table<persistedFaceId: string, userData: string>, recognitionModel: string, name: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($face_list_id | is-empty) { error make --unspanned { msg: "path parameter 'faceListId' must be non-empty" } }
@@ -320,7 +320,7 @@ export def "face-list-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # User defined name, maximum length is 128.
   --user-data: string # User specified data. Length should not exceed 16KB.
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -362,7 +362,7 @@ export def "face-list-create" [
   --recognition-model: string@recognition-model-completer # Name of recognition model. Recognition model is used when the face features are extracted and associated with detected faceIds, (Large)FaceList or (Large)PersonGroup. A recognition model name can be provided when performing Face - Detect or (Large)FaceList - Create or (Large)PersonGroup - Create. The default value is 'recognition_01', if latest model needed, please explicitly specify the model you need. (default: recognition_01)
   --name: string # User defined name, maximum length is 128.
   --user-data: string # User specified data. Length should not exceed 16KB.
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -446,7 +446,7 @@ export def "face-list-delete-face" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($face_list_id | is-empty) { error make --unspanned { msg: "path parameter 'faceListId' must be non-empty" } }
@@ -606,7 +606,7 @@ export def "large-face-list-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
-]: nothing -> table<largeFaceListId: string> {
+]: nothing -> table<largeFaceListId: string, recognitionModel: string, name: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
@@ -642,7 +642,7 @@ export def "large-face-list-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_face_list_id | is-empty) { error make --unspanned { msg: "path parameter 'largeFaceListId' must be non-empty" } }
@@ -679,7 +679,7 @@ export def "large-face-list-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
-]: nothing -> record<largeFaceListId: string> {
+]: nothing -> record<largeFaceListId: string, recognitionModel: string, name: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_face_list_id | is-empty) { error make --unspanned { msg: "path parameter 'largeFaceListId' must be non-empty" } }
@@ -718,7 +718,7 @@ export def "large-face-list-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # User defined name, maximum length is 128.
   --user-data: string # User specified data. Length should not exceed 16KB.
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -760,7 +760,7 @@ export def "large-face-list-create" [
   --recognition-model: string@recognition-model-completer # Name of recognition model. Recognition model is used when the face features are extracted and associated with detected faceIds, (Large)FaceList or (Large)PersonGroup. A recognition model name can be provided when performing Face - Detect or (Large)FaceList - Create or (Large)PersonGroup - Create. The default value is 'recognition_01', if latest model needed, please explicitly specify the model you need. (default: recognition_01)
   --name: string # User defined name, maximum length is 128.
   --user-data: string # User specified data. Length should not exceed 16KB.
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -883,7 +883,7 @@ export def "large-face-list-delete-face" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_face_list_id | is-empty) { error make --unspanned { msg: "path parameter 'largeFaceListId' must be non-empty" } }
@@ -960,7 +960,7 @@ export def "large-face-list-update-face" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-data: string # User-provided data attached to the face. The size limit is 1KB.
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1000,7 +1000,7 @@ export def "large-face-list-train" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_face_list_id | is-empty) { error make --unspanned { msg: "path parameter 'largeFaceListId' must be non-empty" } }
@@ -1074,7 +1074,7 @@ export def "large-person-group-list" [
   --start: string # List large person groups from the least largePersonGroupId greater than the "start".
   --top: int # The number of large person groups to list. (default: 1000)
   --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
-]: nothing -> table<largePersonGroupId: string> {
+]: nothing -> table<largePersonGroupId: string, recognitionModel: string, name: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
@@ -1110,7 +1110,7 @@ export def "large-person-group-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'largePersonGroupId' must be non-empty" } }
@@ -1147,7 +1147,7 @@ export def "large-person-group-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
-]: nothing -> record<largePersonGroupId: string> {
+]: nothing -> record<largePersonGroupId: string, recognitionModel: string, name: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'largePersonGroupId' must be non-empty" } }
@@ -1186,7 +1186,7 @@ export def "large-person-group-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # User defined name, maximum length is 128.
   --user-data: string # User specified data. Length should not exceed 16KB.
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1228,7 +1228,7 @@ export def "large-person-group-create" [
   --recognition-model: string@recognition-model-completer # Name of recognition model. Recognition model is used when the face features are extracted and associated with detected faceIds, (Large)FaceList or (Large)PersonGroup. A recognition model name can be provided when performing Face - Detect or (Large)FaceList - Create or (Large)PersonGroup - Create. The default value is 'recognition_01', if latest model needed, please explicitly specify the model you need. (default: recognition_01)
   --name: string # User defined name, maximum length is 128.
   --user-data: string # User specified data. Length should not exceed 16KB.
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1269,7 +1269,7 @@ export def "large-person-group-person-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Starting person id to return (used to list a range of persons).
   --top: int # Number of persons to return starting with the person id indicated by the 'start' parameter.
-]: nothing -> table<persistedFaceIds: list<string>, personId: string> {
+]: nothing -> table<persistedFaceIds: list<string>, personId: string, name: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'largePersonGroupId' must be non-empty" } }
@@ -1308,7 +1308,7 @@ export def "large-person-group-person-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # User defined name, maximum length is 128.
   --user-data: string # User specified data. Length should not exceed 16KB.
-]: any -> record<persistedFaceIds: list<string>, personId: string> {
+]: any -> record<persistedFaceIds: list<string>, personId: string, name: string, userData: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1348,7 +1348,7 @@ export def "large-person-group-person-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'largePersonGroupId' must be non-empty" } }
@@ -1386,7 +1386,7 @@ export def "large-person-group-person-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<persistedFaceIds: list<string>, personId: string> {
+]: nothing -> record<persistedFaceIds: list<string>, personId: string, name: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'largePersonGroupId' must be non-empty" } }
@@ -1426,7 +1426,7 @@ export def "large-person-group-person-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # User defined name, maximum length is 128.
   --user-data: string # User specified data. Length should not exceed 16KB.
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1514,7 +1514,7 @@ export def "large-person-group-person-delete-face" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'largePersonGroupId' must be non-empty" } }
@@ -1595,7 +1595,7 @@ export def "large-person-group-person-update-face" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-data: string # User-provided data attached to the face. The size limit is 1KB.
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1636,7 +1636,7 @@ export def "large-person-group-train" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'largePersonGroupId' must be non-empty" } }
@@ -1746,7 +1746,7 @@ export def "person-group-list" [
   --start: string # List person groups from the least personGroupId greater than the "start".
   --top: int # The number of person groups to list. (default: 1000)
   --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
-]: nothing -> table<personGroupId: string> {
+]: nothing -> table<personGroupId: string, recognitionModel: string, name: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
@@ -1782,7 +1782,7 @@ export def "person-group-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'personGroupId' must be non-empty" } }
@@ -1819,7 +1819,7 @@ export def "person-group-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
-]: nothing -> record<personGroupId: string> {
+]: nothing -> record<personGroupId: string, recognitionModel: string, name: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'personGroupId' must be non-empty" } }
@@ -1858,7 +1858,7 @@ export def "person-group-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # User defined name, maximum length is 128.
   --user-data: string # User specified data. Length should not exceed 16KB.
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1900,7 +1900,7 @@ export def "person-group-create" [
   --recognition-model: string@recognition-model-completer # Name of recognition model. Recognition model is used when the face features are extracted and associated with detected faceIds, (Large)FaceList or (Large)PersonGroup. A recognition model name can be provided when performing Face - Detect or (Large)FaceList - Create or (Large)PersonGroup - Create. The default value is 'recognition_01', if latest model needed, please explicitly specify the model you need. (default: recognition_01)
   --name: string # User defined name, maximum length is 128.
   --user-data: string # User specified data. Length should not exceed 16KB.
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1941,7 +1941,7 @@ export def "person-group-person-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Starting person id to return (used to list a range of persons).
   --top: int # Number of persons to return starting with the person id indicated by the 'start' parameter.
-]: nothing -> table<persistedFaceIds: list<string>, personId: string> {
+]: nothing -> table<persistedFaceIds: list<string>, personId: string, name: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'personGroupId' must be non-empty" } }
@@ -1980,7 +1980,7 @@ export def "person-group-person-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # User defined name, maximum length is 128.
   --user-data: string # User specified data. Length should not exceed 16KB.
-]: any -> record<persistedFaceIds: list<string>, personId: string> {
+]: any -> record<persistedFaceIds: list<string>, personId: string, name: string, userData: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2020,7 +2020,7 @@ export def "person-group-person-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'personGroupId' must be non-empty" } }
@@ -2058,7 +2058,7 @@ export def "person-group-person-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<persistedFaceIds: list<string>, personId: string> {
+]: nothing -> record<persistedFaceIds: list<string>, personId: string, name: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'personGroupId' must be non-empty" } }
@@ -2098,7 +2098,7 @@ export def "person-group-person-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # User defined name, maximum length is 128.
   --user-data: string # User specified data. Length should not exceed 16KB.
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2186,7 +2186,7 @@ export def "person-group-person-delete-face" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'personGroupId' must be non-empty" } }
@@ -2267,7 +2267,7 @@ export def "person-group-person-update-face" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-data: string # User-provided data attached to the face. The size limit is 1KB.
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2308,7 +2308,7 @@ export def "person-group-train" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'personGroupId' must be non-empty" } }
@@ -2420,7 +2420,7 @@ export def "snapshot-take" [
   object_id: string # User specified source object id to take snapshot from.
   type: string@type-completer # User specified type for the source object to take snapshot from. Currently FaceList, PersonGroup, LargeFaceList and LargePersonGroup are supported.
   --user-data: string # User specified data about the snapshot for any purpose. Length should not exceed 16KB.
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2458,7 +2458,7 @@ export def "snapshot-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
@@ -2532,7 +2532,7 @@ export def "snapshot-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --apply-scope: list<string> # Array of the target Face subscription ids for the snapshot, specified by the user who created the snapshot when calling Snapshot - Take. For each snapshot, only subscriptions included in the applyScope of Snapshot - Take can apply it.
   --user-data: string # User specified data about the snapshot for any purpose. Length should not exceed 16KB.
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2573,7 +2573,7 @@ export def "snapshot-apply" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --mode: string@mode-completer-1 # Snapshot applying mode. Currently only CreateNew is supported, which means the apply operation will fail if target subscription already contains an object of same type and using the same objectId. Users can specify the "objectId" in request body to avoid such conflicts. (default: CreateNew)
   object_id: string # User specified target object id to be created from the snapshot.
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)

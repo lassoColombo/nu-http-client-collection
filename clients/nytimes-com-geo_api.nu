@@ -142,20 +142,20 @@ export def "get-query-json" [
   --filter: string # Filters search results based on the facets provided. For more information on the values you can filter on, see Facets.
   --date-range: string # Start date to end date in the following format- YYYY-MM-DD:YYYY-MM-DD
   --facets: int@facets-completer # When facets is set to 1, a count of all facets will be included in the response. (default: 0)
-  --qp-sort: string # Sorts your results on the fields specified. `sort_value1+[asc | desc],sort_value2+[asc|desc],[...]` Appending +asc to a facet or response will sort results on that value in ascending order. Appending +desc to a facet or response will sort results in descending order. You can sort on multiple fields. You can sort on any facet. For the list of responses you can sort on, see the Sortable Field column in the Response table. If you are doing a spatial search with the ll parameter, you can also sort by the distance from the center of the search: dist+[asc | desc] **Note:** either +asc or +desc is required when using the sort parameter.
+  --sort: string # Sorts your results on the fields specified. `sort_value1+[asc | desc],sort_value2+[asc|desc],[...]` Appending +asc to a facet or response will sort results on that value in ascending order. Appending +desc to a facet or response will sort results in descending order. You can sort on multiple fields. You can sort on any facet. For the list of responses you can sort on, see the Sortable Field column in the Response table. If you are doing a spatial search with the ll parameter, you can also sort by the distance from the center of the search: dist+[asc | desc] **Note:** either +asc or +desc is required when using the sort parameter.
   --limit: int # Limits the number of results returned (default: 20)
   --offset: int # Sets the starting point of the result set (default: 0)
 ]: nothing -> record<results: table<city: string, critic_name: string, event_detail_url: string, event_id: int, event_name: string, event_schedule_id: int, festival: bool, film_rating: bool, free: bool, kid_friendly: bool, last_chance: bool, last_modified: string, long_running_show: bool, previews_and_openings: bool, recur_days: list, recurring_start_date: string, state: string, times_pick: bool, web_description: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "elevation" $elevation "scalar") (serialize-qp "sw" $sw "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "elevation" $elevation "scalar") (serialize-qp "sw" $sw "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/query.json" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"name": $name, "latitude": $latitude, "longitude": $longitude, "elevation": $elevation, "sw": $sw, "query": $query, "filter": $filter, "date_range": $date_range, "facets": $facets, "sort": $qp_sort, "limit": $limit, "offset": $offset} | compact)
+    query: ({"name": $name, "latitude": $latitude, "longitude": $longitude, "elevation": $elevation, "sw": $sw, "query": $query, "filter": $filter, "date_range": $date_range, "facets": $facets, "sort": $sort, "limit": $limit, "offset": $offset} | compact)
     headers: $auth.headers
     body: null
     content_type: null

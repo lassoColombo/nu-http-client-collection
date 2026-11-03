@@ -1,4 +1,4 @@
-# Auto-generated client for VSOnline vv1
+# Auto-generated client for VSOnline v1
 # Source: https://api.apis.guru/v2/specs/visualstudio.com/v1/openapi.json
 # Auth: --token flag or $env.VSONLINE_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -1797,6 +1797,7 @@ export def "delete-api-v1-geneva-actions-vnet-pool-definitions" [
   let full_url = (build-url $base "/api/v1/GenevaActions/VnetPoolDefinitions" $auth.query)
   let req_body = {"dimensions": $dimensions, "isEnabled": $is_enabled, "location": $location, "logicalSkus": $logical_skus, "subtype": $subtype, "targetCount": $target_count, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "isEnabled") == null) { error make --unspanned { msg: "required body field 'isEnabled' missing: pass --is-enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1838,6 +1839,7 @@ export def "post-api-v1-geneva-actions-vnet-pool-definitions" [
   let full_url = (build-url $base "/api/v1/GenevaActions/VnetPoolDefinitions" $auth.query)
   let req_body = {"dimensions": $dimensions, "isEnabled": $is_enabled, "location": $location, "logicalSkus": $logical_skus, "subtype": $subtype, "targetCount": $target_count, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "isEnabled") == null) { error make --unspanned { msg: "required body field 'isEnabled' missing: pass --is-enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -6040,6 +6042,7 @@ export def "post-api-v2-prebuilds-templates-template-id-updatestatus" [
   let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/api/v2/prebuilds/templates/{template_id}/updatestatus") $auth.query)
   let req_body = {"isSuccess": $is_success} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "isSuccess") == null) { error make --unspanned { msg: "required body field 'isSuccess' missing: pass --is-success or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

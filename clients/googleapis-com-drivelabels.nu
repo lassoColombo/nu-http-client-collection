@@ -1,4 +1,4 @@
-# Auto-generated client for Drive Labels API vv2beta
+# Auto-generated client for Drive Labels API v2beta
 # Source: https://api.apis.guru/v2/specs/googleapis.com/drivelabels/v2beta/openapi.json
 # Auth: --token flag or $env.DRIVE_LABELS_API_TOKEN
 
@@ -226,7 +226,7 @@ export def "drivelabels-labels-create" [
   --access-token: string # OAuth access token.
   --alt: string@alt-completer # Data format for response.
   --callback: string # JSONP
-  --fields: string # Selector specifying which fields to include in a partial response. — item shape: {appliedCapabilities?: record, creator?: record, dateOptions?: record, disabler?: record, displayHints?: record, integerOptions?: record, lifecycle?: record, lockStatus?: record, properties?: record, publisher?: record, schemaCapabilities?: record, selectionOptions?: record, textOptions?: record, updater?: record, userOptions?: record}
+  --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.

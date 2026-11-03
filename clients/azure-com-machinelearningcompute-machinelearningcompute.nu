@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -156,10 +156,11 @@ export def "machine-learning-compute-list-available-operations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use. (required)
 ]: nothing -> record<value: table<display: record, name: string, origin: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.MachineLearningCompute/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -193,12 +194,13 @@ export def "operationalization-clusters-list-by-subscription-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use. (required)
   --skiptoken: string # Continuation token for pagination.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MachineLearningCompute/operationalizationClusters") $qp $auth.query)
   let accept_val = "application/json"
@@ -233,13 +235,14 @@ export def "operationalization-clusters-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use. (required)
   --skiptoken: string # Continuation token for pagination.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningCompute/operationalizationClusters") $qp $auth.query)
   let accept_val = "application/json"
@@ -275,14 +278,15 @@ export def "operationalization-clusters-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use. (required)
   --delete-all: oneof<nothing, bool> # If true, deletes all resources associated with this cluster.
-]: nothing -> record<error: record<code: string, details: list<record>, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "deleteAll" $delete_all "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{cluster_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -318,13 +322,14 @@ export def "operationalization-clusters-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use.
-]: nothing -> record<properties: record<appInsights: record<resourceId: string>, clusterType: string, containerRegistry: record<resourceId: string>, containerService: record<agentCount: int, agentVmSize: string, clusterFqdn: string, masterCount: int, orchestratorProperties: record, orchestratorType: string, systemServices: list>, createdOn: string, description: string, globalServiceConfiguration: record<autoScale: record, etag: string, serviceAuth: record, ssl: record>, modifiedOn: string, provisioningErrors: list<record>, provisioningState: string, storageAccount: record<resourceId: string>>> {
+  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use. (required)
+]: nothing -> record<properties: record<appInsights: record<resourceId: string>, clusterType: string, containerRegistry: record<resourceId: string>, containerService: record<agentCount: int, agentVmSize: string, clusterFqdn: string, masterCount: int, orchestratorProperties: record, orchestratorType: string, systemServices: list>, createdOn: string, description: string, globalServiceConfiguration: record<autoScale: record, etag: string, serviceAuth: record, ssl: record>, modifiedOn: string, provisioningErrors: list<record>, provisioningState: string, storageAccount: record<resourceId: string>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{cluster_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -360,15 +365,16 @@ export def "operationalization-clusters-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use. (required)
   --tags: record # Gets or sets a list of key value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater in length than 128 characters and a value no greater in length than 256 characters.
-]: any -> record<properties: record<appInsights: record<resourceId: string>, clusterType: string, containerRegistry: record<resourceId: string>, containerService: record<agentCount: int, agentVmSize: string, clusterFqdn: string, masterCount: int, orchestratorProperties: record, orchestratorType: string, systemServices: list>, createdOn: string, description: string, globalServiceConfiguration: record<autoScale: record, etag: string, serviceAuth: record, ssl: record>, modifiedOn: string, provisioningErrors: list<record>, provisioningState: string, storageAccount: record<resourceId: string>>> {
+]: any -> record<properties: record<appInsights: record<resourceId: string>, clusterType: string, containerRegistry: record<resourceId: string>, containerService: record<agentCount: int, agentVmSize: string, clusterFqdn: string, masterCount: int, orchestratorProperties: record, orchestratorType: string, systemServices: list>, createdOn: string, description: string, globalServiceConfiguration: record<autoScale: record, etag: string, serviceAuth: record, ssl: record>, modifiedOn: string, provisioningErrors: list<record>, provisioningState: string, storageAccount: record<resourceId: string>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{cluster_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -407,17 +413,18 @@ export def "operationalization-clusters-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use. (required)
   --properties: record # Properties of an operationalization cluster — shape: {appInsights?: record, clusterType: "ACS"|"Local", containerRegistry?: record, containerService?: record, description?: string, globalServiceConfiguration?: record, storageAccount?: record}
   location: string # Specifies the location of the resource.
   --tags: record # Contains resource tags defined as key/value pairs.
-]: any -> record<properties: record<appInsights: record<resourceId: string>, clusterType: string, containerRegistry: record<resourceId: string>, containerService: record<agentCount: int, agentVmSize: string, clusterFqdn: string, masterCount: int, orchestratorProperties: record, orchestratorType: string, systemServices: list>, createdOn: string, description: string, globalServiceConfiguration: record<autoScale: record, etag: string, serviceAuth: record, ssl: record>, modifiedOn: string, provisioningErrors: list<record>, provisioningState: string, storageAccount: record<resourceId: string>>> {
+]: any -> record<properties: record<appInsights: record<resourceId: string>, clusterType: string, containerRegistry: record<resourceId: string>, containerService: record<agentCount: int, agentVmSize: string, clusterFqdn: string, masterCount: int, orchestratorProperties: record, orchestratorType: string, systemServices: list>, createdOn: string, description: string, globalServiceConfiguration: record<autoScale: record, etag: string, serviceAuth: record, ssl: record>, modifiedOn: string, provisioningErrors: list<record>, provisioningState: string, storageAccount: record<resourceId: string>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{cluster_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -455,13 +462,14 @@ export def "operationalization-clusters-check-system-services-updates-available"
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use. (required)
 ]: nothing -> record<updatesAvailable: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{cluster_name}/checkSystemServicesUpdatesAvailable") $qp $auth.query)
   let accept_val = "application/json"
@@ -497,13 +505,14 @@ export def "operationalization-clusters-list-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use. (required)
 ]: nothing -> record<appInsights: record<appId: string, instrumentationKey: string>, containerRegistry: record<loginServer: string, password: string, password2: string, username: string>, containerService: record<acsKubeConfig: string, imagePullSecretName: string, servicePrincipalConfiguration: record<clientId: string, secret: string>>, serviceAuthConfiguration: record<primaryAuthKeyHash: string, secondaryAuthKeyHash: string>, sslConfiguration: record<cert: string, cname: string, key: string, status: string>, storageAccount: record<primaryKey: string, resourceId: string, secondaryKey: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{cluster_name}/listKeys") $qp $auth.query)
   let accept_val = "application/json"
@@ -539,13 +548,14 @@ export def "operationalization-clusters-update-system-services" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use. (required)
 ]: nothing -> record<updateCompletedOn: string, updateStartedOn: string, updateStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{cluster_name}/updateSystemServices") $qp $auth.query)
   let accept_val = "application/json"

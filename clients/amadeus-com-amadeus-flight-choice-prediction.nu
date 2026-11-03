@@ -139,15 +139,16 @@ export def "get-flight-choice-predict" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-http-method-override: string # the HTTP method to apply
+  --x-http-method-override: string # the HTTP method to apply (required, default: GET)
   data: list # item shape: {choiceProbability?: string, disablePricing?: bool, fareRules?: record, id: string, instantTicketingRequired?: bool, itineraries?: list, lastTicketingDate?: string, nonHomogeneous?: bool, numberOfBookableSeats?: float, oneWay?: bool, paymentCardRequired?: bool, price?: record, pricingOptions?: record, source: "GDS"|"PYTON", travelerPricings?: list, type: string, validatingAirlineCodes?: list<string>}
   --dictionaries: record # shape: {aircraft?: any, carriers?: any, currencies?: any, locations?: any}
   --meta: record # meta information — shape: {count?: int, links?: any, oneWayCombinations?: list}
   --warnings: list # item shape: {code?: int, detail?: string, source?: record, status?: int, title?: string}
-]: any -> any {
+]: any -> record<data: table<choiceProbability: string, disablePricing: bool, fareRules: record, id: string, instantTicketingRequired: bool, itineraries: list, lastTicketingDate: string, nonHomogeneous: bool, numberOfBookableSeats: float, oneWay: bool, paymentCardRequired: bool, price: record, pricingOptions: record, source: string, travelerPricings: list, type: string, validatingAirlineCodes: list>, dictionaries: record<aircraft: any, carriers: any, currencies: any, locations: any>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>, oneWayCombinations: list<record>>, warnings: table<code: int, detail: string, source: record, status: int, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_http_method_override = ($x_http_method_override | default "GET")
   let full_url = (build-url $base "/shopping/flight-offers/prediction" $auth.query)
   let req_body = {"data": $data, "dictionaries": $dictionaries, "meta": $meta, "warnings": $warnings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

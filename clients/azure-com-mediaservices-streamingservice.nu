@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -159,13 +159,14 @@ export def "live-events-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
-]: nothing -> record<_odata_count: int, _odata_nextLink: string, value: table<properties: record, location: string, tags: record>> {
+  --api-version: string # The Version of the API to be used with the client request. (required)
+]: nothing -> record<_odata_count: int, _odata_nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents") $qp $auth.query)
   let accept_val = "application/json"
@@ -202,14 +203,15 @@ export def "live-events-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The Version of the API to be used with the client request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($live_event_name | is-empty) { error make --unspanned { msg: "path parameter 'liveEventName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -246,14 +248,15 @@ export def "live-events-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
-]: nothing -> record<properties: record<created: string, crossSiteAccessPolicies: record<clientAccessPolicy: string, crossDomainPolicy: string>, description: string, encoding: record<encodingType: string, presetName: string>, input: record<accessControl: record, accessToken: string, endpoints: list, keyFrameIntervalDuration: string, streamingProtocol: string>, lastModified: string, preview: record<accessControl: record, alternativeMediaId: string, endpoints: list, previewLocator: string, streamingPolicyName: string>, provisioningState: string, resourceState: string, streamOptions: list<string>, transcriptions: list<record>, vanityUrl: bool>, location: string, tags: record> {
+  --api-version: string # The Version of the API to be used with the client request. (required)
+]: nothing -> record<properties: record<created: string, crossSiteAccessPolicies: record<clientAccessPolicy: string, crossDomainPolicy: string>, description: string, encoding: record<encodingType: string, presetName: string>, input: record<accessControl: record, accessToken: string, endpoints: list, keyFrameIntervalDuration: string, streamingProtocol: string>, lastModified: string, preview: record<accessControl: record, alternativeMediaId: string, endpoints: list, previewLocator: string, streamingPolicyName: string>, provisioningState: string, resourceState: string, streamOptions: list<string>, transcriptions: list<record>, vanityUrl: bool>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($live_event_name | is-empty) { error make --unspanned { msg: "path parameter 'liveEventName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -291,11 +294,11 @@ export def "live-events-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
+  --api-version: string # The Version of the API to be used with the client request. (required)
   --properties: any # The Live Event properties. — shape: {crossSiteAccessPolicies?: any, description?: string, encoding?: any, input: any, preview?: any, streamOptions?: list<string>, transcriptions?: list, vanityUrl?: bool}
   --location: string # The Azure Region of the resource.
   --tags: record # Resource tags.
-]: any -> record<properties: record<created: string, crossSiteAccessPolicies: record<clientAccessPolicy: string, crossDomainPolicy: string>, description: string, encoding: record<encodingType: string, presetName: string>, input: record<accessControl: record, accessToken: string, endpoints: list, keyFrameIntervalDuration: string, streamingProtocol: string>, lastModified: string, preview: record<accessControl: record, alternativeMediaId: string, endpoints: list, previewLocator: string, streamingPolicyName: string>, provisioningState: string, resourceState: string, streamOptions: list<string>, transcriptions: list<record>, vanityUrl: bool>, location: string, tags: record> {
+]: any -> record<properties: record<created: string, crossSiteAccessPolicies: record<clientAccessPolicy: string, crossDomainPolicy: string>, description: string, encoding: record<encodingType: string, presetName: string>, input: record<accessControl: record, accessToken: string, endpoints: list, keyFrameIntervalDuration: string, streamingProtocol: string>, lastModified: string, preview: record<accessControl: record, alternativeMediaId: string, endpoints: list, previewLocator: string, streamingPolicyName: string>, provisioningState: string, resourceState: string, streamOptions: list<string>, transcriptions: list<record>, vanityUrl: bool>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -303,6 +306,7 @@ export def "live-events-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($live_event_name | is-empty) { error make --unspanned { msg: "path parameter 'liveEventName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -342,12 +346,12 @@ export def "live-events-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
+  --api-version: string # The Version of the API to be used with the client request. (required)
   --auto-start: oneof<nothing, bool> # The flag indicates if the resource should be automatically started on creation.
   --properties: any # The Live Event properties. — shape: {crossSiteAccessPolicies?: any, description?: string, encoding?: any, input: any, preview?: any, streamOptions?: list<string>, transcriptions?: list, vanityUrl?: bool}
   --location: string # The Azure Region of the resource.
   --tags: record # Resource tags.
-]: any -> record<properties: record<created: string, crossSiteAccessPolicies: record<clientAccessPolicy: string, crossDomainPolicy: string>, description: string, encoding: record<encodingType: string, presetName: string>, input: record<accessControl: record, accessToken: string, endpoints: list, keyFrameIntervalDuration: string, streamingProtocol: string>, lastModified: string, preview: record<accessControl: record, alternativeMediaId: string, endpoints: list, previewLocator: string, streamingPolicyName: string>, provisioningState: string, resourceState: string, streamOptions: list<string>, transcriptions: list<record>, vanityUrl: bool>, location: string, tags: record> {
+]: any -> record<properties: record<created: string, crossSiteAccessPolicies: record<clientAccessPolicy: string, crossDomainPolicy: string>, description: string, encoding: record<encodingType: string, presetName: string>, input: record<accessControl: record, accessToken: string, endpoints: list, keyFrameIntervalDuration: string, streamingProtocol: string>, lastModified: string, preview: record<accessControl: record, alternativeMediaId: string, endpoints: list, previewLocator: string, streamingPolicyName: string>, provisioningState: string, resourceState: string, streamOptions: list<string>, transcriptions: list<record>, vanityUrl: bool>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -355,6 +359,7 @@ export def "live-events-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($live_event_name | is-empty) { error make --unspanned { msg: "path parameter 'liveEventName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "autoStart" $auto_start "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -393,14 +398,15 @@ export def "live-outputs-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
-]: nothing -> record<_odata_count: int, _odata_nextLink: string, value: table<properties: record>> {
+  --api-version: string # The Version of the API to be used with the client request. (required)
+]: nothing -> record<_odata_count: int, _odata_nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($live_event_name | is-empty) { error make --unspanned { msg: "path parameter 'liveEventName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}/liveOutputs") $qp $auth.query)
   let accept_val = "application/json"
@@ -438,8 +444,8 @@ export def "live-outputs-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The Version of the API to be used with the client request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -447,6 +453,7 @@ export def "live-outputs-delete" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($live_event_name | is-empty) { error make --unspanned { msg: "path parameter 'liveEventName' must be non-empty" } }
   if ($live_output_name | is-empty) { error make --unspanned { msg: "path parameter 'liveOutputName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name), live_output_name: (encode-path-segment $live_output_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}/liveOutputs/{live_output_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -484,8 +491,8 @@ export def "live-outputs-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
-]: nothing -> record<properties: record<archiveWindowLength: string, assetName: string, created: string, description: string, hls: record<fragmentsPerTsSegment: int>, lastModified: string, manifestName: string, outputSnapTime: int, provisioningState: string, resourceState: string>> {
+  --api-version: string # The Version of the API to be used with the client request. (required)
+]: nothing -> record<properties: record<archiveWindowLength: string, assetName: string, created: string, description: string, hls: record<fragmentsPerTsSegment: int>, lastModified: string, manifestName: string, outputSnapTime: int, provisioningState: string, resourceState: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -493,6 +500,7 @@ export def "live-outputs-get" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($live_event_name | is-empty) { error make --unspanned { msg: "path parameter 'liveEventName' must be non-empty" } }
   if ($live_output_name | is-empty) { error make --unspanned { msg: "path parameter 'liveOutputName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name), live_output_name: (encode-path-segment $live_output_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}/liveOutputs/{live_output_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -531,9 +539,9 @@ export def "live-outputs-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
+  --api-version: string # The Version of the API to be used with the client request. (required)
   --properties: any # The JSON object that contains the properties required to create a Live Output. — shape: {archiveWindowLength: string, assetName: string, description?: string, hls?: any, manifestName?: string, outputSnapTime?: int}
-]: any -> record<properties: record<archiveWindowLength: string, assetName: string, created: string, description: string, hls: record<fragmentsPerTsSegment: int>, lastModified: string, manifestName: string, outputSnapTime: int, provisioningState: string, resourceState: string>> {
+]: any -> record<properties: record<archiveWindowLength: string, assetName: string, created: string, description: string, hls: record<fragmentsPerTsSegment: int>, lastModified: string, manifestName: string, outputSnapTime: int, provisioningState: string, resourceState: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -542,6 +550,7 @@ export def "live-outputs-create" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($live_event_name | is-empty) { error make --unspanned { msg: "path parameter 'liveEventName' must be non-empty" } }
   if ($live_output_name | is-empty) { error make --unspanned { msg: "path parameter 'liveOutputName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name), live_output_name: (encode-path-segment $live_output_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}/liveOutputs/{live_output_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -580,14 +589,15 @@ export def "live-events-reset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The Version of the API to be used with the client request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($live_event_name | is-empty) { error make --unspanned { msg: "path parameter 'liveEventName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}/reset") $qp $auth.query)
   let accept_val = "application/json"
@@ -624,14 +634,15 @@ export def "live-events-start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The Version of the API to be used with the client request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($live_event_name | is-empty) { error make --unspanned { msg: "path parameter 'liveEventName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}/start") $qp $auth.query)
   let accept_val = "application/json"
@@ -668,9 +679,9 @@ export def "live-events-stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
+  --api-version: string # The Version of the API to be used with the client request. (required)
   --remove-outputs-on-stop: oneof<nothing, bool> # The flag indicates if remove LiveOutputs on Stop.
-]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -678,6 +689,7 @@ export def "live-events-stop" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($live_event_name | is-empty) { error make --unspanned { msg: "path parameter 'liveEventName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), live_event_name: (encode-path-segment $live_event_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/liveEvents/{live_event_name}/stop") $qp $auth.query)
   let req_body = {"removeOutputsOnStop": $remove_outputs_on_stop} | compact
@@ -715,13 +727,14 @@ export def "streaming-endpoints-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
-]: nothing -> record<_odata_count: int, _odata_nextLink: string, value: table<properties: record, location: string, tags: record>> {
+  --api-version: string # The Version of the API to be used with the client request. (required)
+]: nothing -> record<_odata_count: int, _odata_nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/streamingEndpoints") $qp $auth.query)
   let accept_val = "application/json"
@@ -758,14 +771,15 @@ export def "streaming-endpoints-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The Version of the API to be used with the client request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($streaming_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'streamingEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), streaming_endpoint_name: (encode-path-segment $streaming_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/streamingEndpoints/{streaming_endpoint_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -802,14 +816,15 @@ export def "streaming-endpoints-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
-]: nothing -> record<properties: record<accessControl: record<akamai: record, ip: record>, availabilitySetName: string, cdnEnabled: bool, cdnProfile: string, cdnProvider: string, created: string, crossSiteAccessPolicies: record<clientAccessPolicy: string, crossDomainPolicy: string>, customHostNames: list<string>, description: string, freeTrialEndTime: string, hostName: string, lastModified: string, maxCacheAge: int, provisioningState: string, resourceState: string, scaleUnits: int>, location: string, tags: record> {
+  --api-version: string # The Version of the API to be used with the client request. (required)
+]: nothing -> record<properties: record<accessControl: record<akamai: record, ip: record>, availabilitySetName: string, cdnEnabled: bool, cdnProfile: string, cdnProvider: string, created: string, crossSiteAccessPolicies: record<clientAccessPolicy: string, crossDomainPolicy: string>, customHostNames: list<string>, description: string, freeTrialEndTime: string, hostName: string, lastModified: string, maxCacheAge: int, provisioningState: string, resourceState: string, scaleUnits: int>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($streaming_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'streamingEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), streaming_endpoint_name: (encode-path-segment $streaming_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/streamingEndpoints/{streaming_endpoint_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -847,11 +862,11 @@ export def "streaming-endpoints-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
+  --api-version: string # The Version of the API to be used with the client request. (required)
   --properties: any # The StreamingEndpoint properties. — shape: {accessControl?: any, availabilitySetName?: string, cdnEnabled?: bool, cdnProfile?: string, cdnProvider?: string, crossSiteAccessPolicies?: any, customHostNames?: list<string>, description?: string, maxCacheAge?: int, scaleUnits: int}
   --location: string # The Azure Region of the resource.
   --tags: record # Resource tags.
-]: any -> record<properties: record<accessControl: record<akamai: record, ip: record>, availabilitySetName: string, cdnEnabled: bool, cdnProfile: string, cdnProvider: string, created: string, crossSiteAccessPolicies: record<clientAccessPolicy: string, crossDomainPolicy: string>, customHostNames: list<string>, description: string, freeTrialEndTime: string, hostName: string, lastModified: string, maxCacheAge: int, provisioningState: string, resourceState: string, scaleUnits: int>, location: string, tags: record> {
+]: any -> record<properties: record<accessControl: record<akamai: record, ip: record>, availabilitySetName: string, cdnEnabled: bool, cdnProfile: string, cdnProvider: string, created: string, crossSiteAccessPolicies: record<clientAccessPolicy: string, crossDomainPolicy: string>, customHostNames: list<string>, description: string, freeTrialEndTime: string, hostName: string, lastModified: string, maxCacheAge: int, provisioningState: string, resourceState: string, scaleUnits: int>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -859,6 +874,7 @@ export def "streaming-endpoints-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($streaming_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'streamingEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), streaming_endpoint_name: (encode-path-segment $streaming_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/streamingEndpoints/{streaming_endpoint_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -898,12 +914,12 @@ export def "streaming-endpoints-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
+  --api-version: string # The Version of the API to be used with the client request. (required)
   --auto-start: oneof<nothing, bool> # The flag indicates if the resource should be automatically started on creation.
   --properties: any # The StreamingEndpoint properties. — shape: {accessControl?: any, availabilitySetName?: string, cdnEnabled?: bool, cdnProfile?: string, cdnProvider?: string, crossSiteAccessPolicies?: any, customHostNames?: list<string>, description?: string, maxCacheAge?: int, scaleUnits: int}
   --location: string # The Azure Region of the resource.
   --tags: record # Resource tags.
-]: any -> record<properties: record<accessControl: record<akamai: record, ip: record>, availabilitySetName: string, cdnEnabled: bool, cdnProfile: string, cdnProvider: string, created: string, crossSiteAccessPolicies: record<clientAccessPolicy: string, crossDomainPolicy: string>, customHostNames: list<string>, description: string, freeTrialEndTime: string, hostName: string, lastModified: string, maxCacheAge: int, provisioningState: string, resourceState: string, scaleUnits: int>, location: string, tags: record> {
+]: any -> record<properties: record<accessControl: record<akamai: record, ip: record>, availabilitySetName: string, cdnEnabled: bool, cdnProfile: string, cdnProvider: string, created: string, crossSiteAccessPolicies: record<clientAccessPolicy: string, crossDomainPolicy: string>, customHostNames: list<string>, description: string, freeTrialEndTime: string, hostName: string, lastModified: string, maxCacheAge: int, provisioningState: string, resourceState: string, scaleUnits: int>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -911,6 +927,7 @@ export def "streaming-endpoints-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($streaming_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'streamingEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "autoStart" $auto_start "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), streaming_endpoint_name: (encode-path-segment $streaming_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/streamingEndpoints/{streaming_endpoint_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -949,9 +966,9 @@ export def "streaming-endpoints-scale" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
+  --api-version: string # The Version of the API to be used with the client request. (required)
   --scale-unit: int # The scale unit number of the StreamingEndpoint. (format: int32)
-]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -959,6 +976,7 @@ export def "streaming-endpoints-scale" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($streaming_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'streamingEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), streaming_endpoint_name: (encode-path-segment $streaming_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/streamingEndpoints/{streaming_endpoint_name}/scale") $qp $auth.query)
   let req_body = {"scaleUnit": $scale_unit} | compact
@@ -997,14 +1015,15 @@ export def "streaming-endpoints-start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The Version of the API to be used with the client request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($streaming_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'streamingEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), streaming_endpoint_name: (encode-path-segment $streaming_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/streamingEndpoints/{streaming_endpoint_name}/start") $qp $auth.query)
   let accept_val = "application/json"
@@ -1041,14 +1060,15 @@ export def "streaming-endpoints-stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The Version of the API to be used with the client request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The Version of the API to be used with the client request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($streaming_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'streamingEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), streaming_endpoint_name: (encode-path-segment $streaming_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{account_name}/streamingEndpoints/{streaming_endpoint_name}/stop") $qp $auth.query)
   let accept_val = "application/json"

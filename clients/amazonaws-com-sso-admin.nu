@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -98,6 +98,8 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def x-amz-target-completer [] { ["SWBExternalService.AttachCustomerManagedPolicyReferenceToPermissionSet"] }
 def x-amz-target-completer-1 [] { ["SWBExternalService.AttachManagedPolicyToPermissionSet"] }
+def target-type-completer [] { ["AWS_ACCOUNT"] }
+def principal-type-completer [] { ["GROUP" "USER"] }
 def x-amz-target-completer-2 [] { ["SWBExternalService.CreateAccountAssignment"] }
 def x-amz-target-completer-3 [] { ["SWBExternalService.CreateInstanceAccessControlAttributeConfiguration"] }
 def x-amz-target-completer-4 [] { ["SWBExternalService.CreatePermissionSet"] }
@@ -118,6 +120,7 @@ def x-amz-target-completer-18 [] { ["SWBExternalService.GetPermissionsBoundaryFo
 def x-amz-target-completer-19 [] { ["SWBExternalService.ListAccountAssignmentCreationStatus"] }
 def x-amz-target-completer-20 [] { ["SWBExternalService.ListAccountAssignmentDeletionStatus"] }
 def x-amz-target-completer-21 [] { ["SWBExternalService.ListAccountAssignments"] }
+def provisioning-status-completer [] { ["LATEST_PERMISSION_SET_NOT_PROVISIONED" "LATEST_PERMISSION_SET_PROVISIONED"] }
 def x-amz-target-completer-22 [] { ["SWBExternalService.ListAccountsForProvisionedPermissionSet"] }
 def x-amz-target-completer-23 [] { ["SWBExternalService.ListCustomerManagedPolicyReferencesInPermissionSet"] }
 def x-amz-target-completer-24 [] { ["SWBExternalService.ListInstances"] }
@@ -126,6 +129,7 @@ def x-amz-target-completer-26 [] { ["SWBExternalService.ListPermissionSetProvisi
 def x-amz-target-completer-27 [] { ["SWBExternalService.ListPermissionSets"] }
 def x-amz-target-completer-28 [] { ["SWBExternalService.ListPermissionSetsProvisionedToAccount"] }
 def x-amz-target-completer-29 [] { ["SWBExternalService.ListTagsForResource"] }
+def target-type-completer-1 [] { ["ALL_PROVISIONED_ACCOUNTS" "AWS_ACCOUNT"] }
 def x-amz-target-completer-30 [] { ["SWBExternalService.ProvisionPermissionSet"] }
 def x-amz-target-completer-31 [] { ["SWBExternalService.PutInlinePolicyToPermissionSet"] }
 def x-amz-target-completer-32 [] { ["SWBExternalService.PutPermissionsBoundaryToPermissionSet"] }
@@ -161,6 +165,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AttachCustomerManagedPolicyReferenceToPermissionSet
+# --CustomerManagedPolicyReference shape: {Name: string, Path?: string}
 export def "attach-customer-managed-policy-reference-to-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,14 +183,15 @@ export def "attach-customer-managed-policy-reference-to-permission-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  instance_arn: any
-  permission_set_arn: any
-  customer_managed_policy_reference: any
+  --x-amz-target: string@x-amz-target-completer # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
+  permission_set_arn: string # The ARN of the PermissionSet.
+  customer_managed_policy_reference: record # Specifies the name and path of a customer managed policy. You must have an IAM policy that matches the name and path in each AWS account where you want to deploy your permission set. — shape: {Name: string, Path?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.AttachCustomerManagedPolicyReferenceToPermissionSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "CustomerManagedPolicyReference": $customer_managed_policy_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -228,14 +234,15 @@ export def "attach-managed-policy-to-permission-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  instance_arn: any
-  permission_set_arn: any
-  managed_policy_arn: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  permission_set_arn: string # The ARN of the PermissionSet that the managed policy should be attached to.
+  managed_policy_arn: string # The AWS managed policy ARN to be attached to a permission set.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.AttachManagedPolicyToPermissionSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "ManagedPolicyArn": $managed_policy_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -278,17 +285,18 @@ export def "create-account-assignment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  instance_arn: any
-  target_id: any
-  target_type: any
-  permission_set_arn: any
-  principal_type: any
-  principal_id: any
-]: any -> record<AccountAssignmentCreationStatus: record<Status: record, RequestId: record, FailureReason: record, TargetId: record, TargetType: record, PermissionSetArn: record, PrincipalType: record, PrincipalId: record, CreatedDate: record>> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  target_id: string # TargetID is an AWS account identifier, typically a 10-12 digit string (For example, 123456789012).
+  target_type: string@target-type-completer # The entity type for which the assignment will be created.
+  permission_set_arn: string # The ARN of the permission set that the admin wants to grant the principal access to.
+  principal_type: string@principal-type-completer # The entity type for which the assignment will be created.
+  principal_id: string # An identifier for an object in IAM Identity Center, such as a user or group. PrincipalIds are GUIDs (For example, f81d4fae-7dec-11d0-a765-00a0c91e6bf6). For more information about PrincipalIds in IAM Identity Center, see the IAM Identity Center Identity Store API Reference (/singlesignon/latest/IdentityStoreAPIReference/welcome.html).
+]: any -> record<AccountAssignmentCreationStatus: record<Status: string, RequestId: string, FailureReason: string, TargetId: string, TargetType: string, PermissionSetArn: string, PrincipalType: string, PrincipalId: string, CreatedDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.CreateAccountAssignment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "TargetId": $target_id, "TargetType": $target_type, "PermissionSetArn": $permission_set_arn, "PrincipalType": $principal_type, "PrincipalId": $principal_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -314,6 +322,7 @@ export def "create-account-assignment" [
 #
 # POST /
 # operationId: CreateInstanceAccessControlAttributeConfiguration
+# --InstanceAccessControlAttributeConfiguration shape: {AccessControlAttributes: list}
 export def "create-instance-access-control-attribute-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -331,13 +340,14 @@ export def "create-instance-access-control-attribute-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  instance_arn: any
-  instance_access_control_attribute_configuration: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
+  instance_access_control_attribute_configuration: record # Specifies the attributes to add to your attribute-based access control (ABAC) configuration. — shape: {AccessControlAttributes: list}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.CreateInstanceAccessControlAttributeConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "InstanceAccessControlAttributeConfiguration": $instance_access_control_attribute_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -363,6 +373,7 @@ export def "create-instance-access-control-attribute-configuration" [
 #
 # POST /
 # operationId: CreatePermissionSet
+# --Tags item shape: {Key: string, Value: string}
 export def "create-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -380,17 +391,18 @@ export def "create-permission-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  name: any
-  --description: any
-  instance_arn: any
-  --session-duration: any
-  --relay-state: any
-  --tags: any
-]: any -> record<PermissionSet: record<Name: record, PermissionSetArn: record, Description: record, CreatedDate: record, SessionDuration: record, RelayState: record>> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  name: string # The name of the PermissionSet.
+  --description: string # The description of the PermissionSet.
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  --session-duration: string # The length of time that the application user sessions are valid in the ISO-8601 standard.
+  --relay-state: string # Used to redirect users within the application during the federation authentication process.
+  --tags: list # The tags to attach to the new PermissionSet. — item shape: {Key: string, Value: string}
+]: any -> record<PermissionSet: record<Name: string, PermissionSetArn: string, Description: string, CreatedDate: string, SessionDuration: string, RelayState: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.CreatePermissionSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "InstanceArn": $instance_arn, "SessionDuration": $session_duration, "RelayState": $relay_state, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -433,17 +445,18 @@ export def "delete-account-assignment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  instance_arn: any
-  target_id: any
-  target_type: any
-  permission_set_arn: any
-  principal_type: any
-  principal_id: any
-]: any -> record<AccountAssignmentDeletionStatus: record<Status: record, RequestId: record, FailureReason: record, TargetId: record, TargetType: record, PermissionSetArn: record, PrincipalType: record, PrincipalId: record, CreatedDate: record>> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  target_id: string # TargetID is an AWS account identifier, typically a 10-12 digit string (For example, 123456789012).
+  target_type: string@target-type-completer # The entity type for which the assignment will be deleted.
+  permission_set_arn: string # The ARN of the permission set that will be used to remove access.
+  principal_type: string@principal-type-completer # The entity type for which the assignment will be deleted.
+  principal_id: string # An identifier for an object in IAM Identity Center, such as a user or group. PrincipalIds are GUIDs (For example, f81d4fae-7dec-11d0-a765-00a0c91e6bf6). For more information about PrincipalIds in IAM Identity Center, see the IAM Identity Center Identity Store API Reference (/singlesignon/latest/IdentityStoreAPIReference/welcome.html).
+]: any -> record<AccountAssignmentDeletionStatus: record<Status: string, RequestId: string, FailureReason: string, TargetId: string, TargetType: string, PermissionSetArn: string, PrincipalType: string, PrincipalId: string, CreatedDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.DeleteAccountAssignment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "TargetId": $target_id, "TargetType": $target_type, "PermissionSetArn": $permission_set_arn, "PrincipalType": $principal_type, "PrincipalId": $principal_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -486,13 +499,14 @@ export def "delete-inline-policy-from-permission-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  instance_arn: any
-  permission_set_arn: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  permission_set_arn: string # The ARN of the permission set that will be used to remove access.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.DeleteInlinePolicyFromPermissionSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -535,12 +549,13 @@ export def "delete-instance-access-control-attribute-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  instance_arn: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.DeleteInstanceAccessControlAttributeConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -583,13 +598,14 @@ export def "delete-permission-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  instance_arn: any
-  permission_set_arn: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  permission_set_arn: string # The ARN of the permission set that should be deleted.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.DeletePermissionSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -632,13 +648,14 @@ export def "delete-permissions-boundary-from-permission-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  instance_arn: any
-  permission_set_arn: any
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
+  permission_set_arn: string # The ARN of the PermissionSet.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.DeletePermissionsBoundaryFromPermissionSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -681,13 +698,14 @@ export def "describe-account-assignment-creation-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  instance_arn: any
-  account_assignment_creation_request_id: any
-]: any -> record<AccountAssignmentCreationStatus: record<Status: record, RequestId: record, FailureReason: record, TargetId: record, TargetType: record, PermissionSetArn: record, PrincipalType: record, PrincipalId: record, CreatedDate: record>> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  account_assignment_creation_request_id: string # The identifier that is used to track the request operation progress.
+]: any -> record<AccountAssignmentCreationStatus: record<Status: string, RequestId: string, FailureReason: string, TargetId: string, TargetType: string, PermissionSetArn: string, PrincipalType: string, PrincipalId: string, CreatedDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.DescribeAccountAssignmentCreationStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "AccountAssignmentCreationRequestId": $account_assignment_creation_request_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -730,13 +748,14 @@ export def "describe-account-assignment-deletion-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  instance_arn: any
-  account_assignment_deletion_request_id: any
-]: any -> record<AccountAssignmentDeletionStatus: record<Status: record, RequestId: record, FailureReason: record, TargetId: record, TargetType: record, PermissionSetArn: record, PrincipalType: record, PrincipalId: record, CreatedDate: record>> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  account_assignment_deletion_request_id: string # The identifier that is used to track the request operation progress.
+]: any -> record<AccountAssignmentDeletionStatus: record<Status: string, RequestId: string, FailureReason: string, TargetId: string, TargetType: string, PermissionSetArn: string, PrincipalType: string, PrincipalId: string, CreatedDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.DescribeAccountAssignmentDeletionStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "AccountAssignmentDeletionRequestId": $account_assignment_deletion_request_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -779,12 +798,13 @@ export def "describe-instance-access-control-attribute-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  instance_arn: any
-]: any -> record<Status: record, StatusReason: record, InstanceAccessControlAttributeConfiguration: record<AccessControlAttributes: record>> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
+]: any -> record<Status: string, StatusReason: string, InstanceAccessControlAttributeConfiguration: record<AccessControlAttributes: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.DescribeInstanceAccessControlAttributeConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -827,13 +847,14 @@ export def "describe-permission-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  instance_arn: any
-  permission_set_arn: any
-]: any -> record<PermissionSet: record<Name: record, PermissionSetArn: record, Description: record, CreatedDate: record, SessionDuration: record, RelayState: record>> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  permission_set_arn: string # The ARN of the permission set.
+]: any -> record<PermissionSet: record<Name: string, PermissionSetArn: string, Description: string, CreatedDate: string, SessionDuration: string, RelayState: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.DescribePermissionSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -876,13 +897,14 @@ export def "describe-permission-set-provisioning-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  instance_arn: any
-  provision_permission_set_request_id: any
-]: any -> record<PermissionSetProvisioningStatus: record<Status: record, RequestId: record, AccountId: record, PermissionSetArn: record, FailureReason: record, CreatedDate: record>> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  provision_permission_set_request_id: string # The identifier that is provided by the ProvisionPermissionSet call to retrieve the current status of the provisioning workflow.
+]: any -> record<PermissionSetProvisioningStatus: record<Status: string, RequestId: string, AccountId: string, PermissionSetArn: string, FailureReason: string, CreatedDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.DescribePermissionSetProvisioningStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "ProvisionPermissionSetRequestId": $provision_permission_set_request_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -908,6 +930,7 @@ export def "describe-permission-set-provisioning-status" [
 #
 # POST /
 # operationId: DetachCustomerManagedPolicyReferenceFromPermissionSet
+# --CustomerManagedPolicyReference shape: {Name: string, Path?: string}
 export def "detach-customer-managed-policy-reference-from-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -925,14 +948,15 @@ export def "detach-customer-managed-policy-reference-from-permission-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  instance_arn: any
-  permission_set_arn: any
-  customer_managed_policy_reference: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
+  permission_set_arn: string # The ARN of the PermissionSet.
+  customer_managed_policy_reference: record # Specifies the name and path of a customer managed policy. You must have an IAM policy that matches the name and path in each AWS account where you want to deploy your permission set. — shape: {Name: string, Path?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.DetachCustomerManagedPolicyReferenceFromPermissionSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "CustomerManagedPolicyReference": $customer_managed_policy_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -975,14 +999,15 @@ export def "detach-managed-policy-from-permission-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  instance_arn: any
-  permission_set_arn: any
-  managed_policy_arn: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  permission_set_arn: string # The ARN of the PermissionSet from which the policy should be detached.
+  managed_policy_arn: string # The AWS managed policy ARN to be detached from a permission set.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.DetachManagedPolicyFromPermissionSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "ManagedPolicyArn": $managed_policy_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1025,13 +1050,14 @@ export def "get-inline-policy-for-permission-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  instance_arn: any
-  permission_set_arn: any
-]: any -> record<InlinePolicy: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  permission_set_arn: string # The ARN of the permission set.
+]: any -> record<InlinePolicy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.GetInlinePolicyForPermissionSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1074,13 +1100,14 @@ export def "get-permissions-boundary-for-permission-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  instance_arn: any
-  permission_set_arn: any
-]: any -> record<PermissionsBoundary: record<CustomerManagedPolicyReference: record<Name: record, Path: record>, ManagedPolicyArn: record>> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
+  permission_set_arn: string # The ARN of the PermissionSet.
+]: any -> record<PermissionsBoundary: record<CustomerManagedPolicyReference: record<Name: string, Path: string>, ManagedPolicyArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.GetPermissionsBoundaryForPermissionSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1106,6 +1133,7 @@ export def "get-permissions-boundary-for-permission-set" [
 #
 # POST /
 # operationId: ListAccountAssignmentCreationStatus
+# --Filter shape: {Status?: "IN_PROGRESS"|"FAILED"|"SUCCEEDED"}
 export def "list-account-assignment-creation-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1125,15 +1153,16 @@ export def "list-account-assignment-creation-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  instance_arn: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-  --filter: any
-]: any -> record<AccountAssignmentsCreationStatus: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  --max-results-body: int # The maximum number of results to display for the assignment. (body field)
+  --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
+  --filter: record # Filters he operation status list based on the passed attribute value. — shape: {Status?: "IN_PROGRESS"|"FAILED"|"SUCCEEDED"}
+]: any -> record<AccountAssignmentsCreationStatus: table<Status: string, RequestId: string, CreatedDate: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.ListAccountAssignmentCreationStatus")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "MaxResults": $max_results_body, "NextToken": $next_token_body, "Filter": $filter} | compact
@@ -1160,6 +1189,7 @@ export def "list-account-assignment-creation-status" [
 #
 # POST /
 # operationId: ListAccountAssignmentDeletionStatus
+# --Filter shape: {Status?: "IN_PROGRESS"|"FAILED"|"SUCCEEDED"}
 export def "list-account-assignment-deletion-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1179,15 +1209,16 @@ export def "list-account-assignment-deletion-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  instance_arn: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-  --filter: any
-]: any -> record<AccountAssignmentsDeletionStatus: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  --max-results-body: int # The maximum number of results to display for the assignment. (body field)
+  --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
+  --filter: record # Filters he operation status list based on the passed attribute value. — shape: {Status?: "IN_PROGRESS"|"FAILED"|"SUCCEEDED"}
+]: any -> record<AccountAssignmentsDeletionStatus: table<Status: string, RequestId: string, CreatedDate: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.ListAccountAssignmentDeletionStatus")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "MaxResults": $max_results_body, "NextToken": $next_token_body, "Filter": $filter} | compact
@@ -1233,16 +1264,17 @@ export def "list-account-assignments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  instance_arn: any
-  account_id: any
-  permission_set_arn: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<AccountAssignments: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  account_id: string # The identifier of the AWS account from which to list the assignments.
+  permission_set_arn: string # The ARN of the permission set from which to list assignments.
+  --max-results-body: int # The maximum number of results to display for the assignment. (body field)
+  --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
+]: any -> record<AccountAssignments: table<AccountId: string, PermissionSetArn: string, PrincipalType: string, PrincipalId: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.ListAccountAssignments")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "AccountId": $account_id, "PermissionSetArn": $permission_set_arn, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1288,16 +1320,17 @@ export def "list-accounts-for-provisioned-permission-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  instance_arn: any
-  permission_set_arn: any
-  --provisioning-status: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<AccountIds: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  permission_set_arn: string # The ARN of the PermissionSet from which the associated AWS accounts will be listed.
+  --provisioning-status: string@provisioning-status-completer # The permission set provisioning status for an AWS account.
+  --max-results-body: int # The maximum number of results to display for the PermissionSet. (body field)
+  --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
+]: any -> record<AccountIds: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.ListAccountsForProvisionedPermissionSet")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "ProvisioningStatus": $provisioning_status, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1343,15 +1376,16 @@ export def "list-customer-managed-policy-references-in-permission-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  instance_arn: any
-  permission_set_arn: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<CustomerManagedPolicyReferences: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
+  permission_set_arn: string # The ARN of the PermissionSet.
+  --max-results-body: int # The maximum number of results to display for the list call. (body field)
+  --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
+]: any -> record<CustomerManagedPolicyReferences: table<Name: string, Path: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.ListCustomerManagedPolicyReferencesInPermissionSet")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1397,13 +1431,14 @@ export def "list-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Instances: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  --max-results-body: int # The maximum number of results to display for the instance. (body field)
+  --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
+]: any -> record<Instances: table<InstanceArn: string, IdentityStoreId: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.ListInstances")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1449,15 +1484,16 @@ export def "list-managed-policies-in-permission-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  instance_arn: any
-  permission_set_arn: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<AttachedManagedPolicies: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  permission_set_arn: string # The ARN of the PermissionSet whose managed policies will be listed.
+  --max-results-body: int # The maximum number of results to display for the PermissionSet. (body field)
+  --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
+]: any -> record<AttachedManagedPolicies: table<Name: string, Arn: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.ListManagedPoliciesInPermissionSet")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1484,6 +1520,7 @@ export def "list-managed-policies-in-permission-set" [
 #
 # POST /
 # operationId: ListPermissionSetProvisioningStatus
+# --Filter shape: {Status?: "IN_PROGRESS"|"FAILED"|"SUCCEEDED"}
 export def "list-permission-set-provisioning-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1503,15 +1540,16 @@ export def "list-permission-set-provisioning-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  instance_arn: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-  --filter: any
-]: any -> record<PermissionSetsProvisioningStatus: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  --max-results-body: int # The maximum number of results to display for the assignment. (body field)
+  --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
+  --filter: record # Filters he operation status list based on the passed attribute value. — shape: {Status?: "IN_PROGRESS"|"FAILED"|"SUCCEEDED"}
+]: any -> record<PermissionSetsProvisioningStatus: table<Status: string, RequestId: string, CreatedDate: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.ListPermissionSetProvisioningStatus")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "MaxResults": $max_results_body, "NextToken": $next_token_body, "Filter": $filter} | compact
@@ -1557,14 +1595,15 @@ export def "list-permission-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  instance_arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<PermissionSets: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
+  --max-results-body: int # The maximum number of results to display for the assignment. (body field)
+]: any -> record<PermissionSets: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.ListPermissionSets")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1610,16 +1649,17 @@ export def "list-permission-sets-provisioned-to-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  instance_arn: any
-  account_id: any
-  --provisioning-status: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<NextToken: record, PermissionSets: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  account_id: string # The identifier of the AWS account from which to list the assignments.
+  --provisioning-status: string@provisioning-status-completer # The status object for the permission set provisioning operation.
+  --max-results-body: int # The maximum number of results to display for the assignment. (body field)
+  --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
+]: any -> record<NextToken: string, PermissionSets: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.ListPermissionSetsProvisionedToAccount")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "AccountId": $account_id, "ProvisioningStatus": $provisioning_status, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1664,14 +1704,15 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  instance_arn: any
-  resource_arn: any
-  --next-token-body: any #  (body field)
-]: any -> record<Tags: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  resource_arn: string # The ARN of the resource with the tags to be listed.
+  --next-token-body: string # The pagination token for the list API. Initially the value is null. Use the output of previous API calls to make subsequent calls. (body field)
+]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.ListTagsForResource")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "ResourceArn": $resource_arn, "NextToken": $next_token_body} | compact
@@ -1715,15 +1756,16 @@ export def "provision-permission-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  instance_arn: any
-  permission_set_arn: any
-  --target-id: any
-  target_type: any
-]: any -> record<PermissionSetProvisioningStatus: record<Status: record, RequestId: record, AccountId: record, PermissionSetArn: record, FailureReason: record, CreatedDate: record>> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  permission_set_arn: string # The ARN of the permission set.
+  --target-id: string # TargetID is an AWS account identifier, typically a 10-12 digit string (For example, 123456789012).
+  target_type: string@target-type-completer-1 # The entity type for which the assignment will be created.
+]: any -> record<PermissionSetProvisioningStatus: record<Status: string, RequestId: string, AccountId: string, PermissionSetArn: string, FailureReason: string, CreatedDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.ProvisionPermissionSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "TargetId": $target_id, "TargetType": $target_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1766,14 +1808,15 @@ export def "put-inline-policy-to-permission-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  instance_arn: any
-  permission_set_arn: any
-  inline_policy: any
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  permission_set_arn: string # The ARN of the permission set.
+  inline_policy: string # The inline policy to attach to a PermissionSet.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.PutInlinePolicyToPermissionSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "InlinePolicy": $inline_policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1799,6 +1842,7 @@ export def "put-inline-policy-to-permission-set" [
 #
 # POST /
 # operationId: PutPermissionsBoundaryToPermissionSet
+# --PermissionsBoundary shape: {CustomerManagedPolicyReference?: record, ManagedPolicyArn?: string}
 export def "put-permissions-boundary-to-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1816,14 +1860,15 @@ export def "put-permissions-boundary-to-permission-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  instance_arn: any
-  permission_set_arn: any
-  permissions_boundary: any
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
+  permission_set_arn: string # The ARN of the PermissionSet.
+  permissions_boundary: record # Specifies the configuration of the AWS managed or customer managed policy that you want to set as a permissions boundary. Specify either CustomerManagedPolicyReference to use the name and path of a customer managed policy, or ManagedPolicyArn to use the ARN of an AWS managed policy. A permissions boundary represents the maximum permissions that any policy can grant your role. For more information, see Permissions boundaries for IAM entities (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html) in the IAM User Guide. Policies used as permissions boundaries don't provide permissions. You must also attach an IAM policy to the role. To learn how the effective permissions for a role are evaluated, see IAM JSON policy evaluation logic (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html) in the IAM User Guide. — shape: {CustomerManagedPolicyReference?: record, ManagedPolicyArn?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.PutPermissionsBoundaryToPermissionSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "PermissionsBoundary": $permissions_boundary} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1849,6 +1894,7 @@ export def "put-permissions-boundary-to-permission-set" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1866,14 +1912,15 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  instance_arn: any
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  resource_arn: string # The ARN of the resource with the tags to be listed.
+  tags: list # A set of key-value pairs that are used to manage the resource. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "ResourceArn": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1916,14 +1963,15 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  instance_arn: any
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  resource_arn: string # The ARN of the resource with the tags to be listed.
+  tag_keys: list<string> # The keys of tags that are attached to the resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1949,6 +1997,7 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateInstanceAccessControlAttributeConfiguration
+# --InstanceAccessControlAttributeConfiguration shape: {AccessControlAttributes: list}
 export def "update-instance-access-control-attribute-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1966,13 +2015,14 @@ export def "update-instance-access-control-attribute-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  instance_arn: any
-  instance_access_control_attribute_configuration: any
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed.
+  instance_access_control_attribute_configuration: record # Specifies the attributes to add to your attribute-based access control (ABAC) configuration. — shape: {AccessControlAttributes: list}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.UpdateInstanceAccessControlAttributeConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "InstanceAccessControlAttributeConfiguration": $instance_access_control_attribute_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2015,16 +2065,17 @@ export def "update-permission-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  instance_arn: any
-  permission_set_arn: any
-  --description: any
-  --session-duration: any
-  --relay-state: any
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  instance_arn: string # The ARN of the IAM Identity Center instance under which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and AWS Service Namespaces (/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
+  permission_set_arn: string # The ARN of the permission set.
+  --description: string # The description of the PermissionSet.
+  --session-duration: string # The length of time that the application user sessions are valid for in the ISO-8601 standard.
+  --relay-state: string # Used to redirect users within the application during the federation authentication process.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SWBExternalService.UpdatePermissionSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "Description": $description, "SessionDuration": $session_duration, "RelayState": $relay_state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

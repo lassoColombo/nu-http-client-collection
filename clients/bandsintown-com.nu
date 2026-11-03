@@ -132,11 +132,12 @@ export def "artist" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # The application ID assigned to you by Bandsintown
+  --app-id: string # The application ID assigned to you by Bandsintown (required)
 ]: nothing -> record<facebook_page_url: string, id: int, image_url: string, mbid: string, name: string, thumb_url: string, tracker_count: int, upcoming_event_count: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($artistname | is-empty) { error make --unspanned { msg: "path parameter 'artistname' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required query parameter 'app_id' missing: pass --app-id" } }
   let qp = [(serialize-qp "app_id" $app_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({artistname: (encode-path-segment $artistname)} | format pattern "/artists/{artistname}") $qp $auth.query)
   let accept_val = "application/json"
@@ -170,12 +171,13 @@ export def "artist-events" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # The application ID assigned to you by Bandsintown
+  --app-id: string # The application ID assigned to you by Bandsintown (required)
   --date: string # Can be one of the following values: "upcoming", "past", "all", or a date range e.g. "2015-05-05,2017-05-05". If not specified, only upcoming shows are returned
 ]: nothing -> table<artist_id: string, datetime: string, description: string, id: string, lineup: list<string>, offers: list<record>, on_sale_datetime: string, url: string, venue: record<city: string, country: string, latitude: string, longitude: string, name: string, region: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($artistname | is-empty) { error make --unspanned { msg: "path parameter 'artistname' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required query parameter 'app_id' missing: pass --app-id" } }
   let qp = [(serialize-qp "app_id" $app_id "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({artistname: (encode-path-segment $artistname)} | format pattern "/artists/{artistname}/events") $qp $auth.query)
   let accept_val = "application/json"

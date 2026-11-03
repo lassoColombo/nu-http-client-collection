@@ -115,6 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 def association-type-completer [] { ["both" "causal" "non_causal"] }
 def relationship-type-completer [] { ["acts_upstream_of_or_within" "involved_in" "involved_in_regulation_of"] }
 def homology-type-completer [] { ["LDO" "O" "P"] }
+def type-completer [] { ["anatomy" "case" "disease" "gene" "genotype" "goterm" "individual" "model" "pathway" "phenotype" "publication" "substance" "variant"] }
 def relationship-type-completer-1 [] { ["acts_upstream_of_or_within" "involved_in"] }
 def direction-completer [] { ["BOTH" "INCOMING" "OUTGOING"] }
 def graph-completer [] { ["data" "ontology"] }
@@ -484,20 +485,20 @@ export def "get-anatomy-gene-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/anatomy/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -540,21 +541,21 @@ export def "get-anatomy-gene-by-taxon-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($taxid | is-empty) { error make --unspanned { msg: "path parameter 'taxid' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), taxid: (encode-path-segment $taxid)} | format pattern "/bioentity/anatomy/{id}/genes/{taxid}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -882,21 +883,21 @@ export def "get-disease-gene-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
   --association-type: string@association-type-completer # Additional filters: causal, non_causal, both (default: both)
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "association_type" $association_type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "association_type" $association_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/disease/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q, "association_type": $association_type} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q, "association_type": $association_type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -936,20 +937,20 @@ export def "get-disease-genotype-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/disease/{id}/genotypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -989,20 +990,20 @@ export def "get-disease-model-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/disease/{id}/models") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1094,20 +1095,20 @@ export def "get-disease-pathway-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/disease/{id}/pathways") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1147,20 +1148,20 @@ export def "get-disease-phenotype-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string, frequency: record, onset: record>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/disease/{id}/phenotypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1200,20 +1201,20 @@ export def "get-disease-publication-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/disease/{id}/publications") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1301,20 +1302,20 @@ export def "get-disease-variant-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/disease/{id}/variants") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1394,21 +1395,21 @@ export def "get-function-gene-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
   --relationship-type: string@relationship-type-completer # relationship type ('involved_in', 'involved_in_regulation_of' or 'acts_upstream_of_or_within') (default: involved_in)
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "relationship_type" $relationship_type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "relationship_type" $relationship_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/function/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q, "relationship_type": $relationship_type} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q, "relationship_type": $relationship_type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1528,20 +1529,20 @@ export def "get-gene-anatomy-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/anatomy") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1629,21 +1630,21 @@ export def "get-gene-disease-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
   --association-type: string@association-type-completer # Additional filters: causal, non_causal, both (default: both)
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "association_type" $association_type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "association_type" $association_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/diseases") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q, "association_type": $association_type} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q, "association_type": $association_type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1683,20 +1684,20 @@ export def "get-gene-expression-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/expression/anatomy") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1784,20 +1785,20 @@ export def "get-gene-genotype-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/genotypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1888,20 +1889,20 @@ export def "get-gene-interactions" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/interactions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1941,20 +1942,20 @@ export def "get-gene-model-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/models") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1994,20 +1995,20 @@ export def "get-gene-ortholog-disease-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/ortholog/diseases") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2047,20 +2048,20 @@ export def "get-gene-ortholog-phenotype-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/ortholog/phenotypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2100,20 +2101,20 @@ export def "get-gene-pathway-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/pathways") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2153,20 +2154,20 @@ export def "get-gene-phenotype-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/phenotypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2206,20 +2207,20 @@ export def "get-gene-publication-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/publications") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2259,20 +2260,20 @@ export def "get-gene-variant-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/variants") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2360,20 +2361,20 @@ export def "get-genotype-disease-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/genotype/{id}/diseases") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2413,20 +2414,20 @@ export def "get-genotype-gene-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/genotype/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2466,20 +2467,20 @@ export def "get-genotype-genotype-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/genotype/{id}/genotypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2519,20 +2520,20 @@ export def "get-genotype-model-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/genotype/{id}/models") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2572,20 +2573,20 @@ export def "get-genotype-phenotype-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/genotype/{id}/phenotypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2625,20 +2626,20 @@ export def "get-genotype-publication-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/genotype/{id}/publications") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2678,20 +2679,20 @@ export def "get-genotype-variant-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/genotype/{id}/variants") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2830,20 +2831,20 @@ export def "get-model-disease-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/model/{id}/diseases") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2883,20 +2884,20 @@ export def "get-model-gene-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/model/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2936,20 +2937,20 @@ export def "get-model-genotype-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/model/{id}/genotypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2989,20 +2990,20 @@ export def "get-model-phenotype-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/model/{id}/phenotypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3042,20 +3043,20 @@ export def "get-model-publication-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/model/{id}/publications") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3095,20 +3096,20 @@ export def "get-model-variant-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/model/{id}/variants") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3148,20 +3149,20 @@ export def "get-pathway-disease-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/pathway/{id}/diseases") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3201,20 +3202,20 @@ export def "get-pathway-gene-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/pathway/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3254,20 +3255,20 @@ export def "get-pathway-phenotype-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/pathway/{id}/phenotypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3403,20 +3404,20 @@ export def "get-phenotype-disease-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string, frequency: record, onset: record>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/phenotype/{id}/diseases") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3508,20 +3509,20 @@ export def "get-phenotype-gene-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/phenotype/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3561,20 +3562,20 @@ export def "get-phenotype-genotype-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/phenotype/{id}/genotypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3614,20 +3615,20 @@ export def "get-phenotype-pathway-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/phenotype/{id}/pathways") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3667,20 +3668,20 @@ export def "get-phenotype-publication-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/phenotype/{id}/publications") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3720,20 +3721,20 @@ export def "get-phenotype-variant-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/phenotype/{id}/variants") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3773,20 +3774,20 @@ export def "get-publication-disease-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/publication/{id}/diseases") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3826,20 +3827,20 @@ export def "get-publication-gene-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/publication/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3879,20 +3880,20 @@ export def "get-publication-genotype-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/publication/{id}/genotypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3932,20 +3933,20 @@ export def "get-publication-model-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/publication/{id}/models") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3985,20 +3986,20 @@ export def "get-publication-phenotype-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/publication/{id}/phenotypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4038,20 +4039,20 @@ export def "get-publication-variant-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/publication/{id}/variants") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4088,7 +4089,7 @@ export def "get-substance-participant-in-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record, slim: list<string>, subject: record, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
+]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4136,7 +4137,7 @@ export def "get-substance-role-associations" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record, slim: list<string>, subject: record, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
+]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4283,20 +4284,20 @@ export def "get-variant-disease-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/variant/{id}/diseases") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4336,20 +4337,20 @@ export def "get-variant-gene-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/variant/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4389,20 +4390,20 @@ export def "get-variant-genotype-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/variant/{id}/genotypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4490,20 +4491,20 @@ export def "get-variant-phenotype-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/variant/{id}/phenotypes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4543,20 +4544,20 @@ export def "get-variant-publication-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/variant/{id}/publications") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4593,7 +4594,7 @@ export def "get-generic-object" [
   --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID or subset ID
   --evidence: string # Object id, e.g. ECO:0000501 (for IEA; Includes inferred by default) or a specific publication or other supporting object, e.g. ZFIN:ZDB-PUB-060503-2
   --direct: oneof<nothing, bool> # Set true to only include direct associations, and false to include inferred (via subclass or subclass|part of), default=False (default: false)
-]: nothing -> record<association_counts: record, taxon: record<id: string, label: string>, xrefs: list<string>> {
+]: nothing -> record<category: list<string>, id: string, iri: string, label: string, consider: list<string>, deprecated: bool, description: string, replaced_by: list<string>, synonyms: table<pred: string, val: string, xrefs: list>, types: list<string>, association_counts: record, taxon: record<id: string, label: string>, xrefs: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4644,20 +4645,20 @@ export def "get-generic-associations" [
   --taxon: list<string> # One or more taxon CURIE to filter associations by subject taxon; includes inferred associations by default
   --direct-taxon: oneof<nothing, bool> # Set true to exclude inferred taxa (default: false)
   --relation: string # A relation CURIE to filter associations
-  --qp-sort: string # Sorting responses <desc,asc>
+  --sort: string # Sorting responses <desc,asc>
   --q: string # Query string to filter documents
 ]: nothing -> record<docs: list<record>, facet_counts: record, highlighting: record, numFound: int, associations: table<evidence_graph: record, evidence_types: list, id: string, negated: bool, object: record, object_eq: list, object_extensions: list, provided_by: list, publications: list, qualifiers: list, relation: record, slim: list, subject: record, subject_eq: list, subject_extensions: list, type: string>, compact_associations: table<objects: list, relation: string, subject: string>, objects: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/{id}/associations") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"rows": $rows, "start": $start, "facet": $facet, "facet_fields": $facet_fields, "unselect_evidence": $unselect_evidence, "exclude_automatic_assertions": $exclude_automatic_assertions, "fetch_objects": $fetch_objects, "use_compact_associations": $use_compact_associations, "slim": $slim, "evidence": $evidence, "direct": $direct, "taxon": $taxon, "direct_taxon": $direct_taxon, "relation": $relation, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4673,7 +4674,7 @@ export def "get-generic-associations" [
 # GET /bioentity/{type}/{id}
 # operationId: get_generic_object_by_type
 export def "get-generic-object-by-type" [
-  type: string
+  type: string@type-completer
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4929,14 +4930,16 @@ export def "get-entity-set-anatomy-slimmer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --subject: list<string> # Entity ids to be examined, e.g. NCBIGene:9342, NCBIGene:7227, NCBIGene:8131, NCBIGene:157570, NCBIGene:51164, NCBIGene:6689, NCBIGene:6387
-  --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID (IMPLEMENTED) or subset ID (TODO)
+  --subject: list<string> # Entity ids to be examined, e.g. NCBIGene:9342, NCBIGene:7227, NCBIGene:8131, NCBIGene:157570, NCBIGene:51164, NCBIGene:6689, NCBIGene:6387 (required)
+  --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID (IMPLEMENTED) or subset ID (TODO) (required)
   --exclude-automatic-assertions: oneof<nothing, bool> # If set, excludes associations that involve IEAs (ECO:0000501) (default: false)
   --rows: int # number of rows (default: 100)
   --start: int # beginning row
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subject == null) { error make --unspanned { msg: "required query parameter 'subject' missing: pass --subject" } }
+  if ($slim == null) { error make --unspanned { msg: "required query parameter 'slim' missing: pass --slim" } }
   let qp = [(serialize-qp "subject" $subject "multi") (serialize-qp "slim" $slim "multi") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bioentityset/slimmer/anatomy" $qp $auth.query)
   let accept_val = "application/json"
@@ -4970,14 +4973,16 @@ export def "get-entity-set-function-slimmer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --relationship-type: string@relationship-type-completer-1 # relationship type ('involved_in' or 'acts_upstream_of_or_within') (default: acts_upstream_of_or_within)
-  --subject: list<string> # Entity ids to be examined, e.g. NCBIGene:9342, NCBIGene:7227, NCBIGene:8131, NCBIGene:157570, NCBIGene:51164, NCBIGene:6689, NCBIGene:6387
-  --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID (IMPLEMENTED) or subset ID (TODO)
+  --subject: list<string> # Entity ids to be examined, e.g. NCBIGene:9342, NCBIGene:7227, NCBIGene:8131, NCBIGene:157570, NCBIGene:51164, NCBIGene:6689, NCBIGene:6387 (required)
+  --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID (IMPLEMENTED) or subset ID (TODO) (required)
   --exclude-automatic-assertions: oneof<nothing, bool> # If set, excludes associations that involve IEAs (ECO:0000501) (default: false)
   --rows: int # number of rows (default: 100)
   --start: int # beginning row
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subject == null) { error make --unspanned { msg: "required query parameter 'subject' missing: pass --subject" } }
+  if ($slim == null) { error make --unspanned { msg: "required query parameter 'slim' missing: pass --slim" } }
   let qp = [(serialize-qp "relationship_type" $relationship_type "scalar") (serialize-qp "subject" $subject "multi") (serialize-qp "slim" $slim "multi") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bioentityset/slimmer/function" $qp $auth.query)
   let accept_val = "application/json"
@@ -5010,14 +5015,16 @@ export def "get-entity-set-phenotype-slimmer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --subject: list<string> # Entity ids to be examined, e.g. NCBIGene:9342, NCBIGene:7227, NCBIGene:8131, NCBIGene:157570, NCBIGene:51164, NCBIGene:6689, NCBIGene:6387
-  --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID (IMPLEMENTED) or subset ID (TODO)
+  --subject: list<string> # Entity ids to be examined, e.g. NCBIGene:9342, NCBIGene:7227, NCBIGene:8131, NCBIGene:157570, NCBIGene:51164, NCBIGene:6689, NCBIGene:6387 (required)
+  --slim: list<string> # Map objects up (slim) to a higher level category. Value can be ontology class ID (IMPLEMENTED) or subset ID (TODO) (required)
   --exclude-automatic-assertions: oneof<nothing, bool> # If set, excludes associations that involve IEAs (ECO:0000501) (default: false)
   --rows: int # number of rows (default: 100)
   --start: int # beginning row
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subject == null) { error make --unspanned { msg: "required query parameter 'subject' missing: pass --subject" } }
+  if ($slim == null) { error make --unspanned { msg: "required query parameter 'slim' missing: pass --slim" } }
   let qp = [(serialize-qp "subject" $subject "multi") (serialize-qp "slim" $slim "multi") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bioentityset/slimmer/phenotype" $qp $auth.query)
   let accept_val = "application/json"
@@ -5090,7 +5097,7 @@ export def "get-instance-object" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --title: string # string to search for in title of model
   --contributor: string # string to search for in contributor of model
-]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record, slim: list<string>, subject: record, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
+]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5490,7 +5497,7 @@ export def "get-features-within-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<homology_associations: list<record>, locations: list<record>, seq: record<alphabet: string, md5checksum: string, residues: string, seqlen: string>> {
+]: nothing -> table<category: list<string>, id: string, iri: string, label: string, consider: list<string>, deprecated: bool, description: string, replaced_by: list<string>, synonyms: list<record>, types: list<string>, association_counts: record, taxon: record<id: string, label: string>, xrefs: list<string>, homology_associations: list<record>, locations: list<record>, seq: record<category: list, id: string, iri: string, label: string, consider: list, deprecated: bool, description: string, replaced_by: list, synonyms: list, types: list, association_counts: record, taxon: record, xrefs: list, alphabet: string, md5checksum: string, residues: string, seqlen: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($build | is-empty) { error make --unspanned { msg: "path parameter 'build' must be non-empty" } }
@@ -5571,7 +5578,7 @@ export def "get-node-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<association_counts: record, taxon: record<id: string, label: string>, xrefs: list<string>> {
+]: nothing -> table<category: list<string>, id: string, iri: string, label: string, consider: list<string>, deprecated: bool, description: string, replaced_by: list<string>, synonyms: list<record>, types: list<string>, association_counts: record, taxon: record<id: string, label: string>, xrefs: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5608,7 +5615,7 @@ export def "get-identifier-mapper" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record, slim: list<string>, subject: record, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
+]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -5751,7 +5758,7 @@ export def "get-pedigree" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record, slim: list<string>, subject: record, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
+]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5787,7 +5794,7 @@ export def "get-individual" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record, slim: list<string>, subject: record, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
+]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6414,10 +6421,11 @@ export def "get-ontol-identifier-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --label: list<string> # List of labels
+  --label: list<string> # List of labels (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($label == null) { error make --unspanned { msg: "required query parameter 'label' missing: pass --label" } }
   let qp = [(serialize-qp "label" $label "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/ontol/identifier/" $qp $auth.query)
   let accept_val = "application/json"
@@ -6450,10 +6458,11 @@ export def "post-ontol-identifier-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --label: list<string> # List of labels
+  --label: list<string> # List of labels (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($label == null) { error make --unspanned { msg: "required query parameter 'label' missing: pass --label" } }
   let qp = [(serialize-qp "label" $label "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/ontol/identifier/" $qp $auth.query)
   let accept_val = "application/json"
@@ -6528,10 +6537,11 @@ export def "get-ontol-labeler-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list<string> # List of ids
+  --id: list<string> # List of ids (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/ontol/labeler/" $qp $auth.query)
   let accept_val = "application/json"
@@ -6879,7 +6889,7 @@ export def "get-dl-query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record, slim: list<string>, subject: record, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
+]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
@@ -6915,7 +6925,7 @@ export def "get-sparql-query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record, slim: list<string>, subject: record, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
+]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
@@ -7290,7 +7300,7 @@ export def "get-sim-compare" [
   --metric: string@metric-completer # Metric for computing similarity (default: phenodigm)
   --ref-id: list<string> # A phenotype or identifier that is composed of phenotypes (eg disease, gene) (default: [])
   --query-id: list<string> # A phenotype or identifier that is composed of phenotypes (eg disease, gene) (default: [])
-]: nothing -> record<matches: list<record>, metadata: record<max_max_ic: float>, query: record<ids: list<record>, negated_ids: list<record>, reference: record, target_ids: list<list>, unresolved_ids: list<string>>> {
+]: nothing -> record<matches: table<id: string, label: string, taxon: record, type: string, pairwise_match: list, rank: string, score: float, significance: string>, metadata: record<max_max_ic: float>, query: record<ids: list<record>, negated_ids: list<record>, reference: record<id: string, label: string, taxon: record, type: string>, target_ids: list<list>, unresolved_ids: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "is_feature_set" $is_feature_set "scalar") (serialize-qp "metric" $metric "scalar") (serialize-qp "ref_id" $ref_id "multi") (serialize-qp "query_id" $query_id "multi")] | flatten | str join "&"
@@ -7327,7 +7337,7 @@ export def "post-sim-compare" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query-ids: list # list of query profiles
   --reference-ids: list<string> # list of ids
-]: any -> record<matches: list<record>, metadata: record<max_max_ic: float>, query: record<ids: list<record>, negated_ids: list<record>, reference: record, target_ids: list<list>, unresolved_ids: list<string>>> {
+]: any -> record<matches: table<id: string, label: string, taxon: record, type: string, pairwise_match: list, rank: string, score: float, significance: string>, metadata: record<max_max_ic: float>, query: record<ids: list<record>, negated_ids: list<record>, reference: record<id: string, label: string, taxon: record, type: string>, target_ids: list<list>, unresolved_ids: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7446,7 +7456,7 @@ export def "get-sim-search" [
   --id: list<string> # A phenotype or identifier that is composed of phenotypes (eg disease, gene) (default: [])
   --limit: int # number of rows, max 500 (default: 20)
   --taxon: string # ncbi taxon id
-]: nothing -> record<matches: list<record>, metadata: record<max_max_ic: float>, query: record<ids: list<record>, negated_ids: list<record>, reference: record, target_ids: list<list>, unresolved_ids: list<string>>> {
+]: nothing -> record<matches: table<id: string, label: string, taxon: record, type: string, pairwise_match: list, rank: string, score: float, significance: string>, metadata: record<max_max_ic: float>, query: record<ids: list<record>, negated_ids: list<record>, reference: record<id: string, label: string, taxon: record, type: string>, target_ids: list<list>, unresolved_ids: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "is_feature_set" $is_feature_set "scalar") (serialize-qp "metric" $metric "scalar") (serialize-qp "id" $id "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "taxon" $taxon "scalar")] | flatten | str join "&"
@@ -7562,7 +7572,7 @@ export def "get-variant-analyze" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record, slim: list<string>, subject: record, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
+]: nothing -> table<evidence_graph: record<edges: list, nodes: list>, evidence_types: list<record>, id: string, negated: bool, object: record<category: list, id: string, iri: string, label: string, taxon: record>, object_eq: list<string>, object_extensions: list<record>, provided_by: list<string>, publications: list<record>, qualifiers: list<string>, relation: record<category: list, id: string, iri: string, label: string, inverse: bool>, slim: list<string>, subject: record<category: list, id: string, iri: string, label: string, taxon: record>, subject_eq: list<string>, subject_extensions: list<record>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

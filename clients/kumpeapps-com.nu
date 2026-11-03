@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-auth" => { {scheme: $scheme, headers: {X-Auth: $token_val}, query: "", location: "header"} }
+    "x-auth" => { {scheme: $scheme, headers: {"X-Auth": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -171,11 +171,12 @@ export def "appkey-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-key: string # compromised app key
+  --app-key: string # compromised app key (required)
   --comments: string # Comments (like how was this compromised)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($app_key == null) { error make --unspanned { msg: "required query parameter 'app_key' missing: pass --app-key" } }
   let qp = [(serialize-qp "app_key" $app_key "scalar") (serialize-qp "comments" $comments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/appkey" $qp $auth.query)
   let accept_val = "application/json"
@@ -210,12 +211,15 @@ export def "appkey-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # Username assigned to your app
-  --password: string # Password assigned to your app (format: password)
-  --supports-yubikey: oneof<nothing, bool> # App supports YubiKey OTP
+  --username: string # Username assigned to your app (required)
+  --password: string # Password assigned to your app (required, format: password)
+  --supports-yubikey: oneof<nothing, bool> # App supports YubiKey OTP (required)
 ]: nothing -> record<app_key: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
+  if ($password == null) { error make --unspanned { msg: "required query parameter 'password' missing: pass --password" } }
+  if ($supports_yubikey == null) { error make --unspanned { msg: "required query parameter 'supportsYubikey' missing: pass --supports-yubikey" } }
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "supportsYubikey" $supports_yubikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/appkey" $qp $auth.query)
   let accept_val = "application/json"
@@ -250,10 +254,11 @@ export def "appkey-put" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-key: string # app key to deactivate
+  --app-key: string # app key to deactivate (required)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($app_key == null) { error make --unspanned { msg: "required query parameter 'app_key' missing: pass --app-key" } }
   let qp = [(serialize-qp "app_key" $app_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/appkey" $qp $auth.query)
   let accept_val = "application/json"
@@ -286,11 +291,12 @@ export def "auth-appkey-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-key: string # compromised app key
+  --app-key: string # compromised app key (required)
   --comments: string # Comments (like how was this compromised)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($app_key == null) { error make --unspanned { msg: "required query parameter 'app_key' missing: pass --app-key" } }
   let qp = [(serialize-qp "app_key" $app_key "scalar") (serialize-qp "comments" $comments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/appkey" $qp $auth.query)
   let accept_val = "application/json"
@@ -323,12 +329,15 @@ export def "auth-appkey-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # Username assigned to your app
-  --password: string # Password assigned to your app (format: password)
-  --supports-yubikey: oneof<nothing, bool> # App supports YubiKey OTP
+  --username: string # Username assigned to your app (required)
+  --password: string # Password assigned to your app (required, format: password)
+  --supports-yubikey: oneof<nothing, bool> # App supports YubiKey OTP (required)
 ]: nothing -> record<app_key: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
+  if ($password == null) { error make --unspanned { msg: "required query parameter 'password' missing: pass --password" } }
+  if ($supports_yubikey == null) { error make --unspanned { msg: "required query parameter 'supportsYubikey' missing: pass --supports-yubikey" } }
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "supportsYubikey" $supports_yubikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/appkey" $qp $auth.query)
   let accept_val = "application/json"
@@ -361,10 +370,11 @@ export def "auth-appkey-put" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-key: string # app key to deactivate
+  --app-key: string # app key to deactivate (required)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($app_key == null) { error make --unspanned { msg: "required query parameter 'app_key' missing: pass --app-key" } }
   let qp = [(serialize-qp "app_key" $app_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/appkey" $qp $auth.query)
   let accept_val = "application/json"
@@ -397,14 +407,16 @@ export def "auth-authkey-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # Authenticated username
-  --password: string # Authenticated password (format: password)
+  --username: string # Authenticated username (required)
+  --password: string # Authenticated password (required, format: password)
   --otp: string # YubiKey OTP (if configured for user) (format: password)
   --device-name: string # User's device name
   --identifier-for-vendor: string # identifierForVendor for User's Device (if app is iOS)
 ]: nothing -> record<auth_key: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
+  if ($password == null) { error make --unspanned { msg: "required query parameter 'password' missing: pass --password" } }
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "otp" $otp "scalar") (serialize-qp "deviceName" $device_name "scalar") (serialize-qp "identifierForVendor" $identifier_for_vendor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/authkey" $qp $auth.query)
   let accept_val = "application/json"
@@ -437,11 +449,12 @@ export def "auth-authkey-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auth-key: string # auth key to mark as compromised (format: password)
+  --auth-key: string # auth key to mark as compromised (required, format: password)
   --comments: string # Comments (like how was this compromised)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($auth_key == null) { error make --unspanned { msg: "required query parameter 'auth_key' missing: pass --auth-key" } }
   let qp = [(serialize-qp "auth_key" $auth_key "scalar") (serialize-qp "comments" $comments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/authkey" $qp $auth.query)
   let accept_val = "application/json"
@@ -474,12 +487,14 @@ export def "auth-authkey-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # Authenticated username
-  --password: string # Authenticated password (format: password)
+  --username: string # Authenticated username (required)
+  --password: string # Authenticated password (required, format: password)
   --otp: string # YubiKey OTP (if configured for user) (format: password)
 ]: nothing -> record<auth_key: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
+  if ($password == null) { error make --unspanned { msg: "required query parameter 'password' missing: pass --password" } }
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "otp" $otp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/authkey" $qp $auth.query)
   let accept_val = "application/json"
@@ -512,10 +527,11 @@ export def "auth-authkey-put" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auth-key: string # auth key to logout (format: password)
+  --auth-key: string # auth key to logout (required, format: password)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($auth_key == null) { error make --unspanned { msg: "required query parameter 'auth_key' missing: pass --auth-key" } }
   let qp = [(serialize-qp "auth_key" $auth_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/authkey" $qp $auth.query)
   let accept_val = "application/json"
@@ -548,10 +564,11 @@ export def "auth-verifyotp-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --otp: string # YubiKey OTP code
+  --otp: string # YubiKey OTP code (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($otp == null) { error make --unspanned { msg: "required query parameter 'otp' missing: pass --otp" } }
   let qp = [(serialize-qp "otp" $otp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/verifyotp" $qp $auth.query)
   let accept_val = "application/json"
@@ -586,12 +603,14 @@ export def "authkey-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # Authenticated username
-  --password: string # Authenticated password (format: password)
+  --username: string # Authenticated username (required)
+  --password: string # Authenticated password (required, format: password)
   --otp: string # YubiKey OTP (if configured for user) (format: password)
 ]: nothing -> record<auth_key: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
+  if ($password == null) { error make --unspanned { msg: "required query parameter 'password' missing: pass --password" } }
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "otp" $otp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authkey" $qp $auth.query)
   let accept_val = "application/json"
@@ -626,11 +645,12 @@ export def "authkey-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auth-key: string # auth key to mark as compromised (format: password)
+  --auth-key: string # auth key to mark as compromised (required, format: password)
   --comments: string # Comments (like how was this compromised)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($auth_key == null) { error make --unspanned { msg: "required query parameter 'auth_key' missing: pass --auth-key" } }
   let qp = [(serialize-qp "auth_key" $auth_key "scalar") (serialize-qp "comments" $comments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authkey" $qp $auth.query)
   let accept_val = "application/json"
@@ -665,12 +685,14 @@ export def "authkey-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # Authenticated username
-  --password: string # Authenticated password (format: password)
+  --username: string # Authenticated username (required)
+  --password: string # Authenticated password (required, format: password)
   --otp: string # YubiKey OTP (if configured for user) (format: password)
 ]: nothing -> record<auth_key: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
+  if ($password == null) { error make --unspanned { msg: "required query parameter 'password' missing: pass --password" } }
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "otp" $otp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authkey" $qp $auth.query)
   let accept_val = "application/json"
@@ -705,10 +727,11 @@ export def "authkey-put" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auth-key: string # auth key to logout (format: password)
+  --auth-key: string # auth key to logout (required, format: password)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($auth_key == null) { error make --unspanned { msg: "required query parameter 'auth_key' missing: pass --auth-key" } }
   let qp = [(serialize-qp "auth_key" $auth_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authkey" $qp $auth.query)
   let accept_val = "application/json"
@@ -741,11 +764,12 @@ export def "kkid-allowance-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --kid-user-id: int # userID of the kid
+  --kid-user-id: int # userID of the kid (required)
   --transaction-days: int # number of days you wish to search allowance transactions (default is 90 days)
 ]: nothing -> record<allowanceTransaction: table<amount: int, date: string, transactionDescription: string, transactionId: int, transactionType: string, userId: int>, balance: int, id: int, lastUpdated: string, success: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($kid_user_id == null) { error make --unspanned { msg: "required query parameter 'kidUserId' missing: pass --kid-user-id" } }
   let qp = [(serialize-qp "kidUserId" $kid_user_id "scalar") (serialize-qp "transactionDays" $transaction_days "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/allowance" $qp $auth.query)
   let accept_val = "application/json"
@@ -778,13 +802,17 @@ export def "kkid-allowance-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --kid-user-id: int # userID of the kid
-  --amount: float # amount you wish to Add/Subtract (subtract value should be a negative value)
-  --description: string # Description (reason) of allowance transaction
-  --transaction-type: string@transaction-type-completer # Transaction Type (Add/Subtract)
+  --kid-user-id: int # userID of the kid (required)
+  --amount: float # amount you wish to Add/Subtract (subtract value should be a negative value) (required)
+  --description: string # Description (reason) of allowance transaction (required)
+  --transaction-type: string@transaction-type-completer # Transaction Type (Add/Subtract) (required)
 ]: nothing -> record<message: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($kid_user_id == null) { error make --unspanned { msg: "required query parameter 'kidUserId' missing: pass --kid-user-id" } }
+  if ($amount == null) { error make --unspanned { msg: "required query parameter 'amount' missing: pass --amount" } }
+  if ($description == null) { error make --unspanned { msg: "required query parameter 'description' missing: pass --description" } }
+  if ($transaction_type == null) { error make --unspanned { msg: "required query parameter 'transactionType' missing: pass --transaction-type" } }
   let qp = [(serialize-qp "kidUserId" $kid_user_id "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "transactionType" $transaction_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/allowance" $qp $auth.query)
   let accept_val = "application/json"
@@ -817,8 +845,8 @@ export def "kkid-apns-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --kid-user-id: int # userID of the kid
-  --tool: string@tool-completer # tool you wish to talk to
+  --kid-user-id: int # userID of the kid (required)
+  --tool: string@tool-completer # tool you wish to talk to (required)
   --qp-token: string # device APNS token (required for register)
   --devicename: string # Name of device to associate to token (required for register)
   --title: string # title of APNS message (required for send)
@@ -830,6 +858,8 @@ export def "kkid-apns-post" [
 ]: nothing -> record<message: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($kid_user_id == null) { error make --unspanned { msg: "required query parameter 'kidUserId' missing: pass --kid-user-id" } }
+  if ($tool == null) { error make --unspanned { msg: "required query parameter 'tool' missing: pass --tool" } }
   let qp = [(serialize-qp "kidUserId" $kid_user_id "scalar") (serialize-qp "tool" $tool "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devicename" $devicename "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "badge" $badge "scalar") (serialize-qp "sound" $sound "scalar") (serialize-qp "section" $section "scalar") (serialize-qp "priority" $priority "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/apns" $qp $auth.query)
   let accept_val = "application/json"
@@ -862,10 +892,11 @@ export def "kkid-chorelist-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id-chore-list: int # id of the chore you wish to delete
+  --id-chore-list: int # id of the chore you wish to delete (required)
 ]: nothing -> record<message: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_chore_list == null) { error make --unspanned { msg: "required query parameter 'idChoreList' missing: pass --id-chore-list" } }
   let qp = [(serialize-qp "idChoreList" $id_chore_list "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/chorelist" $qp $auth.query)
   let accept_val = "application/json"
@@ -940,11 +971,11 @@ export def "kkid-chorelist-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --kid-username: string # username of kid to assign the chore to.
+  --kid-username: string # username of kid to assign the chore to. (required)
   --day: string@day-completer-1 # day of week (Monday, Tuesday....) for the chore. For weekly chores put Weekly or leave blank
   --nfc-tag: string # text field of nfc tag required to check off chore
   --status: string # status of chore (default is todo)
-  --chore-name: string # name of chore
+  --chore-name: string # name of chore (required)
   --chore-description: string # optional chore description
   --chore-number: int # number priority of chore (default is 5)
   --block-dash: oneof<nothing, bool> # block dash option on this chore
@@ -963,6 +994,8 @@ export def "kkid-chorelist-post" [
 ]: nothing -> record<message: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($kid_username == null) { error make --unspanned { msg: "required query parameter 'kidUsername' missing: pass --kid-username" } }
+  if ($chore_name == null) { error make --unspanned { msg: "required query parameter 'choreName' missing: pass --chore-name" } }
   let qp = [(serialize-qp "kidUsername" $kid_username "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "nfcTag" $nfc_tag "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "choreName" $chore_name "scalar") (serialize-qp "choreDescription" $chore_description "scalar") (serialize-qp "choreNumber" $chore_number "scalar") (serialize-qp "blockDash" $block_dash "scalar") (serialize-qp "oneTime" $one_time "scalar") (serialize-qp "extraAllowance" $extra_allowance "scalar") (serialize-qp "optional" $optional "scalar") (serialize-qp "reassignable" $reassignable "scalar") (serialize-qp "canSteal" $can_steal "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "notes" $notes "scalar") (serialize-qp "requireObjectDetection" $require_object_detection "scalar") (serialize-qp "objectDetectionTag" $object_detection_tag "scalar") (serialize-qp "updatedByAutomation" $updated_by_automation "scalar") (serialize-qp "aiIcon" $ai_icon "scalar") (serialize-qp "isCalendar" $is_calendar "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/chorelist" $qp $auth.query)
   let accept_val = "application/json"
@@ -995,7 +1028,7 @@ export def "kkid-chorelist-put" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id-chore-list: int # id number of chore you wish to update
+  --id-chore-list: int # id number of chore you wish to update (required)
   --status: string # new status of chore
   --stolen: oneof<nothing, bool> # mark chore as stolen by sibling
   --stolen-by: string # username of sibling that stole the chore (required if stolen is true)
@@ -1011,6 +1044,7 @@ export def "kkid-chorelist-put" [
 ]: nothing -> record<message: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_chore_list == null) { error make --unspanned { msg: "required query parameter 'idChoreList' missing: pass --id-chore-list" } }
   let qp = [(serialize-qp "idChoreList" $id_chore_list "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "stolen" $stolen "scalar") (serialize-qp "stolenBy" $stolen_by "scalar") (serialize-qp "nfcTag" $nfc_tag "scalar") (serialize-qp "notes" $notes "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "altitude" $altitude "scalar") (serialize-qp "updatedByAutomation" $updated_by_automation "scalar") (serialize-qp "whereDay" $where_day "scalar") (serialize-qp "whereStatus" $where_status "scalar") (serialize-qp "whereName" $where_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/chorelist" $qp $auth.query)
   let accept_val = "application/json"
@@ -1043,14 +1077,19 @@ export def "kkid-masteruser-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # username of user to create
-  --password: string # password of user to create (format: password)
-  --email: string # email address of user to create
-  --first-name: string # First Name of user to create
-  --last-name: string # Last Name of user to create
+  --username: string # username of user to create (required)
+  --password: string # password of user to create (required, format: password)
+  --email: string # email address of user to create (required)
+  --first-name: string # First Name of user to create (required)
+  --last-name: string # Last Name of user to create (required)
 ]: nothing -> record<added: string, aff_added: string, aff_id: string, aff_payout_type: string, avatar: string, city: string, comment: string, country: string, disable_lock_until: string, email: string, i_agree: string, is_affiliate: string, is_locked: string, lang: string, last_login: string, login: string, name_f: string, name_l: string, pass: string, pass_dattm: string, phone: string, pin: string, plain_password: string, remember_key: string, remote_addr: string, require_consent: string, reseller_id: string, saved_form_id: string, state: string, status: string, street: string, street2: string, subusers_parent_id: string, tax_id: string, unsubscribed: string, user_agent: string, user_id: int, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
+  if ($password == null) { error make --unspanned { msg: "required query parameter 'password' missing: pass --password" } }
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
+  if ($first_name == null) { error make --unspanned { msg: "required query parameter 'firstName' missing: pass --first-name" } }
+  if ($last_name == null) { error make --unspanned { msg: "required query parameter 'lastName' missing: pass --last-name" } }
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/masteruser" $qp $auth.query)
   let accept_val = "application/json"
@@ -1083,15 +1122,18 @@ export def "kkid-share-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --link-user-id: string # User ID that the link should be authenticated to
-  --link: string@link-completer # Link to share
-  --scope: string@scope-completer # Authentication scope for link
+  --link-user-id: string # User ID that the link should be authenticated to (required)
+  --link: string@link-completer # Link to share (required)
+  --scope: string@scope-completer # Authentication scope for link (required)
   --scope2: string@scope2-completer # Authentication scope for link
   --scope3: string@scope3-completer # Authentication scope for link
   --scope4: string@scope4-completer # Authentication scope for link
 ]: nothing -> record<auth_link: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($link_user_id == null) { error make --unspanned { msg: "required query parameter 'linkUserId' missing: pass --link-user-id" } }
+  if ($link == null) { error make --unspanned { msg: "required query parameter 'link' missing: pass --link" } }
+  if ($scope == null) { error make --unspanned { msg: "required query parameter 'scope' missing: pass --scope" } }
   let qp = [(serialize-qp "linkUserId" $link_user_id "scalar") (serialize-qp "link" $link "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "scope2" $scope2 "scalar") (serialize-qp "scope3" $scope3 "scalar") (serialize-qp "scope4" $scope4 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/share" $qp $auth.query)
   let accept_val = "application/json"
@@ -1160,10 +1202,11 @@ export def "kkid-userlist-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-id: int # userID of the user you wish to delete
+  --user-id: int # userID of the user you wish to delete (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'userID' missing: pass --user-id" } }
   let qp = [(serialize-qp "userID" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/userlist" $qp $auth.query)
   let accept_val = "application/json"
@@ -1239,14 +1282,19 @@ export def "kkid-userlist-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # username of user to create
-  --password: string # password of user to create (format: password)
-  --email: string # email address of user to create
-  --first-name: string # First Name of user to create
-  --last-name: string # Last Name of user to create
+  --username: string # username of user to create (required)
+  --password: string # password of user to create (required, format: password)
+  --email: string # email address of user to create (required)
+  --first-name: string # First Name of user to create (required)
+  --last-name: string # Last Name of user to create (required)
 ]: nothing -> record<added: string, aff_added: string, aff_id: string, aff_payout_type: string, avatar: string, city: string, comment: string, country: string, disable_lock_until: string, email: string, i_agree: string, is_affiliate: string, is_locked: string, lang: string, last_login: string, login: string, name_f: string, name_l: string, pass: string, pass_dattm: string, phone: string, pin: string, plain_password: string, remember_key: string, remote_addr: string, require_consent: string, reseller_id: string, saved_form_id: string, state: string, status: string, street: string, street2: string, subusers_parent_id: string, tax_id: string, unsubscribed: string, user_agent: string, user_id: int, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
+  if ($password == null) { error make --unspanned { msg: "required query parameter 'password' missing: pass --password" } }
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
+  if ($first_name == null) { error make --unspanned { msg: "required query parameter 'firstName' missing: pass --first-name" } }
+  if ($last_name == null) { error make --unspanned { msg: "required query parameter 'lastName' missing: pass --last-name" } }
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/userlist" $qp $auth.query)
   let accept_val = "application/json"
@@ -1279,11 +1327,11 @@ export def "kkid-userlist-put" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-id: int # userID of the user you wish to update
-  --username: string # username of user to create
-  --email: string # email address of user to create
-  --first-name: string # First Name of user to create
-  --last-name: string # Last Name of user to create
+  --user-id: int # userID of the user you wish to update (required)
+  --username: string # username of user to create (required)
+  --email: string # email address of user to create (required)
+  --first-name: string # First Name of user to create (required)
+  --last-name: string # Last Name of user to create (required)
   --emoji: string # emoji character for user
   --tmdb-key: string # User's TMdB Session Key
   --enable-wish-list: oneof<nothing, bool> # set status of Wish List module enabled
@@ -1295,6 +1343,11 @@ export def "kkid-userlist-put" [
 ]: nothing -> record<added: string, aff_added: string, aff_id: string, aff_payout_type: string, avatar: string, city: string, comment: string, country: string, disable_lock_until: string, email: string, i_agree: string, is_affiliate: string, is_locked: string, lang: string, last_login: string, login: string, name_f: string, name_l: string, pass: string, pass_dattm: string, phone: string, pin: string, plain_password: string, remember_key: string, remote_addr: string, require_consent: string, reseller_id: string, saved_form_id: string, state: string, status: string, street: string, street2: string, subusers_parent_id: string, tax_id: string, unsubscribed: string, user_agent: string, user_id: int, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'userID' missing: pass --user-id" } }
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
+  if ($first_name == null) { error make --unspanned { msg: "required query parameter 'firstName' missing: pass --first-name" } }
+  if ($last_name == null) { error make --unspanned { msg: "required query parameter 'lastName' missing: pass --last-name" } }
   let qp = [(serialize-qp "userID" $user_id "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "emoji" $emoji "scalar") (serialize-qp "tmdbKey" $tmdb_key "scalar") (serialize-qp "enableWishList" $enable_wish_list "scalar") (serialize-qp "enableChores" $enable_chores "scalar") (serialize-qp "enableAllowance" $enable_allowance "scalar") (serialize-qp "enableAdmin" $enable_admin "scalar") (serialize-qp "enableTmdb" $enable_tmdb "scalar") (serialize-qp "enableObjectDetection" $enable_object_detection "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/userlist" $qp $auth.query)
   let accept_val = "application/json"
@@ -1327,10 +1380,11 @@ export def "kkid-wishlist-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --wish-id: int # ID of wishlist item to delete
+  --wish-id: int # ID of wishlist item to delete (required)
 ]: nothing -> record<message: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($wish_id == null) { error make --unspanned { msg: "required query parameter 'wishId' missing: pass --wish-id" } }
   let qp = [(serialize-qp "wishId" $wish_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/wishlist" $qp $auth.query)
   let accept_val = "application/json"
@@ -1399,14 +1453,16 @@ export def "kkid-wishlist-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --kid-user-id: int # userID of the kid
-  --title: string # Item title
+  --kid-user-id: int # userID of the kid (required)
+  --title: string # Item title (required)
   --description: string # Item Description
   --priority: int # Item Priority
   --link: string # URL Link to item
 ]: nothing -> record<message: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($kid_user_id == null) { error make --unspanned { msg: "required query parameter 'kidUserId' missing: pass --kid-user-id" } }
+  if ($title == null) { error make --unspanned { msg: "required query parameter 'title' missing: pass --title" } }
   let qp = [(serialize-qp "kidUserId" $kid_user_id "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "link" $link "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/wishlist" $qp $auth.query)
   let accept_val = "application/json"
@@ -1439,7 +1495,7 @@ export def "kkid-wishlist-put" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --wish-id: int # Wish list item ID to update
+  --wish-id: int # Wish list item ID to update (required)
   --title: string # Item title
   --description: string # Item Description
   --priority: int # Item Priority
@@ -1447,6 +1503,7 @@ export def "kkid-wishlist-put" [
 ]: nothing -> record<message: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
+  if ($wish_id == null) { error make --unspanned { msg: "required query parameter 'wishId' missing: pass --wish-id" } }
   let qp = [(serialize-qp "wishId" $wish_id "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "link" $link "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/wishlist" $qp $auth.query)
   let accept_val = "application/json"

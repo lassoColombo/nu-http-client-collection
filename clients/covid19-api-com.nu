@@ -136,11 +136,12 @@ export def "get-latest-country-data-by-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --name: string # Name of the country
+  --name: string # Name of the country (required)
   --format: string@format-completer # Format of the response (default: json)
 ]: nothing -> table<confirmed: int, country: string, critical: int, deaths: int, lastChange: string, lastUpdate: string, latitude: float, longitude: float, recovered: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/country" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -211,11 +212,12 @@ export def "get-latest-country-data-by-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --code: string # Country code
+  --code: string # Country code (required)
   --format: string@format-completer # Format of the response (default: json)
 ]: nothing -> table<confirmed: int, country: string, critical: int, deaths: int, lastChange: string, lastUpdate: string, latitude: float, longitude: float, recovered: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($code == null) { error make --unspanned { msg: "required query parameter 'code' missing: pass --code" } }
   let qp = [(serialize-qp "code" $code "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/country/code" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -286,12 +288,13 @@ export def "get-daily-report-all-countries" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --date: string # Date of the report.
+  --date: string # Date of the report. (required)
   --date-format: string@date-format-completer # Date format. If you dont want to use ISO 8601 standard (YYYY-MM-DD), you can provide different format. (default: YYYY-MM-DD)
   --format: string@format-completer # Format of the response (default: json)
 ]: nothing -> table<country: string, date: string, latitude: float, longitude: float, province: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($date == null) { error make --unspanned { msg: "required query parameter 'date' missing: pass --date" } }
   let qp = [(serialize-qp "date" $date "scalar") (serialize-qp "date-format" $date_format "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/report/country/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -325,13 +328,15 @@ export def "get-daily-report-by-country-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --code: string # Country code. Country code is by ISO 3166-1 standard. It can be 2 chars (Alpha-2) or 3 chars (Alpha-3) type.
-  --date: string # Date of the report.
+  --code: string # Country code. Country code is by ISO 3166-1 standard. It can be 2 chars (Alpha-2) or 3 chars (Alpha-3) type. (required)
+  --date: string # Date of the report. (required)
   --date-format: string@date-format-completer # Date format. If you dont want to use ISO 8601 standard (YYYY-MM-DD), you can provide different format. (default: YYYY-MM-DD)
   --format: string@format-completer # Format of the response (default: json)
 ]: nothing -> table<country: string, date: string, latitude: float, longitude: float, province: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($code == null) { error make --unspanned { msg: "required query parameter 'code' missing: pass --code" } }
+  if ($date == null) { error make --unspanned { msg: "required query parameter 'date' missing: pass --date" } }
   let qp = [(serialize-qp "code" $code "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "date-format" $date_format "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/report/country/code" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -365,13 +370,15 @@ export def "get-daily-report-by-country-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --name: string # Country name.
-  --date: string # Date of the report.
+  --name: string # Country name. (required)
+  --date: string # Date of the report. (required)
   --date-format: string@date-format-completer # Date format. If you dont want to use ISO 8601 standard (YYYY-MM-DD), you can provide different format. (default: YYYY-MM-DD)
   --format: string@format-completer # Format of the response (default: json)
 ]: nothing -> table<country: string, date: string, latitude: float, longitude: float, province: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
+  if ($date == null) { error make --unspanned { msg: "required query parameter 'date' missing: pass --date" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "date-format" $date_format "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/report/country/name" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

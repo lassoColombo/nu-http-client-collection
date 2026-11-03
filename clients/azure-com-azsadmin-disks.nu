@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -139,12 +139,13 @@ export def "disks-list" [
   --share-path: string # The source share which the resource belongs to.
   --count: int # The maximum number of disks to return. (format: int32)
   --start: int # The start index of disks in query. (format: int32)
-  --api-version: string # Client API Version. (default: 2018-07-30-preview)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API Version. (required, default: 2018-07-30-preview)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  let api_version = ($api_version | default "2018-07-30-preview")
   let qp = [(serialize-qp "userSubscriptionId" $user_subscription_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sharePath" $share_path "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/disks") $qp $auth.query)
   let accept_val = "application/json"
@@ -180,13 +181,14 @@ export def "disks-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2018-07-30-preview)
-]: nothing -> record<properties: record<actualSizeGB: int, diskId: string, diskSku: string, diskType: string, managedBy: string, provisionSizeGB: int, sharePath: string, status: string, userResourceId: string>> {
+  --api-version: string # Client API Version. (required, default: 2018-07-30-preview)
+]: nothing -> record<properties: record<actualSizeGB: int, diskId: string, diskSku: string, diskType: string, managedBy: string, provisionSizeGB: int, sharePath: string, status: string, userResourceId: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($disk_id | is-empty) { error make --unspanned { msg: "path parameter 'DiskId' must be non-empty" } }
+  let api_version = ($api_version | default "2018-07-30-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location), disk_id: (encode-path-segment $disk_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/disks/{disk_id}") $qp $auth.query)
   let accept_val = "application/json"

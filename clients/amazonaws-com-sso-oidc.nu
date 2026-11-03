@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -148,7 +148,7 @@ export def "create-token" [
   --refresh-token: string # Currently, refreshToken is not yet implemented and is not supported. For more information about the features and limitations of the current IAM Identity Center OIDC implementation, see Considerations for Using this Guide in the IAM Identity Center OIDC API Reference (https://docs.aws.amazon.com/singlesignon/latest/OIDCAPIReference/Welcome.html). The token used to obtain an access token in the event that the access token is invalid or expired.
   --scope: list<string> # The list of scopes that is defined by the client. Upon authorization, this list is used to restrict permissions when granting an access token.
   --redirect-uri: string # The location of the application that will receive the authorization code. Users authorize the service to send the request to this location.
-]: any -> record<accessToken: record, tokenType: record, expiresIn: record, refreshToken: record, idToken: record> {
+]: any -> record<accessToken: string, tokenType: string, expiresIn: int, refreshToken: string, idToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -197,7 +197,7 @@ export def "register-client" [
   client_name: string # The friendly name of the client.
   client_type: string # The type of client. The service supports only public as a client type. Anything other than public will be rejected by the service.
   --scopes: list<string> # The list of scopes that are defined by the client. Upon authorization, this list is used to restrict permissions when granting an access token.
-]: any -> record<clientId: record, clientSecret: record, clientIdIssuedAt: record, clientSecretExpiresAt: record, authorizationEndpoint: record, tokenEndpoint: record> {
+]: any -> record<clientId: string, clientSecret: string, clientIdIssuedAt: int, clientSecretExpiresAt: int, authorizationEndpoint: string, tokenEndpoint: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -246,7 +246,7 @@ export def "start-device-authorization" [
   client_id: string # The unique identifier string for the client that is registered with IAM Identity Center. This value should come from the persisted result of the RegisterClient API operation.
   client_secret: string # A secret string that is generated for the client. This value should come from the persisted result of the RegisterClient API operation.
   start_url: string # The URL for the AWS access portal. For more information, see Using the AWS access portal (https://docs.aws.amazon.com/singlesignon/latest/userguide/using-the-portal.html) in the IAM Identity Center User Guide.
-]: any -> record<deviceCode: record, userCode: record, verificationUri: record, verificationUriComplete: record, expiresIn: record, interval: record> {
+]: any -> record<deviceCode: string, userCode: string, verificationUri: string, verificationUriComplete: string, expiresIn: int, interval: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

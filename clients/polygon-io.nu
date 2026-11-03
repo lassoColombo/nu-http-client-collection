@@ -94,6 +94,8 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["https://api.polygon.io"] }
 def auth-scheme-completer [] { ["query-apiKey"] }
 
+# Completers for enum parameters
+def size-completer [] { ["minute" "second"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -131,20 +133,20 @@ export def "get-v1-companies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string # Which field to sort by. For desc place a `-` in front of the field name. eg `?sort=-marketcap`
+  --sort: string # Which field to sort by. For desc place a `-` in front of the field name. eg `?sort=-marketcap`
   --perpage: float # How many items to be on each page during pagination
   --page: float # Which page of results to return (default: 1)
 ]: nothing -> table<country: string, exchange: string, industry: string, marketcap: float, name: string, sector: string, symbol: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "perpage" $perpage "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "perpage" $perpage "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/companies" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "perpage": $perpage, "page": $page} | compact)
+    query: ({"sort": $sort, "perpage": $perpage, "page": $page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -192,7 +194,7 @@ export def "get-v1-currencies" [
 #
 # GET /v1/historic/agg/{size}/{symbol}/{date}
 export def "get-v1-historic-agg-size-symbol-date" [
-  size: string
+  size: string@size-completer
   symbol: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL

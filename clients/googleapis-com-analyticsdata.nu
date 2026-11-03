@@ -1,4 +1,4 @@
-# Auto-generated client for Google Analytics Data API vv1beta
+# Auto-generated client for Google Analytics Data API v1beta
 # Source: https://api.apis.guru/v2/specs/googleapis.com/analyticsdata/v1beta/openapi.json
 # Auth: --token flag or $env.GOOGLE_ANALYTICS_DATA_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -145,8 +135,8 @@ export def commands []: nothing -> table {
 export def "analyticsdata-properties-get-metadata" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -165,7 +155,7 @@ export def "analyticsdata-properties-get-metadata" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<dimensions: table<apiName: string, category: string, customDefinition: bool, deprecatedApiNames: list, description: string, uiName: string>, metrics: table<apiName: string, blockedReasons: list, category: string, customDefinition: bool, deprecatedApiNames: list, description: string, expression: string, type: string, uiName: string>, name: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_ANALYTICS_DATA_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_ANALYTICS_DATA_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -194,8 +184,8 @@ export def "analyticsdata-properties-get-metadata" [
 export def "analyticsdata-properties-batch-run-pivot-reports" [
   property: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -216,7 +206,7 @@ export def "analyticsdata-properties-batch-run-pivot-reports" [
   --requests: list # Individual requests. Each request has a separate pivot report response. Each batch request is allowed up to 5 requests. — item shape: {cohortSpec?: record, currencyCode?: string, dateRanges?: list, dimensionFilter?: record, dimensions?: list, keepEmptyRows?: bool, metricFilter?: record, metrics?: list, pivots?: list, property?: string, returnPropertyQuota?: bool}
 ]: any -> record<kind: string, pivotReports: table<aggregates: list, dimensionHeaders: list, kind: string, metadata: record, metricHeaders: list, pivotHeaders: list, propertyQuota: record, rows: list>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_ANALYTICS_DATA_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_ANALYTICS_DATA_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($property | is-empty) { error make --unspanned { msg: "path parameter 'property' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -247,8 +237,8 @@ export def "analyticsdata-properties-batch-run-pivot-reports" [
 export def "analyticsdata-properties-batch-run-reports" [
   property: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -269,7 +259,7 @@ export def "analyticsdata-properties-batch-run-reports" [
   --requests: list # Individual requests. Each request has a separate report response. Each batch request is allowed up to 5 requests. — item shape: {cohortSpec?: record, currencyCode?: string, dateRanges?: list, dimensionFilter?: record, dimensions?: list, keepEmptyRows?: bool, limit?: string, metricAggregations?: list<string>, metricFilter?: record, metrics?: list, offset?: string, orderBys?: list, property?: string, returnPropertyQuota?: bool}
 ]: any -> record<kind: string, reports: table<dimensionHeaders: list, kind: string, maximums: list, metadata: record, metricHeaders: list, minimums: list, propertyQuota: record, rowCount: int, rows: list, totals: list>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_ANALYTICS_DATA_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_ANALYTICS_DATA_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($property | is-empty) { error make --unspanned { msg: "path parameter 'property' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -303,8 +293,8 @@ export def "analyticsdata-properties-batch-run-reports" [
 export def "analyticsdata-properties-check-compatibility" [
   property: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -329,7 +319,7 @@ export def "analyticsdata-properties-check-compatibility" [
   --metrics: list # The metrics in this report. `metrics` should be the same value as in your `runReport` request. — item shape: {expression?: string, invisible?: bool, name?: string}
 ]: any -> record<dimensionCompatibilities: table<compatibility: string, dimensionMetadata: record>, metricCompatibilities: table<compatibility: string, metricMetadata: record>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_ANALYTICS_DATA_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_ANALYTICS_DATA_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($property | is-empty) { error make --unspanned { msg: "path parameter 'property' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -366,8 +356,8 @@ export def "analyticsdata-properties-check-compatibility" [
 export def "analyticsdata-properties-run-pivot-report" [
   property: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -398,7 +388,7 @@ export def "analyticsdata-properties-run-pivot-report" [
   --return-property-quota: oneof<nothing, bool> # Toggles whether to return the current state of this Analytics Property's quota. Quota is returned in [PropertyQuota](#PropertyQuota).
 ]: any -> record<aggregates: table<dimensionValues: list, metricValues: list>, dimensionHeaders: table<name: string>, kind: string, metadata: record<currencyCode: string, dataLossFromOtherRow: bool, emptyReason: string, schemaRestrictionResponse: record<activeMetricRestrictions: list>, subjectToThresholding: bool, timeZone: string>, metricHeaders: table<name: string, type: string>, pivotHeaders: table<pivotDimensionHeaders: list, rowCount: int>, propertyQuota: record<concurrentRequests: record<consumed: int, remaining: int>, potentiallyThresholdedRequestsPerHour: record<consumed: int, remaining: int>, serverErrorsPerProjectPerHour: record<consumed: int, remaining: int>, tokensPerDay: record<consumed: int, remaining: int>, tokensPerHour: record<consumed: int, remaining: int>, tokensPerProjectPerHour: record<consumed: int, remaining: int>>, rows: table<dimensionValues: list, metricValues: list>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_ANALYTICS_DATA_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_ANALYTICS_DATA_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($property | is-empty) { error make --unspanned { msg: "path parameter 'property' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -434,8 +424,8 @@ export def "analyticsdata-properties-run-pivot-report" [
 export def "analyticsdata-properties-run-realtime-report" [
   property: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -464,7 +454,7 @@ export def "analyticsdata-properties-run-realtime-report" [
   --return-property-quota: oneof<nothing, bool> # Toggles whether to return the current state of this Analytics Property's Realtime quota. Quota is returned in [PropertyQuota](#PropertyQuota).
 ]: any -> record<dimensionHeaders: table<name: string>, kind: string, maximums: table<dimensionValues: list, metricValues: list>, metricHeaders: table<name: string, type: string>, minimums: table<dimensionValues: list, metricValues: list>, propertyQuota: record<concurrentRequests: record<consumed: int, remaining: int>, potentiallyThresholdedRequestsPerHour: record<consumed: int, remaining: int>, serverErrorsPerProjectPerHour: record<consumed: int, remaining: int>, tokensPerDay: record<consumed: int, remaining: int>, tokensPerHour: record<consumed: int, remaining: int>, tokensPerProjectPerHour: record<consumed: int, remaining: int>>, rowCount: int, rows: table<dimensionValues: list, metricValues: list>, totals: table<dimensionValues: list, metricValues: list>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_ANALYTICS_DATA_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_ANALYTICS_DATA_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($property | is-empty) { error make --unspanned { msg: "path parameter 'property' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -501,8 +491,8 @@ export def "analyticsdata-properties-run-realtime-report" [
 export def "analyticsdata-properties-run-report" [
   property: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -536,7 +526,7 @@ export def "analyticsdata-properties-run-report" [
   --return-property-quota: oneof<nothing, bool> # Toggles whether to return the current state of this Analytics Property's quota. Quota is returned in [PropertyQuota](#PropertyQuota).
 ]: any -> record<dimensionHeaders: table<name: string>, kind: string, maximums: table<dimensionValues: list, metricValues: list>, metadata: record<currencyCode: string, dataLossFromOtherRow: bool, emptyReason: string, schemaRestrictionResponse: record<activeMetricRestrictions: list>, subjectToThresholding: bool, timeZone: string>, metricHeaders: table<name: string, type: string>, minimums: table<dimensionValues: list, metricValues: list>, propertyQuota: record<concurrentRequests: record<consumed: int, remaining: int>, potentiallyThresholdedRequestsPerHour: record<consumed: int, remaining: int>, serverErrorsPerProjectPerHour: record<consumed: int, remaining: int>, tokensPerDay: record<consumed: int, remaining: int>, tokensPerHour: record<consumed: int, remaining: int>, tokensPerProjectPerHour: record<consumed: int, remaining: int>>, rowCount: int, rows: table<dimensionValues: list, metricValues: list>, totals: table<dimensionValues: list, metricValues: list>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_ANALYTICS_DATA_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_ANALYTICS_DATA_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($property | is-empty) { error make --unspanned { msg: "path parameter 'property' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"

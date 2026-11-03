@@ -302,7 +302,7 @@ export def "get-isochrone" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --point: string # Specify the start coordinate
+  --point: string # Specify the start coordinate (required)
   --time-limit: int # Specify which time the vehicle should travel. In seconds. (format: int32, default: 600)
   --distance-limit: int # Specify which distance the vehicle should travel. In meters. (format: int32)
   --vehicle: string@vehicle-completer # The vehicle profile for which the route should be calculated. (default: car)
@@ -312,6 +312,7 @@ export def "get-isochrone" [
 ]: nothing -> record<copyrights: list<string>, polygons: table<geometry: record, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($point == null) { error make --unspanned { msg: "required query parameter 'point' missing: pass --point" } }
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "time_limit" $time_limit "scalar") (serialize-qp "distance_limit" $distance_limit "scalar") (serialize-qp "vehicle" $vehicle "scalar") (serialize-qp "buckets" $buckets "scalar") (serialize-qp "reverse_flow" $reverse_flow "scalar") (serialize-qp "weighting" $weighting "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/isochrone" $qp $auth.query)
   let accept_val = "application/json"
@@ -440,7 +441,7 @@ export def "post-matrix" [
   --to-point-hints: list<string> # See `point_hints`of symmetrical matrix
   --to-points: list # The destination points for the routes in an array of `[longitude,latitude]`.
   --turn-costs: oneof<nothing, bool> # Specifies if turn restrictions should be considered. Enabling this option increases the matrix computation time. Only supported for motor vehicles and OpenStreetMap. (default: false)
-  --vehicle: any
+  --vehicle: string@vehicle-completer # The vehicle profile for which the route should be calculated. Other vehicles are listed [here](#section/Map-Data-and-Routing-Profiles/OpenStreetMap) for the details. (default: car)
   --curbsides: list<string> # Optional parameter. It specifies on which side a point should be relative to the driver when she leaves/arrives at a start/target/via point. You need to specify this parameter for either none or all points. Only supported for motor vehicles and OpenStreetMap.
   --point-hints: list<string> # Optional parameter. Specifies a hint for each point in the `points` array to prefer a certain street for the closest location lookup. E.g. if there is an address or house with two or more neighboring streets you can control for which street the closest location is looked up.
   --points: list # Specify multiple points for which the weight-, route-, time- or distance-matrix should be calculated as follows: `[longitude,latitude]`. In this case the origins are identical to the destinations. Thus, if there are N points, NxN entries are calculated. The order of the point parameter is important. Specify at least three points. Cannot be used together with `from_point` or `to_point.`.
@@ -491,7 +492,7 @@ export def "calculate-matrix" [
   --to-point-hints: list<string> # See `point_hints`of symmetrical matrix
   --to-points: list # The destination points for the routes in an array of `[longitude,latitude]`.
   --turn-costs: oneof<nothing, bool> # Specifies if turn restrictions should be considered. Enabling this option increases the matrix computation time. Only supported for motor vehicles and OpenStreetMap. (default: false)
-  --vehicle: any
+  --vehicle: string@vehicle-completer # The vehicle profile for which the route should be calculated. Other vehicles are listed [here](#section/Map-Data-and-Routing-Profiles/OpenStreetMap) for the details. (default: car)
   --curbsides: list<string> # Optional parameter. It specifies on which side a point should be relative to the driver when she leaves/arrives at a start/target/via point. You need to specify this parameter for either none or all points. Only supported for motor vehicles and OpenStreetMap.
   --point-hints: list<string> # Optional parameter. Specifies a hint for each point in the `points` array to prefer a certain street for the closest location lookup. E.g. if there is an address or house with two or more neighboring streets you can control for which street the closest location is looked up.
   --points: list # Specify multiple points for which the weight-, route-, time- or distance-matrix should be calculated as follows: `[longitude,latitude]`. In this case the origins are identical to the destinations. Thus, if there are N points, NxN entries are calculated. The order of the point parameter is important. Specify at least three points. Cannot be used together with `from_point` or `to_point.`.
@@ -568,7 +569,7 @@ export def "get-route" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --point: list<string> # The points for which the route should be calculated. Format: `[latitude,longitude]`. Specify at least an origin and a destination. Via points are possible. The maximum number depends on your plan.
+  --point: list<string> # The points for which the route should be calculated. Format: `[latitude,longitude]`. Specify at least an origin and a destination. Via points are possible. The maximum number depends on your plan. (required)
   --point-hint: list<string> # The `point_hint` is typically a road name to which the associated `point` parameter should be snapped to. Specify no `point_hint` parameter or the same number as you have `point` parameters.
   --snap-prevention: list<string> # Optional parameter to avoid snapping to a certain road class or road environment. Currently supported values are `motorway`, `trunk`, `ferry`, `tunnel`, `bridge` and `ford`. Multiple values are specified like `snap_prevention=ferry&snap_prevention=motorway`.
   --vehicle: string@vehicle-completer # The vehicle profile for which the route should be calculated. (default: car)
@@ -598,6 +599,7 @@ export def "get-route" [
 ]: nothing -> record<info: record<copyrights: list<string>, took: float>, paths: table<ascend: float, bbox: list, descend: float, details: record, distance: float, instructions: list, points: record, points_encoded: bool, points_order: list, snapped_waypoints: record, time: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($point == null) { error make --unspanned { msg: "required query parameter 'point' missing: pass --point" } }
   let qp = [(serialize-qp "point" $point "multi") (serialize-qp "point_hint" $point_hint "multi") (serialize-qp "snap_prevention" $snap_prevention "multi") (serialize-qp "vehicle" $vehicle "scalar") (serialize-qp "curbside" $curbside "multi") (serialize-qp "turn_costs" $turn_costs "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "elevation" $elevation "scalar") (serialize-qp "details" $details "multi") (serialize-qp "optimize" $optimize "scalar") (serialize-qp "instructions" $instructions "scalar") (serialize-qp "calc_points" $calc_points "scalar") (serialize-qp "debug" $debug "scalar") (serialize-qp "points_encoded" $points_encoded "scalar") (serialize-qp "ch.disable" $ch_disable "scalar") (serialize-qp "weighting" $weighting "scalar") (serialize-qp "heading" $heading "multi") (serialize-qp "heading_penalty" $heading_penalty "scalar") (serialize-qp "pass_through" $pass_through "scalar") (serialize-qp "block_area" $block_area "scalar") (serialize-qp "avoid" $avoid "scalar") (serialize-qp "algorithm" $algorithm "scalar") (serialize-qp "round_trip.distance" $round_trip_distance "scalar") (serialize-qp "round_trip.seed" $round_trip_seed "scalar") (serialize-qp "alternative_route.max_paths" $alternative_route_max_paths "scalar") (serialize-qp "alternative_route.max_weight_factor" $alternative_route_max_weight_factor "scalar") (serialize-qp "alternative_route.max_share_factor" $alternative_route_max_share_factor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/route" $qp $auth.query)
   let accept_val = "application/json"
@@ -654,7 +656,7 @@ export def "post-route" [
   --round-trip-distance: int # If `algorithm=round_trip`, this parameter configures approximative length of the resulting round trip. Requires `ch.disable=true`. (format: int32, default: 10000)
   --round-trip-seed: int # If `algorithm=round_trip`, this sets the random seed. Change this to get a different tour for each value. (format: int64)
   --snap-preventions: list<string> # Optional parameter to avoid snapping to a certain road class or road environment. Current supported values `motorway`, `trunk`, `ferry`, `tunnel`, `bridge` and `ford` (e.g. [motorway, ferry, tunnel])
-  --vehicle: any # e.g. bike
+  --vehicle: string@vehicle-completer # The vehicle profile for which the route should be calculated. Other vehicles are listed [here](#section/Map-Data-and-Routing-Profiles/OpenStreetMap) for the details. (default: car, e.g. bike)
   --weighting: string # Determines the way the ''best'' route is calculated. Default is `fastest`. Other options are `shortest` (e.g. for `vehicle=foot` or `bike`) and `short_fastest` which finds a reasonable balance between `shortest` and `fastest`. Requires `ch.disable=true`. (default: fastest)
 ]: any -> record<info: record<copyrights: list<string>, took: float>, paths: table<ascend: float, bbox: list, descend: float, details: record, distance: float, instructions: list, points: record, points_encoded: bool, points_order: list, snapped_waypoints: record, time: int>> {
   let input = $in
@@ -722,7 +724,7 @@ export def "get-route-info" [
 # --objectives item shape: {type: "min"|"min-max", value: "completion_time"|"transport_time"|"vehicles"|"activities"}
 # --services item shape: {address?: record, allowed_vehicles?: list<string>, disallowed_vehicles?: list<string>, duration?: int, group?: string, id: string, max_time_in_vehicle?: int, name?: string, preparation_time?: int, priority?: int, required_skills?: list<string>, size?: list<int>, time_windows?: list, type?: "service"|"pickup"|"delivery"}
 # --shipments item shape: {allowed_vehicles?: list<string>, delivery: record, disallowed_vehicles?: list<string>, id: string, max_time_in_vehicle?: int, name?: string, pickup: record, priority?: int, required_skills?: list<string>, size?: list<int>}
-# --vehicle_types item shape: {capacity?: list<int>, consider_traffic?: bool, cost_per_activation?: float, cost_per_meter?: float, cost_per_second?: float, network_data_provider?: "openstreetmap"|"tomtom", profile?: any, service_time_factor?: float, speed_factor?: float, type_id: string}
+# --vehicle_types item shape: {capacity?: list<int>, consider_traffic?: bool, cost_per_activation?: float, cost_per_meter?: float, cost_per_second?: float, network_data_provider?: "openstreetmap"|"tomtom", profile?: "car"|"bike"|"foot"|"hike"|"mtb"|"racingbike"|"scooter"|"truck"|"small_truck", service_time_factor?: float, speed_factor?: float, type_id: string}
 # --vehicles item shape: {break?: any, earliest_start?: int, end_address?: record, latest_end?: int, max_activities?: int, max_distance?: int, max_driving_time?: int, max_jobs?: int, min_jobs?: int, move_to_end_address?: bool, return_to_depot?: bool, skills?: list<string>, start_address: record, type_id?: string, vehicle_id: string}
 @deprecated --flag algorithm
 export def "solve-vrp" [
@@ -742,7 +744,7 @@ export def "solve-vrp" [
   --relations: list # Defines additional relationships between orders.
   --services: list # Specifies the orders of the type "service". These are, for example, pick-ups, deliveries or other stops that are to be approached by the specified vehicles. Each of these orders contains only one location. — item shape: {address?: record, allowed_vehicles?: list<string>, disallowed_vehicles?: list<string>, duration?: int, group?: string, id: string, max_time_in_vehicle?: int, name?: string, preparation_time?: int, priority?: int, required_skills?: list<string>, size?: list<int>, time_windows?: list, type?: "service"|"pickup"|"delivery"}
   --shipments: list # Specifies the available shipments. Each shipment contains a pickup and a delivery stop, which must be processed one after the other. — item shape: {allowed_vehicles?: list<string>, delivery: record, disallowed_vehicles?: list<string>, id: string, max_time_in_vehicle?: int, name?: string, pickup: record, priority?: int, required_skills?: list<string>, size?: list<int>}
-  --vehicle-types: list # Specifies the available vehicle types. These types can be assigned to vehicles. — item shape: {capacity?: list<int>, consider_traffic?: bool, cost_per_activation?: float, cost_per_meter?: float, cost_per_second?: float, network_data_provider?: "openstreetmap"|"tomtom", profile?: any, service_time_factor?: float, speed_factor?: float, type_id: string}
+  --vehicle-types: list # Specifies the available vehicle types. These types can be assigned to vehicles. — item shape: {capacity?: list<int>, consider_traffic?: bool, cost_per_activation?: float, cost_per_meter?: float, cost_per_second?: float, network_data_provider?: "openstreetmap"|"tomtom", profile?: "car"|"bike"|"foot"|"hike"|"mtb"|"racingbike"|"scooter"|"truck"|"small_truck", service_time_factor?: float, speed_factor?: float, type_id: string}
   --vehicles: list # Specifies the available vehicles. — item shape: {break?: any, earliest_start?: int, end_address?: record, latest_end?: int, max_activities?: int, max_distance?: int, max_driving_time?: int, max_jobs?: int, min_jobs?: int, move_to_end_address?: bool, return_to_depot?: bool, skills?: list<string>, start_address: record, type_id?: string, vehicle_id: string}
 ]: any -> record<copyrights: list<string>, processing_time: int, solution: record<completion_time: int, costs: int, distance: int, max_operation_time: int, no_unassigned: int, no_vehicles: int, preparation_time: int, routes: list<record>, service_duration: int, time: int, transport_time: int, unassigned: record<breaks: list, details: list, services: list, shipments: list>, waiting_time: int>, status: string, waiting_time_in_queue: int> {
   let input = $in
@@ -777,7 +779,7 @@ export def "solve-vrp" [
 # --objectives item shape: {type: "min"|"min-max", value: "completion_time"|"transport_time"|"vehicles"|"activities"}
 # --services item shape: {address?: record, allowed_vehicles?: list<string>, disallowed_vehicles?: list<string>, duration?: int, group?: string, id: string, max_time_in_vehicle?: int, name?: string, preparation_time?: int, priority?: int, required_skills?: list<string>, size?: list<int>, time_windows?: list, type?: "service"|"pickup"|"delivery"}
 # --shipments item shape: {allowed_vehicles?: list<string>, delivery: record, disallowed_vehicles?: list<string>, id: string, max_time_in_vehicle?: int, name?: string, pickup: record, priority?: int, required_skills?: list<string>, size?: list<int>}
-# --vehicle_types item shape: {capacity?: list<int>, consider_traffic?: bool, cost_per_activation?: float, cost_per_meter?: float, cost_per_second?: float, network_data_provider?: "openstreetmap"|"tomtom", profile?: any, service_time_factor?: float, speed_factor?: float, type_id: string}
+# --vehicle_types item shape: {capacity?: list<int>, consider_traffic?: bool, cost_per_activation?: float, cost_per_meter?: float, cost_per_second?: float, network_data_provider?: "openstreetmap"|"tomtom", profile?: "car"|"bike"|"foot"|"hike"|"mtb"|"racingbike"|"scooter"|"truck"|"small_truck", service_time_factor?: float, speed_factor?: float, type_id: string}
 # --vehicles item shape: {break?: any, earliest_start?: int, end_address?: record, latest_end?: int, max_activities?: int, max_distance?: int, max_driving_time?: int, max_jobs?: int, min_jobs?: int, move_to_end_address?: bool, return_to_depot?: bool, skills?: list<string>, start_address: record, type_id?: string, vehicle_id: string}
 @deprecated --flag algorithm
 export def "async-vrp" [
@@ -797,7 +799,7 @@ export def "async-vrp" [
   --relations: list # Defines additional relationships between orders.
   --services: list # Specifies the orders of the type "service". These are, for example, pick-ups, deliveries or other stops that are to be approached by the specified vehicles. Each of these orders contains only one location. — item shape: {address?: record, allowed_vehicles?: list<string>, disallowed_vehicles?: list<string>, duration?: int, group?: string, id: string, max_time_in_vehicle?: int, name?: string, preparation_time?: int, priority?: int, required_skills?: list<string>, size?: list<int>, time_windows?: list, type?: "service"|"pickup"|"delivery"}
   --shipments: list # Specifies the available shipments. Each shipment contains a pickup and a delivery stop, which must be processed one after the other. — item shape: {allowed_vehicles?: list<string>, delivery: record, disallowed_vehicles?: list<string>, id: string, max_time_in_vehicle?: int, name?: string, pickup: record, priority?: int, required_skills?: list<string>, size?: list<int>}
-  --vehicle-types: list # Specifies the available vehicle types. These types can be assigned to vehicles. — item shape: {capacity?: list<int>, consider_traffic?: bool, cost_per_activation?: float, cost_per_meter?: float, cost_per_second?: float, network_data_provider?: "openstreetmap"|"tomtom", profile?: any, service_time_factor?: float, speed_factor?: float, type_id: string}
+  --vehicle-types: list # Specifies the available vehicle types. These types can be assigned to vehicles. — item shape: {capacity?: list<int>, consider_traffic?: bool, cost_per_activation?: float, cost_per_meter?: float, cost_per_second?: float, network_data_provider?: "openstreetmap"|"tomtom", profile?: "car"|"bike"|"foot"|"hike"|"mtb"|"racingbike"|"scooter"|"truck"|"small_truck", service_time_factor?: float, speed_factor?: float, type_id: string}
   --vehicles: list # Specifies the available vehicles. — item shape: {break?: any, earliest_start?: int, end_address?: record, latest_end?: int, max_activities?: int, max_distance?: int, max_driving_time?: int, max_jobs?: int, min_jobs?: int, move_to_end_address?: bool, return_to_depot?: bool, skills?: list<string>, start_address: record, type_id?: string, vehicle_id: string}
 ]: any -> record<job_id: string> {
   let input = $in

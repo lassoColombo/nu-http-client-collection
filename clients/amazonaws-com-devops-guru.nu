@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -114,6 +114,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def organization-resource-collection-type-completer [] { ["AWS_ACCOUNT" "AWS_CLOUD_FORMATION" "AWS_SERVICE" "AWS_TAGS"] }
+def resource-collection-type-completer [] { ["AWS_CLOUD_FORMATION" "AWS_SERVICE" "AWS_TAGS"] }
 def locale-completer [] { ["DE_DE" "EN_GB" "EN_US" "ES_ES" "FR_FR" "IT_IT" "JA_JP" "KO_KR" "PT_BR" "ZH_CN" "ZH_TW"] }
 def type-completer [] { ["PROACTIVE" "REACTIVE"] }
 def action-completer [] { ["ADD" "REMOVE"] }
@@ -145,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # PUT /channels
 # operationId: AddNotificationChannel
-# --Config shape: {Sns?: any, Filters?: any}
+# --Config shape: {Sns?: record, Filters?: record}
 export def "add-notification-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -163,8 +164,8 @@ export def "add-notification-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  config: record # Information about notification channels you have configured with DevOps Guru. The one supported notification channel is Amazon Simple Notification Service (Amazon SNS). — shape: {Sns?: any, Filters?: any}
-]: any -> record<Id: record> {
+  config: record # Information about notification channels you have configured with DevOps Guru. The one supported notification channel is Amazon Simple Notification Service (Amazon SNS). — shape: {Sns?: record, Filters?: record}
+]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -212,7 +213,7 @@ export def "list-notification-channels" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
-]: any -> record<Channels: record, NextToken: record> {
+]: any -> record<Channels: table<Id: string, Config: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -306,7 +307,7 @@ export def "describe-insight" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ProactiveInsight: record<Id: record, Name: record, Severity: record, Status: record, InsightTimeRange: record<StartTime: record, EndTime: record>, PredictionTimeRange: record<StartTime: record, EndTime: record>, ResourceCollection: record<CloudFormation: record, Tags: record>, SsmOpsItemId: record, Description: record>, ReactiveInsight: record<Id: record, Name: record, Severity: record, Status: record, InsightTimeRange: record<StartTime: record, EndTime: record>, ResourceCollection: record<CloudFormation: record, Tags: record>, SsmOpsItemId: record, Description: record>> {
+]: nothing -> record<ProactiveInsight: record<Id: string, Name: string, Severity: string, Status: string, InsightTimeRange: record<StartTime: string, EndTime: string>, PredictionTimeRange: record<StartTime: string, EndTime: string>, ResourceCollection: record<CloudFormation: record, Tags: list>, SsmOpsItemId: string, Description: string>, ReactiveInsight: record<Id: string, Name: string, Severity: string, Status: string, InsightTimeRange: record<StartTime: string, EndTime: string>, ResourceCollection: record<CloudFormation: record, Tags: list>, SsmOpsItemId: string, Description: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -351,7 +352,7 @@ export def "describe-account-health" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OpenReactiveInsights: record, OpenProactiveInsights: record, MetricsAnalyzed: record, ResourceHours: record, AnalyzedResourceCount: record> {
+]: nothing -> record<OpenReactiveInsights: int, OpenProactiveInsights: int, MetricsAnalyzed: int, ResourceHours: int, AnalyzedResourceCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/health" $auth.query)
@@ -396,7 +397,7 @@ export def "describe-account-overview" [
   --x-amz-signed-headers: string
   from_time: string # The start of the time range passed in. The start time granularity is at the day level. The floor of the start time is used. Returned information occurred after this day. (format: date-time)
   --to-time: string # The end of the time range passed in. The start time granularity is at the day level. The floor of the start time is used. Returned information occurred before this day. If this is not specified, then the current day is used. (format: date-time)
-]: any -> record<ReactiveInsights: record, ProactiveInsights: record, MeanTimeToRecoverInMilliseconds: record> {
+]: any -> record<ReactiveInsights: int, ProactiveInsights: int, MeanTimeToRecoverInMilliseconds: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -444,7 +445,7 @@ export def "describe-anomaly" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ProactiveAnomaly: record<Id: record, Severity: record, Status: record, UpdateTime: record, AnomalyTimeRange: record<StartTime: record, EndTime: record>, AnomalyReportedTimeRange: record<OpenTime: record, CloseTime: record>, PredictionTimeRange: record<StartTime: record, EndTime: record>, SourceDetails: record<CloudWatchMetrics: record, PerformanceInsightsMetrics: record>, AssociatedInsightId: record, ResourceCollection: record<CloudFormation: record, Tags: record>, Limit: record, SourceMetadata: record<Source: record, SourceResourceName: record, SourceResourceType: record>, AnomalyResources: record, Description: record>, ReactiveAnomaly: record<Id: record, Severity: record, Status: record, AnomalyTimeRange: record<StartTime: record, EndTime: record>, AnomalyReportedTimeRange: record<OpenTime: record, CloseTime: record>, SourceDetails: record<CloudWatchMetrics: record, PerformanceInsightsMetrics: record>, AssociatedInsightId: record, ResourceCollection: record<CloudFormation: record, Tags: record>, Type: record, Name: record, Description: record, CausalAnomalyId: record, AnomalyResources: record>> {
+]: nothing -> record<ProactiveAnomaly: record<Id: string, Severity: string, Status: string, UpdateTime: string, AnomalyTimeRange: record<StartTime: string, EndTime: string>, AnomalyReportedTimeRange: record<OpenTime: string, CloseTime: string>, PredictionTimeRange: record<StartTime: string, EndTime: string>, SourceDetails: record<CloudWatchMetrics: list, PerformanceInsightsMetrics: list>, AssociatedInsightId: string, ResourceCollection: record<CloudFormation: record, Tags: list>, Limit: float, SourceMetadata: record<Source: string, SourceResourceName: string, SourceResourceType: string>, AnomalyResources: list<record>, Description: string>, ReactiveAnomaly: record<Id: string, Severity: string, Status: string, AnomalyTimeRange: record<StartTime: string, EndTime: string>, AnomalyReportedTimeRange: record<OpenTime: string, CloseTime: string>, SourceDetails: record<CloudWatchMetrics: list, PerformanceInsightsMetrics: list>, AssociatedInsightId: string, ResourceCollection: record<CloudFormation: record, Tags: list>, Type: string, Name: string, Description: string, CausalAnomalyId: string, AnomalyResources: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -489,7 +490,7 @@ export def "describe-event-sources-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventSources: record<AmazonCodeGuruProfiler: record<Status: record>>> {
+]: nothing -> record<EventSources: record<AmazonCodeGuruProfiler: record<Status: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/event-sources" $auth.query)
@@ -515,7 +516,7 @@ export def "describe-event-sources-config" [
 #
 # PUT /event-sources
 # operationId: UpdateEventSourcesConfig
-# --EventSources shape: {AmazonCodeGuruProfiler?: any}
+# --EventSources shape: {AmazonCodeGuruProfiler?: record}
 export def "update-event-sources-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -533,7 +534,7 @@ export def "update-event-sources-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --event-sources: record # Information about the integration of DevOps Guru as consumer with another AWS service, such as AWS CodeGuru Profiler via EventBridge. — shape: {AmazonCodeGuruProfiler?: any}
+  --event-sources: record # Information about the integration of DevOps Guru as consumer with another AWS service, such as AWS CodeGuru Profiler via EventBridge. — shape: {AmazonCodeGuruProfiler?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -581,7 +582,7 @@ export def "describe-feedback" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --insight-id: string # The ID of the insight for which the feedback was provided.
-]: any -> record<InsightFeedback: record<Id: record, Feedback: record>> {
+]: any -> record<InsightFeedback: record<Id: string, Feedback: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -610,7 +611,7 @@ export def "describe-feedback" [
 #
 # PUT /feedback
 # operationId: PutFeedback
-# --InsightFeedback shape: {Id?: any, Feedback?: any}
+# --InsightFeedback shape: {Id?: string, Feedback?: "VALID_COLLECTION"|"RECOMMENDATION_USEFUL"|"ALERT_TOO_SENSITIVE"|"DATA_NOISY_ANOMALY"|"DATA_INCORRECT"}
 export def "put-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -628,7 +629,7 @@ export def "put-feedback" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --insight-feedback: record # Information about insight feedback received from a customer. — shape: {Id?: any, Feedback?: any}
+  --insight-feedback: record # Information about insight feedback received from a customer. — shape: {Id?: string, Feedback?: "VALID_COLLECTION"|"RECOMMENDATION_USEFUL"|"ALERT_TOO_SENSITIVE"|"DATA_NOISY_ANOMALY"|"DATA_INCORRECT"}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -677,7 +678,7 @@ export def "describe-organization-health" [
   --x-amz-signed-headers: string
   --account-ids: list<string> # The ID of the Amazon Web Services account.
   --organizational-unit-ids: list<string> # The ID of the organizational unit.
-]: any -> record<OpenReactiveInsights: record, OpenProactiveInsights: record, MetricsAnalyzed: record, ResourceHours: record> {
+]: any -> record<OpenReactiveInsights: int, OpenProactiveInsights: int, MetricsAnalyzed: int, ResourceHours: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -727,7 +728,7 @@ export def "describe-organization-overview" [
   --to-time: string # The end of the time range passed in. The start time granularity is at the day level. The floor of the start time is used. Returned information occurred before this day. If this is not specified, then the current day is used. (format: date-time)
   --account-ids: list<string> # The ID of the Amazon Web Services account.
   --organizational-unit-ids: list<string> # The ID of the organizational unit.
-]: any -> record<ReactiveInsights: record, ProactiveInsights: record> {
+]: any -> record<ReactiveInsights: int, ProactiveInsights: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -779,7 +780,7 @@ export def "describe-organization-resource-collection-health" [
   --organizational-unit-ids: list<string> # The ID of the organizational unit.
   --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
   --max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value.
-]: any -> record<CloudFormation: record, Service: record, Account: record, NextToken: record, Tags: record> {
+]: any -> record<CloudFormation: table<StackName: string, Insight: record, AnalyzedResourceCount: int>, Service: table<ServiceName: string, Insight: record, AnalyzedResourceCount: int>, Account: table<AccountId: string, Insight: record>, NextToken: string, Tags: table<AppBoundaryKey: string, TagValue: string, Insight: record, AnalyzedResourceCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -810,7 +811,7 @@ export def "describe-organization-resource-collection-health" [
 # GET /accounts/health/resource-collection/{ResourceCollectionType}
 # operationId: DescribeResourceCollectionHealth
 export def "describe-resource-collection-health" [
-  resource_collection_type: string
+  resource_collection_type: string@resource-collection-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -828,7 +829,7 @@ export def "describe-resource-collection-health" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CloudFormation: record, Service: record, NextToken: record, Tags: record> {
+]: nothing -> record<CloudFormation: table<StackName: string, Insight: record, AnalyzedResourceCount: int>, Service: table<ServiceName: string, Insight: record, AnalyzedResourceCount: int>, NextToken: string, Tags: table<AppBoundaryKey: string, TagValue: string, Insight: record, AnalyzedResourceCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_collection_type | is-empty) { error make --unspanned { msg: "path parameter 'ResourceCollectionType' must be non-empty" } }
@@ -873,7 +874,7 @@ export def "describe-service-integration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ServiceIntegration: record<OpsCenter: record<OptInStatus: record>, LogsAnomalyDetection: record<OptInStatus: record>>> {
+]: nothing -> record<ServiceIntegration: record<OpsCenter: record<OptInStatus: string>, LogsAnomalyDetection: record<OptInStatus: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/service-integrations" $auth.query)
@@ -899,7 +900,7 @@ export def "describe-service-integration" [
 #
 # PUT /service-integrations
 # operationId: UpdateServiceIntegration
-# --ServiceIntegration shape: {OpsCenter?: record, LogsAnomalyDetection?: any}
+# --ServiceIntegration shape: {OpsCenter?: record, LogsAnomalyDetection?: record}
 export def "update-service-integration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -917,7 +918,7 @@ export def "update-service-integration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  service_integration: record # Information about updating the integration status of an Amazon Web Services service, such as Amazon Web Services Systems Manager, with DevOps Guru. — shape: {OpsCenter?: record, LogsAnomalyDetection?: any}
+  service_integration: record # Information about updating the integration status of an Amazon Web Services service, such as Amazon Web Services Systems Manager, with DevOps Guru. — shape: {OpsCenter?: record, LogsAnomalyDetection?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -965,7 +966,7 @@ export def "get-cost-estimation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ResourceCollection: record<CloudFormation: record<StackNames: record>, Tags: record>, Status: record, Costs: record, TimeRange: record<StartTime: record, EndTime: record>, TotalCost: record, NextToken: record> {
+]: nothing -> record<ResourceCollection: record<CloudFormation: record<StackNames: list>, Tags: list<record>>, Status: string, Costs: table<Type: string, State: string, Count: int, UnitCost: float, Cost: float>, TimeRange: record<StartTime: string, EndTime: string>, TotalCost: float, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -992,7 +993,7 @@ export def "get-cost-estimation" [
 #
 # PUT /cost-estimation
 # operationId: StartCostEstimation
-# --ResourceCollection shape: {CloudFormation?: any, Tags?: any}
+# --ResourceCollection shape: {CloudFormation?: record, Tags?: list}
 export def "start-cost-estimation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1010,7 +1011,7 @@ export def "start-cost-estimation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  resource_collection: record # Information about a filter used to specify which Amazon Web Services resources are analyzed to create a monthly DevOps Guru cost estimate. For more information, see Estimate your Amazon DevOps Guru costs (https://docs.aws.amazon.com/devops-guru/latest/userguide/cost-estimate.html) and Amazon DevOps Guru pricing (http://aws.amazon.com/devops-guru/pricing/). — shape: {CloudFormation?: any, Tags?: any}
+  resource_collection: record # Information about a filter used to specify which Amazon Web Services resources are analyzed to create a monthly DevOps Guru cost estimate. For more information, see Estimate your Amazon DevOps Guru costs (https://docs.aws.amazon.com/devops-guru/latest/userguide/cost-estimate.html) and Amazon DevOps Guru pricing (http://aws.amazon.com/devops-guru/pricing/). — shape: {CloudFormation?: record, Tags?: list}
   --client-token: string # The idempotency token used to identify each cost estimate request.
 ]: any -> record {
   let input = $in
@@ -1042,7 +1043,7 @@ export def "start-cost-estimation" [
 # GET /resource-collections/{ResourceCollectionType}
 # operationId: GetResourceCollection
 export def "get-resource-collection" [
-  resource_collection_type: string
+  resource_collection_type: string@resource-collection-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1060,7 +1061,7 @@ export def "get-resource-collection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ResourceCollection: record<CloudFormation: record<StackNames: record>, Tags: record>, NextToken: record> {
+]: nothing -> record<ResourceCollection: record<CloudFormation: record<StackNames: list>, Tags: list<record>>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_collection_type | is-empty) { error make --unspanned { msg: "path parameter 'ResourceCollectionType' must be non-empty" } }
@@ -1088,7 +1089,7 @@ export def "get-resource-collection" [
 #
 # POST /anomalies/insight/{InsightId}
 # operationId: ListAnomaliesForInsight
-# --StartTimeRange shape: {FromTime?: any, ToTime?: any}
+# --StartTimeRange shape: {FromTime?: string, ToTime?: string}
 # --Filters shape: {ServiceCollection?: record}
 export def "list-anomalies-for-insight" [
   insight_id: string
@@ -1110,12 +1111,12 @@ export def "list-anomalies-for-insight" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --start-time-range: record # A time range used to specify when the behavior of an insight or anomaly started. — shape: {FromTime?: any, ToTime?: any}
+  --start-time-range: record # A time range used to specify when the behavior of an insight or anomaly started. — shape: {FromTime?: string, ToTime?: string}
   --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
   --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
   --account-id: string # The ID of the Amazon Web Services account.
   --filters: record # Specifies one or more service names that are used to list anomalies. — shape: {ServiceCollection?: record}
-]: any -> record<ProactiveAnomalies: record, ReactiveAnomalies: record, NextToken: record> {
+]: any -> record<ProactiveAnomalies: table<Id: string, Severity: string, Status: string, UpdateTime: string, AnomalyTimeRange: record, AnomalyReportedTimeRange: record, PredictionTimeRange: record, SourceDetails: record, AssociatedInsightId: string, ResourceCollection: record, Limit: float, SourceMetadata: record, AnomalyResources: list, Description: string>, ReactiveAnomalies: table<Id: string, Severity: string, Status: string, AnomalyTimeRange: record, AnomalyReportedTimeRange: record, SourceDetails: record, AssociatedInsightId: string, ResourceCollection: record, Type: string, Name: string, Description: string, CausalAnomalyId: string, AnomalyResources: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1168,7 +1169,7 @@ export def "list-anomalous-log-groups" [
   insight_id: string # The ID of the insight containing the log groups.
   --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
   --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
-]: any -> record<InsightId: record, AnomalousLogGroups: record, NextToken: record> {
+]: any -> record<InsightId: string, AnomalousLogGroups: table<LogGroupName: string, ImpactStartTime: string, ImpactEndTime: string, NumberOfLogLinesScanned: int, LogAnomalyShowcases: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1198,7 +1199,7 @@ export def "list-anomalous-log-groups" [
 #
 # POST /events
 # operationId: ListEvents
-# --Filters shape: {InsightId?: any, EventTimeRange?: any, EventClass?: any, EventSource?: any, DataSource?: any, ResourceCollection?: record}
+# --Filters shape: {InsightId?: string, EventTimeRange?: record, EventClass?: "INFRASTRUCTURE"|"DEPLOYMENT"|"SECURITY_CHANGE"|"CONFIG_CHANGE"|"SCHEMA_CHANGE", EventSource?: string, DataSource?: "AWS_CLOUD_TRAIL"|"AWS_CODE_DEPLOY", ResourceCollection?: record}
 export def "list-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1218,11 +1219,11 @@ export def "list-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  filters: record # Filters you can use to specify which events are returned when ListEvents is called. — shape: {InsightId?: any, EventTimeRange?: any, EventClass?: any, EventSource?: any, DataSource?: any, ResourceCollection?: record}
+  filters: record # Filters you can use to specify which events are returned when ListEvents is called. — shape: {InsightId?: string, EventTimeRange?: record, EventClass?: "INFRASTRUCTURE"|"DEPLOYMENT"|"SECURITY_CHANGE"|"CONFIG_CHANGE"|"SCHEMA_CHANGE", EventSource?: string, DataSource?: "AWS_CLOUD_TRAIL"|"AWS_CODE_DEPLOY", ResourceCollection?: record}
   --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
   --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
   --account-id: string # The ID of the Amazon Web Services account.
-]: any -> record<Events: record, NextToken: record> {
+]: any -> record<Events: table<ResourceCollection: record, Id: string, Time: string, EventSource: string, Name: string, DataSource: string, EventClass: string, Resources: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1252,7 +1253,7 @@ export def "list-events" [
 #
 # POST /insights
 # operationId: ListInsights
-# --StatusFilter shape: {Ongoing?: any, Closed?: any, Any?: any}
+# --StatusFilter shape: {Ongoing?: record, Closed?: record, Any?: record}
 export def "list-insights" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1272,10 +1273,10 @@ export def "list-insights" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  status_filter: record # A filter used by ListInsights to specify which insights to return. — shape: {Ongoing?: any, Closed?: any, Any?: any}
+  status_filter: record # A filter used by ListInsights to specify which insights to return. — shape: {Ongoing?: record, Closed?: record, Any?: record}
   --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
   --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
-]: any -> record<ProactiveInsights: record, ReactiveInsights: record, NextToken: record> {
+]: any -> record<ProactiveInsights: table<Id: string, Name: string, Severity: string, Status: string, InsightTimeRange: record, PredictionTimeRange: record, ResourceCollection: record, ServiceCollection: record, AssociatedResourceArns: list>, ReactiveInsights: table<Id: string, Name: string, Severity: string, Status: string, InsightTimeRange: record, ResourceCollection: record, ServiceCollection: record, AssociatedResourceArns: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1305,7 +1306,7 @@ export def "list-insights" [
 #
 # POST /monitoredResources
 # operationId: ListMonitoredResources
-# --Filters shape: {ResourcePermission?: any, ResourceTypeFilters?: any}
+# --Filters shape: {ResourcePermission?: "FULL_PERMISSION"|"MISSING_PERMISSION", ResourceTypeFilters?: list<string>}
 export def "list-monitored-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1325,10 +1326,10 @@ export def "list-monitored-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filters: record # Filters to determine which monitored resources you want to retrieve. You can filter by resource type or resource permission status. — shape: {ResourcePermission?: any, ResourceTypeFilters?: any}
+  --filters: record # Filters to determine which monitored resources you want to retrieve. You can filter by resource type or resource permission status. — shape: {ResourcePermission?: "FULL_PERMISSION"|"MISSING_PERMISSION", ResourceTypeFilters?: list<string>}
   --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
   --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
-]: any -> record<MonitoredResourceIdentifiers: record, NextToken: record> {
+]: any -> record<MonitoredResourceIdentifiers: table<MonitoredResourceName: string, Type: string, ResourcePermission: string, LastUpdated: string, ResourceCollection: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1358,7 +1359,7 @@ export def "list-monitored-resources" [
 #
 # POST /organization/insights
 # operationId: ListOrganizationInsights
-# --StatusFilter shape: {Ongoing?: any, Closed?: any, Any?: any}
+# --StatusFilter shape: {Ongoing?: record, Closed?: record, Any?: record}
 export def "list-organization-insights" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1378,12 +1379,12 @@ export def "list-organization-insights" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  status_filter: record # A filter used by ListInsights to specify which insights to return. — shape: {Ongoing?: any, Closed?: any, Any?: any}
+  status_filter: record # A filter used by ListInsights to specify which insights to return. — shape: {Ongoing?: record, Closed?: record, Any?: record}
   --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
   --account-ids: list<string> # The ID of the Amazon Web Services account.
   --organizational-unit-ids: list<string> # The ID of the organizational unit.
   --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
-]: any -> record<ProactiveInsights: record, ReactiveInsights: record, NextToken: record> {
+]: any -> record<ProactiveInsights: table<Id: string, AccountId: string, OrganizationalUnitId: string, Name: string, Severity: string, Status: string, InsightTimeRange: record, PredictionTimeRange: record, ResourceCollection: record, ServiceCollection: record>, ReactiveInsights: table<Id: string, AccountId: string, OrganizationalUnitId: string, Name: string, Severity: string, Status: string, InsightTimeRange: record, ResourceCollection: record, ServiceCollection: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1435,7 +1436,7 @@ export def "list-recommendations" [
   --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
   --locale: string@locale-completer # A locale that specifies the language to use for recommendations.
   --account-id: string # The ID of the Amazon Web Services account.
-]: any -> record<Recommendations: record, NextToken: record> {
+]: any -> record<Recommendations: table<Description: string, Link: string, Name: string, Reason: string, RelatedEvents: list, RelatedAnomalies: list, Category: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1510,8 +1511,8 @@ export def "remove-notification-channel" [
 #
 # POST /insights/search
 # operationId: SearchInsights
-# --StartTimeRange shape: {FromTime?: any, ToTime?: any}
-# --Filters shape: {Severities?: any, Statuses?: any, ResourceCollection?: record, ServiceCollection?: any}
+# --StartTimeRange shape: {FromTime?: string, ToTime?: string}
+# --Filters shape: {Severities?: list<string>, Statuses?: list<string>, ResourceCollection?: record, ServiceCollection?: record}
 export def "search-insights" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1531,12 +1532,12 @@ export def "search-insights" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  start_time_range: record # A time range used to specify when the behavior of an insight or anomaly started. — shape: {FromTime?: any, ToTime?: any}
-  --filters: record # Specifies values used to filter responses when searching for insights. You can use a ResourceCollection, ServiceCollection, array of severities, and an array of status values. Each filter type contains one or more values to search for. If you specify multiple filter types, the filter types are joined with an AND, and the request returns only results that match all of the specified filters. — shape: {Severities?: any, Statuses?: any, ResourceCollection?: record, ServiceCollection?: any}
+  start_time_range: record # A time range used to specify when the behavior of an insight or anomaly started. — shape: {FromTime?: string, ToTime?: string}
+  --filters: record # Specifies values used to filter responses when searching for insights. You can use a ResourceCollection, ServiceCollection, array of severities, and an array of status values. Each filter type contains one or more values to search for. If you specify multiple filter types, the filter types are joined with an AND, and the request returns only results that match all of the specified filters. — shape: {Severities?: list<string>, Statuses?: list<string>, ResourceCollection?: record, ServiceCollection?: record}
   --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
   --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
   type: string@type-completer # The type of insights you are searching for (REACTIVE or PROACTIVE).
-]: any -> record<ProactiveInsights: record, ReactiveInsights: record, NextToken: record> {
+]: any -> record<ProactiveInsights: table<Id: string, Name: string, Severity: string, Status: string, InsightTimeRange: record, PredictionTimeRange: record, ResourceCollection: record, ServiceCollection: record, AssociatedResourceArns: list>, ReactiveInsights: table<Id: string, Name: string, Severity: string, Status: string, InsightTimeRange: record, ResourceCollection: record, ServiceCollection: record, AssociatedResourceArns: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1566,8 +1567,8 @@ export def "search-insights" [
 #
 # POST /organization/insights/search
 # operationId: SearchOrganizationInsights
-# --StartTimeRange shape: {FromTime?: any, ToTime?: any}
-# --Filters shape: {Severities?: any, Statuses?: any, ResourceCollection?: record, ServiceCollection?: record}
+# --StartTimeRange shape: {FromTime?: string, ToTime?: string}
+# --Filters shape: {Severities?: list<string>, Statuses?: list<string>, ResourceCollection?: record, ServiceCollection?: record}
 export def "search-organization-insights" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1588,12 +1589,12 @@ export def "search-organization-insights" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   account_ids: list<string> # The ID of the Amazon Web Services account.
-  start_time_range: record # A time range used to specify when the behavior of an insight or anomaly started. — shape: {FromTime?: any, ToTime?: any}
-  --filters: record # Filters you can use to specify which events are returned when ListEvents is called. — shape: {Severities?: any, Statuses?: any, ResourceCollection?: record, ServiceCollection?: record}
+  start_time_range: record # A time range used to specify when the behavior of an insight or anomaly started. — shape: {FromTime?: string, ToTime?: string}
+  --filters: record # Filters you can use to specify which events are returned when ListEvents is called. — shape: {Severities?: list<string>, Statuses?: list<string>, ResourceCollection?: record, ServiceCollection?: record}
   --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
   --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
   type: string@type-completer # The type of insights you are searching for (REACTIVE or PROACTIVE).
-]: any -> record<ProactiveInsights: record, ReactiveInsights: record, NextToken: record> {
+]: any -> record<ProactiveInsights: table<Id: string, Name: string, Severity: string, Status: string, InsightTimeRange: record, PredictionTimeRange: record, ResourceCollection: record, ServiceCollection: record, AssociatedResourceArns: list>, ReactiveInsights: table<Id: string, Name: string, Severity: string, Status: string, InsightTimeRange: record, ResourceCollection: record, ServiceCollection: record, AssociatedResourceArns: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1623,7 +1624,7 @@ export def "search-organization-insights" [
 #
 # PUT /resource-collections
 # operationId: UpdateResourceCollection
-# --ResourceCollection shape: {CloudFormation?: any, Tags?: any}
+# --ResourceCollection shape: {CloudFormation?: record, Tags?: list}
 export def "update-resource-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1642,7 +1643,7 @@ export def "update-resource-collection" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   action: string@action-completer # Specifies if the resource collection in the request is added or deleted to the resource collection.
-  resource_collection: record # Contains information used to update a collection of Amazon Web Services resources. — shape: {CloudFormation?: any, Tags?: any}
+  resource_collection: record # Contains information used to update a collection of Amazon Web Services resources. — shape: {CloudFormation?: record, Tags?: list}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -98,6 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def x-amz-target-completer [] { ["AppRunner.AssociateCustomDomain"] }
 def x-amz-target-completer-1 [] { ["AppRunner.CreateAutoScalingConfiguration"] }
+def provider-type-completer [] { ["GITHUB"] }
 def x-amz-target-completer-2 [] { ["AppRunner.CreateConnection"] }
 def x-amz-target-completer-3 [] { ["AppRunner.CreateObservabilityConfiguration"] }
 def x-amz-target-completer-4 [] { ["AppRunner.CreateService"] }
@@ -176,14 +177,15 @@ export def "associate-custom-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  service_arn: any
-  domain_name: any
-  --enable-www-subdomain: any
-]: any -> record<DNSTarget: record, ServiceArn: record, CustomDomain: record<DomainName: record, EnableWWWSubdomain: record, CertificateValidationRecords: record, Status: record>, VpcDNSTargets: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  service_arn: string # The Amazon Resource Name (ARN) of the App Runner service that you want to associate a custom domain name with.
+  domain_name: string # A custom domain endpoint to associate. Specify a root domain (for example, example.com), a subdomain (for example, login.example.com or admin.login.example.com), or a wildcard (for example, *.example.com).
+  --enable-www-subdomain: oneof<nothing, bool> # Set to true to associate the subdomain www.DomainName with the App Runner service in addition to the base domain. Default: true
+]: any -> record<DNSTarget: string, ServiceArn: string, CustomDomain: record<DomainName: string, EnableWWWSubdomain: bool, CertificateValidationRecords: list<record>, Status: string>, VpcDNSTargets: table<VpcIngressConnectionArn: string, VpcId: string, DomainName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.AssociateCustomDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceArn": $service_arn, "DomainName": $domain_name, "EnableWWWSubdomain": $enable_www_subdomain} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -209,6 +211,7 @@ export def "associate-custom-domain" [
 #
 # POST /
 # operationId: CreateAutoScalingConfiguration
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-auto-scaling-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,16 +229,17 @@ export def "create-auto-scaling-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  auto_scaling_configuration_name: any
-  --max-concurrency: any
-  --min-size: any
-  --max-size: any
-  --tags: any
-]: any -> record<AutoScalingConfiguration: record<AutoScalingConfigurationArn: record, AutoScalingConfigurationName: record, AutoScalingConfigurationRevision: record, Latest: record, Status: record, MaxConcurrency: record, MinSize: record, MaxSize: record, CreatedAt: record, DeletedAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  auto_scaling_configuration_name: string # A name for the auto scaling configuration. When you use it for the first time in an Amazon Web Services Region, App Runner creates revision number 1 of this name. When you use the same name in subsequent calls, App Runner creates incremental revisions of the configuration. The name DefaultConfiguration is reserved (it's the configuration that App Runner uses if you don't provide a custome one). You can't use it to create a new auto scaling configuration, and you can't create a revision of it. When you want to use your own auto scaling configuration for your App Runner service, create a configuration with a different name, and then provide it when you create or update your service.
+  --max-concurrency: int # The maximum number of concurrent requests that you want an instance to process. If the number of concurrent requests exceeds this limit, App Runner scales up your service. Default: 100
+  --min-size: int # The minimum number of instances that App Runner provisions for your service. The service always has at least MinSize provisioned instances. Some of them actively serve traffic. The rest of them (provisioned and inactive instances) are a cost-effective compute capacity reserve and are ready to be quickly activated. You pay for memory usage of all the provisioned instances. You pay for CPU usage of only the active subset. App Runner temporarily doubles the number of provisioned instances during deployments, to maintain the same capacity for both old and new code. Default: 1
+  --max-size: int # The maximum number of instances that your service scales up to. At most MaxSize instances actively serve traffic for your service. Default: 25
+  --tags: list # A list of metadata items that you can associate with your auto scaling configuration resource. A tag is a key-value pair. — item shape: {Key?: string, Value?: string}
+]: any -> record<AutoScalingConfiguration: record<AutoScalingConfigurationArn: string, AutoScalingConfigurationName: string, AutoScalingConfigurationRevision: int, Latest: bool, Status: string, MaxConcurrency: int, MinSize: int, MaxSize: int, CreatedAt: string, DeletedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.CreateAutoScalingConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AutoScalingConfigurationName": $auto_scaling_configuration_name, "MaxConcurrency": $max_concurrency, "MinSize": $min_size, "MaxSize": $max_size, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -261,6 +265,7 @@ export def "create-auto-scaling-configuration" [
 #
 # POST /
 # operationId: CreateConnection
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,14 +283,15 @@ export def "create-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  connection_name: any
-  provider_type: any
-  --tags: any
-]: any -> record<Connection: record<ConnectionName: record, ConnectionArn: record, ProviderType: record, Status: record, CreatedAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  connection_name: string # A name for the new connection. It must be unique across all App Runner connections for the Amazon Web Services account in the Amazon Web Services Region.
+  provider_type: string@provider-type-completer # The source repository provider.
+  --tags: list # A list of metadata items that you can associate with your connection resource. A tag is a key-value pair. — item shape: {Key?: string, Value?: string}
+]: any -> record<Connection: record<ConnectionName: string, ConnectionArn: string, ProviderType: string, Status: string, CreatedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.CreateConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConnectionName": $connection_name, "ProviderType": $provider_type, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -311,6 +317,8 @@ export def "create-connection" [
 #
 # POST /
 # operationId: CreateObservabilityConfiguration
+# --TraceConfiguration shape: {Vendor: "AWSXRAY"}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-observability-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -328,14 +336,15 @@ export def "create-observability-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  observability_configuration_name: any
-  --trace-configuration: any
-  --tags: any
-]: any -> record<ObservabilityConfiguration: record<ObservabilityConfigurationArn: record, ObservabilityConfigurationName: record, TraceConfiguration: record<Vendor: record>, ObservabilityConfigurationRevision: record, Latest: record, Status: record, CreatedAt: record, DeletedAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  observability_configuration_name: string # A name for the observability configuration. When you use it for the first time in an Amazon Web Services Region, App Runner creates revision number 1 of this name. When you use the same name in subsequent calls, App Runner creates incremental revisions of the configuration. The name DefaultConfiguration is reserved. You can't use it to create a new observability configuration, and you can't create a revision of it. When you want to use your own observability configuration for your App Runner service, create a configuration with a different name, and then provide it when you create or update your service.
+  --trace-configuration: record # Describes the configuration of the tracing feature within an App Runner observability configuration. — shape: {Vendor: "AWSXRAY"}
+  --tags: list # A list of metadata items that you can associate with your observability configuration resource. A tag is a key-value pair. — item shape: {Key?: string, Value?: string}
+]: any -> record<ObservabilityConfiguration: record<ObservabilityConfigurationArn: string, ObservabilityConfigurationName: string, TraceConfiguration: record<Vendor: string>, ObservabilityConfigurationRevision: int, Latest: bool, Status: string, CreatedAt: string, DeletedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.CreateObservabilityConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ObservabilityConfigurationName": $observability_configuration_name, "TraceConfiguration": $trace_configuration, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -361,6 +370,13 @@ export def "create-observability-configuration" [
 #
 # POST /
 # operationId: CreateService
+# --SourceConfiguration shape: {CodeRepository?: record, ImageRepository?: record, AutoDeploymentsEnabled?: bool, AuthenticationConfiguration?: record}
+# --InstanceConfiguration shape: {Cpu?: string, Memory?: string, InstanceRoleArn?: string}
+# --Tags item shape: {Key?: string, Value?: string}
+# --EncryptionConfiguration shape: {KmsKey: string}
+# --HealthCheckConfiguration shape: {Protocol?: "TCP"|"HTTP", Path?: string, Interval?: int, Timeout?: int, HealthyThreshold?: int, UnhealthyThreshold?: int}
+# --NetworkConfiguration shape: {EgressConfiguration?: record, IngressConfiguration?: record}
+# --ObservabilityConfiguration shape: {ObservabilityEnabled: bool, ObservabilityConfigurationArn?: string}
 export def "create-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,20 +394,21 @@ export def "create-service" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  service_name: any
-  source_configuration: any
-  --instance-configuration: any
-  --tags: any
-  --encryption-configuration: any
-  --health-check-configuration: any
-  --auto-scaling-configuration-arn: any
-  --network-configuration: any
-  --observability-configuration: any
-]: any -> record<Service: record<ServiceName: record, ServiceId: record, ServiceArn: record, ServiceUrl: record, CreatedAt: record, UpdatedAt: record, DeletedAt: record, Status: record, SourceConfiguration: record<CodeRepository: record, ImageRepository: record, AutoDeploymentsEnabled: record, AuthenticationConfiguration: record>, InstanceConfiguration: record<Cpu: record, Memory: record, InstanceRoleArn: record>, EncryptionConfiguration: record<KmsKey: record>, HealthCheckConfiguration: record<Protocol: record, Path: record, Interval: record, Timeout: record, HealthyThreshold: record, UnhealthyThreshold: record>, AutoScalingConfigurationSummary: record<AutoScalingConfigurationArn: record, AutoScalingConfigurationName: record, AutoScalingConfigurationRevision: record>, NetworkConfiguration: record<EgressConfiguration: record, IngressConfiguration: record>, ObservabilityConfiguration: record<ObservabilityEnabled: record, ObservabilityConfigurationArn: record>>, OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  service_name: string # A name for the App Runner service. It must be unique across all the running App Runner services in your Amazon Web Services account in the Amazon Web Services Region.
+  source_configuration: record # Describes the source deployed to an App Runner service. It can be a code or an image repository. — shape: {CodeRepository?: record, ImageRepository?: record, AutoDeploymentsEnabled?: bool, AuthenticationConfiguration?: record}
+  --instance-configuration: record # Describes the runtime configuration of an App Runner service instance (scaling unit). — shape: {Cpu?: string, Memory?: string, InstanceRoleArn?: string}
+  --tags: list # An optional list of metadata items that you can associate with the App Runner service resource. A tag is a key-value pair. — item shape: {Key?: string, Value?: string}
+  --encryption-configuration: record # Describes a custom encryption key that App Runner uses to encrypt copies of the source repository and service logs. — shape: {KmsKey: string}
+  --health-check-configuration: record # Describes the settings for the health check that App Runner performs to monitor the health of a service. — shape: {Protocol?: "TCP"|"HTTP", Path?: string, Interval?: int, Timeout?: int, HealthyThreshold?: int, UnhealthyThreshold?: int}
+  --auto-scaling-configuration-arn: string # The Amazon Resource Name (ARN) of an App Runner automatic scaling configuration resource that you want to associate with your service. If not provided, App Runner associates the latest revision of a default auto scaling configuration. Specify an ARN with a name and a revision number to associate that revision. For example: arn:aws:apprunner:us-east-1:123456789012:autoscalingconfiguration/high-availability/3 Specify just the name to associate the latest revision. For example: arn:aws:apprunner:us-east-1:123456789012:autoscalingconfiguration/high-availability
+  --network-configuration: record # Describes configuration settings related to network traffic of an App Runner service. Consists of embedded objects for each configurable network feature. — shape: {EgressConfiguration?: record, IngressConfiguration?: record}
+  --observability-configuration: record # Describes the observability configuration of an App Runner service. These are additional observability features, like tracing, that you choose to enable. They're configured in a separate resource that you associate with your service. — shape: {ObservabilityEnabled: bool, ObservabilityConfigurationArn?: string}
+]: any -> record<Service: record<ServiceName: string, ServiceId: string, ServiceArn: string, ServiceUrl: string, CreatedAt: string, UpdatedAt: string, DeletedAt: string, Status: string, SourceConfiguration: record<CodeRepository: record, ImageRepository: record, AutoDeploymentsEnabled: bool, AuthenticationConfiguration: record>, InstanceConfiguration: record<Cpu: string, Memory: string, InstanceRoleArn: string>, EncryptionConfiguration: record<KmsKey: string>, HealthCheckConfiguration: record<Protocol: string, Path: string, Interval: int, Timeout: int, HealthyThreshold: int, UnhealthyThreshold: int>, AutoScalingConfigurationSummary: record<AutoScalingConfigurationArn: string, AutoScalingConfigurationName: string, AutoScalingConfigurationRevision: int>, NetworkConfiguration: record<EgressConfiguration: record, IngressConfiguration: record>, ObservabilityConfiguration: record<ObservabilityEnabled: bool, ObservabilityConfigurationArn: string>>, OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.CreateService")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceName": $service_name, "SourceConfiguration": $source_configuration, "InstanceConfiguration": $instance_configuration, "Tags": $tags, "EncryptionConfiguration": $encryption_configuration, "HealthCheckConfiguration": $health_check_configuration, "AutoScalingConfigurationArn": $auto_scaling_configuration_arn, "NetworkConfiguration": $network_configuration, "ObservabilityConfiguration": $observability_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -417,6 +434,7 @@ export def "create-service" [
 #
 # POST /
 # operationId: CreateVpcConnector
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-vpc-connector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -434,15 +452,16 @@ export def "create-vpc-connector" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  vpc_connector_name: any
-  subnets: any
-  --security-groups: any
-  --tags: any
-]: any -> record<VpcConnector: record<VpcConnectorName: record, VpcConnectorArn: record, VpcConnectorRevision: record, Subnets: record, SecurityGroups: record, Status: record, CreatedAt: record, DeletedAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  vpc_connector_name: string # A name for the VPC connector.
+  subnets: list<string> # A list of IDs of subnets that App Runner should use when it associates your service with a custom Amazon VPC. Specify IDs of subnets of a single Amazon VPC. App Runner determines the Amazon VPC from the subnets you specify. App Runner currently only provides support for IPv4.
+  --security-groups: list<string> # A list of IDs of security groups that App Runner should use for access to Amazon Web Services resources under the specified subnets. If not specified, App Runner uses the default security group of the Amazon VPC. The default security group allows all outbound traffic.
+  --tags: list # A list of metadata items that you can associate with your VPC connector resource. A tag is a key-value pair. — item shape: {Key?: string, Value?: string}
+]: any -> record<VpcConnector: record<VpcConnectorName: string, VpcConnectorArn: string, VpcConnectorRevision: int, Subnets: list<string>, SecurityGroups: list<string>, Status: string, CreatedAt: string, DeletedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.CreateVpcConnector")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VpcConnectorName": $vpc_connector_name, "Subnets": $subnets, "SecurityGroups": $security_groups, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -468,6 +487,8 @@ export def "create-vpc-connector" [
 #
 # POST /
 # operationId: CreateVpcIngressConnection
+# --IngressVpcConfiguration shape: {VpcId?: string, VpcEndpointId?: string}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-vpc-ingress-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -485,15 +506,16 @@ export def "create-vpc-ingress-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  service_arn: any
-  vpc_ingress_connection_name: any
-  ingress_vpc_configuration: any
-  --tags: any
-]: any -> record<VpcIngressConnection: record<VpcIngressConnectionArn: record, VpcIngressConnectionName: record, ServiceArn: record, Status: record, AccountId: record, DomainName: record, IngressVpcConfiguration: record<VpcId: record, VpcEndpointId: record>, CreatedAt: record, DeletedAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  service_arn: string # The Amazon Resource Name (ARN) for this App Runner service that is used to create the VPC Ingress Connection resource.
+  vpc_ingress_connection_name: string # A name for the VPC Ingress Connection resource. It must be unique across all the active VPC Ingress Connections in your Amazon Web Services account in the Amazon Web Services Region.
+  ingress_vpc_configuration: record # The configuration of your VPC and the associated VPC endpoint. The VPC endpoint is an Amazon Web Services PrivateLink resource that allows access to your App Runner services from within an Amazon VPC. — shape: {VpcId?: string, VpcEndpointId?: string}
+  --tags: list # An optional list of metadata items that you can associate with the VPC Ingress Connection resource. A tag is a key-value pair. — item shape: {Key?: string, Value?: string}
+]: any -> record<VpcIngressConnection: record<VpcIngressConnectionArn: string, VpcIngressConnectionName: string, ServiceArn: string, Status: string, AccountId: string, DomainName: string, IngressVpcConfiguration: record<VpcId: string, VpcEndpointId: string>, CreatedAt: string, DeletedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.CreateVpcIngressConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceArn": $service_arn, "VpcIngressConnectionName": $vpc_ingress_connection_name, "IngressVpcConfiguration": $ingress_vpc_configuration, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -536,12 +558,13 @@ export def "delete-auto-scaling-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  auto_scaling_configuration_arn: any
-]: any -> record<AutoScalingConfiguration: record<AutoScalingConfigurationArn: record, AutoScalingConfigurationName: record, AutoScalingConfigurationRevision: record, Latest: record, Status: record, MaxConcurrency: record, MinSize: record, MaxSize: record, CreatedAt: record, DeletedAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  auto_scaling_configuration_arn: string # The Amazon Resource Name (ARN) of the App Runner auto scaling configuration that you want to delete. The ARN can be a full auto scaling configuration ARN, or a partial ARN ending with either .../name or .../name/revision . If a revision isn't specified, the latest active revision is deleted.
+]: any -> record<AutoScalingConfiguration: record<AutoScalingConfigurationArn: string, AutoScalingConfigurationName: string, AutoScalingConfigurationRevision: int, Latest: bool, Status: string, MaxConcurrency: int, MinSize: int, MaxSize: int, CreatedAt: string, DeletedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.DeleteAutoScalingConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AutoScalingConfigurationArn": $auto_scaling_configuration_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -584,12 +607,13 @@ export def "delete-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  connection_arn: any
-]: any -> record<Connection: record<ConnectionName: record, ConnectionArn: record, ProviderType: record, Status: record, CreatedAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  connection_arn: string # The Amazon Resource Name (ARN) of the App Runner connection that you want to delete.
+]: any -> record<Connection: record<ConnectionName: string, ConnectionArn: string, ProviderType: string, Status: string, CreatedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.DeleteConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConnectionArn": $connection_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -632,12 +656,13 @@ export def "delete-observability-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  observability_configuration_arn: any
-]: any -> record<ObservabilityConfiguration: record<ObservabilityConfigurationArn: record, ObservabilityConfigurationName: record, TraceConfiguration: record<Vendor: record>, ObservabilityConfigurationRevision: record, Latest: record, Status: record, CreatedAt: record, DeletedAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  observability_configuration_arn: string # The Amazon Resource Name (ARN) of the App Runner observability configuration that you want to delete. The ARN can be a full observability configuration ARN, or a partial ARN ending with either .../name or .../name/revision . If a revision isn't specified, the latest active revision is deleted.
+]: any -> record<ObservabilityConfiguration: record<ObservabilityConfigurationArn: string, ObservabilityConfigurationName: string, TraceConfiguration: record<Vendor: string>, ObservabilityConfigurationRevision: int, Latest: bool, Status: string, CreatedAt: string, DeletedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.DeleteObservabilityConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ObservabilityConfigurationArn": $observability_configuration_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -680,12 +705,13 @@ export def "delete-service" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  service_arn: any
-]: any -> record<Service: record<ServiceName: record, ServiceId: record, ServiceArn: record, ServiceUrl: record, CreatedAt: record, UpdatedAt: record, DeletedAt: record, Status: record, SourceConfiguration: record<CodeRepository: record, ImageRepository: record, AutoDeploymentsEnabled: record, AuthenticationConfiguration: record>, InstanceConfiguration: record<Cpu: record, Memory: record, InstanceRoleArn: record>, EncryptionConfiguration: record<KmsKey: record>, HealthCheckConfiguration: record<Protocol: record, Path: record, Interval: record, Timeout: record, HealthyThreshold: record, UnhealthyThreshold: record>, AutoScalingConfigurationSummary: record<AutoScalingConfigurationArn: record, AutoScalingConfigurationName: record, AutoScalingConfigurationRevision: record>, NetworkConfiguration: record<EgressConfiguration: record, IngressConfiguration: record>, ObservabilityConfiguration: record<ObservabilityEnabled: record, ObservabilityConfigurationArn: record>>, OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  service_arn: string # The Amazon Resource Name (ARN) of the App Runner service that you want to delete.
+]: any -> record<Service: record<ServiceName: string, ServiceId: string, ServiceArn: string, ServiceUrl: string, CreatedAt: string, UpdatedAt: string, DeletedAt: string, Status: string, SourceConfiguration: record<CodeRepository: record, ImageRepository: record, AutoDeploymentsEnabled: bool, AuthenticationConfiguration: record>, InstanceConfiguration: record<Cpu: string, Memory: string, InstanceRoleArn: string>, EncryptionConfiguration: record<KmsKey: string>, HealthCheckConfiguration: record<Protocol: string, Path: string, Interval: int, Timeout: int, HealthyThreshold: int, UnhealthyThreshold: int>, AutoScalingConfigurationSummary: record<AutoScalingConfigurationArn: string, AutoScalingConfigurationName: string, AutoScalingConfigurationRevision: int>, NetworkConfiguration: record<EgressConfiguration: record, IngressConfiguration: record>, ObservabilityConfiguration: record<ObservabilityEnabled: bool, ObservabilityConfigurationArn: string>>, OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.DeleteService")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceArn": $service_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -728,12 +754,13 @@ export def "delete-vpc-connector" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  vpc_connector_arn: any
-]: any -> record<VpcConnector: record<VpcConnectorName: record, VpcConnectorArn: record, VpcConnectorRevision: record, Subnets: record, SecurityGroups: record, Status: record, CreatedAt: record, DeletedAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  vpc_connector_arn: string # The Amazon Resource Name (ARN) of the App Runner VPC connector that you want to delete. The ARN must be a full VPC connector ARN.
+]: any -> record<VpcConnector: record<VpcConnectorName: string, VpcConnectorArn: string, VpcConnectorRevision: int, Subnets: list<string>, SecurityGroups: list<string>, Status: string, CreatedAt: string, DeletedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.DeleteVpcConnector")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VpcConnectorArn": $vpc_connector_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -776,12 +803,13 @@ export def "delete-vpc-ingress-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  vpc_ingress_connection_arn: any
-]: any -> record<VpcIngressConnection: record<VpcIngressConnectionArn: record, VpcIngressConnectionName: record, ServiceArn: record, Status: record, AccountId: record, DomainName: record, IngressVpcConfiguration: record<VpcId: record, VpcEndpointId: record>, CreatedAt: record, DeletedAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  vpc_ingress_connection_arn: string # The Amazon Resource Name (ARN) of the App Runner VPC Ingress Connection that you want to delete.
+]: any -> record<VpcIngressConnection: record<VpcIngressConnectionArn: string, VpcIngressConnectionName: string, ServiceArn: string, Status: string, AccountId: string, DomainName: string, IngressVpcConfiguration: record<VpcId: string, VpcEndpointId: string>, CreatedAt: string, DeletedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.DeleteVpcIngressConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VpcIngressConnectionArn": $vpc_ingress_connection_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -824,12 +852,13 @@ export def "describe-auto-scaling-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  auto_scaling_configuration_arn: any
-]: any -> record<AutoScalingConfiguration: record<AutoScalingConfigurationArn: record, AutoScalingConfigurationName: record, AutoScalingConfigurationRevision: record, Latest: record, Status: record, MaxConcurrency: record, MinSize: record, MaxSize: record, CreatedAt: record, DeletedAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  auto_scaling_configuration_arn: string # The Amazon Resource Name (ARN) of the App Runner auto scaling configuration that you want a description for. The ARN can be a full auto scaling configuration ARN, or a partial ARN ending with either .../name or .../name/revision . If a revision isn't specified, the latest active revision is described.
+]: any -> record<AutoScalingConfiguration: record<AutoScalingConfigurationArn: string, AutoScalingConfigurationName: string, AutoScalingConfigurationRevision: int, Latest: bool, Status: string, MaxConcurrency: int, MinSize: int, MaxSize: int, CreatedAt: string, DeletedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.DescribeAutoScalingConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AutoScalingConfigurationArn": $auto_scaling_configuration_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -874,14 +903,15 @@ export def "describe-custom-domains" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  service_arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<DNSTarget: record, ServiceArn: record, CustomDomains: record, VpcDNSTargets: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  service_arn: string # The Amazon Resource Name (ARN) of the App Runner service that you want associated custom domain names to be described for.
+  --next-token-body: string # A token from a previous result page. It's used for a paginated request. The request retrieves the next result page. All other parameter values must be identical to the ones that are specified in the initial request. If you don't specify NextToken, the request retrieves the first result page. (body field)
+  --max-results-body: int # The maximum number of results that each response (result page) can include. It's used for a paginated request. If you don't specify MaxResults, the request retrieves all available results in a single response. (body field)
+]: any -> record<DNSTarget: string, ServiceArn: string, CustomDomains: table<DomainName: string, EnableWWWSubdomain: bool, CertificateValidationRecords: list, Status: string>, VpcDNSTargets: table<VpcIngressConnectionArn: string, VpcId: string, DomainName: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.DescribeCustomDomains")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ServiceArn": $service_arn, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -925,12 +955,13 @@ export def "describe-observability-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  observability_configuration_arn: any
-]: any -> record<ObservabilityConfiguration: record<ObservabilityConfigurationArn: record, ObservabilityConfigurationName: record, TraceConfiguration: record<Vendor: record>, ObservabilityConfigurationRevision: record, Latest: record, Status: record, CreatedAt: record, DeletedAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  observability_configuration_arn: string # The Amazon Resource Name (ARN) of the App Runner observability configuration that you want a description for. The ARN can be a full observability configuration ARN, or a partial ARN ending with either .../name or .../name/revision . If a revision isn't specified, the latest active revision is described.
+]: any -> record<ObservabilityConfiguration: record<ObservabilityConfigurationArn: string, ObservabilityConfigurationName: string, TraceConfiguration: record<Vendor: string>, ObservabilityConfigurationRevision: int, Latest: bool, Status: string, CreatedAt: string, DeletedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.DescribeObservabilityConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ObservabilityConfigurationArn": $observability_configuration_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -973,12 +1004,13 @@ export def "describe-service" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  service_arn: any
-]: any -> record<Service: record<ServiceName: record, ServiceId: record, ServiceArn: record, ServiceUrl: record, CreatedAt: record, UpdatedAt: record, DeletedAt: record, Status: record, SourceConfiguration: record<CodeRepository: record, ImageRepository: record, AutoDeploymentsEnabled: record, AuthenticationConfiguration: record>, InstanceConfiguration: record<Cpu: record, Memory: record, InstanceRoleArn: record>, EncryptionConfiguration: record<KmsKey: record>, HealthCheckConfiguration: record<Protocol: record, Path: record, Interval: record, Timeout: record, HealthyThreshold: record, UnhealthyThreshold: record>, AutoScalingConfigurationSummary: record<AutoScalingConfigurationArn: record, AutoScalingConfigurationName: record, AutoScalingConfigurationRevision: record>, NetworkConfiguration: record<EgressConfiguration: record, IngressConfiguration: record>, ObservabilityConfiguration: record<ObservabilityEnabled: record, ObservabilityConfigurationArn: record>>> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  service_arn: string # The Amazon Resource Name (ARN) of the App Runner service that you want a description for.
+]: any -> record<Service: record<ServiceName: string, ServiceId: string, ServiceArn: string, ServiceUrl: string, CreatedAt: string, UpdatedAt: string, DeletedAt: string, Status: string, SourceConfiguration: record<CodeRepository: record, ImageRepository: record, AutoDeploymentsEnabled: bool, AuthenticationConfiguration: record>, InstanceConfiguration: record<Cpu: string, Memory: string, InstanceRoleArn: string>, EncryptionConfiguration: record<KmsKey: string>, HealthCheckConfiguration: record<Protocol: string, Path: string, Interval: int, Timeout: int, HealthyThreshold: int, UnhealthyThreshold: int>, AutoScalingConfigurationSummary: record<AutoScalingConfigurationArn: string, AutoScalingConfigurationName: string, AutoScalingConfigurationRevision: int>, NetworkConfiguration: record<EgressConfiguration: record, IngressConfiguration: record>, ObservabilityConfiguration: record<ObservabilityEnabled: bool, ObservabilityConfigurationArn: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.DescribeService")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceArn": $service_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1021,12 +1053,13 @@ export def "describe-vpc-connector" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  vpc_connector_arn: any
-]: any -> record<VpcConnector: record<VpcConnectorName: record, VpcConnectorArn: record, VpcConnectorRevision: record, Subnets: record, SecurityGroups: record, Status: record, CreatedAt: record, DeletedAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  vpc_connector_arn: string # The Amazon Resource Name (ARN) of the App Runner VPC connector that you want a description for. The ARN must be a full VPC connector ARN.
+]: any -> record<VpcConnector: record<VpcConnectorName: string, VpcConnectorArn: string, VpcConnectorRevision: int, Subnets: list<string>, SecurityGroups: list<string>, Status: string, CreatedAt: string, DeletedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.DescribeVpcConnector")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VpcConnectorArn": $vpc_connector_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1069,12 +1102,13 @@ export def "describe-vpc-ingress-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  vpc_ingress_connection_arn: any
-]: any -> record<VpcIngressConnection: record<VpcIngressConnectionArn: record, VpcIngressConnectionName: record, ServiceArn: record, Status: record, AccountId: record, DomainName: record, IngressVpcConfiguration: record<VpcId: record, VpcEndpointId: record>, CreatedAt: record, DeletedAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  vpc_ingress_connection_arn: string # The Amazon Resource Name (ARN) of the App Runner VPC Ingress Connection that you want a description for.
+]: any -> record<VpcIngressConnection: record<VpcIngressConnectionArn: string, VpcIngressConnectionName: string, ServiceArn: string, Status: string, AccountId: string, DomainName: string, IngressVpcConfiguration: record<VpcId: string, VpcEndpointId: string>, CreatedAt: string, DeletedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.DescribeVpcIngressConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VpcIngressConnectionArn": $vpc_ingress_connection_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1117,13 +1151,14 @@ export def "disassociate-custom-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  service_arn: any
-  domain_name: any
-]: any -> record<DNSTarget: record, ServiceArn: record, CustomDomain: record<DomainName: record, EnableWWWSubdomain: record, CertificateValidationRecords: record, Status: record>, VpcDNSTargets: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  service_arn: string # The Amazon Resource Name (ARN) of the App Runner service that you want to disassociate a custom domain name from.
+  domain_name: string # The domain name that you want to disassociate from the App Runner service.
+]: any -> record<DNSTarget: string, ServiceArn: string, CustomDomain: record<DomainName: string, EnableWWWSubdomain: bool, CertificateValidationRecords: list<record>, Status: string>, VpcDNSTargets: table<VpcIngressConnectionArn: string, VpcId: string, DomainName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.DisassociateCustomDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceArn": $service_arn, "DomainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1168,15 +1203,16 @@ export def "list-auto-scaling-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  --auto-scaling-configuration-name: any
-  --latest-only: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<AutoScalingConfigurationSummaryList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  --auto-scaling-configuration-name: string # The name of the App Runner auto scaling configuration that you want to list. If specified, App Runner lists revisions that share this name. If not specified, App Runner returns revisions of all active configurations.
+  --latest-only: oneof<nothing, bool> # Set to true to list only the latest revision for each requested configuration name. Set to false to list all revisions for each requested configuration name. Default: true
+  --max-results-body: int # The maximum number of results to include in each response (result page). It's used for a paginated request. If you don't specify MaxResults, the request retrieves all available results in a single response. (body field)
+  --next-token-body: string # A token from a previous result page. It's used for a paginated request. The request retrieves the next result page. All other parameter values must be identical to the ones that are specified in the initial request. If you don't specify NextToken, the request retrieves the first result page. (body field)
+]: any -> record<AutoScalingConfigurationSummaryList: table<AutoScalingConfigurationArn: string, AutoScalingConfigurationName: string, AutoScalingConfigurationRevision: int>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.ListAutoScalingConfigurations")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"AutoScalingConfigurationName": $auto_scaling_configuration_name, "LatestOnly": $latest_only, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1222,14 +1258,15 @@ export def "list-connections" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  --connection-name: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ConnectionSummaryList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  --connection-name: string # If specified, only this connection is returned. If not specified, the result isn't filtered by name.
+  --max-results-body: int # The maximum number of results to include in each response (result page). Used for a paginated request. If you don't specify MaxResults, the request retrieves all available results in a single response. (body field)
+  --next-token-body: string # A token from a previous result page. Used for a paginated request. The request retrieves the next result page. All other parameter values must be identical to the ones specified in the initial request. If you don't specify NextToken, the request retrieves the first result page. (body field)
+]: any -> record<ConnectionSummaryList: table<ConnectionName: string, ConnectionArn: string, ProviderType: string, Status: string, CreatedAt: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.ListConnections")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConnectionName": $connection_name, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1275,15 +1312,16 @@ export def "list-observability-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  --observability-configuration-name: any
-  --latest-only: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ObservabilityConfigurationSummaryList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  --observability-configuration-name: string # The name of the App Runner observability configuration that you want to list. If specified, App Runner lists revisions that share this name. If not specified, App Runner returns revisions of all active configurations.
+  --latest-only: oneof<nothing, bool> # Set to true to list only the latest revision for each requested configuration name. Set to false to list all revisions for each requested configuration name. Default: true
+  --max-results-body: int # The maximum number of results to include in each response (result page). It's used for a paginated request. If you don't specify MaxResults, the request retrieves all available results in a single response. (body field)
+  --next-token-body: string # A token from a previous result page. It's used for a paginated request. The request retrieves the next result page. All other parameter values must be identical to the ones that are specified in the initial request. If you don't specify NextToken, the request retrieves the first result page. (body field)
+]: any -> record<ObservabilityConfigurationSummaryList: table<ObservabilityConfigurationArn: string, ObservabilityConfigurationName: string, ObservabilityConfigurationRevision: int>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.ListObservabilityConfigurations")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ObservabilityConfigurationName": $observability_configuration_name, "LatestOnly": $latest_only, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1329,14 +1367,15 @@ export def "list-operations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  service_arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<OperationSummaryList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  service_arn: string # The Amazon Resource Name (ARN) of the App Runner service that you want a list of operations for.
+  --next-token-body: string # A token from a previous result page. It's used for a paginated request. The request retrieves the next result page. All other parameter values must be identical to the ones specified in the initial request. If you don't specify NextToken, the request retrieves the first result page. (body field)
+  --max-results-body: int # The maximum number of results to include in each response (result page). It's used for a paginated request. If you don't specify MaxResults, the request retrieves all available results in a single response. (body field)
+]: any -> record<OperationSummaryList: table<Id: string, Type: string, Status: string, TargetArn: string, StartedAt: string, EndedAt: string, UpdatedAt: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.ListOperations")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ServiceArn": $service_arn, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1382,13 +1421,14 @@ export def "list-services" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<ServiceSummaryList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  --next-token-body: string # A token from a previous result page. Used for a paginated request. The request retrieves the next result page. All other parameter values must be identical to the ones specified in the initial request. If you don't specify NextToken, the request retrieves the first result page. (body field)
+  --max-results-body: int # The maximum number of results to include in each response (result page). It's used for a paginated request. If you don't specify MaxResults, the request retrieves all available results in a single response. (body field)
+]: any -> record<ServiceSummaryList: table<ServiceName: string, ServiceId: string, ServiceArn: string, ServiceUrl: string, CreatedAt: string, UpdatedAt: string, Status: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.ListServices")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1432,12 +1472,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  resource_arn: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource that a tag list is requested for. It must be the ARN of an App Runner resource.
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1482,13 +1523,14 @@ export def "list-vpc-connectors" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<VpcConnectors: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  --max-results-body: int # The maximum number of results to include in each response (result page). It's used for a paginated request. If you don't specify MaxResults, the request retrieves all available results in a single response. (body field)
+  --next-token-body: string # A token from a previous result page. It's used for a paginated request. The request retrieves the next result page. All other parameter values must be identical to the ones that are specified in the initial request. If you don't specify NextToken, the request retrieves the first result page. (body field)
+]: any -> record<VpcConnectors: table<VpcConnectorName: string, VpcConnectorArn: string, VpcConnectorRevision: int, Subnets: list, SecurityGroups: list, Status: string, CreatedAt: string, DeletedAt: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.ListVpcConnectors")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1515,6 +1557,7 @@ export def "list-vpc-connectors" [
 #
 # POST /
 # operationId: ListVpcIngressConnections
+# --Filter shape: {ServiceArn?: string, VpcEndpointId?: string}
 export def "list-vpc-ingress-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1534,14 +1577,15 @@ export def "list-vpc-ingress-connections" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  --filter: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<VpcIngressConnectionSummaryList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  --filter: record # Returns a list of VPC Ingress Connections based on the filter provided. It can return either ServiceArn or VpcEndpointId, or both. — shape: {ServiceArn?: string, VpcEndpointId?: string}
+  --max-results-body: int # The maximum number of results to include in each response (result page). It's used for a paginated request. If you don't specify MaxResults, the request retrieves all available results in a single response. (body field)
+  --next-token-body: string # A token from a previous result page. It's used for a paginated request. The request retrieves the next result page. All other parameter values must be identical to the ones that are specified in the initial request. If you don't specify NextToken, the request retrieves the first result page. (body field)
+]: any -> record<VpcIngressConnectionSummaryList: table<VpcIngressConnectionArn: string, ServiceArn: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.ListVpcIngressConnections")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Filter": $filter, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1585,12 +1629,13 @@ export def "pause-service" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  service_arn: any
-]: any -> record<Service: record<ServiceName: record, ServiceId: record, ServiceArn: record, ServiceUrl: record, CreatedAt: record, UpdatedAt: record, DeletedAt: record, Status: record, SourceConfiguration: record<CodeRepository: record, ImageRepository: record, AutoDeploymentsEnabled: record, AuthenticationConfiguration: record>, InstanceConfiguration: record<Cpu: record, Memory: record, InstanceRoleArn: record>, EncryptionConfiguration: record<KmsKey: record>, HealthCheckConfiguration: record<Protocol: record, Path: record, Interval: record, Timeout: record, HealthyThreshold: record, UnhealthyThreshold: record>, AutoScalingConfigurationSummary: record<AutoScalingConfigurationArn: record, AutoScalingConfigurationName: record, AutoScalingConfigurationRevision: record>, NetworkConfiguration: record<EgressConfiguration: record, IngressConfiguration: record>, ObservabilityConfiguration: record<ObservabilityEnabled: record, ObservabilityConfigurationArn: record>>, OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  service_arn: string # The Amazon Resource Name (ARN) of the App Runner service that you want to pause.
+]: any -> record<Service: record<ServiceName: string, ServiceId: string, ServiceArn: string, ServiceUrl: string, CreatedAt: string, UpdatedAt: string, DeletedAt: string, Status: string, SourceConfiguration: record<CodeRepository: record, ImageRepository: record, AutoDeploymentsEnabled: bool, AuthenticationConfiguration: record>, InstanceConfiguration: record<Cpu: string, Memory: string, InstanceRoleArn: string>, EncryptionConfiguration: record<KmsKey: string>, HealthCheckConfiguration: record<Protocol: string, Path: string, Interval: int, Timeout: int, HealthyThreshold: int, UnhealthyThreshold: int>, AutoScalingConfigurationSummary: record<AutoScalingConfigurationArn: string, AutoScalingConfigurationName: string, AutoScalingConfigurationRevision: int>, NetworkConfiguration: record<EgressConfiguration: record, IngressConfiguration: record>, ObservabilityConfiguration: record<ObservabilityEnabled: bool, ObservabilityConfigurationArn: string>>, OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.PauseService")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceArn": $service_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1633,12 +1678,13 @@ export def "resume-service" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  service_arn: any
-]: any -> record<Service: record<ServiceName: record, ServiceId: record, ServiceArn: record, ServiceUrl: record, CreatedAt: record, UpdatedAt: record, DeletedAt: record, Status: record, SourceConfiguration: record<CodeRepository: record, ImageRepository: record, AutoDeploymentsEnabled: record, AuthenticationConfiguration: record>, InstanceConfiguration: record<Cpu: record, Memory: record, InstanceRoleArn: record>, EncryptionConfiguration: record<KmsKey: record>, HealthCheckConfiguration: record<Protocol: record, Path: record, Interval: record, Timeout: record, HealthyThreshold: record, UnhealthyThreshold: record>, AutoScalingConfigurationSummary: record<AutoScalingConfigurationArn: record, AutoScalingConfigurationName: record, AutoScalingConfigurationRevision: record>, NetworkConfiguration: record<EgressConfiguration: record, IngressConfiguration: record>, ObservabilityConfiguration: record<ObservabilityEnabled: record, ObservabilityConfigurationArn: record>>, OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  service_arn: string # The Amazon Resource Name (ARN) of the App Runner service that you want to resume.
+]: any -> record<Service: record<ServiceName: string, ServiceId: string, ServiceArn: string, ServiceUrl: string, CreatedAt: string, UpdatedAt: string, DeletedAt: string, Status: string, SourceConfiguration: record<CodeRepository: record, ImageRepository: record, AutoDeploymentsEnabled: bool, AuthenticationConfiguration: record>, InstanceConfiguration: record<Cpu: string, Memory: string, InstanceRoleArn: string>, EncryptionConfiguration: record<KmsKey: string>, HealthCheckConfiguration: record<Protocol: string, Path: string, Interval: int, Timeout: int, HealthyThreshold: int, UnhealthyThreshold: int>, AutoScalingConfigurationSummary: record<AutoScalingConfigurationArn: string, AutoScalingConfigurationName: string, AutoScalingConfigurationRevision: int>, NetworkConfiguration: record<EgressConfiguration: record, IngressConfiguration: record>, ObservabilityConfiguration: record<ObservabilityEnabled: bool, ObservabilityConfigurationArn: string>>, OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.ResumeService")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceArn": $service_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1681,12 +1727,13 @@ export def "start-deployment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  service_arn: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  service_arn: string # The Amazon Resource Name (ARN) of the App Runner service that you want to manually deploy to.
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.StartDeployment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceArn": $service_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1712,6 +1759,7 @@ export def "start-deployment" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1729,13 +1777,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource that you want to update tags for. It must be the ARN of an App Runner resource.
+  tags: list # A list of tag key-value pairs to add or update. If a key is new to the resource, the tag is added with the provided value. If a key is already associated with the resource, the value of the tag is updated. — item shape: {Key?: string, Value?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1778,13 +1827,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource that you want to remove tags from. It must be the ARN of an App Runner resource.
+  tag_keys: list<string> # A list of tag keys that you want to remove.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1810,6 +1860,11 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateService
+# --SourceConfiguration shape: {CodeRepository?: record, ImageRepository?: record, AutoDeploymentsEnabled?: bool, AuthenticationConfiguration?: record}
+# --InstanceConfiguration shape: {Cpu?: string, Memory?: string, InstanceRoleArn?: string}
+# --HealthCheckConfiguration shape: {Protocol?: "TCP"|"HTTP", Path?: string, Interval?: int, Timeout?: int, HealthyThreshold?: int, UnhealthyThreshold?: int}
+# --NetworkConfiguration shape: {EgressConfiguration?: record, IngressConfiguration?: record}
+# --ObservabilityConfiguration shape: {ObservabilityEnabled: bool, ObservabilityConfigurationArn?: string}
 export def "update-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1827,18 +1882,19 @@ export def "update-service" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  service_arn: any
-  --source-configuration: any
-  --instance-configuration: any
-  --auto-scaling-configuration-arn: any
-  --health-check-configuration: any
-  --network-configuration: any
-  --observability-configuration: any
-]: any -> record<Service: record<ServiceName: record, ServiceId: record, ServiceArn: record, ServiceUrl: record, CreatedAt: record, UpdatedAt: record, DeletedAt: record, Status: record, SourceConfiguration: record<CodeRepository: record, ImageRepository: record, AutoDeploymentsEnabled: record, AuthenticationConfiguration: record>, InstanceConfiguration: record<Cpu: record, Memory: record, InstanceRoleArn: record>, EncryptionConfiguration: record<KmsKey: record>, HealthCheckConfiguration: record<Protocol: record, Path: record, Interval: record, Timeout: record, HealthyThreshold: record, UnhealthyThreshold: record>, AutoScalingConfigurationSummary: record<AutoScalingConfigurationArn: record, AutoScalingConfigurationName: record, AutoScalingConfigurationRevision: record>, NetworkConfiguration: record<EgressConfiguration: record, IngressConfiguration: record>, ObservabilityConfiguration: record<ObservabilityEnabled: record, ObservabilityConfigurationArn: record>>, OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  service_arn: string # The Amazon Resource Name (ARN) of the App Runner service that you want to update.
+  --source-configuration: record # Describes the source deployed to an App Runner service. It can be a code or an image repository. — shape: {CodeRepository?: record, ImageRepository?: record, AutoDeploymentsEnabled?: bool, AuthenticationConfiguration?: record}
+  --instance-configuration: record # Describes the runtime configuration of an App Runner service instance (scaling unit). — shape: {Cpu?: string, Memory?: string, InstanceRoleArn?: string}
+  --auto-scaling-configuration-arn: string # The Amazon Resource Name (ARN) of an App Runner automatic scaling configuration resource that you want to associate with the App Runner service.
+  --health-check-configuration: record # Describes the settings for the health check that App Runner performs to monitor the health of a service. — shape: {Protocol?: "TCP"|"HTTP", Path?: string, Interval?: int, Timeout?: int, HealthyThreshold?: int, UnhealthyThreshold?: int}
+  --network-configuration: record # Describes configuration settings related to network traffic of an App Runner service. Consists of embedded objects for each configurable network feature. — shape: {EgressConfiguration?: record, IngressConfiguration?: record}
+  --observability-configuration: record # Describes the observability configuration of an App Runner service. These are additional observability features, like tracing, that you choose to enable. They're configured in a separate resource that you associate with your service. — shape: {ObservabilityEnabled: bool, ObservabilityConfigurationArn?: string}
+]: any -> record<Service: record<ServiceName: string, ServiceId: string, ServiceArn: string, ServiceUrl: string, CreatedAt: string, UpdatedAt: string, DeletedAt: string, Status: string, SourceConfiguration: record<CodeRepository: record, ImageRepository: record, AutoDeploymentsEnabled: bool, AuthenticationConfiguration: record>, InstanceConfiguration: record<Cpu: string, Memory: string, InstanceRoleArn: string>, EncryptionConfiguration: record<KmsKey: string>, HealthCheckConfiguration: record<Protocol: string, Path: string, Interval: int, Timeout: int, HealthyThreshold: int, UnhealthyThreshold: int>, AutoScalingConfigurationSummary: record<AutoScalingConfigurationArn: string, AutoScalingConfigurationName: string, AutoScalingConfigurationRevision: int>, NetworkConfiguration: record<EgressConfiguration: record, IngressConfiguration: record>, ObservabilityConfiguration: record<ObservabilityEnabled: bool, ObservabilityConfigurationArn: string>>, OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.UpdateService")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceArn": $service_arn, "SourceConfiguration": $source_configuration, "InstanceConfiguration": $instance_configuration, "AutoScalingConfigurationArn": $auto_scaling_configuration_arn, "HealthCheckConfiguration": $health_check_configuration, "NetworkConfiguration": $network_configuration, "ObservabilityConfiguration": $observability_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1864,6 +1920,7 @@ export def "update-service" [
 #
 # POST /
 # operationId: UpdateVpcIngressConnection
+# --IngressVpcConfiguration shape: {VpcId?: string, VpcEndpointId?: string}
 export def "update-vpc-ingress-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1881,13 +1938,14 @@ export def "update-vpc-ingress-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  vpc_ingress_connection_arn: any
-  ingress_vpc_configuration: any
-]: any -> record<VpcIngressConnection: record<VpcIngressConnectionArn: record, VpcIngressConnectionName: record, ServiceArn: record, Status: record, AccountId: record, DomainName: record, IngressVpcConfiguration: record<VpcId: record, VpcEndpointId: record>, CreatedAt: record, DeletedAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  vpc_ingress_connection_arn: string # The Amazon Resource Name (Arn) for the App Runner VPC Ingress Connection resource that you want to update.
+  ingress_vpc_configuration: record # The configuration of your VPC and the associated VPC endpoint. The VPC endpoint is an Amazon Web Services PrivateLink resource that allows access to your App Runner services from within an Amazon VPC. — shape: {VpcId?: string, VpcEndpointId?: string}
+]: any -> record<VpcIngressConnection: record<VpcIngressConnectionArn: string, VpcIngressConnectionName: string, ServiceArn: string, Status: string, AccountId: string, DomainName: string, IngressVpcConfiguration: record<VpcId: string, VpcEndpointId: string>, CreatedAt: string, DeletedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AppRunner.UpdateVpcIngressConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VpcIngressConnectionArn": $vpc_ingress_connection_arn, "IngressVpcConfiguration": $ingress_vpc_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

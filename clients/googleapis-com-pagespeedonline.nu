@@ -1,4 +1,4 @@
-# Auto-generated client for PageSpeed Insights API vv5
+# Auto-generated client for PageSpeed Insights API v5
 # Source: https://api.apis.guru/v2/specs/googleapis.com/pagespeedonline/v5/openapi.json
 # Auth: --token flag or $env.PAGESPEED_INSIGHTS_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -138,8 +128,8 @@ export def commands []: nothing -> table {
 # operationId: pagespeedonline.pagespeedapi.runpagespeed
 export def "pagespeedonline-pagespeedapi-runpagespeed" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -157,7 +147,7 @@ export def "pagespeedonline-pagespeedapi-runpagespeed" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --url: string # Required. The URL to fetch and analyze
+  --url: string # Required. The URL to fetch and analyze (required)
   --captcha-token: string # The captcha token passed when filling out a captcha.
   --category: list<string> # A Lighthouse category to run; if none are given, only Performance category will be run
   --locale: string # The locale used to localize formatted results
@@ -165,8 +155,9 @@ export def "pagespeedonline-pagespeedapi-runpagespeed" [
   --utm-campaign: string # Campaign name for analytics.
   --utm-source: string # Campaign source for analytics.
 ]: nothing -> record<analysisUTCTimestamp: string, captchaResult: string, id: string, kind: string, lighthouseResult: record<audits: record, categories: record<accessibility: record, best_practices: record, performance: record, pwa: record, seo: record>, categoryGroups: record, configSettings: record<channel: string, emulatedFormFactor: string, formFactor: string, locale: string, onlyCategories: any>, entities: list<record>, environment: record<benchmarkIndex: float, credits: record, hostUserAgent: string, networkUserAgent: string>, fetchTime: string, finalDisplayedUrl: string, finalUrl: string, fullPageScreenshot: any, i18n: record<rendererFormattedStrings: record>, lighthouseVersion: string, mainDocumentUrl: string, requestedUrl: string, runWarnings: list<any>, runtimeError: record<code: string, message: string>, stackPacks: list<record>, timing: record<total: float>, userAgent: string>, loadingExperience: record<id: string, initial_url: string, metrics: record, origin_fallback: bool, overall_category: string>, originLoadingExperience: record<id: string, initial_url: string, metrics: record, origin_fallback: bool, overall_category: string>, version: record<major: string, minor: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o PAGESPEED_INSIGHTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o PAGESPEED_INSIGHTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "captchaToken" $captcha_token "scalar") (serialize-qp "category" $category "multi") (serialize-qp "locale" $locale "scalar") (serialize-qp "strategy" $strategy "scalar") (serialize-qp "utm_campaign" $utm_campaign "scalar") (serialize-qp "utm_source" $utm_source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pagespeedonline/v5/runPagespeed" $qp $auth.query)
   let accept_val = "application/json"

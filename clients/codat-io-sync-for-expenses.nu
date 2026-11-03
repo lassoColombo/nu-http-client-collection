@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 # GET /companies/{companyId}/sync/expenses/config
 # operationId: get-company-configuration
 export def "get-company-configuration" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +196,7 @@ export def "get-company-configuration" [
 # --customer shape: {id?: string}
 # --supplier shape: {id?: string}
 export def "save-company-configuration" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "save-company-configuration" [
 # POST /companies/{companyId}/sync/expenses/connections/partnerExpense
 # operationId: create-partner-expense-connection
 export def "create-partner-expense-connection" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,7 +275,7 @@ export def "create-partner-expense-connection" [
 # operationId: create-expense-dataset
 # --items item shape: {currency: string, currencyRate?: float, id: string, issueDate: string, lines?: list, merchantName?: string, notes?: string, type: "Payment"|"Refund"|"Reward"|"Chargeback"|"TransferIn"|"TransferOut"|"AdjustmentIn"|"AdjustmentOut"}
 export def "create-expense-dataset" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -315,7 +315,7 @@ export def "create-expense-dataset" [
 # GET /companies/{companyId}/sync/expenses/mappingOptions
 # operationId: get-mapping-options
 export def "get-mapping-options" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -391,7 +391,7 @@ export def "intiate-sync" [
 # GET /companies/{companyId}/sync/expenses/syncs/lastSuccessful/status
 # operationId: get-last-successful-sync
 export def "get-last-successful-sync" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "get-last-successful-sync" [
 # GET /companies/{companyId}/sync/expenses/syncs/latest/status
 # operationId: get-latest-sync
 export def "get-latest-sync" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,7 +463,7 @@ export def "get-latest-sync" [
 # GET /companies/{companyId}/sync/expenses/syncs/list/status
 # operationId: list-syncs
 export def "list-syncs" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -499,7 +499,7 @@ export def "list-syncs" [
 # GET /companies/{companyId}/sync/expenses/syncs/{syncId}/status
 # operationId: get-sync-by-id
 export def "get-sync-by-id" [
-  company_id: any
+  company_id: string
   sync_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -537,7 +537,7 @@ export def "get-sync-by-id" [
 # GET /companies/{companyId}/sync/expenses/syncs/{syncId}/transactions
 # operationId: list-sync-transactions
 export def "list-sync-transactions" [
-  company_id: any
+  company_id: string
   sync_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -548,13 +548,14 @@ export def "list-sync-transactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 1, e.g. 1)
+  --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (required, format: int32, default: 1, e.g. 1)
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100, e.g. 100)
 ]: nothing -> record<results: table<integrationType: string, message: string, status: string, transactionId: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($sync_id | is-empty) { error make --unspanned { msg: "path parameter 'syncId' must be non-empty" } }
+  let page = ($page | default 1)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), sync_id: (encode-path-segment $sync_id)} | format pattern "/companies/{company_id}/sync/expenses/syncs/{sync_id}/transactions") $qp $auth.query)
   let accept_val = "application/json"
@@ -578,7 +579,7 @@ export def "list-sync-transactions" [
 # GET /companies/{companyId}/sync/expenses/syncs/{syncId}/transactions/{transactionId}
 # operationId: get-sync-transaction
 export def "get-sync-transaction" [
-  company_id: any
+  company_id: string
   sync_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -618,7 +619,7 @@ export def "get-sync-transaction" [
 # POST /companies/{companyId}/sync/expenses/syncs/{syncId}/transactions/{transactionId}/attachments
 # operationId: upload-attachment
 export def "upload-attachment" [
-  company_id: any
+  company_id: string
   sync_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -643,8 +644,8 @@ export def "upload-attachment" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url

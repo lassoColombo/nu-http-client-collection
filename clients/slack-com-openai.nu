@@ -1,4 +1,4 @@
-# Auto-generated client for Slack AI Plugin vv1
+# Auto-generated client for Slack AI Plugin v1
 # Source: https://api.apis.guru/v2/specs/slack.com/openai/v1/openapi.json
 # Auth: --token flag or $env.SLACK_AI_PLUGIN_TOKEN
 

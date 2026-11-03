@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -96,9 +96,13 @@ def base-url-completer [] { ["http://ssm-contacts.us-east-1.amazonaws.com" "http
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def accept-type-completer [] { ["DELIVERED" "READ"] }
+def accept-code-validation-completer [] { ["ENFORCE" "IGNORE"] }
 def x-amz-target-completer [] { ["SSMContacts.AcceptPage"] }
 def x-amz-target-completer-1 [] { ["SSMContacts.ActivateContactChannel"] }
+def type-completer [] { ["ESCALATION" "ONCALL_SCHEDULE" "PERSONAL"] }
 def x-amz-target-completer-2 [] { ["SSMContacts.CreateContact"] }
+def type-completer-1 [] { ["EMAIL" "SMS" "VOICE"] }
 def x-amz-target-completer-3 [] { ["SSMContacts.CreateContactChannel"] }
 def x-amz-target-completer-4 [] { ["SSMContacts.CreateRotation"] }
 def x-amz-target-completer-5 [] { ["SSMContacts.CreateRotationOverride"] }
@@ -180,17 +184,18 @@ export def "accept-page" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  page_id: any
-  --contact-channel-id: any
-  accept_type: any
-  --note: any
-  accept_code: any
-  --accept-code-validation: any
+  --x-amz-target: string@x-amz-target-completer # required
+  page_id: string # The Amazon Resource Name (ARN) of the engagement to a contact channel.
+  --contact-channel-id: string # The ARN of the contact channel.
+  accept_type: string@accept-type-completer # The type indicates if the page was DELIVERED or READ.
+  --note: string # Information provided by the user when the user acknowledges the page.
+  accept_code: string # A 6-digit code used to acknowledge the page.
+  --accept-code-validation: string@accept-code-validation-completer # An optional field that Incident Manager uses to ENFORCE AcceptCode validation when acknowledging an page. Acknowledgement can occur by replying to a page, or when entering the AcceptCode in the console. Enforcing AcceptCode validation causes Incident Manager to verify that the code entered by the user matches the code sent by Incident Manager with the page. Incident Manager can also IGNORE AcceptCode validation. Ignoring AcceptCode validation causes Incident Manager to accept any value entered for the AcceptCode.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.AcceptPage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"PageId": $page_id, "ContactChannelId": $contact_channel_id, "AcceptType": $accept_type, "Note": $note, "AcceptCode": $accept_code, "AcceptCodeValidation": $accept_code_validation} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -233,13 +238,14 @@ export def "activate-contact-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  contact_channel_id: any
-  activation_code: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  contact_channel_id: string # The Amazon Resource Name (ARN) of the contact channel.
+  activation_code: string # The code sent to the contact channel when it was created in the contact.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.ActivateContactChannel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactChannelId": $contact_channel_id, "ActivationCode": $activation_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -265,6 +271,8 @@ export def "activate-contact-channel" [
 #
 # POST /
 # operationId: CreateContact
+# --Plan shape: {Stages?: list, RotationIds?: list<string>}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -282,17 +290,18 @@ export def "create-contact" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  alias: any
-  --display-name: any
-  type: any
-  plan: any
-  --tags: any
-  --idempotency-token: any
-]: any -> record<ContactArn: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  alias: string # The short name to quickly identify a contact or escalation plan. The contact alias must be unique and identifiable.
+  --display-name: string # The full name of the contact or escalation plan.
+  type: string@type-completer # To create an escalation plan use ESCALATION. To create a contact use PERSONAL.
+  plan: record # Information about the stages and on-call rotation teams associated with an escalation plan or engagement plan. — shape: {Stages?: list, RotationIds?: list<string>}
+  --tags: list # Adds a tag to the target. You can only tag resources created in the first Region of your replication set. — item shape: {Key?: string, Value?: string}
+  --idempotency-token: string # A token ensuring that the operation is called only once with the specified details.
+]: any -> record<ContactArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.CreateContact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Alias": $alias, "DisplayName": $display_name, "Type": $type, "Plan": $plan, "Tags": $tags, "IdempotencyToken": $idempotency_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -318,6 +327,7 @@ export def "create-contact" [
 #
 # POST /
 # operationId: CreateContactChannel
+# --DeliveryAddress shape: {SimpleAddress?: string}
 export def "create-contact-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,17 +345,18 @@ export def "create-contact-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  contact_id: any
-  name: any
-  type: any
-  delivery_address: any
-  --defer-activation: any
-  --idempotency-token: any
-]: any -> record<ContactChannelArn: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  contact_id: string # The Amazon Resource Name (ARN) of the contact you are adding the contact channel to.
+  name: string # The name of the contact channel.
+  type: string@type-completer-1 # Incident Manager supports three types of contact channels: SMS VOICE EMAIL
+  delivery_address: record # The details that Incident Manager uses when trying to engage the contact channel. — shape: {SimpleAddress?: string}
+  --defer-activation: oneof<nothing, bool> # If you want to activate the channel at a later time, you can choose to defer activation. Incident Manager can't engage your contact channel until it has been activated.
+  --idempotency-token: string # A token ensuring that the operation is called only once with the specified details.
+]: any -> record<ContactChannelArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.CreateContactChannel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactId": $contact_id, "Name": $name, "Type": $type, "DeliveryAddress": $delivery_address, "DeferActivation": $defer_activation, "IdempotencyToken": $idempotency_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -371,6 +382,8 @@ export def "create-contact-channel" [
 #
 # POST /
 # operationId: CreateRotation
+# --Recurrence shape: {MonthlySettings?: list, WeeklySettings?: list, DailySettings?: list, NumberOfOnCalls: int, ShiftCoverages?: record, RecurrenceMultiplier: int}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-rotation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -388,18 +401,19 @@ export def "create-rotation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  name: any
-  contact_ids: any
-  --start-time: any
-  time_zone_id: any
-  recurrence: any
-  --tags: any
-  --idempotency-token: any
-]: any -> record<RotationArn: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  name: string # The name of the rotation.
+  contact_ids: list<string> # The Amazon Resource Names (ARNs) of the contacts to add to the rotation. The order that you list the contacts in is their shift order in the rotation schedule. To change the order of the contact's shifts, use the UpdateRotation operation.
+  --start-time: string # The date and time that the rotation goes into effect. (format: date-time)
+  time_zone_id: string # The time zone to base the rotation’s activity on in Internet Assigned Numbers Authority (IANA) format. For example: "America/Los_Angeles", "UTC", or "Asia/Seoul". For more information, see the Time Zone Database (https://www.iana.org/time-zones) on the IANA website. Designators for time zones that don’t support Daylight Savings Time rules, such as Pacific Standard Time (PST) and Pacific Daylight Time (PDT), are not supported.
+  recurrence: record # Information about when an on-call rotation is in effect and how long the rotation period lasts. — shape: {MonthlySettings?: list, WeeklySettings?: list, DailySettings?: list, NumberOfOnCalls: int, ShiftCoverages?: record, RecurrenceMultiplier: int}
+  --tags: list # Optional metadata to assign to the rotation. Tags enable you to categorize a resource in different ways, such as by purpose, owner, or environment. For more information, see Tagging Incident Manager resources (https://docs.aws.amazon.com/incident-manager/latest/userguide/tagging.html) in the Incident Manager User Guide. — item shape: {Key?: string, Value?: string}
+  --idempotency-token: string # A token that ensures that the operation is called only once with the specified details.
+]: any -> record<RotationArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.CreateRotation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "ContactIds": $contact_ids, "StartTime": $start_time, "TimeZoneId": $time_zone_id, "Recurrence": $recurrence, "Tags": $tags, "IdempotencyToken": $idempotency_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -442,16 +456,17 @@ export def "create-rotation-override" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  rotation_id: any
-  new_contact_ids: any
-  start_time: any
-  end_time: any
-  --idempotency-token: any
-]: any -> record<RotationOverrideId: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  rotation_id: string # The Amazon Resource Name (ARN) of the rotation to create an override for.
+  new_contact_ids: list<string> # The Amazon Resource Names (ARNs) of the contacts to replace those in the current on-call rotation with. If you want to include any current team members in the override shift, you must include their ARNs in the new contact ID list.
+  start_time: string # The date and time when the override goes into effect. (format: date-time)
+  end_time: string # The date and time when the override ends. (format: date-time)
+  --idempotency-token: string # A token that ensures that the operation is called only once with the specified details.
+]: any -> record<RotationOverrideId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.CreateRotationOverride")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RotationId": $rotation_id, "NewContactIds": $new_contact_ids, "StartTime": $start_time, "EndTime": $end_time, "IdempotencyToken": $idempotency_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -494,12 +509,13 @@ export def "deactivate-contact-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  contact_channel_id: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  contact_channel_id: string # The Amazon Resource Name (ARN) of the contact channel you're deactivating.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.DeactivateContactChannel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactChannelId": $contact_channel_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -542,12 +558,13 @@ export def "delete-contact" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  contact_id: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  contact_id: string # The Amazon Resource Name (ARN) of the contact that you're deleting.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.DeleteContact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactId": $contact_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -590,12 +607,13 @@ export def "delete-contact-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  contact_channel_id: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  contact_channel_id: string # The Amazon Resource Name (ARN) of the contact channel.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.DeleteContactChannel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactChannelId": $contact_channel_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -638,12 +656,13 @@ export def "delete-rotation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  rotation_id: any
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  rotation_id: string # The Amazon Resource Name (ARN) of the on-call rotation to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.DeleteRotation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RotationId": $rotation_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -686,13 +705,14 @@ export def "delete-rotation-override" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  rotation_id: any
-  rotation_override_id: any
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  rotation_id: string # The Amazon Resource Name (ARN) of the rotation that was overridden.
+  rotation_override_id: string # The Amazon Resource Name (ARN) of the on-call rotation override to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.DeleteRotationOverride")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RotationId": $rotation_id, "RotationOverrideId": $rotation_override_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -735,12 +755,13 @@ export def "describe-engagement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  engagement_id: any
-]: any -> record<ContactArn: record, EngagementArn: record, Sender: record, Subject: record, Content: record, PublicSubject: record, PublicContent: record, IncidentId: record, StartTime: record, StopTime: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  engagement_id: string # The Amazon Resource Name (ARN) of the engagement you want the details of.
+]: any -> record<ContactArn: string, EngagementArn: string, Sender: string, Subject: string, Content: string, PublicSubject: string, PublicContent: string, IncidentId: string, StartTime: string, StopTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.DescribeEngagement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EngagementId": $engagement_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -783,12 +804,13 @@ export def "describe-page" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  page_id: any
-]: any -> record<PageArn: record, EngagementArn: record, ContactArn: record, Sender: record, Subject: record, Content: record, PublicSubject: record, PublicContent: record, IncidentId: record, SentTime: record, ReadTime: record, DeliveryTime: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  page_id: string # The ID of the engagement to a contact channel.
+]: any -> record<PageArn: string, EngagementArn: string, ContactArn: string, Sender: string, Subject: string, Content: string, PublicSubject: string, PublicContent: string, IncidentId: string, SentTime: string, ReadTime: string, DeliveryTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.DescribePage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"PageId": $page_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -831,12 +853,13 @@ export def "get-contact" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  contact_id: any
-]: any -> record<ContactArn: record, Alias: record, DisplayName: record, Type: record, Plan: record<Stages: record, RotationIds: record>> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  contact_id: string # The Amazon Resource Name (ARN) of the contact or escalation plan.
+]: any -> record<ContactArn: string, Alias: string, DisplayName: string, Type: string, Plan: record<Stages: list<record>, RotationIds: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.GetContact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactId": $contact_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -879,12 +902,13 @@ export def "get-contact-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  contact_channel_id: any
-]: any -> record<ContactArn: record, ContactChannelArn: record, Name: record, Type: record, DeliveryAddress: record<SimpleAddress: record>, ActivationStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  contact_channel_id: string # The Amazon Resource Name (ARN) of the contact channel you want information about.
+]: any -> record<ContactArn: string, ContactChannelArn: string, Name: string, Type: string, DeliveryAddress: record<SimpleAddress: string>, ActivationStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.GetContactChannel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactChannelId": $contact_channel_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -927,12 +951,13 @@ export def "get-contact-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  contact_arn: any
-]: any -> record<ContactArn: record, Policy: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  contact_arn: string # The Amazon Resource Name (ARN) of the contact or escalation plan.
+]: any -> record<ContactArn: string, Policy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.GetContactPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactArn": $contact_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -975,12 +1000,13 @@ export def "get-rotation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  rotation_id: any
-]: any -> record<RotationArn: record, Name: record, ContactIds: record, StartTime: record, TimeZoneId: record, Recurrence: record<MonthlySettings: record, WeeklySettings: record, DailySettings: record, NumberOfOnCalls: record, ShiftCoverages: record, RecurrenceMultiplier: record>> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  rotation_id: string # The Amazon Resource Name (ARN) of the on-call rotation to retrieve information about.
+]: any -> record<RotationArn: string, Name: string, ContactIds: list<string>, StartTime: string, TimeZoneId: string, Recurrence: record<MonthlySettings: list<record>, WeeklySettings: list<record>, DailySettings: list<record>, NumberOfOnCalls: int, ShiftCoverages: record, RecurrenceMultiplier: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.GetRotation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RotationId": $rotation_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1023,13 +1049,14 @@ export def "get-rotation-override" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  rotation_id: any
-  rotation_override_id: any
-]: any -> record<RotationOverrideId: record, RotationArn: record, NewContactIds: record, StartTime: record, EndTime: record, CreateTime: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  rotation_id: string # The Amazon Resource Name (ARN) of the overridden rotation to retrieve information about.
+  rotation_override_id: string # The Amazon Resource Name (ARN) of the on-call rotation override to retrieve information about.
+]: any -> record<RotationOverrideId: string, RotationArn: string, NewContactIds: list<string>, StartTime: string, EndTime: string, CreateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.GetRotationOverride")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RotationId": $rotation_id, "RotationOverrideId": $rotation_override_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1074,14 +1101,15 @@ export def "list-contact-channels" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  contact_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, ContactChannels: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  contact_id: string # The Amazon Resource Name (ARN) of the contact.
+  --next-token-body: string # The pagination token to continue to the next page of results. (body field)
+  --max-results-body: int # The maximum number of contact channels per page. (body field)
+]: any -> record<NextToken: string, ContactChannels: table<ContactChannelArn: string, ContactArn: string, Name: string, Type: string, DeliveryAddress: record, ActivationStatus: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.ListContactChannels")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ContactId": $contact_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1127,15 +1155,16 @@ export def "list-contacts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --alias-prefix: any
-  --type: any
-]: any -> record<NextToken: record, Contacts: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  --next-token-body: string # The pagination token to continue to the next page of results. (body field)
+  --max-results-body: int # The maximum number of contacts and escalation plans per page of results. (body field)
+  --alias-prefix: string # Used to list only contacts who's aliases start with the specified prefix.
+  --type: string@type-completer # The type of contact. A contact is type PERSONAL and an escalation plan is type ESCALATION.
+]: any -> record<NextToken: string, Contacts: table<ContactArn: string, Alias: string, DisplayName: string, Type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.ListContacts")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "AliasPrefix": $alias_prefix, "Type": $type} | compact
@@ -1162,6 +1191,7 @@ export def "list-contacts" [
 #
 # POST /
 # operationId: ListEngagements
+# --TimeRangeValue shape: {StartTime?: string, EndTime?: string}
 export def "list-engagements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1181,15 +1211,16 @@ export def "list-engagements" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --incident-id: any
-  --time-range-value: any
-]: any -> record<NextToken: record, Engagements: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  --next-token-body: string # The pagination token to continue to the next page of results. (body field)
+  --max-results-body: int # The maximum number of engagements per page of results. (body field)
+  --incident-id: string # The Amazon Resource Name (ARN) of the incident you're listing engagements for.
+  --time-range-value: record # A range of between two set times — shape: {StartTime?: string, EndTime?: string}
+]: any -> record<NextToken: string, Engagements: table<EngagementArn: string, ContactArn: string, Sender: string, IncidentId: string, StartTime: string, StopTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.ListEngagements")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "IncidentId": $incident_id, "TimeRangeValue": $time_range_value} | compact
@@ -1235,14 +1266,15 @@ export def "list-page-receipts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  page_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, Receipts: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  page_id: string # The Amazon Resource Name (ARN) of the engagement to a specific contact channel.
+  --next-token-body: string # The pagination token to continue to the next page of results. (body field)
+  --max-results-body: int # The maximum number of acknowledgements per page of results. (body field)
+]: any -> record<NextToken: string, Receipts: table<ContactChannelArn: string, ReceiptType: string, ReceiptInfo: string, ReceiptTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.ListPageReceipts")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"PageId": $page_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1287,13 +1319,14 @@ export def "list-page-resolutions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  --next-token-body: any #  (body field)
-  page_id: any
-]: any -> record<NextToken: record, PageResolutions: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  --next-token-body: string # A token to start the list. Use this token to get the next set of results. (body field)
+  page_id: string # The Amazon Resource Name (ARN) of the contact engaged for the incident.
+]: any -> record<NextToken: string, PageResolutions: table<ContactArn: string, Type: string, StageIndex: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.ListPageResolutions")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "PageId": $page_id} | compact
@@ -1339,14 +1372,15 @@ export def "list-pages-by-contact" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  contact_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, Pages: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  contact_id: string # The Amazon Resource Name (ARN) of the contact you are retrieving engagements for.
+  --next-token-body: string # The pagination token to continue to the next page of results. (body field)
+  --max-results-body: int # The maximum number of engagements to contact channels to list per page of results. (body field)
+]: any -> record<NextToken: string, Pages: table<PageArn: string, EngagementArn: string, ContactArn: string, Sender: string, IncidentId: string, SentTime: string, DeliveryTime: string, ReadTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.ListPagesByContact")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ContactId": $contact_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1392,14 +1426,15 @@ export def "list-pages-by-engagement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  engagement_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, Pages: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  engagement_id: string # The Amazon Resource Name (ARN) of the engagement.
+  --next-token-body: string # The pagination token to continue to the next page of results. (body field)
+  --max-results-body: int # The maximum number of engagements to contact channels to list per page of results. (body field)
+]: any -> record<NextToken: string, Pages: table<PageArn: string, EngagementArn: string, ContactArn: string, Sender: string, IncidentId: string, SentTime: string, DeliveryTime: string, ReadTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.ListPagesByEngagement")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"EngagementId": $engagement_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1426,6 +1461,8 @@ export def "list-pages-by-engagement" [
 #
 # POST /
 # operationId: ListPreviewRotationShifts
+# --Recurrence shape: {MonthlySettings?: list, WeeklySettings?: list, DailySettings?: list, NumberOfOnCalls: int, ShiftCoverages?: record, RecurrenceMultiplier: int}
+# --Overrides item shape: {NewMembers?: list<string>, StartTime?: string, EndTime?: string}
 export def "list-preview-rotation-shifts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1445,20 +1482,21 @@ export def "list-preview-rotation-shifts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  --rotation-start-time: any
-  --start-time: any
-  end_time: any
-  members: any
-  time_zone_id: any
-  recurrence: any
-  --overrides: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<RotationShifts: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  --rotation-start-time: string # The date and time a rotation would begin. The first shift is calculated from this date and time. (format: date-time)
+  --start-time: string # Used to filter the range of calculated shifts before sending the response back to the user. (format: date-time)
+  end_time: string # The date and time a rotation shift would end. (format: date-time)
+  members: list<string> # The contacts that would be assigned to a rotation.
+  time_zone_id: string # The time zone the rotation’s activity would be based on, in Internet Assigned Numbers Authority (IANA) format. For example: "America/Los_Angeles", "UTC", or "Asia/Seoul".
+  recurrence: record # Information about when an on-call rotation is in effect and how long the rotation period lasts. — shape: {MonthlySettings?: list, WeeklySettings?: list, DailySettings?: list, NumberOfOnCalls: int, ShiftCoverages?: record, RecurrenceMultiplier: int}
+  --overrides: list # Information about changes that would be made in a rotation override. — item shape: {NewMembers?: list<string>, StartTime?: string, EndTime?: string}
+  --next-token-body: string # A token to start the list. This token is used to get the next set of results. (body field)
+  --max-results-body: int # The maximum number of items to return for this call. The call also returns a token that can be specified in a subsequent call to get the next set of results. (body field)
+]: any -> record<RotationShifts: table<ContactIds: list, StartTime: string, EndTime: string, Type: string, ShiftDetails: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.ListPreviewRotationShifts")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"RotationStartTime": $rotation_start_time, "StartTime": $start_time, "EndTime": $end_time, "Members": $members, "TimeZoneId": $time_zone_id, "Recurrence": $recurrence, "Overrides": $overrides, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1504,16 +1542,17 @@ export def "list-rotation-overrides" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  rotation_id: any
-  start_time: any
-  end_time: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<RotationOverrides: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  rotation_id: string # The Amazon Resource Name (ARN) of the rotation to retrieve information about.
+  start_time: string # The date and time for the beginning of a time range for listing overrides. (format: date-time)
+  end_time: string # The date and time for the end of a time range for listing overrides. (format: date-time)
+  --next-token-body: string # A token to start the list. Use this token to get the next set of results. (body field)
+  --max-results-body: int # The maximum number of items to return for this call. The call also returns a token that you can specify in a subsequent call to get the next set of results. (body field)
+]: any -> record<RotationOverrides: table<RotationOverrideId: string, NewContactIds: list, StartTime: string, EndTime: string, CreateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.ListRotationOverrides")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"RotationId": $rotation_id, "StartTime": $start_time, "EndTime": $end_time, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1559,16 +1598,17 @@ export def "list-rotation-shifts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  rotation_id: any
-  --start-time: any
-  end_time: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<RotationShifts: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  rotation_id: string # The Amazon Resource Name (ARN) of the rotation to retrieve shift information about.
+  --start-time: string # The date and time for the beginning of the time range to list shifts for. (format: date-time)
+  end_time: string # The date and time for the end of the time range to list shifts for. (format: date-time)
+  --next-token-body: string # A token to start the list. Use this token to get the next set of results. (body field)
+  --max-results-body: int # The maximum number of items to return for this call. The call also returns a token that you can specify in a subsequent call to get the next set of results. (body field)
+]: any -> record<RotationShifts: table<ContactIds: list, StartTime: string, EndTime: string, Type: string, ShiftDetails: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.ListRotationShifts")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"RotationId": $rotation_id, "StartTime": $start_time, "EndTime": $end_time, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1614,14 +1654,15 @@ export def "list-rotations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  --rotation-name-prefix: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, Rotations: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  --rotation-name-prefix: string # A filter to include rotations in list results based on their common prefix. For example, entering prod returns a list of all rotation names that begin with prod, such as production and prod-1.
+  --next-token-body: string # A token to start the list. Use this token to get the next set of results. (body field)
+  --max-results-body: int # The maximum number of items to return for this call. The call also returns a token that you can specify in a subsequent call to get the next set of results. (body field)
+]: any -> record<NextToken: string, Rotations: table<RotationArn: string, Name: string, ContactIds: list, StartTime: string, TimeZoneId: string, Recurrence: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.ListRotations")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"RotationNamePrefix": $rotation_name_prefix, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1665,12 +1706,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  resource_arn: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the contact or escalation plan.
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1713,13 +1755,14 @@ export def "put-contact-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  contact_arn: any
-  policy: any
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  contact_arn: string # The Amazon Resource Name (ARN) of the contact or escalation plan.
+  policy: string # Details of the resource policy.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.PutContactPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactArn": $contact_arn, "Policy": $policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1762,12 +1805,13 @@ export def "send-activation-code" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  contact_channel_id: any
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  contact_channel_id: string # The Amazon Resource Name (ARN) of the contact channel.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.SendActivationCode")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactChannelId": $contact_channel_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1810,19 +1854,20 @@ export def "start-engagement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  contact_id: any
-  sender: any
-  subject: any
-  content: any
-  --public-subject: any
-  --public-content: any
-  --incident-id: any
-  --idempotency-token: any
-]: any -> record<EngagementArn: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  contact_id: string # The Amazon Resource Name (ARN) of the contact being engaged.
+  sender: string # The user that started the engagement.
+  subject: string # The secure subject of the message that was sent to the contact. Use this field for engagements to VOICE or EMAIL.
+  content: string # The secure content of the message that was sent to the contact. Use this field for engagements to VOICE or EMAIL.
+  --public-subject: string # The insecure subject of the message that was sent to the contact. Use this field for engagements to SMS.
+  --public-content: string # The insecure content of the message that was sent to the contact. Use this field for engagements to SMS.
+  --incident-id: string # The ARN of the incident that the engagement is part of.
+  --idempotency-token: string # A token ensuring that the operation is called only once with the specified details.
+]: any -> record<EngagementArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.StartEngagement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactId": $contact_id, "Sender": $sender, "Subject": $subject, "Content": $content, "PublicSubject": $public_subject, "PublicContent": $public_content, "IncidentId": $incident_id, "IdempotencyToken": $idempotency_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1865,13 +1910,14 @@ export def "stop-engagement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  engagement_id: any
-  --reason: any
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  engagement_id: string # The Amazon Resource Name (ARN) of the engagement.
+  --reason: string # The reason that you're stopping the engagement.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.StopEngagement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EngagementId": $engagement_id, "Reason": $reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1897,6 +1943,7 @@ export def "stop-engagement" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1914,13 +1961,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the contact or escalation plan.
+  tags: list # A list of tags that you are adding to the contact or escalation plan. — item shape: {Key?: string, Value?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1963,13 +2011,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the contact or escalation plan.
+  tag_keys: list<string> # The key of the tag that you want to remove.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1995,6 +2044,7 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateContact
+# --Plan shape: {Stages?: list, RotationIds?: list<string>}
 export def "update-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2012,14 +2062,15 @@ export def "update-contact" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  contact_id: any
-  --display-name: any
-  --plan: any
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  contact_id: string # The Amazon Resource Name (ARN) of the contact or escalation plan you're updating.
+  --display-name: string # The full name of the contact or escalation plan.
+  --plan: record # Information about the stages and on-call rotation teams associated with an escalation plan or engagement plan. — shape: {Stages?: list, RotationIds?: list<string>}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.UpdateContact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactId": $contact_id, "DisplayName": $display_name, "Plan": $plan} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2045,6 +2096,7 @@ export def "update-contact" [
 #
 # POST /
 # operationId: UpdateContactChannel
+# --DeliveryAddress shape: {SimpleAddress?: string}
 export def "update-contact-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2062,14 +2114,15 @@ export def "update-contact-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  contact_channel_id: any
-  --name: any
-  --delivery-address: any
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  contact_channel_id: string # The Amazon Resource Name (ARN) of the contact channel you want to update.
+  --name: string # The name of the contact channel.
+  --delivery-address: record # The details that Incident Manager uses when trying to engage the contact channel. — shape: {SimpleAddress?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.UpdateContactChannel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactChannelId": $contact_channel_id, "Name": $name, "DeliveryAddress": $delivery_address} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2095,6 +2148,7 @@ export def "update-contact-channel" [
 #
 # POST /
 # operationId: UpdateRotation
+# --Recurrence shape: {MonthlySettings?: list, WeeklySettings?: list, DailySettings?: list, NumberOfOnCalls: int, ShiftCoverages?: record, RecurrenceMultiplier: int}
 export def "update-rotation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2112,16 +2166,17 @@ export def "update-rotation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  rotation_id: any
-  --contact-ids: any
-  --start-time: any
-  --time-zone-id: any
-  recurrence: any
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  rotation_id: string # The Amazon Resource Name (ARN) of the rotation to update.
+  --contact-ids: list<string> # The Amazon Resource Names (ARNs) of the contacts to include in the updated rotation. The order in which you list the contacts is their shift order in the rotation schedule.
+  --start-time: string # The date and time the rotation goes into effect. (format: date-time)
+  --time-zone-id: string # The time zone to base the updated rotation’s activity on, in Internet Assigned Numbers Authority (IANA) format. For example: "America/Los_Angeles", "UTC", or "Asia/Seoul". For more information, see the Time Zone Database (https://www.iana.org/time-zones) on the IANA website. Designators for time zones that don’t support Daylight Savings Time Rules, such as Pacific Standard Time (PST) and Pacific Daylight Time (PDT), aren't supported.
+  recurrence: record # Information about when an on-call rotation is in effect and how long the rotation period lasts. — shape: {MonthlySettings?: list, WeeklySettings?: list, DailySettings?: list, NumberOfOnCalls: int, ShiftCoverages?: record, RecurrenceMultiplier: int}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SSMContacts.UpdateRotation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RotationId": $rotation_id, "ContactIds": $contact_ids, "StartTime": $start_time, "TimeZoneId": $time_zone_id, "Recurrence": $recurrence} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

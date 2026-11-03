@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -203,7 +203,7 @@ export def "read-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Job: record<Id: record, Arn: record, PipelineId: record, Input: record<Key: record, FrameRate: record, Resolution: record, AspectRatio: record, Interlaced: record, Container: record, Encryption: record, TimeSpan: record, InputCaptions: record, DetectedProperties: record>, Inputs: record, Output: record<Id: record, Key: record, ThumbnailPattern: record, ThumbnailEncryption: record, Rotate: record, PresetId: record, SegmentDuration: record, Status: record, StatusDetail: record, Duration: record, Width: record, Height: record, FrameRate: record, FileSize: record, DurationMillis: record, Watermarks: record, AlbumArt: record, Composition: record, Captions: record, Encryption: record, AppliedColorSpaceConversion: record>, Outputs: record, OutputKeyPrefix: record, Playlists: record, Status: record, UserMetadata: record, Timing: record<SubmitTimeMillis: record, StartTimeMillis: record, FinishTimeMillis: record>>> {
+]: nothing -> record<Job: record<Id: string, Arn: string, PipelineId: string, Input: record<Key: string, FrameRate: string, Resolution: string, AspectRatio: string, Interlaced: string, Container: string, Encryption: record, TimeSpan: record, InputCaptions: record, DetectedProperties: record>, Inputs: list<record>, Output: record<Id: string, Key: string, ThumbnailPattern: string, ThumbnailEncryption: record, Rotate: string, PresetId: string, SegmentDuration: string, Status: string, StatusDetail: string, Duration: int, Width: int, Height: int, FrameRate: string, FileSize: int, DurationMillis: int, Watermarks: list, AlbumArt: record, Composition: list, Captions: record, Encryption: record, AppliedColorSpaceConversion: string>, Outputs: list<record>, OutputKeyPrefix: string, Playlists: list<record>, Status: string, UserMetadata: record, Timing: record<SubmitTimeMillis: int, StartTimeMillis: int, FinishTimeMillis: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -230,11 +230,11 @@ export def "read-job" [
 #
 # POST /2012-09-25/jobs
 # operationId: CreateJob
-# --Input shape: {Key?: any, FrameRate?: any, Resolution?: any, AspectRatio?: any, Interlaced?: any, Container?: any, Encryption?: any, TimeSpan?: any, InputCaptions?: any, DetectedProperties?: any}
-# --Inputs item shape: {Key?: any, FrameRate?: any, Resolution?: any, AspectRatio?: any, Interlaced?: any, Container?: any, Encryption?: any, TimeSpan?: any, InputCaptions?: any, DetectedProperties?: any}
-# --Output shape: {Key?: any, ThumbnailPattern?: any, ThumbnailEncryption?: any, Rotate?: any, PresetId?: any, SegmentDuration?: any, Watermarks?: any, AlbumArt?: any, Composition?: any, Captions?: any, Encryption?: any}
-# --Outputs item shape: {Key?: any, ThumbnailPattern?: any, ThumbnailEncryption?: any, Rotate?: any, PresetId?: any, SegmentDuration?: any, Watermarks?: any, AlbumArt?: any, Composition?: any, Captions?: any, Encryption?: any}
-# --Playlists item shape: {Name?: any, Format?: any, OutputKeys?: any, HlsContentProtection?: any, PlayReadyDrm?: any}
+# --Input shape: {Key?: string, FrameRate?: string, Resolution?: string, AspectRatio?: string, Interlaced?: string, Container?: string, Encryption?: record, TimeSpan?: record, InputCaptions?: record, DetectedProperties?: record}
+# --Inputs item shape: {Key?: string, FrameRate?: string, Resolution?: string, AspectRatio?: string, Interlaced?: string, Container?: string, Encryption?: record, TimeSpan?: record, InputCaptions?: record, DetectedProperties?: record}
+# --Output shape: {Key?: string, ThumbnailPattern?: string, ThumbnailEncryption?: record, Rotate?: string, PresetId?: string, SegmentDuration?: string, Watermarks?: list, AlbumArt?: record, Composition?: list, Captions?: record, Encryption?: record}
+# --Outputs item shape: {Key?: string, ThumbnailPattern?: string, ThumbnailEncryption?: record, Rotate?: string, PresetId?: string, SegmentDuration?: string, Watermarks?: list, AlbumArt?: record, Composition?: list, Captions?: record, Encryption?: record}
+# --Playlists item shape: {Name?: string, Format?: string, OutputKeys?: list<string>, HlsContentProtection?: record, PlayReadyDrm?: record}
 export def "create-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -253,19 +253,19 @@ export def "create-job" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   pipeline_id: string # The Id of the pipeline that you want Elastic Transcoder to use for transcoding. The pipeline determines several settings, including the Amazon S3 bucket from which Elastic Transcoder gets the files to transcode and the bucket into which Elastic Transcoder puts the transcoded files.
-  --input: record # Information about the file that you're transcoding. — shape: {Key?: any, FrameRate?: any, Resolution?: any, AspectRatio?: any, Interlaced?: any, Container?: any, Encryption?: any, TimeSpan?: any, InputCaptions?: any, DetectedProperties?: any}
-  --inputs: list # A section of the request body that provides information about the files that are being transcoded. — item shape: {Key?: any, FrameRate?: any, Resolution?: any, AspectRatio?: any, Interlaced?: any, Container?: any, Encryption?: any, TimeSpan?: any, InputCaptions?: any, DetectedProperties?: any}
-  --output: record # The CreateJobOutput structure. — shape: {Key?: any, ThumbnailPattern?: any, ThumbnailEncryption?: any, Rotate?: any, PresetId?: any, SegmentDuration?: any, Watermarks?: any, AlbumArt?: any, Composition?: any, Captions?: any, Encryption?: any}
-  --outputs: list # A section of the request body that provides information about the transcoded (target) files. We recommend that you use the Outputs syntax instead of the Output syntax. — item shape: {Key?: any, ThumbnailPattern?: any, ThumbnailEncryption?: any, Rotate?: any, PresetId?: any, SegmentDuration?: any, Watermarks?: any, AlbumArt?: any, Composition?: any, Captions?: any, Encryption?: any}
+  --body-input: record # Information about the file that you're transcoding. — shape: {Key?: string, FrameRate?: string, Resolution?: string, AspectRatio?: string, Interlaced?: string, Container?: string, Encryption?: record, TimeSpan?: record, InputCaptions?: record, DetectedProperties?: record}
+  --inputs: list # A section of the request body that provides information about the files that are being transcoded. — item shape: {Key?: string, FrameRate?: string, Resolution?: string, AspectRatio?: string, Interlaced?: string, Container?: string, Encryption?: record, TimeSpan?: record, InputCaptions?: record, DetectedProperties?: record}
+  --output: record # The CreateJobOutput structure. — shape: {Key?: string, ThumbnailPattern?: string, ThumbnailEncryption?: record, Rotate?: string, PresetId?: string, SegmentDuration?: string, Watermarks?: list, AlbumArt?: record, Composition?: list, Captions?: record, Encryption?: record}
+  --outputs: list # A section of the request body that provides information about the transcoded (target) files. We recommend that you use the Outputs syntax instead of the Output syntax. — item shape: {Key?: string, ThumbnailPattern?: string, ThumbnailEncryption?: record, Rotate?: string, PresetId?: string, SegmentDuration?: string, Watermarks?: list, AlbumArt?: record, Composition?: list, Captions?: record, Encryption?: record}
   --output-key-prefix: string # The value, if any, that you want Elastic Transcoder to prepend to the names of all files that this job creates, including output files, thumbnails, and playlists.
-  --playlists: list # If you specify a preset in PresetId for which the value of Container is fmp4 (Fragmented MP4) or ts (MPEG-TS), Playlists contains information about the master playlists that you want Elastic Transcoder to create. The maximum number of master playlists in a job is 30. — item shape: {Name?: any, Format?: any, OutputKeys?: any, HlsContentProtection?: any, PlayReadyDrm?: any}
+  --playlists: list # If you specify a preset in PresetId for which the value of Container is fmp4 (Fragmented MP4) or ts (MPEG-TS), Playlists contains information about the master playlists that you want Elastic Transcoder to create. The maximum number of master playlists in a job is 30. — item shape: {Name?: string, Format?: string, OutputKeys?: list<string>, HlsContentProtection?: record, PlayReadyDrm?: record}
   --user-metadata: record # User-defined metadata that you want to associate with an Elastic Transcoder job. You specify metadata in key/value pairs, and you can add up to 10 key/value pairs per job. Elastic Transcoder does not guarantee that key/value pairs are returned in the same order in which you specify them.
-]: any -> record<Job: record<Id: record, Arn: record, PipelineId: record, Input: record<Key: record, FrameRate: record, Resolution: record, AspectRatio: record, Interlaced: record, Container: record, Encryption: record, TimeSpan: record, InputCaptions: record, DetectedProperties: record>, Inputs: record, Output: record<Id: record, Key: record, ThumbnailPattern: record, ThumbnailEncryption: record, Rotate: record, PresetId: record, SegmentDuration: record, Status: record, StatusDetail: record, Duration: record, Width: record, Height: record, FrameRate: record, FileSize: record, DurationMillis: record, Watermarks: record, AlbumArt: record, Composition: record, Captions: record, Encryption: record, AppliedColorSpaceConversion: record>, Outputs: record, OutputKeyPrefix: record, Playlists: record, Status: record, UserMetadata: record, Timing: record<SubmitTimeMillis: record, StartTimeMillis: record, FinishTimeMillis: record>>> {
+]: any -> record<Job: record<Id: string, Arn: string, PipelineId: string, Input: record<Key: string, FrameRate: string, Resolution: string, AspectRatio: string, Interlaced: string, Container: string, Encryption: record, TimeSpan: record, InputCaptions: record, DetectedProperties: record>, Inputs: list<record>, Output: record<Id: string, Key: string, ThumbnailPattern: string, ThumbnailEncryption: record, Rotate: string, PresetId: string, SegmentDuration: string, Status: string, StatusDetail: string, Duration: int, Width: int, Height: int, FrameRate: string, FileSize: int, DurationMillis: int, Watermarks: list, AlbumArt: record, Composition: list, Captions: record, Encryption: record, AppliedColorSpaceConversion: string>, Outputs: list<record>, OutputKeyPrefix: string, Playlists: list<record>, Status: string, UserMetadata: record, Timing: record<SubmitTimeMillis: int, StartTimeMillis: int, FinishTimeMillis: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2012-09-25/jobs" $auth.query)
-  let req_body = {"PipelineId": $pipeline_id, "Input": $input, "Inputs": $inputs, "Output": $output, "Outputs": $outputs, "OutputKeyPrefix": $output_key_prefix, "Playlists": $playlists, "UserMetadata": $user_metadata} | compact
+  let req_body = {"PipelineId": $pipeline_id, "Input": $body_input, "Inputs": $inputs, "Output": $output, "Outputs": $outputs, "OutputKeyPrefix": $output_key_prefix, "Playlists": $playlists, "UserMetadata": $user_metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -289,9 +289,9 @@ export def "create-job" [
 #
 # POST /2012-09-25/pipelines
 # operationId: CreatePipeline
-# --Notifications shape: {Progressing?: any, Completed?: any, Warning?: any, Error?: any}
-# --ContentConfig shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
-# --ThumbnailConfig shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
+# --Notifications shape: {Progressing?: string, Completed?: string, Warning?: string, Error?: string}
+# --ContentConfig shape: {Bucket?: string, StorageClass?: string, Permissions?: list}
+# --ThumbnailConfig shape: {Bucket?: string, StorageClass?: string, Permissions?: list}
 export def "create-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -314,10 +314,10 @@ export def "create-pipeline" [
   --output-bucket: string # The Amazon S3 bucket in which you want Elastic Transcoder to save the transcoded files. (Use this, or use ContentConfig:Bucket plus ThumbnailConfig:Bucket.) Specify this value when all of the following are true: You want to save transcoded files, thumbnails (if any), and playlists (if any) together in one bucket. You do not want to specify the users or groups who have access to the transcoded files, thumbnails, and playlists. You do not want to specify the permissions that Elastic Transcoder grants to the files. When Elastic Transcoder saves files in OutputBucket, it grants full control over the files only to the AWS account that owns the role that is specified by Role. You want to associate the transcoded files and thumbnails with the Amazon S3 Standard storage class. If you want to save transcoded files and playlists in one bucket and thumbnails in another bucket, specify which users can access the transcoded files or the permissions the users have, or change the Amazon S3 storage class, omit OutputBucket and specify values for ContentConfig and ThumbnailConfig instead.
   role: string # The IAM Amazon Resource Name (ARN) for the role that you want Elastic Transcoder to use to create the pipeline.
   --aws-kms-key-arn: string # The AWS Key Management Service (AWS KMS) key that you want to use with this pipeline. If you use either s3 or s3-aws-kms as your Encryption:Mode, you don't need to provide a key with your job because a default key, known as an AWS-KMS key, is created for you automatically. You need to provide an AWS-KMS key only if you want to use a non-default AWS-KMS key, or if you are using an Encryption:Mode of aes-cbc-pkcs7, aes-ctr, or aes-gcm.
-  --notifications: record # The Amazon Simple Notification Service (Amazon SNS) topic or topics to notify in order to report job status. To receive notifications, you must also subscribe to the new topic in the Amazon SNS console. — shape: {Progressing?: any, Completed?: any, Warning?: any, Error?: any}
-  --content-config: record # The PipelineOutputConfig structure. — shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
-  --thumbnail-config: record # The PipelineOutputConfig structure. — shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
-]: any -> record<Pipeline: record<Id: record, Arn: record, Name: record, Status: record, InputBucket: record, OutputBucket: record, Role: record, AwsKmsKeyArn: record, Notifications: record<Progressing: record, Completed: record, Warning: record, Error: record>, ContentConfig: record<Bucket: record, StorageClass: record, Permissions: record>, ThumbnailConfig: record<Bucket: record, StorageClass: record, Permissions: record>>, Warnings: record> {
+  --notifications: record # The Amazon Simple Notification Service (Amazon SNS) topic or topics to notify in order to report job status. To receive notifications, you must also subscribe to the new topic in the Amazon SNS console. — shape: {Progressing?: string, Completed?: string, Warning?: string, Error?: string}
+  --content-config: record # The PipelineOutputConfig structure. — shape: {Bucket?: string, StorageClass?: string, Permissions?: list}
+  --thumbnail-config: record # The PipelineOutputConfig structure. — shape: {Bucket?: string, StorageClass?: string, Permissions?: list}
+]: any -> record<Pipeline: record<Id: string, Arn: string, Name: string, Status: string, InputBucket: string, OutputBucket: string, Role: string, AwsKmsKeyArn: string, Notifications: record<Progressing: string, Completed: string, Warning: string, Error: string>, ContentConfig: record<Bucket: string, StorageClass: string, Permissions: list>, ThumbnailConfig: record<Bucket: string, StorageClass: string, Permissions: list>>, Warnings: table<Code: string, Message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -365,7 +365,7 @@ export def "list-pipelines" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Pipelines: record, NextPageToken: record> {
+]: nothing -> record<Pipelines: table<Id: string, Arn: string, Name: string, Status: string, InputBucket: string, OutputBucket: string, Role: string, AwsKmsKeyArn: string, Notifications: record, ContentConfig: record, ThumbnailConfig: record>, NextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Ascending" $ascending "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
@@ -392,9 +392,9 @@ export def "list-pipelines" [
 #
 # POST /2012-09-25/presets
 # operationId: CreatePreset
-# --Video shape: {Codec?: any, CodecOptions?: any, KeyframesMaxDist?: any, FixedGOP?: any, BitRate?: any, FrameRate?: any, MaxFrameRate?: any, Resolution?: any, AspectRatio?: any, MaxWidth?: any, MaxHeight?: any, DisplayAspectRatio?: any, SizingPolicy?: any, PaddingPolicy?: any, Watermarks?: any}
-# --Audio shape: {Codec?: any, SampleRate?: any, BitRate?: any, Channels?: any, AudioPackingMode?: any, CodecOptions?: any}
-# --Thumbnails shape: {Format?: any, Interval?: any, Resolution?: any, AspectRatio?: any, MaxWidth?: any, MaxHeight?: any, SizingPolicy?: any, PaddingPolicy?: any}
+# --Video shape: {Codec?: string, CodecOptions?: record, KeyframesMaxDist?: string, FixedGOP?: string, BitRate?: string, FrameRate?: string, MaxFrameRate?: string, Resolution?: string, AspectRatio?: string, MaxWidth?: string, MaxHeight?: string, DisplayAspectRatio?: string, SizingPolicy?: string, PaddingPolicy?: string, Watermarks?: list}
+# --Audio shape: {Codec?: string, SampleRate?: string, BitRate?: string, Channels?: string, AudioPackingMode?: string, CodecOptions?: record}
+# --Thumbnails shape: {Format?: string, Interval?: string, Resolution?: string, AspectRatio?: string, MaxWidth?: string, MaxHeight?: string, SizingPolicy?: string, PaddingPolicy?: string}
 export def "create-preset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -415,10 +415,10 @@ export def "create-preset" [
   name: string # The name of the preset. We recommend that the name be unique within the AWS account, but uniqueness is not enforced.
   --description: string # A description of the preset.
   container: string # The container type for the output file. Valid values include flac, flv, fmp4, gif, mp3, mp4, mpg, mxf, oga, ogg, ts, and webm.
-  --video: record # The VideoParameters structure. — shape: {Codec?: any, CodecOptions?: any, KeyframesMaxDist?: any, FixedGOP?: any, BitRate?: any, FrameRate?: any, MaxFrameRate?: any, Resolution?: any, AspectRatio?: any, MaxWidth?: any, MaxHeight?: any, DisplayAspectRatio?: any, SizingPolicy?: any, PaddingPolicy?: any, Watermarks?: any}
-  --audio: record # Parameters required for transcoding audio. — shape: {Codec?: any, SampleRate?: any, BitRate?: any, Channels?: any, AudioPackingMode?: any, CodecOptions?: any}
-  --thumbnails: record # Thumbnails for videos. — shape: {Format?: any, Interval?: any, Resolution?: any, AspectRatio?: any, MaxWidth?: any, MaxHeight?: any, SizingPolicy?: any, PaddingPolicy?: any}
-]: any -> record<Preset: record<Id: record, Arn: record, Name: record, Description: record, Container: record, Audio: record<Codec: record, SampleRate: record, BitRate: record, Channels: record, AudioPackingMode: record, CodecOptions: record>, Video: record<Codec: record, CodecOptions: record, KeyframesMaxDist: record, FixedGOP: record, BitRate: record, FrameRate: record, MaxFrameRate: record, Resolution: record, AspectRatio: record, MaxWidth: record, MaxHeight: record, DisplayAspectRatio: record, SizingPolicy: record, PaddingPolicy: record, Watermarks: record>, Thumbnails: record<Format: record, Interval: record, Resolution: record, AspectRatio: record, MaxWidth: record, MaxHeight: record, SizingPolicy: record, PaddingPolicy: record>, Type: record>, Warning: record> {
+  --video: record # The VideoParameters structure. — shape: {Codec?: string, CodecOptions?: record, KeyframesMaxDist?: string, FixedGOP?: string, BitRate?: string, FrameRate?: string, MaxFrameRate?: string, Resolution?: string, AspectRatio?: string, MaxWidth?: string, MaxHeight?: string, DisplayAspectRatio?: string, SizingPolicy?: string, PaddingPolicy?: string, Watermarks?: list}
+  --audio: record # Parameters required for transcoding audio. — shape: {Codec?: string, SampleRate?: string, BitRate?: string, Channels?: string, AudioPackingMode?: string, CodecOptions?: record}
+  --thumbnails: record # Thumbnails for videos. — shape: {Format?: string, Interval?: string, Resolution?: string, AspectRatio?: string, MaxWidth?: string, MaxHeight?: string, SizingPolicy?: string, PaddingPolicy?: string}
+]: any -> record<Preset: record<Id: string, Arn: string, Name: string, Description: string, Container: string, Audio: record<Codec: string, SampleRate: string, BitRate: string, Channels: string, AudioPackingMode: string, CodecOptions: record>, Video: record<Codec: string, CodecOptions: record, KeyframesMaxDist: string, FixedGOP: string, BitRate: string, FrameRate: string, MaxFrameRate: string, Resolution: string, AspectRatio: string, MaxWidth: string, MaxHeight: string, DisplayAspectRatio: string, SizingPolicy: string, PaddingPolicy: string, Watermarks: list>, Thumbnails: record<Format: string, Interval: string, Resolution: string, AspectRatio: string, MaxWidth: string, MaxHeight: string, SizingPolicy: string, PaddingPolicy: string>, Type: string>, Warning: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -466,7 +466,7 @@ export def "list-presets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Presets: record, NextPageToken: record> {
+]: nothing -> record<Presets: table<Id: string, Arn: string, Name: string, Description: string, Container: string, Audio: record, Video: record, Thumbnails: record, Type: string>, NextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Ascending" $ascending "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
@@ -556,7 +556,7 @@ export def "read-pipeline" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Pipeline: record<Id: record, Arn: record, Name: record, Status: record, InputBucket: record, OutputBucket: record, Role: record, AwsKmsKeyArn: record, Notifications: record<Progressing: record, Completed: record, Warning: record, Error: record>, ContentConfig: record<Bucket: record, StorageClass: record, Permissions: record>, ThumbnailConfig: record<Bucket: record, StorageClass: record, Permissions: record>>, Warnings: record> {
+]: nothing -> record<Pipeline: record<Id: string, Arn: string, Name: string, Status: string, InputBucket: string, OutputBucket: string, Role: string, AwsKmsKeyArn: string, Notifications: record<Progressing: string, Completed: string, Warning: string, Error: string>, ContentConfig: record<Bucket: string, StorageClass: string, Permissions: list>, ThumbnailConfig: record<Bucket: string, StorageClass: string, Permissions: list>>, Warnings: table<Code: string, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -583,9 +583,9 @@ export def "read-pipeline" [
 #
 # PUT /2012-09-25/pipelines/{Id}
 # operationId: UpdatePipeline
-# --Notifications shape: {Progressing?: any, Completed?: any, Warning?: any, Error?: any}
-# --ContentConfig shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
-# --ThumbnailConfig shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
+# --Notifications shape: {Progressing?: string, Completed?: string, Warning?: string, Error?: string}
+# --ContentConfig shape: {Bucket?: string, StorageClass?: string, Permissions?: list}
+# --ThumbnailConfig shape: {Bucket?: string, StorageClass?: string, Permissions?: list}
 export def "update-pipeline" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -608,10 +608,10 @@ export def "update-pipeline" [
   --input-bucket: string # The Amazon S3 bucket in which you saved the media files that you want to transcode and the graphics that you want to use as watermarks.
   --role: string # The IAM Amazon Resource Name (ARN) for the role that you want Elastic Transcoder to use to transcode jobs for this pipeline.
   --aws-kms-key-arn: string # The AWS Key Management Service (AWS KMS) key that you want to use with this pipeline. If you use either s3 or s3-aws-kms as your Encryption:Mode, you don't need to provide a key with your job because a default key, known as an AWS-KMS key, is created for you automatically. You need to provide an AWS-KMS key only if you want to use a non-default AWS-KMS key, or if you are using an Encryption:Mode of aes-cbc-pkcs7, aes-ctr, or aes-gcm.
-  --notifications: record # The Amazon Simple Notification Service (Amazon SNS) topic or topics to notify in order to report job status. To receive notifications, you must also subscribe to the new topic in the Amazon SNS console. — shape: {Progressing?: any, Completed?: any, Warning?: any, Error?: any}
-  --content-config: record # The PipelineOutputConfig structure. — shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
-  --thumbnail-config: record # The PipelineOutputConfig structure. — shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
-]: any -> record<Pipeline: record<Id: record, Arn: record, Name: record, Status: record, InputBucket: record, OutputBucket: record, Role: record, AwsKmsKeyArn: record, Notifications: record<Progressing: record, Completed: record, Warning: record, Error: record>, ContentConfig: record<Bucket: record, StorageClass: record, Permissions: record>, ThumbnailConfig: record<Bucket: record, StorageClass: record, Permissions: record>>, Warnings: record> {
+  --notifications: record # The Amazon Simple Notification Service (Amazon SNS) topic or topics to notify in order to report job status. To receive notifications, you must also subscribe to the new topic in the Amazon SNS console. — shape: {Progressing?: string, Completed?: string, Warning?: string, Error?: string}
+  --content-config: record # The PipelineOutputConfig structure. — shape: {Bucket?: string, StorageClass?: string, Permissions?: list}
+  --thumbnail-config: record # The PipelineOutputConfig structure. — shape: {Bucket?: string, StorageClass?: string, Permissions?: list}
+]: any -> record<Pipeline: record<Id: string, Arn: string, Name: string, Status: string, InputBucket: string, OutputBucket: string, Role: string, AwsKmsKeyArn: string, Notifications: record<Progressing: string, Completed: string, Warning: string, Error: string>, ContentConfig: record<Bucket: string, StorageClass: string, Permissions: list>, ThumbnailConfig: record<Bucket: string, StorageClass: string, Permissions: list>>, Warnings: table<Code: string, Message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -704,7 +704,7 @@ export def "read-preset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Preset: record<Id: record, Arn: record, Name: record, Description: record, Container: record, Audio: record<Codec: record, SampleRate: record, BitRate: record, Channels: record, AudioPackingMode: record, CodecOptions: record>, Video: record<Codec: record, CodecOptions: record, KeyframesMaxDist: record, FixedGOP: record, BitRate: record, FrameRate: record, MaxFrameRate: record, Resolution: record, AspectRatio: record, MaxWidth: record, MaxHeight: record, DisplayAspectRatio: record, SizingPolicy: record, PaddingPolicy: record, Watermarks: record>, Thumbnails: record<Format: record, Interval: record, Resolution: record, AspectRatio: record, MaxWidth: record, MaxHeight: record, SizingPolicy: record, PaddingPolicy: record>, Type: record>> {
+]: nothing -> record<Preset: record<Id: string, Arn: string, Name: string, Description: string, Container: string, Audio: record<Codec: string, SampleRate: string, BitRate: string, Channels: string, AudioPackingMode: string, CodecOptions: record>, Video: record<Codec: string, CodecOptions: record, KeyframesMaxDist: string, FixedGOP: string, BitRate: string, FrameRate: string, MaxFrameRate: string, Resolution: string, AspectRatio: string, MaxWidth: string, MaxHeight: string, DisplayAspectRatio: string, SizingPolicy: string, PaddingPolicy: string, Watermarks: list>, Thumbnails: record<Format: string, Interval: string, Resolution: string, AspectRatio: string, MaxWidth: string, MaxHeight: string, SizingPolicy: string, PaddingPolicy: string>, Type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -751,7 +751,7 @@ export def "list-jobs-by-pipeline" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Jobs: record, NextPageToken: record> {
+]: nothing -> record<Jobs: table<Id: string, Arn: string, PipelineId: string, Input: record, Inputs: list, Output: record, Outputs: list, OutputKeyPrefix: string, Playlists: list, Status: string, UserMetadata: record, Timing: record>, NextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pipeline_id | is-empty) { error make --unspanned { msg: "path parameter 'PipelineId' must be non-empty" } }
@@ -799,7 +799,7 @@ export def "list-jobs-by-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Jobs: record, NextPageToken: record> {
+]: nothing -> record<Jobs: table<Id: string, Arn: string, PipelineId: string, Input: record, Inputs: list, Output: record, Outputs: list, OutputKeyPrefix: string, Playlists: list, Status: string, UserMetadata: record, Timing: record>, NextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($status | is-empty) { error make --unspanned { msg: "path parameter 'Status' must be non-empty" } }
@@ -850,7 +850,7 @@ export def "test-role" [
   input_bucket: string # The Amazon S3 bucket that contains media files to be transcoded. The action attempts to read from this bucket.
   output_bucket: string # The Amazon S3 bucket that Elastic Transcoder writes transcoded media files to. The action attempts to read from this bucket.
   topics: list<string> # The ARNs of one or more Amazon Simple Notification Service (Amazon SNS) topics that you want the action to send a test notification to.
-]: any -> record<Success: record, Messages: record> {
+]: any -> record<Success: string, Messages: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -879,7 +879,7 @@ export def "test-role" [
 #
 # POST /2012-09-25/pipelines/{Id}/notifications
 # operationId: UpdatePipelineNotifications
-# --Notifications shape: {Progressing?: any, Completed?: any, Warning?: any, Error?: any}
+# --Notifications shape: {Progressing?: string, Completed?: string, Warning?: string, Error?: string}
 export def "update-pipeline-notifications" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -898,8 +898,8 @@ export def "update-pipeline-notifications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  notifications: record # The Amazon Simple Notification Service (Amazon SNS) topic or topics to notify in order to report job status. To receive notifications, you must also subscribe to the new topic in the Amazon SNS console. — shape: {Progressing?: any, Completed?: any, Warning?: any, Error?: any}
-]: any -> record<Pipeline: record<Id: record, Arn: record, Name: record, Status: record, InputBucket: record, OutputBucket: record, Role: record, AwsKmsKeyArn: record, Notifications: record<Progressing: record, Completed: record, Warning: record, Error: record>, ContentConfig: record<Bucket: record, StorageClass: record, Permissions: record>, ThumbnailConfig: record<Bucket: record, StorageClass: record, Permissions: record>>> {
+  notifications: record # The Amazon Simple Notification Service (Amazon SNS) topic or topics to notify in order to report job status. To receive notifications, you must also subscribe to the new topic in the Amazon SNS console. — shape: {Progressing?: string, Completed?: string, Warning?: string, Error?: string}
+]: any -> record<Pipeline: record<Id: string, Arn: string, Name: string, Status: string, InputBucket: string, OutputBucket: string, Role: string, AwsKmsKeyArn: string, Notifications: record<Progressing: string, Completed: string, Warning: string, Error: string>, ContentConfig: record<Bucket: string, StorageClass: string, Permissions: list>, ThumbnailConfig: record<Bucket: string, StorageClass: string, Permissions: list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -948,7 +948,7 @@ export def "update-pipeline-status" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   status: string # The desired status of the pipeline: Active: The pipeline is processing jobs. Paused: The pipeline is not currently processing jobs.
-]: any -> record<Pipeline: record<Id: record, Arn: record, Name: record, Status: record, InputBucket: record, OutputBucket: record, Role: record, AwsKmsKeyArn: record, Notifications: record<Progressing: record, Completed: record, Warning: record, Error: record>, ContentConfig: record<Bucket: record, StorageClass: record, Permissions: record>, ThumbnailConfig: record<Bucket: record, StorageClass: record, Permissions: record>>> {
+]: any -> record<Pipeline: record<Id: string, Arn: string, Name: string, Status: string, InputBucket: string, OutputBucket: string, Role: string, AwsKmsKeyArn: string, Notifications: record<Progressing: string, Completed: string, Warning: string, Error: string>, ContentConfig: record<Bucket: string, StorageClass: string, Permissions: list>, ThumbnailConfig: record<Bucket: string, StorageClass: string, Permissions: list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

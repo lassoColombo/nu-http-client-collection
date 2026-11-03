@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -142,7 +142,7 @@ export def "get-deployments" [
   --x-amz-signed-headers: string
   device_name: string # The unique name of the device you want to get the configuration of active deployments from.
   device_fleet_name: string # The name of the fleet that the device belongs to.
-]: any -> record<Deployments: record> {
+]: any -> record<Deployments: table<DeploymentName: string, Type: string, FailureHandlingPolicy: string, Definitions: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -190,7 +190,7 @@ export def "get-device-registration" [
   --x-amz-signed-headers: string
   device_name: string # The unique name of the device you want to get the registration status from.
   device_fleet_name: string # The name of the fleet that the device belongs to.
-]: any -> record<DeviceRegistration: record, CacheTTL: record> {
+]: any -> record<DeviceRegistration: string, CacheTTL: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -219,9 +219,9 @@ export def "get-device-registration" [
 #
 # POST /SendHeartbeat
 # operationId: SendHeartbeat
-# --AgentMetrics item shape: {Dimension?: any, MetricName?: any, Value?: any, Timestamp?: any}
-# --Models item shape: {ModelName?: any, ModelVersion?: any, LatestSampleTime?: any, LatestInference?: any, ModelMetrics?: any}
-# --DeploymentResult shape: {DeploymentName?: any, DeploymentStatus?: any, DeploymentStatusMessage?: any, DeploymentStartTime?: any, DeploymentEndTime?: any, DeploymentModels?: any}
+# --AgentMetrics item shape: {Dimension?: string, MetricName?: string, Value?: float, Timestamp?: string}
+# --Models item shape: {ModelName?: string, ModelVersion?: string, LatestSampleTime?: string, LatestInference?: string, ModelMetrics?: list}
+# --DeploymentResult shape: {DeploymentName?: string, DeploymentStatus?: string, DeploymentStatusMessage?: string, DeploymentStartTime?: string, DeploymentEndTime?: string, DeploymentModels?: list}
 export def "send-heartbeat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -239,12 +239,12 @@ export def "send-heartbeat" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --agent-metrics: list # For internal use. Returns a list of SageMaker Edge Manager agent operating metrics. — item shape: {Dimension?: any, MetricName?: any, Value?: any, Timestamp?: any}
-  --models: list # Returns a list of models deployed on the the device. — item shape: {ModelName?: any, ModelVersion?: any, LatestSampleTime?: any, LatestInference?: any, ModelMetrics?: any}
+  --agent-metrics: list # For internal use. Returns a list of SageMaker Edge Manager agent operating metrics. — item shape: {Dimension?: string, MetricName?: string, Value?: float, Timestamp?: string}
+  --models: list # Returns a list of models deployed on the the device. — item shape: {ModelName?: string, ModelVersion?: string, LatestSampleTime?: string, LatestInference?: string, ModelMetrics?: list}
   agent_version: string # Returns the version of the agent.
   device_name: string # The unique name of the device.
   device_fleet_name: string # The name of the fleet that the device belongs to.
-  --deployment-result: record # Information about the result of a deployment on an edge device that is registered with SageMaker Edge Manager. — shape: {DeploymentName?: any, DeploymentStatus?: any, DeploymentStatusMessage?: any, DeploymentStartTime?: any, DeploymentEndTime?: any, DeploymentModels?: any}
+  --deployment-result: record # Information about the result of a deployment on an edge device that is registered with SageMaker Edge Manager. — shape: {DeploymentName?: string, DeploymentStatus?: string, DeploymentStatusMessage?: string, DeploymentStartTime?: string, DeploymentEndTime?: string, DeploymentModels?: list}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

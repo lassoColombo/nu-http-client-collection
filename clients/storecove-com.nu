@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -113,11 +113,14 @@ def base-url-completer [] { ["https://api.storecove.com/api/v2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def evidence-type-completer [] { ["clearing" "sending"] }
 def mode-completer [] { ["direct"] }
 def country-completer [] { ["AD" "AE" "AF" "AG" "AI" "AL" "AM" "AO" "AQ" "AR" "AS" "AT" "AU" "AW" "AX" "AZ" "BA" "BB" "BD" "BE" "BF" "BG" "BH" "BI" "BJ" "BL" "BM" "BN" "BO" "BQ" "BR" "BS" "BT" "BV" "BW" "BY" "BZ" "CA" "CC" "CD" "CF" "CG" "CH" "CI" "CK" "CL" "CM" "CN" "CO" "CR" "CU" "CV" "CW" "CX" "CY" "CZ" "DE" "DJ" "DK" "DM" "DO" "DZ" "EC" "EE" "EG" "EH" "ER" "ES" "ET" "FI" "FJ" "FK" "FM" "FO" "FR" "GA" "GB" "GD" "GE" "GF" "GG" "GH" "GI" "GL" "GM" "GN" "GP" "GQ" "GR" "GS" "GT" "GU" "GW" "GY" "HK" "HM" "HN" "HR" "HT" "HU" "ID" "IE" "IL" "IM" "IN" "IO" "IQ" "IR" "IS" "IT" "JE" "JM" "JO" "JP" "KE" "KG" "KH" "KI" "KM" "KN" "KP" "KR" "KW" "KY" "KZ" "LA" "LB" "LC" "LI" "LK" "LR" "LS" "LT" "LU" "LV" "LY" "MA" "MC" "MD" "ME" "MF" "MG" "MH" "MK" "ML" "MM" "MN" "MO" "MP" "MQ" "MR" "MS" "MT" "MU" "MV" "MW" "MX" "MY" "MZ" "NA" "NC" "NE" "NF" "NG" "NI" "NL" "NO" "NP" "NR" "NU" "NZ" "OM" "PA" "PE" "PF" "PG" "PH" "PK" "PL" "PM" "PN" "PR" "PS" "PT" "PW" "PY" "QA" "RE" "RO" "RS" "RU" "RW" "SA" "SB" "SC" "SD" "SE" "SG" "SH" "SI" "SJ" "SK" "SL" "SM" "SN" "SO" "SR" "SS" "ST" "SV" "SX" "SY" "SZ" "TC" "TD" "TF" "TG" "TH" "TJ" "TK" "TL" "TM" "TN" "TO" "TR" "TT" "TV" "TW" "TZ" "UA" "UG" "UM" "US" "UY" "UZ" "VA" "VC" "VE" "VG" "VI" "VN" "VU" "WF" "WS" "XI" "YE" "YT" "ZA" "ZM" "ZW"] }
 def package-version-completer [] { ["aunz" "peppol_bis_v3" "sg"] }
 def packaging-completer [] { ["ubl"] }
 def parse-strategy-completer [] { ["rfc822"] }
+def packaging-completer-1 [] { ["json" "original" "ubl"] }
+def package-version-completer-1 [] { ["aunz" "en16931" "jp" "original" "sg" "si11" "si12" "si20"] }
 def syntax-completer [] { ["json" "original"] }
 
 # List all available API commands with their parameters
@@ -314,7 +317,7 @@ export def "create-document-submission" [
 # operationId: show_document_submission_evidence
 export def "show-document-submission-evidence" [
   guid: string
-  evidence_type: string
+  evidence_type: string@evidence-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1157,7 +1160,7 @@ export def "get-invoice-json" [
 # operationId: get_invoice_ubl
 export def "get-invoice-ubl" [
   guid: string
-  packaging: string
+  packaging: string@packaging-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1197,8 +1200,8 @@ export def "get-invoice-ubl" [
 # operationId: get_invoice_ubl_versioned
 export def "get-invoice-ubl-versioned" [
   guid: string
-  packaging: string
-  package_version: string
+  packaging: string@packaging-completer
+  package_version: string@package-version-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1287,12 +1290,13 @@ export def "get-received-document" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --syntax: string@syntax-completer # The syntax in which to receive the received document. (default: json)
+  --syntax: string@syntax-completer # The syntax in which to receive the received document. (required, default: json)
 ]: nothing -> record<guid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($guid | is-empty) { error make --unspanned { msg: "path parameter 'guid' must be non-empty" } }
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  let syntax = ($syntax | default "json")
   let qp = [(serialize-qp "syntax" $syntax "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({guid: (encode-path-segment $guid), format: (encode-path-segment $format)} | format pattern "/received_documents/{guid}/{format}") $qp $auth.query)
   let accept_val = "application/json"

@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {x-api-key: $token_val}, query: "", location: "header"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "x-api-key" => { {scheme: $scheme, headers: {"x-api-key": $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -185,6 +185,7 @@ export def "list-bookings" [
 #
 # POST /bookings
 # operationId: createBooking
+# --bookingContact shape: {email: string, firstName: string, lastName: string}
 # --notes shape: {fromGuest?: string, fromSeller?: string}
 # --rooms item shape: {adults: float, notes?: record, rateId: string}
 export def "create-booking" [
@@ -197,13 +198,13 @@ export def "create-booking" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  booking_contact: any # Details of your guest (will be provided to the hotel in case of questions).
+  booking_contact: record # Details of your guest (will be provided to the hotel in case of questions). — shape: {email: string, firstName: string, lastName: string}
   end: string # The last day of the desired stay range in ISO 8601 format YYYY-MM-DD. (format: date)
   --notes: record # Notes allow sellers to their guests to communicate relevant information to the hotel. — shape: {fromGuest?: string, fromSeller?: string}
   --payment-type: string@payment-type-completer # How will the guest make payment for this booking?
   rooms: list # List of room type identifiers to be booked. — item shape: {adults: float, notes?: record, rateId: string}
   start: string # The first day of the desired stay range in ISO 8601 format YYYY-MM-DD. (format: date)
-]: any -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
+]: any -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record<email: string, firstName: string, lastName: string, contactId: string>, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -241,7 +242,7 @@ export def "cancel-booking" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
+]: nothing -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record<email: string, firstName: string, lastName: string, contactId: string>, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($booking_id | is-empty) { error make --unspanned { msg: "path parameter 'bookingId' must be non-empty" } }
@@ -277,7 +278,7 @@ export def "retrieve-booking" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
+]: nothing -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record<email: string, firstName: string, lastName: string, contactId: string>, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($booking_id | is-empty) { error make --unspanned { msg: "path parameter 'bookingId' must be non-empty" } }
@@ -302,6 +303,7 @@ export def "retrieve-booking" [
 #
 # PUT /bookings/{bookingId}
 # operationId: updateBooking
+# --bookingContact shape: {email: string, firstName: string, lastName: string}
 # --notes shape: {fromGuest?: string, fromSeller?: string}
 # --rooms item shape: {adults: float, notes?: record, rateId: string}
 export def "update-booking" [
@@ -315,14 +317,14 @@ export def "update-booking" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  booking_contact: any # Details of your guest (will be provided to the hotel in case of questions).
+  booking_contact: record # Details of your guest (will be provided to the hotel in case of questions). — shape: {email: string, firstName: string, lastName: string}
   end: string # The last day of the desired stay range in ISO 8601 format YYYY-MM-DD. (format: date)
   --notes: record # Notes allow sellers to their guests to communicate relevant information to the hotel. — shape: {fromGuest?: string, fromSeller?: string}
   --payment-type: string@payment-type-completer # How will the guest make payment for this booking?
   rooms: list # List of room type identifiers to be booked. — item shape: {adults: float, notes?: record, rateId: string}
   start: string # The first day of the desired stay range in ISO 8601 format YYYY-MM-DD. (format: date)
   update_booking_version_at_timestamp: string # The timestamp of when the booking was last updated (format: date-time, e.g. 2020-12-20T11:01:30.745Z)
-]: any -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
+]: any -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record<email: string, firstName: string, lastName: string, contactId: string>, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -364,7 +366,7 @@ export def "update-booking-contact" [
   --dry-run(-n) # Return the request that would be sent without executing it
   booking_contact: record # Information on a person and their contact details. — shape: {email: string, firstName: string, lastName: string}
   update_booking_version_at_timestamp: string # The timestamp of when the booking was last updated (format: date-time, e.g. 2020-12-20T11:01:30.745Z)
-]: any -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
+]: any -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record<email: string, firstName: string, lastName: string, contactId: string>, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -497,7 +499,7 @@ export def "list-rate-plans-for-hotel" [
   --start: string # Start date of the considered time window for the returned rate plan. (e.g. 2022-05-12)
   --end: string # Start date of the considered time window for the returned rate plan. (e.g. 2022-05-12)
   --room-id: string # The UUID of room for which rate plans are being fetched. (format: uuid, e.g. 6d3a255d-3b22-48a4-8076-3ae3d0ade3d7)
-]: nothing -> any {
+]: nothing -> record<data: table<adjustments: list, components: list, conditions: record, description: string, hotelId: string, ratePlanId: float, restrictions: record, roomTypes: list>, pagination: record<count: float, next: string, prev: string, total: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
@@ -541,7 +543,7 @@ export def "list-rate-plan-for-hotel-for-rate-plan-id" [
   --start: string # Start date of the considered time window for the returned rate plan. (e.g. 2022-05-12)
   --end: string # Start date of the considered time window for the returned rate plan. (e.g. 2022-05-12)
   --room-type-id: string # The uuid of room for which rate plans are being fetched. (format: uuid, e.g. 6d3a255d-3b22-48a4-8076-3ae3d0ade3d7)
-]: nothing -> any {
+]: nothing -> record<adjustments: table<adjustmentId: string, amount: float, conditions: list, type: string>, components: table<formatted: string, includedInRate: bool, type: string>, conditions: record<cancellationDeadline: float, cancellationPolicy: string>, description: string, hotelId: string, ratePlanId: float, restrictions: record<lengthOfStay: record<max: float, min: float>>, roomTypes: table<dates: list, maxOccupancy: float, name: string, roomTypeId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }

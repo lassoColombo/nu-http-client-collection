@@ -2269,20 +2269,20 @@ export def "post-rest-service-fecru-admin-repositories-v1-repository-rescan-meta
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: int # the revision number to start at (format: int64)
-  --qp-to: int # the revision number to end at (format: int64)
+  --from: int # the revision number to start at (format: int64)
+  --to: int # the revision number to end at (format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/rescan-metadata") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -2992,20 +2992,20 @@ export def "put-rest-service-fecru-admin-repositories-repository-rescan-metadata
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # the revision number to start at
-  --qp-to: string # the revision number to end at
+  --from: string # the revision number to start at
+  --to: string # the revision number to end at
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/rescan-metadata") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -3020,7 +3020,7 @@ export def "put-rest-service-fecru-admin-repositories-repository-rescan-metadata
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/start
 # operationId: start
-export def "start" [
+export def "put-rest-service-fecru-admin-repositories-repository-start" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

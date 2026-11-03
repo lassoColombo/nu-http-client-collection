@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -158,11 +158,12 @@ export def "locations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Specifies the API version to use for this request.
+  --api-version: string@api-version-completer # Specifies the API version to use for this request. (required)
   --accept-language: string # Specifies the preferred language for the response.
 ]: nothing -> record<value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2016-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ImportExport/locations" $qp $auth.query)
   let accept_val = "application/json"
@@ -198,12 +199,13 @@ export def "locations-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Specifies the API version to use for this request.
+  --api-version: string@api-version-completer # Specifies the API version to use for this request. (required)
   --accept-language: string # Specifies the preferred language for the response.
 ]: nothing -> record<id: string, name: string, properties: record<alternateLocations: list<string>, city: string, countryOrRegion: string, phone: string, postalCode: string, recipientName: string, stateOrProvince: string, streetAddress1: string, streetAddress2: string, supportedCarriers: list<string>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
+  let api_version = ($api_version | default "2016-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location_name: (encode-path-segment $location_name)} | format pattern "/providers/Microsoft.ImportExport/locations/{location_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -238,11 +240,12 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Specifies the API version to use for this request.
+  --api-version: string@api-version-completer # Specifies the API version to use for this request. (required)
   --accept-language: string # Specifies the preferred language for the response.
 ]: nothing -> record<value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2016-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ImportExport/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -280,12 +283,13 @@ export def "jobs-list-by-subscription" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # An integer value that specifies how many jobs at most should be returned. The value cannot exceed 100.
   --filter: string # Can be used to restrict the results to certain conditions.
-  --api-version: string@api-version-completer # Specifies the API version to use for this request.
+  --api-version: string@api-version-completer # Specifies the API version to use for this request. (required)
   --accept-language: string # Specifies the preferred language for the response.
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2016-11-01")
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ImportExport/jobs") $qp $auth.query)
   let accept_val = "application/json"
@@ -324,13 +328,14 @@ export def "jobs-list-by-resource-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # An integer value that specifies how many jobs at most should be returned. The value cannot exceed 100.
   --filter: string # Can be used to restrict the results to certain conditions.
-  --api-version: string@api-version-completer # Specifies the API version to use for this request.
+  --api-version: string@api-version-completer # Specifies the API version to use for this request. (required)
   --accept-language: string # Specifies the preferred language for the response.
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  let api_version = ($api_version | default "2016-11-01")
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ImportExport/jobs") $qp $auth.query)
   let accept_val = "application/json"
@@ -368,14 +373,15 @@ export def "jobs-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Specifies the API version to use for this request.
+  --api-version: string@api-version-completer # Specifies the API version to use for this request. (required)
   --accept-language: string # Specifies the preferred language for the response.
-]: nothing -> record<error: record<code: string, details: list<record>, innererror: record, message: string, target: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  let api_version = ($api_version | default "2016-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ImportExport/jobs/{job_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -413,7 +419,7 @@ export def "jobs-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Specifies the API version to use for this request.
+  --api-version: string@api-version-completer # Specifies the API version to use for this request. (required)
   --accept-language: string # Specifies the preferred language for the response.
 ]: nothing -> record<id: string, location: string, name: string, properties: record<backupDriveManifest: bool, cancelRequested: bool, deliveryPackage: record<carrierName: string, driveCount: int, shipDate: string, trackingNumber: string>, diagnosticsPath: string, driveList: list<record>, export: record<blobList: record, blobListblobPath: string>, incompleteBlobListUri: string, jobType: string, logLevel: string, percentComplete: int, provisioningState: string, returnAddress: record<city: string, countryOrRegion: string, email: string, phone: string, postalCode: string, recipientName: string, stateOrProvince: string, streetAddress1: string, streetAddress2: string>, returnPackage: record<carrierName: string, driveCount: int, shipDate: string, trackingNumber: string>, returnShipping: record<carrierAccountNumber: string, carrierName: string>, shippingInformation: record<city: string, countryOrRegion: string, phone: string, postalCode: string, recipientName: string, stateOrProvince: string, streetAddress1: string, streetAddress2: string>, state: string, storageAccountId: string>, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -421,6 +427,7 @@ export def "jobs-get" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  let api_version = ($api_version | default "2016-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ImportExport/jobs/{job_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -459,7 +466,7 @@ export def "jobs-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Specifies the API version to use for this request.
+  --api-version: string@api-version-completer # Specifies the API version to use for this request. (required)
   --accept-language: string # Specifies the preferred language for the response.
   --properties: any # Specifies the properties of a UpdateJob. — shape: {backupDriveManifest?: bool, cancelRequested?: bool, deliveryPackage?: any, driveList?: list, logLevel?: string, returnAddress?: any, returnShipping?: any, state?: string}
   --tags: record # Specifies the tags that will be assigned to the job
@@ -470,6 +477,7 @@ export def "jobs-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  let api_version = ($api_version | default "2016-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ImportExport/jobs/{job_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -510,7 +518,7 @@ export def "jobs-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Specifies the API version to use for this request.
+  --api-version: string@api-version-completer # Specifies the API version to use for this request. (required)
   --accept-language: string # Specifies the preferred language for the response.
   --x-ms-client-tenant-id: string # The tenant ID of the client making the request.
   --location: string # Specifies the supported Azure location where the job should be created
@@ -523,6 +531,7 @@ export def "jobs-create" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  let api_version = ($api_version | default "2016-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ImportExport/jobs/{job_name}") $qp $auth.query)
   let req_body = {"location": $location, "properties": $properties, "tags": $tags} | compact
@@ -562,7 +571,7 @@ export def "bit-locker-keys-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Specifies the API version to use for this request.
+  --api-version: string@api-version-completer # Specifies the API version to use for this request. (required)
   --accept-language: string # Specifies the preferred language for the response.
 ]: nothing -> record<value: table<bitLockerKey: string, driveId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -570,6 +579,7 @@ export def "bit-locker-keys-list" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  let api_version = ($api_version | default "2016-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ImportExport/jobs/{job_name}/listBitLockerKeys") $qp $auth.query)
   let accept_val = "application/json"

@@ -165,11 +165,12 @@ export def "get-v1-scrape-emails-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --website: string # The website (ie. www.soundflair.com)
+  --website: string # The website (ie. www.soundflair.com) (required)
   --must-include: string # Optional. The word(s) that the webpage must include (otherwise it will skip scraping that page). Good if you want to scrape only contact pages. Takes regex (ie. about contact).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($website == null) { error make --unspanned { msg: "required query parameter 'website' missing: pass --website" } }
   let qp = [(serialize-qp "website" $website "scalar") (serialize-qp "must_include" $must_include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/scrape_emails.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -202,10 +203,11 @@ export def "get-v1-scrape-store-links-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --website: string # The website (ie. www.soundflair.com)
+  --website: string # The website (ie. www.soundflair.com) (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($website == null) { error make --unspanned { msg: "required query parameter 'website' missing: pass --website" } }
   let qp = [(serialize-qp "website" $website "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/scrape_store_links.json" $qp $auth.query)
   let accept_val = "application/json"

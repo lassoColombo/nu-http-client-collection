@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -112,6 +112,8 @@ def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def management-groups-namespace-completer [] { ["Microsoft.Management"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -141,7 +143,7 @@ export def commands []: nothing -> table {
 # GET /providers/{managementGroupsNamespace}/managementGroups/{managementGroupId}/providers/Microsoft.PolicyInsights/remediations
 # operationId: Remediations_ListForManagementGroup
 export def "remediations-list-for-management-group" [
-  management_groups_namespace: string
+  management_groups_namespace: string@management-groups-namespace-completer
   management_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -154,12 +156,13 @@ export def "remediations-list-for-management-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Maximum number of records to return. (format: int32)
   --filter: string # OData filter expression.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($management_groups_namespace | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupsNamespace' must be non-empty" } }
   if ($management_group_id | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({management_groups_namespace: (encode-path-segment $management_groups_namespace), management_group_id: (encode-path-segment $management_group_id)} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_id}/providers/Microsoft.PolicyInsights/remediations") $qp $auth.query)
   let accept_val = "application/json"
@@ -183,7 +186,7 @@ export def "remediations-list-for-management-group" [
 # DELETE /providers/{managementGroupsNamespace}/managementGroups/{managementGroupId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_DeleteAtManagementGroup
 export def "remediations-delete-at-management-group" [
-  management_groups_namespace: string
+  management_groups_namespace: string@management-groups-namespace-completer
   management_group_id: string
   remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -195,13 +198,14 @@ export def "remediations-delete-at-management-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<id: string, name: string, properties: record<createdOn: string, deploymentStatus: record<failedDeployments: int, successfulDeployments: int, totalDeployments: int>, filters: record<locations: list>, lastUpdatedOn: string, policyAssignmentId: string, policyDefinitionReferenceId: string, provisioningState: string, resourceDiscoveryMode: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($management_groups_namespace | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupsNamespace' must be non-empty" } }
   if ($management_group_id | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupId' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({management_groups_namespace: (encode-path-segment $management_groups_namespace), management_group_id: (encode-path-segment $management_group_id), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -225,7 +229,7 @@ export def "remediations-delete-at-management-group" [
 # GET /providers/{managementGroupsNamespace}/managementGroups/{managementGroupId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_GetAtManagementGroup
 export def "remediations-get-at-management-group" [
-  management_groups_namespace: string
+  management_groups_namespace: string@management-groups-namespace-completer
   management_group_id: string
   remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -237,13 +241,14 @@ export def "remediations-get-at-management-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<id: string, name: string, properties: record<createdOn: string, deploymentStatus: record<failedDeployments: int, successfulDeployments: int, totalDeployments: int>, filters: record<locations: list>, lastUpdatedOn: string, policyAssignmentId: string, policyDefinitionReferenceId: string, provisioningState: string, resourceDiscoveryMode: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($management_groups_namespace | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupsNamespace' must be non-empty" } }
   if ($management_group_id | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupId' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({management_groups_namespace: (encode-path-segment $management_groups_namespace), management_group_id: (encode-path-segment $management_group_id), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -268,7 +273,7 @@ export def "remediations-get-at-management-group" [
 # operationId: Remediations_CreateOrUpdateAtManagementGroup
 # --properties shape: {deploymentStatus?: any, filters?: any, policyAssignmentId?: string, policyDefinitionReferenceId?: string, resourceDiscoveryMode?: "ExistingNonCompliant"|"ReEvaluateCompliance"}
 export def "remediations-create-or-update-at-management-group" [
-  management_groups_namespace: string
+  management_groups_namespace: string@management-groups-namespace-completer
   management_group_id: string
   remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -280,7 +285,7 @@ export def "remediations-create-or-update-at-management-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # The remediation properties. — shape: {deploymentStatus?: any, filters?: any, policyAssignmentId?: string, policyDefinitionReferenceId?: string, resourceDiscoveryMode?: "ExistingNonCompliant"|"ReEvaluateCompliance"}
 ]: any -> record<id: string, name: string, properties: record<createdOn: string, deploymentStatus: record<failedDeployments: int, successfulDeployments: int, totalDeployments: int>, filters: record<locations: list>, lastUpdatedOn: string, policyAssignmentId: string, policyDefinitionReferenceId: string, provisioningState: string, resourceDiscoveryMode: string>, type: string> {
   let input = $in
@@ -289,6 +294,7 @@ export def "remediations-create-or-update-at-management-group" [
   if ($management_groups_namespace | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupsNamespace' must be non-empty" } }
   if ($management_group_id | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupId' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({management_groups_namespace: (encode-path-segment $management_groups_namespace), management_group_id: (encode-path-segment $management_group_id), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -314,7 +320,7 @@ export def "remediations-create-or-update-at-management-group" [
 # POST /providers/{managementGroupsNamespace}/managementGroups/{managementGroupId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}/cancel
 # operationId: Remediations_CancelAtManagementGroup
 export def "remediations-cancel-at-management-group" [
-  management_groups_namespace: string
+  management_groups_namespace: string@management-groups-namespace-completer
   management_group_id: string
   remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -326,13 +332,14 @@ export def "remediations-cancel-at-management-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<id: string, name: string, properties: record<createdOn: string, deploymentStatus: record<failedDeployments: int, successfulDeployments: int, totalDeployments: int>, filters: record<locations: list>, lastUpdatedOn: string, policyAssignmentId: string, policyDefinitionReferenceId: string, provisioningState: string, resourceDiscoveryMode: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($management_groups_namespace | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupsNamespace' must be non-empty" } }
   if ($management_group_id | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupId' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({management_groups_namespace: (encode-path-segment $management_groups_namespace), management_group_id: (encode-path-segment $management_group_id), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}/cancel") $qp $auth.query)
   let accept_val = "application/json"
@@ -356,7 +363,7 @@ export def "remediations-cancel-at-management-group" [
 # POST /providers/{managementGroupsNamespace}/managementGroups/{managementGroupId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}/listDeployments
 # operationId: Remediations_ListDeploymentsAtManagementGroup
 export def "remediations-list-deployments-at-management-group" [
-  management_groups_namespace: string
+  management_groups_namespace: string@management-groups-namespace-completer
   management_group_id: string
   remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -369,13 +376,14 @@ export def "remediations-list-deployments-at-management-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Maximum number of records to return. (format: int32)
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<createdOn: string, deploymentId: string, error: record, lastUpdatedOn: string, remediatedResourceId: string, resourceLocation: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($management_groups_namespace | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupsNamespace' must be non-empty" } }
   if ($management_group_id | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupId' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({management_groups_namespace: (encode-path-segment $management_groups_namespace), management_group_id: (encode-path-segment $management_group_id), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}/listDeployments") $qp $auth.query)
   let accept_val = "application/json"
@@ -411,11 +419,12 @@ export def "remediations-list-for-subscription" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Maximum number of records to return. (format: int32)
   --filter: string # OData filter expression.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/remediations") $qp $auth.query)
   let accept_val = "application/json"
@@ -450,12 +459,13 @@ export def "remediations-delete-at-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<id: string, name: string, properties: record<createdOn: string, deploymentStatus: record<failedDeployments: int, successfulDeployments: int, totalDeployments: int>, filters: record<locations: list>, lastUpdatedOn: string, policyAssignmentId: string, policyDefinitionReferenceId: string, provisioningState: string, resourceDiscoveryMode: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -490,12 +500,13 @@ export def "remediations-get-at-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<id: string, name: string, properties: record<createdOn: string, deploymentStatus: record<failedDeployments: int, successfulDeployments: int, totalDeployments: int>, filters: record<locations: list>, lastUpdatedOn: string, policyAssignmentId: string, policyDefinitionReferenceId: string, provisioningState: string, resourceDiscoveryMode: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -531,7 +542,7 @@ export def "remediations-create-or-update-at-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # The remediation properties. — shape: {deploymentStatus?: any, filters?: any, policyAssignmentId?: string, policyDefinitionReferenceId?: string, resourceDiscoveryMode?: "ExistingNonCompliant"|"ReEvaluateCompliance"}
 ]: any -> record<id: string, name: string, properties: record<createdOn: string, deploymentStatus: record<failedDeployments: int, successfulDeployments: int, totalDeployments: int>, filters: record<locations: list>, lastUpdatedOn: string, policyAssignmentId: string, policyDefinitionReferenceId: string, provisioningState: string, resourceDiscoveryMode: string>, type: string> {
   let input = $in
@@ -539,6 +550,7 @@ export def "remediations-create-or-update-at-subscription" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -575,12 +587,13 @@ export def "remediations-cancel-at-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<id: string, name: string, properties: record<createdOn: string, deploymentStatus: record<failedDeployments: int, successfulDeployments: int, totalDeployments: int>, filters: record<locations: list>, lastUpdatedOn: string, policyAssignmentId: string, policyDefinitionReferenceId: string, provisioningState: string, resourceDiscoveryMode: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}/cancel") $qp $auth.query)
   let accept_val = "application/json"
@@ -616,12 +629,13 @@ export def "remediations-list-deployments-at-subscription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Maximum number of records to return. (format: int32)
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<createdOn: string, deploymentId: string, error: record, lastUpdatedOn: string, remediatedResourceId: string, resourceLocation: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}/listDeployments") $qp $auth.query)
   let accept_val = "application/json"
@@ -658,12 +672,13 @@ export def "remediations-list-for-resource-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Maximum number of records to return. (format: int32)
   --filter: string # OData filter expression.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/remediations") $qp $auth.query)
   let accept_val = "application/json"
@@ -699,13 +714,14 @@ export def "remediations-delete-at-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<id: string, name: string, properties: record<createdOn: string, deploymentStatus: record<failedDeployments: int, successfulDeployments: int, totalDeployments: int>, filters: record<locations: list>, lastUpdatedOn: string, policyAssignmentId: string, policyDefinitionReferenceId: string, provisioningState: string, resourceDiscoveryMode: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -741,13 +757,14 @@ export def "remediations-get-at-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<id: string, name: string, properties: record<createdOn: string, deploymentStatus: record<failedDeployments: int, successfulDeployments: int, totalDeployments: int>, filters: record<locations: list>, lastUpdatedOn: string, policyAssignmentId: string, policyDefinitionReferenceId: string, provisioningState: string, resourceDiscoveryMode: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -784,7 +801,7 @@ export def "remediations-create-or-update-at-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # The remediation properties. — shape: {deploymentStatus?: any, filters?: any, policyAssignmentId?: string, policyDefinitionReferenceId?: string, resourceDiscoveryMode?: "ExistingNonCompliant"|"ReEvaluateCompliance"}
 ]: any -> record<id: string, name: string, properties: record<createdOn: string, deploymentStatus: record<failedDeployments: int, successfulDeployments: int, totalDeployments: int>, filters: record<locations: list>, lastUpdatedOn: string, policyAssignmentId: string, policyDefinitionReferenceId: string, provisioningState: string, resourceDiscoveryMode: string>, type: string> {
   let input = $in
@@ -793,6 +810,7 @@ export def "remediations-create-or-update-at-resource-group" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -830,13 +848,14 @@ export def "remediations-cancel-at-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<id: string, name: string, properties: record<createdOn: string, deploymentStatus: record<failedDeployments: int, successfulDeployments: int, totalDeployments: int>, filters: record<locations: list>, lastUpdatedOn: string, policyAssignmentId: string, policyDefinitionReferenceId: string, provisioningState: string, resourceDiscoveryMode: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}/cancel") $qp $auth.query)
   let accept_val = "application/json"
@@ -873,13 +892,14 @@ export def "remediations-list-deployments-at-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Maximum number of records to return. (format: int32)
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<createdOn: string, deploymentId: string, error: record, lastUpdatedOn: string, remediatedResourceId: string, resourceLocation: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}/listDeployments") $qp $auth.query)
   let accept_val = "application/json"
@@ -915,11 +935,12 @@ export def "remediations-list-for-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Maximum number of records to return. (format: int32)
   --filter: string # OData filter expression.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/remediations") $qp $auth.query)
   let accept_val = "application/json"
@@ -954,12 +975,13 @@ export def "remediations-delete-at-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<id: string, name: string, properties: record<createdOn: string, deploymentStatus: record<failedDeployments: int, successfulDeployments: int, totalDeployments: int>, filters: record<locations: list>, lastUpdatedOn: string, policyAssignmentId: string, policyDefinitionReferenceId: string, provisioningState: string, resourceDiscoveryMode: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -994,12 +1016,13 @@ export def "remediations-get-at-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<id: string, name: string, properties: record<createdOn: string, deploymentStatus: record<failedDeployments: int, successfulDeployments: int, totalDeployments: int>, filters: record<locations: list>, lastUpdatedOn: string, policyAssignmentId: string, policyDefinitionReferenceId: string, provisioningState: string, resourceDiscoveryMode: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1035,7 +1058,7 @@ export def "remediations-create-or-update-at-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # The remediation properties. — shape: {deploymentStatus?: any, filters?: any, policyAssignmentId?: string, policyDefinitionReferenceId?: string, resourceDiscoveryMode?: "ExistingNonCompliant"|"ReEvaluateCompliance"}
 ]: any -> record<id: string, name: string, properties: record<createdOn: string, deploymentStatus: record<failedDeployments: int, successfulDeployments: int, totalDeployments: int>, filters: record<locations: list>, lastUpdatedOn: string, policyAssignmentId: string, policyDefinitionReferenceId: string, provisioningState: string, resourceDiscoveryMode: string>, type: string> {
   let input = $in
@@ -1043,6 +1066,7 @@ export def "remediations-create-or-update-at-resource" [
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1079,12 +1103,13 @@ export def "remediations-cancel-at-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<id: string, name: string, properties: record<createdOn: string, deploymentStatus: record<failedDeployments: int, successfulDeployments: int, totalDeployments: int>, filters: record<locations: list>, lastUpdatedOn: string, policyAssignmentId: string, policyDefinitionReferenceId: string, provisioningState: string, resourceDiscoveryMode: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}/cancel") $qp $auth.query)
   let accept_val = "application/json"
@@ -1120,12 +1145,13 @@ export def "remediations-list-deployments-at-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Maximum number of records to return. (format: int32)
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<createdOn: string, deploymentId: string, error: record, lastUpdatedOn: string, remediatedResourceId: string, resourceLocation: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   if ($remediation_name | is-empty) { error make --unspanned { msg: "path parameter 'remediationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id), remediation_name: (encode-path-segment $remediation_name)} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}/listDeployments") $qp $auth.query)
   let accept_val = "application/json"

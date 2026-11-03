@@ -13,7 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "query-apikey" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "apikey")=(encode-path-segment $token_val)", location: "query"} }
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -103,7 +103,9 @@ def base-url-completer [] { ["https://public.opendatasoft.com/api/v2"] }
 def auth-scheme-completer [] { ["query-apikey" "basic" "basic-credentials"] }
 
 # Completers for enum parameters
+def source-completer [] { ["catalog" "monitoring" "opendatasoft"] }
 def delimiter-completer [] { ["," ";" "|"] }
+def metadata-template-type-completer [] { ["basic" "extra" "interop"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -237,7 +239,7 @@ export def "get-page" [
 # GET /{source}
 # operationId: getSource
 export def "get-source" [
-  source: string
+  source: string@source-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,7 +275,7 @@ export def "get-source" [
 # GET /{source}/aggregates
 # operationId: aggregateDatasets
 export def "aggregate-datasets" [
-  source: string
+  source: string@source-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -284,7 +286,7 @@ export def "aggregate-datasets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
   --group-by: string # A group by expression defines a grouping function for an aggregation. It can be: - a field name: group result by each value of this field - a range function: group result by range - a date function: group result by date It is possible to specify a custom name with the 'as name' notation. For instance: group_by='city_field as city'.
   --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
   --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
@@ -296,14 +298,14 @@ export def "aggregate-datasets" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
-  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/aggregates") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"select": $select, "where": $qp_where, "group_by": $group_by, "order_by": $order_by, "limit": $limit, "offset": $offset, "facet": $facet, "refine": $refine, "exclude": $exclude} | compact)
+    query: ({"select": $select, "where": $where, "group_by": $group_by, "order_by": $order_by, "limit": $limit, "offset": $offset, "facet": $facet, "refine": $refine, "exclude": $exclude} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -319,7 +321,7 @@ export def "aggregate-datasets" [
 # GET /{source}/datasets
 # operationId: getDatasets
 export def "get-datasets" [
-  source: string
+  source: string@source-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,9 +332,9 @@ export def "get-datasets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
   --group-by: string # A group by expression defines a grouping function for an aggregation. It can be: - a field name: group result by each value of this field - a range function: group result by range - a date function: group result by date It is possible to specify a custom name with the 'as name' notation. For instance: group_by='city_field as city'.
-  --qp-sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
+  --sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
   --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
   --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
   --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
@@ -347,14 +349,14 @@ export def "get-datasets" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
-  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/datasets") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"select": $select, "where": $qp_where, "group_by": $group_by, "sort": $qp_sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "pretty": $pretty, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact)
+    query: ({"select": $select, "where": $where, "group_by": $group_by, "sort": $sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "pretty": $pretty, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -370,7 +372,7 @@ export def "get-datasets" [
 # GET /{source}/datasets/{dataset_id}
 # operationId: getDataset
 export def "get-dataset" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -413,7 +415,7 @@ export def "get-dataset" [
 # GET /{source}/datasets/{dataset_id}/aggregates
 # operationId: aggregateRecords
 export def "aggregate-records" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -425,7 +427,7 @@ export def "aggregate-records" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
   --group-by: string # A group by expression defines a grouping function for an aggregation. It can be: - a field name: group result by each value of this field - a range function: group result by range - a date function: group result by date It is possible to specify a custom name with the 'as name' notation. For instance: group_by='city_field as city'.
   --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
   --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
@@ -438,14 +440,14 @@ export def "aggregate-records" [
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
-  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/aggregates") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"select": $select, "where": $qp_where, "group_by": $group_by, "order_by": $order_by, "limit": $limit, "offset": $offset, "facet": $facet, "refine": $refine, "exclude": $exclude} | compact)
+    query: ({"select": $select, "where": $where, "group_by": $group_by, "order_by": $order_by, "limit": $limit, "offset": $offset, "facet": $facet, "refine": $refine, "exclude": $exclude} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -461,7 +463,7 @@ export def "aggregate-records" [
 # GET /{source}/datasets/{dataset_id}/attachments
 # operationId: getDatasetAttachements
 export def "get-dataset-attachements" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -499,7 +501,7 @@ export def "get-dataset-attachements" [
 # GET /{source}/datasets/{dataset_id}/attachments/{attachment_id}
 # operationId: downloadDatasetAttachement
 export def "download-dataset-attachement" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -539,7 +541,7 @@ export def "download-dataset-attachement" [
 # GET /{source}/datasets/{dataset_id}/exports/csv
 # operationId: exportRecordsCSV
 export def "export-records-csv" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -551,8 +553,8 @@ export def "export-records-csv" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --qp-sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
   --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
   --limit: int # Number of items to return in export. Use -1 (default) to retrieve all records (default: -1)
   --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
@@ -566,14 +568,14 @@ export def "export-records-csv" [
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
-  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "delimiter" $delimiter "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "sort" $sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "delimiter" $delimiter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/csv") $qp $auth.query)
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"select": $select, "where": $qp_where, "sort": $qp_sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "delimiter": $delimiter} | compact)
+    query: ({"select": $select, "where": $where, "sort": $sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "delimiter": $delimiter} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -589,7 +591,7 @@ export def "export-records-csv" [
 # GET /{source}/datasets/{dataset_id}/exports/geojson
 # operationId: exportRecordsGEOJSON
 export def "export-records-geojson" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -601,8 +603,8 @@ export def "export-records-geojson" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --qp-sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
   --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
   --limit: int # Number of items to return in export. Use -1 (default) to retrieve all records (default: -1)
   --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
@@ -617,14 +619,14 @@ export def "export-records-geojson" [
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
-  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "sort" $sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/geojson") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"select": $select, "where": $qp_where, "sort": $qp_sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "pretty": $pretty} | compact)
+    query: ({"select": $select, "where": $where, "sort": $sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "pretty": $pretty} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -640,7 +642,7 @@ export def "export-records-geojson" [
 # GET /{source}/datasets/{dataset_id}/exports/ical
 # operationId: exportRecordsICAL
 export def "export-records-ical" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -652,8 +654,8 @@ export def "export-records-ical" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --qp-sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
   --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
   --limit: int # Number of items to return in export. Use -1 (default) to retrieve all records (default: -1)
   --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
@@ -667,14 +669,14 @@ export def "export-records-ical" [
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
-  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "sort" $sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/ical") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"select": $select, "where": $qp_where, "sort": $qp_sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone} | compact)
+    query: ({"select": $select, "where": $where, "sort": $sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -690,7 +692,7 @@ export def "export-records-ical" [
 # GET /{source}/datasets/{dataset_id}/exports/json
 # operationId: exportRecordsJSON
 export def "export-records-json" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -702,8 +704,8 @@ export def "export-records-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --qp-sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
   --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
   --limit: int # Number of items to return in export. Use -1 (default) to retrieve all records (default: -1)
   --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
@@ -718,14 +720,14 @@ export def "export-records-json" [
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
-  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "sort" $sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/json") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"select": $select, "where": $qp_where, "sort": $qp_sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "pretty": $pretty, "timezone": $timezone} | compact)
+    query: ({"select": $select, "where": $where, "sort": $sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "pretty": $pretty, "timezone": $timezone} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -741,7 +743,7 @@ export def "export-records-json" [
 # GET /{source}/datasets/{dataset_id}/exports/ov2
 # operationId: exportRecordsOV2
 export def "export-records-ov2" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -753,8 +755,8 @@ export def "export-records-ov2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --qp-sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
   --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
   --limit: int # Number of items to return in export. Use -1 (default) to retrieve all records (default: -1)
   --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
@@ -768,14 +770,14 @@ export def "export-records-ov2" [
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
-  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "sort" $sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/ov2") $qp $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"select": $select, "where": $qp_where, "sort": $qp_sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone} | compact)
+    query: ({"select": $select, "where": $where, "sort": $sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -791,7 +793,7 @@ export def "export-records-ov2" [
 # GET /{source}/datasets/{dataset_id}/exports/shp
 # operationId: exportRecordsSHP
 export def "export-records-shp" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -803,8 +805,8 @@ export def "export-records-shp" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --qp-sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
   --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
   --limit: int # Number of items to return in export. Use -1 (default) to retrieve all records (default: -1)
   --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
@@ -818,14 +820,14 @@ export def "export-records-shp" [
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
-  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "sort" $sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/shp") $qp $auth.query)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"select": $select, "where": $qp_where, "sort": $qp_sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone} | compact)
+    query: ({"select": $select, "where": $where, "sort": $sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -841,7 +843,7 @@ export def "export-records-shp" [
 # GET /{source}/datasets/{dataset_id}/exports/xls
 # operationId: exportRecordsXLS
 export def "export-records-xls" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -853,8 +855,8 @@ export def "export-records-xls" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --qp-sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
   --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
   --limit: int # Number of items to return in export. Use -1 (default) to retrieve all records (default: -1)
   --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
@@ -868,14 +870,14 @@ export def "export-records-xls" [
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
-  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "sort" $sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/xls") $qp $auth.query)
   let accept_val = "xls"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"select": $select, "where": $qp_where, "sort": $qp_sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone} | compact)
+    query: ({"select": $select, "where": $where, "sort": $sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -891,7 +893,7 @@ export def "export-records-xls" [
 # GET /{source}/datasets/{dataset_id}/facets
 # operationId: getRecordsFacets
 export def "get-records-facets" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -902,7 +904,7 @@ export def "get-records-facets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
   --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
   --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
   --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
@@ -913,14 +915,14 @@ export def "get-records-facets" [
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
-  let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "search" $search "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "where" $where "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "search" $search "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/facets") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "facet": $facet, "refine": $refine, "exclude": $exclude, "search": $search, "timezone": $timezone} | compact)
+    query: ({"where": $where, "facet": $facet, "refine": $refine, "exclude": $exclude, "search": $search, "timezone": $timezone} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -936,7 +938,7 @@ export def "get-records-facets" [
 # PUT /{source}/datasets/{dataset_id}/feedback
 # operationId: sendDatasetFeedback
 export def "send-dataset-feedback" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -981,7 +983,7 @@ export def "send-dataset-feedback" [
 # GET /{source}/datasets/{dataset_id}/files/{file_id}
 # operationId: getDatasetFile
 export def "get-dataset-file" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1023,7 +1025,7 @@ export def "get-dataset-file" [
 # GET /{source}/datasets/{dataset_id}/records
 # operationId: getRecords
 export def "get-records" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1035,9 +1037,9 @@ export def "get-records" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
   --group-by: string # A group by expression defines a grouping function for an aggregation. It can be: - a field name: group result by each value of this field - a range function: group result by range - a date function: group result by date It is possible to specify a custom name with the 'as name' notation. For instance: group_by='city_field as city'.
-  --qp-sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
+  --sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
   --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
   --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
   --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
@@ -1052,14 +1054,14 @@ export def "get-records" [
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
-  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/records") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"select": $select, "where": $qp_where, "group_by": $group_by, "sort": $qp_sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "pretty": $pretty, "timezone": $timezone} | compact)
+    query: ({"select": $select, "where": $where, "group_by": $group_by, "sort": $sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "pretty": $pretty, "timezone": $timezone} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1075,7 +1077,7 @@ export def "get-records" [
 # GET /{source}/datasets/{dataset_id}/records/{record_id}
 # operationId: getRecord
 export def "get-record" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   record_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1119,7 +1121,7 @@ export def "get-record" [
 # GET /{source}/datasets/{dataset_id}/reuses
 # operationId: getDatasetReuses
 export def "get-dataset-reuses" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1161,7 +1163,7 @@ export def "get-dataset-reuses" [
 # GET /{source}/datasets/{dataset_id}/reuses/{reuse_id}
 # operationId: getDatasetReuse
 export def "get-dataset-reuse" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   reuse_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1203,7 +1205,7 @@ export def "get-dataset-reuse" [
 # GET /{source}/datasets/{dataset_id}/snapshots
 # operationId: getDatasetSnapshots
 export def "get-dataset-snapshots" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1243,7 +1245,7 @@ export def "get-dataset-snapshots" [
 # GET /{source}/datasets/{dataset_id}/snapshots/{snapshot_id}
 # operationId: downloadDatasetSnapshot
 export def "download-dataset-snapshot" [
-  source: string
+  source: string@source-completer
   dataset_id: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1285,7 +1287,7 @@ export def "download-dataset-snapshot" [
 # GET /{source}/exports/csv
 # operationId: exportDatasetsCSV
 export def "export-datasets-csv" [
-  source: string
+  source: string@source-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1295,7 +1297,7 @@ export def "export-datasets-csv" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
   --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
   --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
   --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
@@ -1309,14 +1311,14 @@ export def "export-datasets-csv" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
-  let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar") (serialize-qp "delimiter" $delimiter "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "where" $where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar") (serialize-qp "delimiter" $delimiter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/csv") $qp $auth.query)
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "include_app_metas": $include_app_metas, "delimiter": $delimiter} | compact)
+    query: ({"where": $where, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "include_app_metas": $include_app_metas, "delimiter": $delimiter} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1332,7 +1334,7 @@ export def "export-datasets-csv" [
 # GET /{source}/exports/json
 # operationId: exportDatasetsJson
 export def "export-datasets-json" [
-  source: string
+  source: string@source-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1342,7 +1344,7 @@ export def "export-datasets-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
   --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
   --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
   --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
@@ -1356,14 +1358,14 @@ export def "export-datasets-json" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
-  let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "where" $where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/json") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "pretty": $pretty, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact)
+    query: ({"where": $where, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "pretty": $pretty, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1379,7 +1381,7 @@ export def "export-datasets-json" [
 # GET /{source}/exports/rdf
 # operationId: exportDatasetsRDF
 export def "export-datasets-rdf" [
-  source: string
+  source: string@source-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1389,7 +1391,7 @@ export def "export-datasets-rdf" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
   --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
   --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
   --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
@@ -1402,14 +1404,14 @@ export def "export-datasets-rdf" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
-  let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "where" $where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/rdf") $qp $auth.query)
   let accept_val = "application/rdf+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact)
+    query: ({"where": $where, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1425,7 +1427,7 @@ export def "export-datasets-rdf" [
 # GET /{source}/exports/rss
 # operationId: exportDatasetsRSS
 export def "export-datasets-rss" [
-  source: string
+  source: string@source-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1435,7 +1437,7 @@ export def "export-datasets-rss" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
   --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
   --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
   --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
@@ -1448,14 +1450,14 @@ export def "export-datasets-rss" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
-  let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "where" $where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/rss") $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact)
+    query: ({"where": $where, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1471,7 +1473,7 @@ export def "export-datasets-rss" [
 # GET /{source}/exports/ttl
 # operationId: exportDatasetsTTL
 export def "export-datasets-ttl" [
-  source: string
+  source: string@source-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1481,7 +1483,7 @@ export def "export-datasets-ttl" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
   --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
   --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
   --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
@@ -1494,14 +1496,14 @@ export def "export-datasets-ttl" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
-  let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "where" $where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/ttl") $qp $auth.query)
   let accept_val = "text/turtle"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact)
+    query: ({"where": $where, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1517,7 +1519,7 @@ export def "export-datasets-ttl" [
 # GET /{source}/exports/xls
 # operationId: exportDatasetsXLS
 export def "export-datasets-xls" [
-  source: string
+  source: string@source-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1527,7 +1529,7 @@ export def "export-datasets-xls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
   --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
   --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
   --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
@@ -1540,14 +1542,14 @@ export def "export-datasets-xls" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
-  let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "where" $where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/xls") $qp $auth.query)
   let accept_val = "xls"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact)
+    query: ({"where": $where, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1563,7 +1565,7 @@ export def "export-datasets-xls" [
 # GET /{source}/facets
 # operationId: getDatasetsFacets
 export def "get-datasets-facets" [
-  source: string
+  source: string@source-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1576,21 +1578,21 @@ export def "get-datasets-facets" [
   --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
   --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
   --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
-  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
   --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
   --timezone: string # Set timezone for datetime fields (default: UTC)
 ]: nothing -> record<facets: table<facets: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
-  let qp = [(serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "where" $qp_where "multi") (serialize-qp "search" $search "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "where" $where "multi") (serialize-qp "search" $search "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/facets") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"facet": $facet, "refine": $refine, "exclude": $exclude, "where": $qp_where, "search": $search, "timezone": $timezone} | compact)
+    query: ({"facet": $facet, "refine": $refine, "exclude": $exclude, "where": $where, "search": $search, "timezone": $timezone} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1606,7 +1608,7 @@ export def "get-datasets-facets" [
 # GET /{source}/metadata_templates
 # operationId: getMetadataTemplatesTypes
 export def "get-metadata-templates-types" [
-  source: string
+  source: string@source-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1642,8 +1644,8 @@ export def "get-metadata-templates-types" [
 # GET /{source}/metadata_templates/{metadata_template_type}
 # operationId: getMetadataTemplatesType
 export def "get-metadata-templates-type" [
-  source: string
-  metadata_template_type: string
+  source: string@source-completer
+  metadata_template_type: string@metadata-template-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1680,8 +1682,8 @@ export def "get-metadata-templates-type" [
 # GET /{source}/metadata_templates/{metadata_template_type}/{metadata_template_name}
 # operationId: getMetadataTemplate
 export def "get-metadata-template" [
-  source: string
-  metadata_template_type: string
+  source: string@source-completer
+  metadata_template_type: string@metadata-template-type-completer
   metadata_template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

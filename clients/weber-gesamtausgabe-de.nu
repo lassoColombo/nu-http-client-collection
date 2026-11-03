@@ -93,6 +93,8 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["http://localhost:8080/exist/apps/WeGA-WebApp/api/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def facet-completer [] { ["addressee" "sender"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -130,10 +132,11 @@ export def "get-application-new-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --doc-type: list<string> # The WeGA document type
+  --doc-type: list<string> # The WeGA document type (required)
 ]: nothing -> record<docID: string, docType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($doc_type == null) { error make --unspanned { msg: "required query parameter 'docType' missing: pass --doc-type" } }
   let qp = [(serialize-qp "docType" $doc_type "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/application/newID" $qp $auth.query)
   let accept_val = "application/json"
@@ -314,7 +317,7 @@ export def "get-documents-find-by-date" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --from-date: string # The min date to search for (format: date, default: 1786-11-18)
+  --from-date: string # The min date to search for (required, format: date, default: 1786-11-18)
   --to-date: string # The max date to search for (format: date)
   --doc-type: list<string> # The WeGA document type
   --offset: int # Position of first item to retrieve (starting from 1) (format: int32, default: 1)
@@ -322,6 +325,7 @@ export def "get-documents-find-by-date" [
 ]: nothing -> table<docID: string, docType: string, title: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let from_date = ($from_date | default "1786-11-18")
   let qp = [(serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "docType" $doc_type "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/documents/findByDate" $qp $auth.query)
   let accept_val = "application/json"
@@ -418,7 +422,7 @@ export def "get-documents-doc-id" [
 #
 # GET /facets/{facet}
 export def "get-facets-facet" [
-  facet: string
+  facet: string@facet-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,15 +432,17 @@ export def "get-facets-facet" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --scope: string # The scope of the result set, i.e. 'indices' or a WeGA ID
+  --scope: string # The scope of the result set, i.e. 'indices' or a WeGA ID (required)
   --term: string # The search term to be looked for in the facet's label
-  --doc-type: list<string> # The WeGA document type
+  --doc-type: list<string> # The WeGA document type (required)
   --offset: int # Position of first item to retrieve (starting from 1) (format: int32, default: 1)
   --limit: int # Number of items to retrieve (200 max) (format: int32, default: 10)
 ]: nothing -> table<frequency: int, label: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($facet | is-empty) { error make --unspanned { msg: "path parameter 'facet' must be non-empty" } }
+  if ($scope == null) { error make --unspanned { msg: "required query parameter 'scope' missing: pass --scope" } }
+  if ($doc_type == null) { error make --unspanned { msg: "required query parameter 'docType' missing: pass --doc-type" } }
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "term" $term "scalar") (serialize-qp "docType" $doc_type "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({facet: (encode-path-segment $facet)} | format pattern "/facets/{facet}") $qp $auth.query)
   let accept_val = "application/json"

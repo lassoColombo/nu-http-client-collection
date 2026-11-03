@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -159,13 +159,14 @@ export def "job-agents-list-by-server" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record, sku: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents") $qp $auth.query)
   let accept_val = "application/json"
@@ -202,7 +203,7 @@ export def "job-agents-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -210,6 +211,7 @@ export def "job-agents-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -246,14 +248,15 @@ export def "job-agents-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<databaseId: string, state: string>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<databaseId: string, state: string>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -290,9 +293,9 @@ export def "job-agents-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --tags: record # Resource tags.
-]: any -> record<properties: record<databaseId: string, state: string>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>> {
+]: any -> record<properties: record<databaseId: string, state: string>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -300,6 +303,7 @@ export def "job-agents-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -340,12 +344,12 @@ export def "job-agents-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: record # Properties of a job agent. — shape: {databaseId: string}
   --sku: record # An ARM Resource SKU. — shape: {capacity?: int, family?: string, name: string, size?: string, tier?: string}
   location: string # Resource location.
   --tags: record # Resource tags.
-]: any -> record<properties: record<databaseId: string, state: string>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>> {
+]: any -> record<properties: record<databaseId: string, state: string>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -353,6 +357,7 @@ export def "job-agents-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
@@ -391,14 +396,15 @@ export def "job-credentials-list-by-agent" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/credentials") $qp $auth.query)
   let accept_val = "application/json"
@@ -436,7 +442,7 @@ export def "job-credentials-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -445,6 +451,7 @@ export def "job-credentials-delete" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($credential_name | is-empty) { error make --unspanned { msg: "path parameter 'credentialName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), credential_name: (encode-path-segment $credential_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/credentials/{credential_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -482,8 +489,8 @@ export def "job-credentials-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<password: string, username: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<password: string, username: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -491,6 +498,7 @@ export def "job-credentials-get" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($credential_name | is-empty) { error make --unspanned { msg: "path parameter 'credentialName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), credential_name: (encode-path-segment $credential_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/credentials/{credential_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -529,9 +537,9 @@ export def "job-credentials-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: record # Properties of a job credential. — shape: {password: string, username: string}
-]: any -> record<properties: record<password: string, username: string>> {
+]: any -> record<properties: record<password: string, username: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -540,6 +548,7 @@ export def "job-credentials-create-or-update" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($credential_name | is-empty) { error make --unspanned { msg: "path parameter 'credentialName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), credential_name: (encode-path-segment $credential_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/credentials/{credential_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -585,14 +594,15 @@ export def "job-executions-list-by-agent" [
   --is-active: oneof<nothing, bool> # If specified, only active or only completed job executions are included.
   --skip: int # The number of elements in the collection to skip.
   --top: int # The number of elements to return from the collection.
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "createTimeMin" $create_time_min "scalar") (serialize-qp "createTimeMax" $create_time_max "scalar") (serialize-qp "endTimeMin" $end_time_min "scalar") (serialize-qp "endTimeMax" $end_time_max "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/executions") $qp $auth.query)
   let accept_val = "application/json"
@@ -629,14 +639,15 @@ export def "jobs-list-by-agent" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs") $qp $auth.query)
   let accept_val = "application/json"
@@ -674,7 +685,7 @@ export def "jobs-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -683,6 +694,7 @@ export def "jobs-delete" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -720,8 +732,8 @@ export def "jobs-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<description: string, schedule: record<enabled: bool, endTime: string, interval: string, startTime: string, type: string>, version: int>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<description: string, schedule: record<enabled: bool, endTime: string, interval: string, startTime: string, type: string>, version: int>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -729,6 +741,7 @@ export def "jobs-get" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -767,9 +780,9 @@ export def "jobs-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: record # Properties of a job. — shape: {description?: string, schedule?: record}
-]: any -> record<properties: record<description: string, schedule: record<enabled: bool, endTime: string, interval: string, startTime: string, type: string>, version: int>> {
+]: any -> record<properties: record<description: string, schedule: record<enabled: bool, endTime: string, interval: string, startTime: string, type: string>, version: int>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -778,6 +791,7 @@ export def "jobs-create-or-update" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -824,8 +838,8 @@ export def "job-executions-list-by-job" [
   --is-active: oneof<nothing, bool> # If specified, only active or only completed job executions are included.
   --skip: int # The number of elements in the collection to skip.
   --top: int # The number of elements to return from the collection.
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -833,6 +847,7 @@ export def "job-executions-list-by-job" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "createTimeMin" $create_time_min "scalar") (serialize-qp "createTimeMax" $create_time_max "scalar") (serialize-qp "endTimeMin" $end_time_min "scalar") (serialize-qp "endTimeMax" $end_time_max "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}/executions") $qp $auth.query)
   let accept_val = "application/json"
@@ -871,8 +886,8 @@ export def "job-executions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<createTime: string, currentAttemptStartTime: string, currentAttempts: int, endTime: string, jobExecutionId: string, jobVersion: int, lastMessage: string, lifecycle: string, provisioningState: string, startTime: string, stepId: int, stepName: string, target: record<databaseName: string, serverName: string, type: string>>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<createTime: string, currentAttemptStartTime: string, currentAttempts: int, endTime: string, jobExecutionId: string, jobVersion: int, lastMessage: string, lifecycle: string, provisioningState: string, startTime: string, stepId: int, stepName: string, target: record<databaseName: string, serverName: string, type: string>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -881,6 +896,7 @@ export def "job-executions-get" [
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
   if ($job_execution_id | is-empty) { error make --unspanned { msg: "path parameter 'jobExecutionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name), job_execution_id: (encode-path-segment $job_execution_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}/executions/{job_execution_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -919,8 +935,8 @@ export def "job-executions-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<createTime: string, currentAttemptStartTime: string, currentAttempts: int, endTime: string, jobExecutionId: string, jobVersion: int, lastMessage: string, lifecycle: string, provisioningState: string, startTime: string, stepId: int, stepName: string, target: record<databaseName: string, serverName: string, type: string>>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<createTime: string, currentAttemptStartTime: string, currentAttempts: int, endTime: string, jobExecutionId: string, jobVersion: int, lastMessage: string, lifecycle: string, provisioningState: string, startTime: string, stepId: int, stepName: string, target: record<databaseName: string, serverName: string, type: string>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -929,6 +945,7 @@ export def "job-executions-create-or-update" [
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
   if ($job_execution_id | is-empty) { error make --unspanned { msg: "path parameter 'jobExecutionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name), job_execution_id: (encode-path-segment $job_execution_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}/executions/{job_execution_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -967,7 +984,7 @@ export def "job-executions-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -977,6 +994,7 @@ export def "job-executions-cancel" [
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
   if ($job_execution_id | is-empty) { error make --unspanned { msg: "path parameter 'jobExecutionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name), job_execution_id: (encode-path-segment $job_execution_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}/executions/{job_execution_id}/cancel") $qp $auth.query)
   let accept_val = "application/json"
@@ -1022,8 +1040,8 @@ export def "job-step-executions-list-by-job-execution" [
   --is-active: oneof<nothing, bool> # If specified, only active or only completed job executions are included.
   --skip: int # The number of elements in the collection to skip.
   --top: int # The number of elements to return from the collection.
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1032,6 +1050,7 @@ export def "job-step-executions-list-by-job-execution" [
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
   if ($job_execution_id | is-empty) { error make --unspanned { msg: "path parameter 'jobExecutionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "createTimeMin" $create_time_min "scalar") (serialize-qp "createTimeMax" $create_time_max "scalar") (serialize-qp "endTimeMin" $end_time_min "scalar") (serialize-qp "endTimeMax" $end_time_max "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name), job_execution_id: (encode-path-segment $job_execution_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}/executions/{job_execution_id}/steps") $qp $auth.query)
   let accept_val = "application/json"
@@ -1071,8 +1090,8 @@ export def "job-step-executions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<createTime: string, currentAttemptStartTime: string, currentAttempts: int, endTime: string, jobExecutionId: string, jobVersion: int, lastMessage: string, lifecycle: string, provisioningState: string, startTime: string, stepId: int, stepName: string, target: record<databaseName: string, serverName: string, type: string>>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<createTime: string, currentAttemptStartTime: string, currentAttempts: int, endTime: string, jobExecutionId: string, jobVersion: int, lastMessage: string, lifecycle: string, provisioningState: string, startTime: string, stepId: int, stepName: string, target: record<databaseName: string, serverName: string, type: string>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1082,6 +1101,7 @@ export def "job-step-executions-get" [
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
   if ($job_execution_id | is-empty) { error make --unspanned { msg: "path parameter 'jobExecutionId' must be non-empty" } }
   if ($step_name | is-empty) { error make --unspanned { msg: "path parameter 'stepName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name), job_execution_id: (encode-path-segment $job_execution_id), step_name: (encode-path-segment $step_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}/executions/{job_execution_id}/steps/{step_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1128,8 +1148,8 @@ export def "job-target-executions-list-by-step" [
   --is-active: oneof<nothing, bool> # If specified, only active or only completed job executions are included.
   --skip: int # The number of elements in the collection to skip.
   --top: int # The number of elements to return from the collection.
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1139,6 +1159,7 @@ export def "job-target-executions-list-by-step" [
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
   if ($job_execution_id | is-empty) { error make --unspanned { msg: "path parameter 'jobExecutionId' must be non-empty" } }
   if ($step_name | is-empty) { error make --unspanned { msg: "path parameter 'stepName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "createTimeMin" $create_time_min "scalar") (serialize-qp "createTimeMax" $create_time_max "scalar") (serialize-qp "endTimeMin" $end_time_min "scalar") (serialize-qp "endTimeMax" $end_time_max "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name), job_execution_id: (encode-path-segment $job_execution_id), step_name: (encode-path-segment $step_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}/executions/{job_execution_id}/steps/{step_name}/targets") $qp $auth.query)
   let accept_val = "application/json"
@@ -1179,8 +1200,8 @@ export def "job-target-executions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<createTime: string, currentAttemptStartTime: string, currentAttempts: int, endTime: string, jobExecutionId: string, jobVersion: int, lastMessage: string, lifecycle: string, provisioningState: string, startTime: string, stepId: int, stepName: string, target: record<databaseName: string, serverName: string, type: string>>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<createTime: string, currentAttemptStartTime: string, currentAttempts: int, endTime: string, jobExecutionId: string, jobVersion: int, lastMessage: string, lifecycle: string, provisioningState: string, startTime: string, stepId: int, stepName: string, target: record<databaseName: string, serverName: string, type: string>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1191,6 +1212,7 @@ export def "job-target-executions-get" [
   if ($job_execution_id | is-empty) { error make --unspanned { msg: "path parameter 'jobExecutionId' must be non-empty" } }
   if ($step_name | is-empty) { error make --unspanned { msg: "path parameter 'stepName' must be non-empty" } }
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'targetId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name), job_execution_id: (encode-path-segment $job_execution_id), step_name: (encode-path-segment $step_name), target_id: (encode-path-segment $target_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}/executions/{job_execution_id}/steps/{step_name}/targets/{target_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1236,8 +1258,8 @@ export def "job-target-executions-list-by-job-execution" [
   --is-active: oneof<nothing, bool> # If specified, only active or only completed job executions are included.
   --skip: int # The number of elements in the collection to skip.
   --top: int # The number of elements to return from the collection.
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1246,6 +1268,7 @@ export def "job-target-executions-list-by-job-execution" [
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
   if ($job_execution_id | is-empty) { error make --unspanned { msg: "path parameter 'jobExecutionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "createTimeMin" $create_time_min "scalar") (serialize-qp "createTimeMax" $create_time_max "scalar") (serialize-qp "endTimeMin" $end_time_min "scalar") (serialize-qp "endTimeMax" $end_time_max "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name), job_execution_id: (encode-path-segment $job_execution_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}/executions/{job_execution_id}/targets") $qp $auth.query)
   let accept_val = "application/json"
@@ -1283,8 +1306,8 @@ export def "job-executions-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<createTime: string, currentAttemptStartTime: string, currentAttempts: int, endTime: string, jobExecutionId: string, jobVersion: int, lastMessage: string, lifecycle: string, provisioningState: string, startTime: string, stepId: int, stepName: string, target: record<databaseName: string, serverName: string, type: string>>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<createTime: string, currentAttemptStartTime: string, currentAttempts: int, endTime: string, jobExecutionId: string, jobVersion: int, lastMessage: string, lifecycle: string, provisioningState: string, startTime: string, stepId: int, stepName: string, target: record<databaseName: string, serverName: string, type: string>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1292,6 +1315,7 @@ export def "job-executions-create" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}/start") $qp $auth.query)
   let accept_val = "application/json"
@@ -1329,8 +1353,8 @@ export def "job-steps-list-by-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1338,6 +1362,7 @@ export def "job-steps-list-by-job" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}/steps") $qp $auth.query)
   let accept_val = "application/json"
@@ -1376,7 +1401,7 @@ export def "job-steps-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1386,6 +1411,7 @@ export def "job-steps-delete" [
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
   if ($step_name | is-empty) { error make --unspanned { msg: "path parameter 'stepName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name), step_name: (encode-path-segment $step_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}/steps/{step_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1424,8 +1450,8 @@ export def "job-steps-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<action: record<source: string, type: string, value: string>, credential: string, executionOptions: record<initialRetryIntervalSeconds: int, maximumRetryIntervalSeconds: int, retryAttempts: int, retryIntervalBackoffMultiplier: float, timeoutSeconds: int>, output: record<credential: string, databaseName: string, resourceGroupName: string, schemaName: string, serverName: string, subscriptionId: string, tableName: string, type: string>, stepId: int, targetGroup: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<action: record<source: string, type: string, value: string>, credential: string, executionOptions: record<initialRetryIntervalSeconds: int, maximumRetryIntervalSeconds: int, retryAttempts: int, retryIntervalBackoffMultiplier: float, timeoutSeconds: int>, output: record<credential: string, databaseName: string, resourceGroupName: string, schemaName: string, serverName: string, subscriptionId: string, tableName: string, type: string>, stepId: int, targetGroup: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1434,6 +1460,7 @@ export def "job-steps-get" [
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
   if ($step_name | is-empty) { error make --unspanned { msg: "path parameter 'stepName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name), step_name: (encode-path-segment $step_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}/steps/{step_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1473,9 +1500,9 @@ export def "job-steps-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: record # Properties of a job step. — shape: {action: record, credential: string, executionOptions?: record, output?: record, stepId?: int, targetGroup: string}
-]: any -> record<properties: record<action: record<source: string, type: string, value: string>, credential: string, executionOptions: record<initialRetryIntervalSeconds: int, maximumRetryIntervalSeconds: int, retryAttempts: int, retryIntervalBackoffMultiplier: float, timeoutSeconds: int>, output: record<credential: string, databaseName: string, resourceGroupName: string, schemaName: string, serverName: string, subscriptionId: string, tableName: string, type: string>, stepId: int, targetGroup: string>> {
+]: any -> record<properties: record<action: record<source: string, type: string, value: string>, credential: string, executionOptions: record<initialRetryIntervalSeconds: int, maximumRetryIntervalSeconds: int, retryAttempts: int, retryIntervalBackoffMultiplier: float, timeoutSeconds: int>, output: record<credential: string, databaseName: string, resourceGroupName: string, schemaName: string, serverName: string, subscriptionId: string, tableName: string, type: string>, stepId: int, targetGroup: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1485,6 +1512,7 @@ export def "job-steps-create-or-update" [
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
   if ($step_name | is-empty) { error make --unspanned { msg: "path parameter 'stepName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name), step_name: (encode-path-segment $step_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}/steps/{step_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1524,8 +1552,8 @@ export def "job-versions-list-by-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: list<record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1533,6 +1561,7 @@ export def "job-versions-list-by-job" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}/versions") $qp $auth.query)
   let accept_val = "application/json"
@@ -1571,8 +1600,8 @@ export def "job-versions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1581,6 +1610,7 @@ export def "job-versions-get" [
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
   if ($job_version | is-empty) { error make --unspanned { msg: "path parameter 'jobVersion' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name), job_version: (encode-path-segment $job_version)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}/versions/{job_version}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1619,8 +1649,8 @@ export def "job-steps-list-by-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1629,6 +1659,7 @@ export def "job-steps-list-by-version" [
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
   if ($job_version | is-empty) { error make --unspanned { msg: "path parameter 'jobVersion' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name), job_version: (encode-path-segment $job_version)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}/versions/{job_version}/steps") $qp $auth.query)
   let accept_val = "application/json"
@@ -1668,8 +1699,8 @@ export def "job-steps-get-by-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<action: record<source: string, type: string, value: string>, credential: string, executionOptions: record<initialRetryIntervalSeconds: int, maximumRetryIntervalSeconds: int, retryAttempts: int, retryIntervalBackoffMultiplier: float, timeoutSeconds: int>, output: record<credential: string, databaseName: string, resourceGroupName: string, schemaName: string, serverName: string, subscriptionId: string, tableName: string, type: string>, stepId: int, targetGroup: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<action: record<source: string, type: string, value: string>, credential: string, executionOptions: record<initialRetryIntervalSeconds: int, maximumRetryIntervalSeconds: int, retryAttempts: int, retryIntervalBackoffMultiplier: float, timeoutSeconds: int>, output: record<credential: string, databaseName: string, resourceGroupName: string, schemaName: string, serverName: string, subscriptionId: string, tableName: string, type: string>, stepId: int, targetGroup: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1679,6 +1710,7 @@ export def "job-steps-get-by-version" [
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
   if ($job_version | is-empty) { error make --unspanned { msg: "path parameter 'jobVersion' must be non-empty" } }
   if ($step_name | is-empty) { error make --unspanned { msg: "path parameter 'stepName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), job_name: (encode-path-segment $job_name), job_version: (encode-path-segment $job_version), step_name: (encode-path-segment $step_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/jobs/{job_name}/versions/{job_version}/steps/{step_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1715,14 +1747,15 @@ export def "job-target-groups-list-by-agent" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/targetGroups") $qp $auth.query)
   let accept_val = "application/json"
@@ -1760,7 +1793,7 @@ export def "job-target-groups-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1769,6 +1802,7 @@ export def "job-target-groups-delete" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($target_group_name | is-empty) { error make --unspanned { msg: "path parameter 'targetGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), target_group_name: (encode-path-segment $target_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/targetGroups/{target_group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1806,8 +1840,8 @@ export def "job-target-groups-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<members: list<record>>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<members: list<record>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1815,6 +1849,7 @@ export def "job-target-groups-get" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($target_group_name | is-empty) { error make --unspanned { msg: "path parameter 'targetGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), target_group_name: (encode-path-segment $target_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/targetGroups/{target_group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1853,9 +1888,9 @@ export def "job-target-groups-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: record # Properties of job target group. — shape: {members: list}
-]: any -> record<properties: record<members: list<record>>> {
+]: any -> record<properties: record<members: list<record>>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1864,6 +1899,7 @@ export def "job-target-groups-create-or-update" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($job_agent_name | is-empty) { error make --unspanned { msg: "path parameter 'jobAgentName' must be non-empty" } }
   if ($target_group_name | is-empty) { error make --unspanned { msg: "path parameter 'targetGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), job_agent_name: (encode-path-segment $job_agent_name), target_group_name: (encode-path-segment $target_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/jobAgents/{job_agent_name}/targetGroups/{target_group_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

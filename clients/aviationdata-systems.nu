@@ -1,4 +1,4 @@
-# Auto-generated client for AviationData.Systems Airports API V1 vv1
+# Auto-generated client for AviationData.Systems Airports API V1 v1
 # Source: https://api.apis.guru/v2/specs/aviationdata.systems/v1/swagger.json
 # Auth: --token flag or $env.AVIATIONDATA_SYSTEMS_AIRPORTS_API_V1_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -138,12 +138,13 @@ export def "auto-complete-airport-name-airport-name-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --airport-service-type: string@airport-service-type-completer # Required: Needs to be: All, Scheduled or NonScheduled
+  --airport-service-type: string@airport-service-type-completer # Required: Needs to be: All, Scheduled or NonScheduled (required)
   --optional-country-code: string # Optional: Country code (ISO 3166-1). This can be found via /countries
 ]: nothing -> record<airport_list: table<label: string, value: string>, disclaimer: string, message: string, status_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($airport_name | is-empty) { error make --unspanned { msg: "path parameter 'airport_name' must be non-empty" } }
+  if ($airport_service_type == null) { error make --unspanned { msg: "required query parameter 'airport_service_type' missing: pass --airport-service-type" } }
   let qp = [(serialize-qp "airport_service_type" $airport_service_type "scalar") (serialize-qp "optional_country_code" $optional_country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({airport_name: (encode-path-segment $airport_name)} | format pattern "/v1/airport/autocomplete/{airport_name}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -293,11 +294,12 @@ export def "country-airport-list-country-airport-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --airport-service-type: string@airport-service-type-completer # Required: Needs to be: All, Scheduled or NonScheduled
+  --airport-service-type: string@airport-service-type-completer # Required: Needs to be: All, Scheduled or NonScheduled (required)
 ]: nothing -> record<airport_list: table<airport_name: string, airport_type: string, iata_code: string, latitude: string, location: string, longitude: string>, country: record<continent: string, country_code: string, flag_url: string, name: string>, disclaimer: string, message: string, status_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'country_code' must be non-empty" } }
+  if ($airport_service_type == null) { error make --unspanned { msg: "required query parameter 'airport_service_type' missing: pass --airport-service-type" } }
   let qp = [(serialize-qp "airport_service_type" $airport_service_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({country_code: (encode-path-segment $country_code)} | format pattern "/v1/country/code/{country_code}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")

@@ -1,4 +1,4 @@
-# Auto-generated client for hetras Booking API Version 0 vv0
+# Auto-generated client for hetras Booking API Version 0 v0
 # Source: https://api.apis.guru/v2/specs/hetras-certification.net/booking/v0/swagger.json
 # Auth: --token flag or $env.HETRAS_BOOKING_API_VERSION_0_TOKEN
 
@@ -162,20 +162,30 @@ export def "addons-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --hotel-id: int # Specifies the hotel id to request offers for. (format: int32)
-  --arrival-date: string # Date from when the addon service will be booked to the reservation in the ISO-8601 format "YYYY-MM-DD". (format: date-time)
-  --departure-date: string # Date until when the addon service will be booked to the reservation in the ISO-8601 format "YYYY-MM-DD". This is usually the departure date of the reservation. (format: date-time)
-  --channel-code: string # Channel Code the rate plan needs to be configured for.
-  --adults: string # Number of adults per room. (format: byte)
-  --rooms: string # Number of rooms. (format: byte)
-  --room-type: string # Only return offers for the specified room type code.
-  --rate-plan-code: string # Only return offers for the specified rate plan code.
+  --hotel-id: int # Specifies the hotel id to request offers for. (required, format: int32)
+  --arrival-date: string # Date from when the addon service will be booked to the reservation in the ISO-8601 format "YYYY-MM-DD". (required, format: date-time)
+  --departure-date: string # Date until when the addon service will be booked to the reservation in the ISO-8601 format "YYYY-MM-DD". This is usually the departure date of the reservation. (required, format: date-time)
+  --channel-code: string # Channel Code the rate plan needs to be configured for. (required)
+  --adults: string # Number of adults per room. (required, format: byte)
+  --rooms: string # Number of rooms. (required, format: byte)
+  --room-type: string # Only return offers for the specified room type code. (required)
+  --rate-plan-code: string # Only return offers for the specified rate plan code. (required)
   --expand: string@expand-completer # Expand the rates breakdown if required.
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<addon_services: table<breakdown: list, code: string, description: string, frequency: string, name: string, rate_mode: string, total_stay: record>, adults: int, arrival_date: string, departure_date: string, hotel_id: int, hotel_name: string, rate_plan: record<code: string, description: string, name: string>, room: record<description: string, name: string, room_number: int, type: string>, rooms: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id == null) { error make --unspanned { msg: "required query parameter 'hotelId' missing: pass --hotel-id" } }
+  if ($arrival_date == null) { error make --unspanned { msg: "required query parameter 'arrivalDate' missing: pass --arrival-date" } }
+  if ($departure_date == null) { error make --unspanned { msg: "required query parameter 'departureDate' missing: pass --departure-date" } }
+  if ($channel_code == null) { error make --unspanned { msg: "required query parameter 'channelCode' missing: pass --channel-code" } }
+  if ($adults == null) { error make --unspanned { msg: "required query parameter 'adults' missing: pass --adults" } }
+  if ($rooms == null) { error make --unspanned { msg: "required query parameter 'rooms' missing: pass --rooms" } }
+  if ($room_type == null) { error make --unspanned { msg: "required query parameter 'roomType' missing: pass --room-type" } }
+  if ($rate_plan_code == null) { error make --unspanned { msg: "required query parameter 'ratePlanCode' missing: pass --rate-plan-code" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "arrivalDate" $arrival_date "scalar") (serialize-qp "departureDate" $departure_date "scalar") (serialize-qp "channelCode" $channel_code "scalar") (serialize-qp "adults" $adults "scalar") (serialize-qp "rooms" $rooms "scalar") (serialize-qp "roomType" $room_type "scalar") (serialize-qp "ratePlanCode" $rate_plan_code "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/addons" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -211,19 +221,24 @@ export def "availability-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --hotel-id: int # Specifies the hotel id to request the availability for. (format: int32)
-  --qp-from: string # Defines the first business day you would like to get availability numbers for. (format: date-time)
-  --qp-to: string # Defines the last business day you would like to get availability numbers for. The maximum time span between from´and to is limited to 365 days. (format: date-time)
+  --hotel-id: int # Specifies the hotel id to request the availability for. (required, format: int32)
+  --from: string # Defines the first business day you would like to get availability numbers for. (required, format: date-time)
+  --to: string # Defines the last business day you would like to get availability numbers for. The maximum time span between from´and to is limited to 365 days. (required, format: date-time)
   --expand: string@expand-completer-1 # You can expand the room types breakdown per business day for the availibility numbers if need be.
   --skip: int # Amount of items to skip. (format: int32)
   --top: int # Amount of items to select. (format: int32)
   --inlinecount: string@inlinecount-completer # Return total number of items for a given filter criteria.
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<_count: int, _links: record, daily_availabilities: table<business_day: string, house_level: record, room_types: list>, hotel: record<code: string, id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
+  if ($hotel_id == null) { error make --unspanned { msg: "required query parameter 'hotelId' missing: pass --hotel-id" } }
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
+  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/availability" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -232,7 +247,7 @@ export def "availability-get" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"hotelId": $hotel_id, "from": $qp_from, "to": $qp_to, "expand": $expand, "skip": $skip, "top": $top, "inlinecount": $inlinecount} | compact)
+    query: ({"hotelId": $hotel_id, "from": $from, "to": $to, "expand": $expand, "skip": $skip, "top": $top, "inlinecount": $inlinecount} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -247,7 +262,6 @@ export def "availability-get" [
 #
 # GET /api/booking/v0/blocks
 # operationId: Blocks_GetBlocksAsync
-# --WaitHandle shape: {Handle?: record, SafeWaitHandle?: record}
 export def "blocks-get-blocks-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -261,20 +275,22 @@ export def "blocks-get-blocks-async" [
   --accept: string@accept-completer # Response content type
   --hotel-id: int # Only return blocks for this specific hotel. (format: int32)
   --group-code: string # Filter the blocks by the specified group code
-  --qp-from: string # Return all blocks where the block's last_departure is greater than specified date. (format: date-time)
-  --qp-to: string # Return all blocks where the block's last_departure is less than specified date. (format: date-time)
+  --from: string # Return all blocks where the block's last_departure is greater than specified date. (format: date-time)
+  --to: string # Return all blocks where the block's last_departure is less than specified date. (format: date-time)
   --status: string@status-completer # Return all blocks where the block status is one of the specified values.
   --rate-plan-codes: list<string> # Return all blocks that have related the specified comma-separated rate plans.
   --count-details: oneof<nothing, bool> # If true it will include also details of block count per each room type.
   --skip: int # Amount of items to skip. (format: int32)
   --top: int # Amount of items to select. (format: int32)
   --inlinecount: string@inlinecount-completer # Return total number of items for a given filter criteria.
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "groupCode" $group_code "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "countDetails" $count_details "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
+  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "groupCode" $group_code "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "countDetails" $count_details "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/blocks" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -283,7 +299,7 @@ export def "blocks-get-blocks-async" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"hotelId": $hotel_id, "groupCode": $group_code, "from": $qp_from, "to": $qp_to, "status": $status, "ratePlanCodes": $rate_plan_codes, "countDetails": $count_details, "skip": $skip, "top": $top, "inlinecount": $inlinecount} | compact)
+    query: ({"hotelId": $hotel_id, "groupCode": $group_code, "from": $from, "to": $to, "status": $status, "ratePlanCodes": $rate_plan_codes, "countDetails": $count_details, "skip": $skip, "top": $top, "inlinecount": $inlinecount} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -298,7 +314,6 @@ export def "blocks-get-blocks-async" [
 #
 # GET /api/booking/v0/blocks/$count
 # operationId: Blocks_GetBlocksCountAsync
-# --WaitHandle shape: {Handle?: record, SafeWaitHandle?: record}
 export def "blocks-get-blocks-count-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -312,17 +327,19 @@ export def "blocks-get-blocks-count-async" [
   --accept: string@accept-completer # Response content type
   --hotel-id: int # Only return blocks for this specific hotel. (format: int32)
   --group-code: string # Filter the blocks by the specified group code
-  --qp-from: string # Return all blocks where the block's last_departure is greater than specified date. (format: date-time)
-  --qp-to: string # Return all blocks where the block's last_departure is less than specified date. (format: date-time)
+  --from: string # Return all blocks where the block's last_departure is greater than specified date. (format: date-time)
+  --to: string # Return all blocks where the block's last_departure is less than specified date. (format: date-time)
   --status: string@status-completer # Return all blocks where the block status is one of the specified values.
   --rate-plan-codes: list<string> # Return all blocks that have related the specified comma-separated rate plans.
   --count-details: oneof<nothing, bool> # If true it will include also details of block count per each room type.
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "groupCode" $group_code "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "countDetails" $count_details "scalar")] | flatten | str join "&"
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
+  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "groupCode" $group_code "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "countDetails" $count_details "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/blocks/$count" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -331,7 +348,7 @@ export def "blocks-get-blocks-count-async" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"hotelId": $hotel_id, "groupCode": $group_code, "from": $qp_from, "to": $qp_to, "status": $status, "ratePlanCodes": $rate_plan_codes, "countDetails": $count_details} | compact)
+    query: ({"hotelId": $hotel_id, "groupCode": $group_code, "from": $from, "to": $to, "status": $status, "ratePlanCodes": $rate_plan_codes, "countDetails": $count_details} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -346,7 +363,6 @@ export def "blocks-get-blocks-count-async" [
 #
 # GET /api/booking/v0/blocks/{blockCode}
 # operationId: Blocks_GetSingleBlockAsync
-# --WaitHandle shape: {Handle?: record, SafeWaitHandle?: record}
 export def "blocks-get-single-block-async" [
   block_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -359,12 +375,14 @@ export def "blocks-get-single-block-async" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($block_code | is-empty) { error make --unspanned { msg: "path parameter 'blockCode' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({block_code: (encode-path-segment $block_code)} | format pattern "/api/booking/v0/blocks/{block_code}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -418,19 +436,21 @@ export def "bookings-get-bookings" [
   --room-types: list<string> # Return all bookings where the room type is one of the specified values.
   --rate-plan-codes: list<string> # Return all bookings where the rate plan code is one of the specified values.
   --labels: list<string> # Return all reservations with at least one of the specified labels.
-  --qp-from: string # Start date for the selected date filter. If you select arrival date as date filter the bookings returned will have at least one reservation arriving on the specified date or later. (format: date-time)
-  --qp-to: string # End date for the selected date filter. If you select arrival date as date filter the bookings returned will have at least one reservation arriving on the specified date or earlier. (format: date-time)
+  --from: string # Start date for the selected date filter. If you select arrival date as date filter the bookings returned will have at least one reservation arriving on the specified date or later. (format: date-time)
+  --to: string # End date for the selected date filter. If you select arrival date as date filter the bookings returned will have at least one reservation arriving on the specified date or earlier. (format: date-time)
   --date-filter: string@date-filter-completer # Select a date field you want to filter bookings by. Only one filter at a time can be applied. The to and from dates will then define the time range.
   --exclude: string@exclude-completer # To be able to request reservations without personal data based on GDPR.
   --skip: int # Amount of items to skip. (format: int32)
   --top: int # Amount of items to select. (format: int32)
   --inlinecount: string@inlinecount-completer # Return total number of items for a given filter criteria.
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<_count: int, _links: record, bookings: table<_links: record, confirmation_id: string, created: string, reservations: list, updated: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "cancellationId" $cancellation_id "scalar") (serialize-qp "reservationNumber" $reservation_number "scalar") (serialize-qp "customerName" $customer_name "scalar") (serialize-qp "customerEmail" $customer_email "scalar") (serialize-qp "customerId" $customer_id "scalar") (serialize-qp "roomNumber" $room_number "scalar") (serialize-qp "externalId" $external_id "scalar") (serialize-qp "companyName" $company_name "scalar") (serialize-qp "companyId" $company_id "scalar") (serialize-qp "companyEmail" $company_email "scalar") (serialize-qp "blockCode" $block_code "scalar") (serialize-qp "reservationStatuses" $reservation_statuses "csv") (serialize-qp "marketCodes" $market_codes "csv") (serialize-qp "channelCodes" $channel_codes "csv") (serialize-qp "subChannelCodes" $sub_channel_codes "csv") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "labels" $labels "csv") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "dateFilter" $date_filter "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
+  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "cancellationId" $cancellation_id "scalar") (serialize-qp "reservationNumber" $reservation_number "scalar") (serialize-qp "customerName" $customer_name "scalar") (serialize-qp "customerEmail" $customer_email "scalar") (serialize-qp "customerId" $customer_id "scalar") (serialize-qp "roomNumber" $room_number "scalar") (serialize-qp "externalId" $external_id "scalar") (serialize-qp "companyName" $company_name "scalar") (serialize-qp "companyId" $company_id "scalar") (serialize-qp "companyEmail" $company_email "scalar") (serialize-qp "blockCode" $block_code "scalar") (serialize-qp "reservationStatuses" $reservation_statuses "csv") (serialize-qp "marketCodes" $market_codes "csv") (serialize-qp "channelCodes" $channel_codes "csv") (serialize-qp "subChannelCodes" $sub_channel_codes "csv") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "labels" $labels "csv") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "dateFilter" $date_filter "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/bookings" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -439,7 +459,7 @@ export def "bookings-get-bookings" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"hotelId": $hotel_id, "cancellationId": $cancellation_id, "reservationNumber": $reservation_number, "customerName": $customer_name, "customerEmail": $customer_email, "customerId": $customer_id, "roomNumber": $room_number, "externalId": $external_id, "companyName": $company_name, "companyId": $company_id, "companyEmail": $company_email, "blockCode": $block_code, "reservationStatuses": $reservation_statuses, "marketCodes": $market_codes, "channelCodes": $channel_codes, "subChannelCodes": $sub_channel_codes, "roomTypes": $room_types, "ratePlanCodes": $rate_plan_codes, "labels": $labels, "from": $qp_from, "to": $qp_to, "dateFilter": $date_filter, "exclude": $exclude, "skip": $skip, "top": $top, "inlinecount": $inlinecount} | compact)
+    query: ({"hotelId": $hotel_id, "cancellationId": $cancellation_id, "reservationNumber": $reservation_number, "customerName": $customer_name, "customerEmail": $customer_email, "customerId": $customer_id, "roomNumber": $room_number, "externalId": $external_id, "companyName": $company_name, "companyId": $company_id, "companyEmail": $company_email, "blockCode": $block_code, "reservationStatuses": $reservation_statuses, "marketCodes": $market_codes, "channelCodes": $channel_codes, "subChannelCodes": $sub_channel_codes, "roomTypes": $room_types, "ratePlanCodes": $rate_plan_codes, "labels": $labels, "from": $from, "to": $to, "dateFilter": $date_filter, "exclude": $exclude, "skip": $skip, "top": $top, "inlinecount": $inlinecount} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -471,8 +491,8 @@ export def "bookings-create-booking" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --send-confirmation: oneof<nothing, bool> # Whether to send a confirmation email to the primary guest
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
   --addons: list<string> # A list of addon service codes that should be booked for all reservations of this booking
   --adults: int # The number of adults per room (format: int32)
   --arrival-date: string # The arrival date of the guests (format: date-time)
@@ -496,6 +516,8 @@ export def "bookings-create-booking" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let qp = [(serialize-qp "sendConfirmation" $send_confirmation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/bookings" $qp $auth.query)
   let req_body = {"addons": $addons, "adults": $adults, "arrival_date": $arrival_date, "channel_code": $channel_code, "comment": $comment, "company": $company, "contact": $contact, "departure_date": $departure_date, "external_id": $external_id, "group_code": $group_code, "guarantee": $guarantee, "guests": $guests, "hotel_id": $hotel_id, "payment_method": $payment_method, "prepay_discount": $prepay_discount, "rate_plan": $rate_plan, "room_type": $room_type, "rooms": $rooms, "travel_agent": $travel_agent} | compact
@@ -552,16 +574,18 @@ export def "bookings-get-bookings-count" [
   --room-types: list<string> # Return all bookings where the room type is one of the specified values.
   --rate-plan-codes: list<string> # Return all bookings where the rate plan code is one of the specified values.
   --labels: list<string> # Return all reservations with at least one of the specified labels.
-  --qp-from: string # Start date for the selected date filter. If you select arrival date as date filter the bookings returned will have at least one reservation arriving on the specified date or later. (format: date-time)
-  --qp-to: string # End date for the selected date filter. If you select arrival date as date filter the bookings returned will have at least one reservation arriving on the specified date or earlier. (format: date-time)
+  --from: string # Start date for the selected date filter. If you select arrival date as date filter the bookings returned will have at least one reservation arriving on the specified date or later. (format: date-time)
+  --to: string # End date for the selected date filter. If you select arrival date as date filter the bookings returned will have at least one reservation arriving on the specified date or earlier. (format: date-time)
   --date-filter: string@date-filter-completer # Select a date field you want to filter bookings by. Only one filter at a time can be applied. The to and from dates will then define the time range.
   --exclude: string@exclude-completer # To be able to request reservations without personal data based on GDPR.
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "cancellationId" $cancellation_id "scalar") (serialize-qp "reservationNumber" $reservation_number "scalar") (serialize-qp "customerName" $customer_name "scalar") (serialize-qp "customerEmail" $customer_email "scalar") (serialize-qp "customerId" $customer_id "scalar") (serialize-qp "roomNumber" $room_number "scalar") (serialize-qp "externalId" $external_id "scalar") (serialize-qp "companyName" $company_name "scalar") (serialize-qp "companyId" $company_id "scalar") (serialize-qp "companyEmail" $company_email "scalar") (serialize-qp "blockCode" $block_code "scalar") (serialize-qp "reservationStatuses" $reservation_statuses "csv") (serialize-qp "marketCodes" $market_codes "csv") (serialize-qp "channelCodes" $channel_codes "csv") (serialize-qp "subChannelCodes" $sub_channel_codes "csv") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "labels" $labels "csv") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "dateFilter" $date_filter "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
+  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "cancellationId" $cancellation_id "scalar") (serialize-qp "reservationNumber" $reservation_number "scalar") (serialize-qp "customerName" $customer_name "scalar") (serialize-qp "customerEmail" $customer_email "scalar") (serialize-qp "customerId" $customer_id "scalar") (serialize-qp "roomNumber" $room_number "scalar") (serialize-qp "externalId" $external_id "scalar") (serialize-qp "companyName" $company_name "scalar") (serialize-qp "companyId" $company_id "scalar") (serialize-qp "companyEmail" $company_email "scalar") (serialize-qp "blockCode" $block_code "scalar") (serialize-qp "reservationStatuses" $reservation_statuses "csv") (serialize-qp "marketCodes" $market_codes "csv") (serialize-qp "channelCodes" $channel_codes "csv") (serialize-qp "subChannelCodes" $sub_channel_codes "csv") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "labels" $labels "csv") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "dateFilter" $date_filter "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/bookings/$count" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -570,7 +594,7 @@ export def "bookings-get-bookings-count" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"hotelId": $hotel_id, "cancellationId": $cancellation_id, "reservationNumber": $reservation_number, "customerName": $customer_name, "customerEmail": $customer_email, "customerId": $customer_id, "roomNumber": $room_number, "externalId": $external_id, "companyName": $company_name, "companyId": $company_id, "companyEmail": $company_email, "blockCode": $block_code, "reservationStatuses": $reservation_statuses, "marketCodes": $market_codes, "channelCodes": $channel_codes, "subChannelCodes": $sub_channel_codes, "roomTypes": $room_types, "ratePlanCodes": $rate_plan_codes, "labels": $labels, "from": $qp_from, "to": $qp_to, "dateFilter": $date_filter, "exclude": $exclude} | compact)
+    query: ({"hotelId": $hotel_id, "cancellationId": $cancellation_id, "reservationNumber": $reservation_number, "customerName": $customer_name, "customerEmail": $customer_email, "customerId": $customer_id, "roomNumber": $room_number, "externalId": $external_id, "companyName": $company_name, "companyId": $company_id, "companyEmail": $company_email, "blockCode": $block_code, "reservationStatuses": $reservation_statuses, "marketCodes": $market_codes, "channelCodes": $channel_codes, "subChannelCodes": $sub_channel_codes, "roomTypes": $room_types, "ratePlanCodes": $rate_plan_codes, "labels": $labels, "from": $from, "to": $to, "dateFilter": $date_filter, "exclude": $exclude} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -599,12 +623,14 @@ export def "bookings-get-booking" [
   --accept: string@accept-completer # Response content type
   --expand: string@expand-completer-2 # Specifies the expand type.
   --exclude: string@exclude-completer-1 # Specifies the exclude type.
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<reservations: table<_warnings: list, addon_services: list, adults: int, arrival_date: string, balance: float, block: record, cancellation_id: string, cancellation_policies: list, channel_code: string, checkin_time: string, checkout_time: string, comment: string, company: record, confirmation_id: string, contact: record, created: string, currency: string, departure_date: string, external_id: string, general_policies: list, guarantee: record, guests: list, hotel_id: int, labels: list, market_code: string, noshow_policy: record, payment_method: string, rate_plan: record, reservation_number: int, reservation_status: string, room: record, room_rates: list, rooms: int, services: list, subchannel_code: string, total_stay: record, updated: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($confirmation_id | is-empty) { error make --unspanned { msg: "path parameter 'confirmationId' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({confirmation_id: (encode-path-segment $confirmation_id)} | format pattern "/api/booking/v0/bookings/{confirmation_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -644,13 +670,15 @@ export def "bookings-get-reservation" [
   --accept: string@accept-completer # Response content type
   --expand: string@expand-completer-2 # Specifies the expand type.
   --exclude: string@exclude-completer-1 # Specifies the exclude type.
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<_warnings: list<string>, addon_services: list<string>, adults: int, arrival_date: string, balance: float, block: record<_links: record, code: string, name: string>, cancellation_id: string, cancellation_policies: table<description: string, fee: float, fee_date: string>, channel_code: string, checkin_time: string, checkout_time: string, comment: string, company: record<company_id: string>, confirmation_id: string, contact: record<_links: record, customer_id: string>, created: string, currency: string, departure_date: string, external_id: string, general_policies: table<description: string, name: string>, guarantee: record<guarantee_type: string, valid_token: bool>, guests: table<_links: record, customer_id: string, email: string, first_name: string, gender: string, last_name: string, mailing_address: record, nationality: string, phone: string, primary: bool, subscribed_consents: list, title: string>, hotel_id: int, labels: list<string>, market_code: string, noshow_policy: record<description: string, fee: float>, payment_method: string, rate_plan: record<code: string, description: string, name: string>, reservation_number: int, reservation_status: string, room: record<_links: record, description: string, name: string, number: string, room_type: record<_links: record, code: string, description: string, name: string>>, room_rates: table<addon_services: list, date: string, excluded_tax: float, included_services: list, included_tax: float, rate: float, room_type: string>, rooms: int, services: table<code: string, description: string, frequency: string, is_addon: bool, name: string>, subchannel_code: string, total_stay: record<addon_services: list<record>, excluded_tax: float, included_services: list<string>, included_tax: float, rate: float>, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($confirmation_id | is-empty) { error make --unspanned { msg: "path parameter 'confirmationId' must be non-empty" } }
   if ($reservation_number | is-empty) { error make --unspanned { msg: "path parameter 'reservationNumber' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({confirmation_id: (encode-path-segment $confirmation_id), reservation_number: (encode-path-segment $reservation_number)} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -688,8 +716,8 @@ export def "bookings-patch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
   --body: list
 ]: any -> record {
   let input = $in
@@ -697,6 +725,8 @@ export def "bookings-patch" [
   let base = ($base_url | default $BASE_URL)
   if ($confirmation_id | is-empty) { error make --unspanned { msg: "path parameter 'confirmationId' must be non-empty" } }
   if ($reservation_number | is-empty) { error make --unspanned { msg: "path parameter 'reservationNumber' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({confirmation_id: (encode-path-segment $confirmation_id), reservation_number: (encode-path-segment $reservation_number)} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -735,8 +765,8 @@ export def "bookings-post-room-assignment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
   --amenities: list<string> # Ensure the assigned room will have all the amenities specified. You can provide a comma seperated list of amenity codes.
   --condition: string@condition-completer # Here you can define to limit the list of assignable rooms based on their current condition. This is only applicable if the underlying reservation is due to arrive on the current business day. If not set by default only clean rooms will be assigned.
   --include-out-of-service: oneof<nothing, bool> # Sometimes you might want to assign rooms which are out of service (small repair needed) if no other rooms are available anymore. If you set include_out_of_service to true even those rooms will be considered. The default is false.
@@ -750,6 +780,8 @@ export def "bookings-post-room-assignment" [
   let base = ($base_url | default $BASE_URL)
   if ($confirmation_id | is-empty) { error make --unspanned { msg: "path parameter 'confirmationId' must be non-empty" } }
   if ($reservation_number | is-empty) { error make --unspanned { msg: "path parameter 'reservationNumber' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({confirmation_id: (encode-path-segment $confirmation_id), reservation_number: (encode-path-segment $reservation_number)} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}/assign_room") $auth.query)
   let req_body = {"amenities": $amenities, "condition": $condition, "include_out_of_service": $include_out_of_service, "locations": $locations, "respect_guest_preferences": $respect_guest_preferences, "room_number": $room_number, "views": $views} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -789,13 +821,15 @@ export def "bookings-cancel-reservation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --send-confirmation: oneof<nothing, bool> # Whether to send a confirmation email to the primary guest
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<_warnings: list<string>, balance: float, cancellation_fee: float, cancellation_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($confirmation_id | is-empty) { error make --unspanned { msg: "path parameter 'confirmationId' must be non-empty" } }
   if ($reservation_number | is-empty) { error make --unspanned { msg: "path parameter 'reservationNumber' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let qp = [(serialize-qp "sendConfirmation" $send_confirmation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({confirmation_id: (encode-path-segment $confirmation_id), reservation_number: (encode-path-segment $reservation_number)} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}/cancel") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -833,8 +867,8 @@ export def "bookings-check-in" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
   --client-identity: string # Client identity
 ]: any -> record<_warnings: list<string>> {
   let input = $in
@@ -842,6 +876,8 @@ export def "bookings-check-in" [
   let base = ($base_url | default $BASE_URL)
   if ($confirmation_id | is-empty) { error make --unspanned { msg: "path parameter 'confirmationId' must be non-empty" } }
   if ($reservation_number | is-empty) { error make --unspanned { msg: "path parameter 'reservationNumber' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({confirmation_id: (encode-path-segment $confirmation_id), reservation_number: (encode-path-segment $reservation_number)} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}/check_in") $auth.query)
   let req_body = {"client_identity": $client_identity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -880,13 +916,15 @@ export def "bookings-check-out" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<_warnings: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($confirmation_id | is-empty) { error make --unspanned { msg: "path parameter 'confirmationId' must be non-empty" } }
   if ($reservation_number | is-empty) { error make --unspanned { msg: "path parameter 'reservationNumber' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({confirmation_id: (encode-path-segment $confirmation_id), reservation_number: (encode-path-segment $reservation_number)} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}/check_out") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -924,8 +962,8 @@ export def "bookings-payment-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
   --authorization: record # shape: {amount?: float, expiry_date?: string, merchant_reference: string, reference: string, shopper_reference: string}
   --no-authorization-required: oneof<nothing, bool> # Whether hetras should skip authorization using the provided token when no authorization details are supplied. Optional flag, defaults to false.
   payment_token: string # The token you get from the payment service provider
@@ -935,6 +973,8 @@ export def "bookings-payment-token" [
   let base = ($base_url | default $BASE_URL)
   if ($confirmation_id | is-empty) { error make --unspanned { msg: "path parameter 'confirmationId' must be non-empty" } }
   if ($reservation_number | is-empty) { error make --unspanned { msg: "path parameter 'reservationNumber' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({confirmation_id: (encode-path-segment $confirmation_id), reservation_number: (encode-path-segment $reservation_number)} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}/payment_token") $auth.query)
   let req_body = {"authorization": $authorization, "no_authorization_required": $no_authorization_required, "payment_token": $payment_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -973,8 +1013,8 @@ export def "bookings-terminal-authorization" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
   --amount-to-authorize: float # The amount to authorize (format: double)
   --client-identity: string # Client identity
 ]: any -> record<_warnings: list<string>> {
@@ -983,6 +1023,8 @@ export def "bookings-terminal-authorization" [
   let base = ($base_url | default $BASE_URL)
   if ($confirmation_id | is-empty) { error make --unspanned { msg: "path parameter 'confirmationId' must be non-empty" } }
   if ($reservation_number | is-empty) { error make --unspanned { msg: "path parameter 'reservationNumber' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({confirmation_id: (encode-path-segment $confirmation_id), reservation_number: (encode-path-segment $reservation_number)} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}/pre_authorize") $auth.query)
   let req_body = {"amount_to_authorize": $amount_to_authorize, "client_identity": $client_identity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1019,21 +1061,27 @@ export def "daily-rates-get-daily-rates" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --hotel-id: int # Define the hotel id to request the availability for. (format: int32)
-  --qp-from: string # Define the first business day you would like to get availability numbers for. The day should not be in the past. (format: date-time)
-  --qp-to: string # Define the last business day you would like to get rates for (inclusive). The maximum time span between 'From' and 'To' is limited to 365 days. This can't be less than the 'From' date. (format: date-time)
-  --channel-code: string # Define the channel code in order to look up the rates for.
+  --hotel-id: int # Define the hotel id to request the availability for. (required, format: int32)
+  --from: string # Define the first business day you would like to get availability numbers for. The day should not be in the past. (required, format: date-time)
+  --to: string # Define the last business day you would like to get rates for (inclusive). The maximum time span between 'From' and 'To' is limited to 365 days. This can't be less than the 'From' date. (required, format: date-time)
+  --channel-code: string # Define the channel code in order to look up the rates for. (required)
   --expand: list<string> # Define the sections you want to expand and get informed about rates for.
   --rate-plan-codes: list<string> # Define the codes of rate plans to show in the response. A list of comma ',' separated rate plan codes.
   --skip: int # Amount of items to skip. (format: int32)
   --top: int # Amount of items to select. (format: int32)
   --inlinecount: string@inlinecount-completer # Return total number of items for a given filter criteria.
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<_count: int, _links: record, daily_rates: table<business_day: string, offers: list>, hotel: record<_links: record, code: string, id: int, name: string>, policies: record<cancellation_policies: list<record>, guarantee_types: list<record>, noshow_policies: list<record>>, rateplans: table<_links: record, code: string, currency: string, name: string>, room_types: table<_links: record, code: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "channelCode" $channel_code "scalar") (serialize-qp "expand" $expand "csv") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
+  if ($hotel_id == null) { error make --unspanned { msg: "required query parameter 'hotelId' missing: pass --hotel-id" } }
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  if ($channel_code == null) { error make --unspanned { msg: "required query parameter 'channelCode' missing: pass --channel-code" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
+  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "channelCode" $channel_code "scalar") (serialize-qp "expand" $expand "csv") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/daily_rates" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1042,7 +1090,7 @@ export def "daily-rates-get-daily-rates" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"hotelId": $hotel_id, "from": $qp_from, "to": $qp_to, "channelCode": $channel_code, "expand": $expand, "ratePlanCodes": $rate_plan_codes, "skip": $skip, "top": $top, "inlinecount": $inlinecount} | compact)
+    query: ({"hotelId": $hotel_id, "from": $from, "to": $to, "channelCode": $channel_code, "expand": $expand, "ratePlanCodes": $rate_plan_codes, "skip": $skip, "top": $top, "inlinecount": $inlinecount} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1068,21 +1116,28 @@ export def "rates-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --hotel-id: int # Specifies the hotel id to request offers for. (format: int32)
-  --arrival-date: string # Date of arrival for the guest in the ISO-8601 format "YYYY-MM-DD". (format: date-time)
-  --departure-date: string # Date of departure for the guest in the ISO-8601 format "YYYY-MM-DD". (format: date-time)
-  --channel-code: string # Channel Code the rate plan needs to be configured for.
-  --adults: string # Number of adults per room. (format: byte)
+  --hotel-id: int # Specifies the hotel id to request offers for. (required, format: int32)
+  --arrival-date: string # Date of arrival for the guest in the ISO-8601 format "YYYY-MM-DD". (required, format: date-time)
+  --departure-date: string # Date of departure for the guest in the ISO-8601 format "YYYY-MM-DD". (required, format: date-time)
+  --channel-code: string # Channel Code the rate plan needs to be configured for. (required)
+  --adults: string # Number of adults per room. (required, format: byte)
   --rooms: string # Number of rooms (default is 1). (format: byte)
   --room-type: string # Only return offers with rates for the specified room type code.
   --rate-plan-code: string # Only return offers for the specified room type code.
   --group-code: string # Only return offers for the specified group code.
   --expand: string@expand-completer # Expand the rates breakdown if required.
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<arrival_date: string, departure_date: string, hotel_id: int, hotel_name: string, rate_plans: table<code: string, description: string, name: string>, room_offers: table<offers: list, room_type: string>, rooms: table<description: string, name: string, room_number: int, type: string>, services: table<code: string, description: string, frequency: string, is_addon: bool, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id == null) { error make --unspanned { msg: "required query parameter 'hotelId' missing: pass --hotel-id" } }
+  if ($arrival_date == null) { error make --unspanned { msg: "required query parameter 'arrivalDate' missing: pass --arrival-date" } }
+  if ($departure_date == null) { error make --unspanned { msg: "required query parameter 'departureDate' missing: pass --departure-date" } }
+  if ($channel_code == null) { error make --unspanned { msg: "required query parameter 'channelCode' missing: pass --channel-code" } }
+  if ($adults == null) { error make --unspanned { msg: "required query parameter 'adults' missing: pass --adults" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "arrivalDate" $arrival_date "scalar") (serialize-qp "departureDate" $departure_date "scalar") (serialize-qp "channelCode" $channel_code "scalar") (serialize-qp "adults" $adults "scalar") (serialize-qp "rooms" $rooms "scalar") (serialize-qp "roomType" $room_type "scalar") (serialize-qp "ratePlanCode" $rate_plan_code "scalar") (serialize-qp "groupCode" $group_code "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/rates" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

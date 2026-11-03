@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -137,12 +137,14 @@ export def "attested-get-document" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # This is the API version to use.
+  --api-version: string@api-version-completer # This is the API version to use. (required)
   --nonce: string # This is a string of up to 32 random alphanumeric characters.
-  --metadata: string@metadata-completer # This must be set to 'true'.
+  --metadata: string@metadata-completer # This must be set to 'true'. (required)
 ]: nothing -> record<encoding: string, signature: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2018-10-01")
+  let metadata = ($metadata | default "true")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "nonce" $nonce "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attested/document" $qp $auth.query)
   let accept_val = "application/json"
@@ -177,11 +179,13 @@ export def "identity-get-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # This is the API version to use.
-  --metadata: string@metadata-completer # This must be set to 'true'.
+  --api-version: string@api-version-completer # This is the API version to use. (required)
+  --metadata: string@metadata-completer # This must be set to 'true'. (required)
 ]: nothing -> record<tenantId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2018-10-01")
+  let metadata = ($metadata | default "true")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/identity/info" $qp $auth.query)
   let accept_val = "application/json"
@@ -216,17 +220,20 @@ export def "identity-get-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource: string # This is the urlencoded identifier URI of the sink resource for the requested Azure AD token. The resulting token contains the corresponding aud for this resource.
-  --api-version: string@api-version-completer # This is the API version to use.
+  --resource: string # This is the urlencoded identifier URI of the sink resource for the requested Azure AD token. The resulting token contains the corresponding aud for this resource. (required)
+  --api-version: string@api-version-completer # This is the API version to use. (required)
   --client-id: string # This identifies, by Azure AD client id, a specific explicit identity to use when authenticating to Azure AD. Mutually exclusive with object_id and msi_res_id.
   --object-id: string # This identifies, by Azure AD object id, a specific explicit identity to use when authenticating to Azure AD. Mutually exclusive with client_id and msi_res_id.
   --msi-res-id: string # This identifies, by urlencoded ARM resource id, a specific explicit identity to use when authenticating to Azure AD. Mutually exclusive with client_id and object_id.
   --authority: string # This indicates the authority to request AAD tokens from. Defaults to the known authority of the identity to be used.
   --bypass-cache: string@bypass-cache-completer # If provided, the value must be 'true'. This indicates to the server that the token must be retrieved from Azure AD and cannot be retrieved from an internal cache.
-  --metadata: string@metadata-completer # This must be set to 'true'.
+  --metadata: string@metadata-completer # This must be set to 'true'. (required)
 ]: nothing -> record<access_token: string, client_id: string, expires_in: string, expires_on: string, ext_expires_in: string, msi_res_id: string, not_before: string, object_id: string, resource: string, token_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource == null) { error make --unspanned { msg: "required query parameter 'resource' missing: pass --resource" } }
+  let api_version = ($api_version | default "2018-10-01")
+  let metadata = ($metadata | default "true")
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "api-version" $api_version "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "object_id" $object_id "scalar") (serialize-qp "msi_res_id" $msi_res_id "scalar") (serialize-qp "authority" $authority "scalar") (serialize-qp "bypass_cache" $bypass_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/identity/oauth2/token" $qp $auth.query)
   let accept_val = "application/json"
@@ -261,11 +268,13 @@ export def "instances-get-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # This is the API version to use.
-  --metadata: string@metadata-completer # This must be set to 'true'.
+  --api-version: string@api-version-completer # This is the API version to use. (required)
+  --metadata: string@metadata-completer # This must be set to 'true'. (required)
 ]: nothing -> record<compute: record<azEnvironment: string, location: string, name: string, offer: string, osType: string, placementGroupId: string, plan: record<name: string, product: string, publisher: string>, platformFaultDomain: string, platformUpdateDomain: string, provider: string, publicKeys: list<record>, publisher: string, resourceGroupName: string, resourceId: string, sku: string, storageProfile: record<dataDisks: list, imageReference: record, osDisk: record>, subscriptionId: string, tags: string, version: string, vmId: string, vmScaleSetName: string, vmSize: string, zone: string>, network: record<interface: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2018-10-01")
+  let metadata = ($metadata | default "true")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/instance" $qp $auth.query)
   let accept_val = "application/json"

@@ -1,4 +1,4 @@
-# Auto-generated client for Europeana Search & Record API vversion unknown
+# Auto-generated client for Europeana Search & Record API version unknown
 # Source: https://api.apis.guru/v2/specs/europeana.eu/version unknown/swagger.json
 # Auth: --token flag or $env.EUROPEANA_SEARCH_RECORD_API_TOKEN
 
@@ -143,11 +143,12 @@ export def "open-search" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --count: int # count (format: int32, default: 12)
-  --search-terms: string # searchTerms
+  --search-terms: string # searchTerms (required)
   --start-index: int # startIndex (format: int32, default: 1)
 ]: nothing -> record<empty: bool, model: record, modelMap: record, reference: bool, status: string, view: record<contentType: string>, viewName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($search_terms == null) { error make --unspanned { msg: "required query parameter 'searchTerms' missing: pass --search-terms" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "searchTerms" $search_terms "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/record/v2/opensearch.rss" $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
@@ -194,26 +195,28 @@ export def "search-records" [
   --q-source: string # q.source
   --q-target: string # q.target
   --qf: list<string> # qf
-  --query: string # query
+  --query: string # query (required)
   --reusability: list<string> # reusability
   --rows: int # rows (format: int32, default: 12)
-  --qp-sort: string # sort
+  --sort: string # sort
   --start: int # start (format: int32, default: 1)
   --text-fulltext: oneof<nothing, bool> # text_fulltext
   --theme: string # theme
   --thumbnail: oneof<nothing, bool> # thumbnail
-  --wskey: string # wskey
+  --wskey: string # wskey (required)
 ]: nothing -> record<empty: bool, model: record, modelMap: record, reference: bool, status: string, view: record<contentType: string>, viewName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "boost" $boost "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "colourpalette" $colourpalette "multi") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "hit.fl" $hit_fl "scalar") (serialize-qp "hit.selectors" $hit_selectors "scalar") (serialize-qp "landingpage" $landingpage "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "media" $media "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "q.source" $q_source "scalar") (serialize-qp "q.target" $q_target "scalar") (serialize-qp "qf" $qf "multi") (serialize-qp "query" $query "scalar") (serialize-qp "reusability" $reusability "multi") (serialize-qp "rows" $rows "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "text_fulltext" $text_fulltext "scalar") (serialize-qp "theme" $theme "scalar") (serialize-qp "thumbnail" $thumbnail "scalar") (serialize-qp "wskey" $wskey "scalar")] | flatten | str join "&"
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
+  if ($wskey == null) { error make --unspanned { msg: "required query parameter 'wskey' missing: pass --wskey" } }
+  let qp = [(serialize-qp "boost" $boost "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "colourpalette" $colourpalette "multi") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "hit.fl" $hit_fl "scalar") (serialize-qp "hit.selectors" $hit_selectors "scalar") (serialize-qp "landingpage" $landingpage "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "media" $media "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "q.source" $q_source "scalar") (serialize-qp "q.target" $q_target "scalar") (serialize-qp "qf" $qf "multi") (serialize-qp "query" $query "scalar") (serialize-qp "reusability" $reusability "multi") (serialize-qp "rows" $rows "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "text_fulltext" $text_fulltext "scalar") (serialize-qp "theme" $theme "scalar") (serialize-qp "thumbnail" $thumbnail "scalar") (serialize-qp "wskey" $wskey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/record/v2/search.json" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"boost": $boost, "callback": $callback, "colourpalette": $colourpalette, "cursor": $cursor, "facet": $facet, "hit.fl": $hit_fl, "hit.selectors": $hit_selectors, "landingpage": $landingpage, "lang": $lang, "media": $media, "profile": $profile, "q.source": $q_source, "q.target": $q_target, "qf": $qf, "query": $query, "reusability": $reusability, "rows": $rows, "sort": $qp_sort, "start": $start, "text_fulltext": $text_fulltext, "theme": $theme, "thumbnail": $thumbnail, "wskey": $wskey} | compact)
+    query: ({"boost": $boost, "callback": $callback, "colourpalette": $colourpalette, "cursor": $cursor, "facet": $facet, "hit.fl": $hit_fl, "hit.selectors": $hit_selectors, "landingpage": $landingpage, "lang": $lang, "media": $media, "profile": $profile, "q.source": $q_source, "q.target": $q_target, "qf": $qf, "query": $query, "reusability": $reusability, "rows": $rows, "sort": $sort, "start": $start, "text_fulltext": $text_fulltext, "theme": $theme, "thumbnail": $thumbnail, "wskey": $wskey} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -239,7 +242,7 @@ export def "search-records-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --wskey: string # wskey
+  --wskey: string # wskey (required)
   --boost: string
   --callback: string
   --colour-palette: list<string>
@@ -253,7 +256,7 @@ export def "search-records-post" [
   query: string
   --reusability: list<string>
   --rows: int # format: int32
-  --body-sort: list<string>
+  --sort: list<string>
   --start: int # format: int32
   --text-fulltext: oneof<nothing, bool>
   --theme: string
@@ -262,9 +265,10 @@ export def "search-records-post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($wskey == null) { error make --unspanned { msg: "required query parameter 'wskey' missing: pass --wskey" } }
   let qp = [(serialize-qp "wskey" $wskey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/record/v2/search.json" $qp $auth.query)
-  let req_body = {"boost": $boost, "callback": $callback, "colourPalette": $colour_palette, "cursor": $cursor, "facet": $facet, "hit": $hit, "landingPage": $landing_page, "media": $media, "profile": $profile, "qf": $qf, "query": $query, "reusability": $reusability, "rows": $rows, "sort": $body_sort, "start": $start, "textFulltext": $text_fulltext, "theme": $theme, "thumbnail": $thumbnail} | compact
+  let req_body = {"boost": $boost, "callback": $callback, "colourPalette": $colour_palette, "cursor": $cursor, "facet": $facet, "hit": $hit, "landingPage": $landing_page, "media": $media, "profile": $profile, "qf": $qf, "query": $query, "reusability": $reusability, "rows": $rows, "sort": $sort, "start": $start, "textFulltext": $text_fulltext, "theme": $theme, "thumbnail": $thumbnail} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -297,13 +301,16 @@ export def "translate-query-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # callback
-  --language-codes: list<string> # languageCodes
+  --language-codes: list<string> # languageCodes (required)
   --profile: string # profile
-  --term: string # term
-  --wskey: string # wskey
+  --term: string # term (required)
+  --wskey: string # wskey (required)
 ]: nothing -> record<empty: bool, model: record, modelMap: record, reference: bool, status: string, view: record<contentType: string>, viewName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($language_codes == null) { error make --unspanned { msg: "required query parameter 'languageCodes' missing: pass --language-codes" } }
+  if ($term == null) { error make --unspanned { msg: "required query parameter 'term' missing: pass --term" } }
+  if ($wskey == null) { error make --unspanned { msg: "required query parameter 'wskey' missing: pass --wskey" } }
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "languageCodes" $language_codes "multi") (serialize-qp "profile" $profile "scalar") (serialize-qp "term" $term "scalar") (serialize-qp "wskey" $wskey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/record/v2/translateQuery.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -341,12 +348,13 @@ export def "get-single-record-json" [
   --callback: string # callback
   --lang: string # lang
   --profile: string # profile (default: standard)
-  --wskey: string # wskey
+  --wskey: string # wskey (required)
 ]: nothing -> record<empty: bool, model: record, modelMap: record, reference: bool, status: string, view: record<contentType: string>, viewName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionId' must be non-empty" } }
   if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'recordId' must be non-empty" } }
+  if ($wskey == null) { error make --unspanned { msg: "required query parameter 'wskey' missing: pass --wskey" } }
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "wskey" $wskey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), record_id: (encode-path-segment $record_id)} | format pattern "/record/v2/{collection_id}/{record_id}.json") $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"
@@ -385,12 +393,13 @@ export def "get-single-record-json-ld" [
   --callback: string # callback
   --lang: string # lang
   --profile: string # profile (default: standard)
-  --wskey: string # wskey
+  --wskey: string # wskey (required)
 ]: nothing -> record<empty: bool, model: record, modelMap: record, reference: bool, status: string, view: record<contentType: string>, viewName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionId' must be non-empty" } }
   if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'recordId' must be non-empty" } }
+  if ($wskey == null) { error make --unspanned { msg: "required query parameter 'wskey' missing: pass --wskey" } }
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "wskey" $wskey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), record_id: (encode-path-segment $record_id)} | format pattern "/record/v2/{collection_id}/{record_id}.jsonld") $qp $auth.query)
   let accept_val = ($accept | default "application/json;charset=UTF-8")
@@ -427,12 +436,13 @@ export def "get-single-record-rdf" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # lang
   --profile: string # profile (default: standard)
-  --wskey: string # wskey
+  --wskey: string # wskey (required)
 ]: nothing -> record<empty: bool, model: record, modelMap: record, reference: bool, status: string, view: record<contentType: string>, viewName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionId' must be non-empty" } }
   if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'recordId' must be non-empty" } }
+  if ($wskey == null) { error make --unspanned { msg: "required query parameter 'wskey' missing: pass --wskey" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "wskey" $wskey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), record_id: (encode-path-segment $record_id)} | format pattern "/record/v2/{collection_id}/{record_id}.rdf") $qp $auth.query)
   let accept_val = "application/rdf+xml;charset=UTF-8"
@@ -471,12 +481,13 @@ export def "get-single-record-schema-org" [
   --callback: string # callback
   --lang: string # lang
   --profile: string # profile (default: standard)
-  --wskey: string # wskey
+  --wskey: string # wskey (required)
 ]: nothing -> record<empty: bool, model: record, modelMap: record, reference: bool, status: string, view: record<contentType: string>, viewName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionId' must be non-empty" } }
   if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'recordId' must be non-empty" } }
+  if ($wskey == null) { error make --unspanned { msg: "required query parameter 'wskey' missing: pass --wskey" } }
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "wskey" $wskey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), record_id: (encode-path-segment $record_id)} | format pattern "/record/v2/{collection_id}/{record_id}.schema.jsonld") $qp $auth.query)
   let accept_val = ($accept | default "application/json;charset=UTF-8")
@@ -514,12 +525,13 @@ export def "get-single-record-turtle" [
   --accept: string@accept-completer-2 # Response content type
   --lang: string # lang
   --profile: string # profile (default: standard)
-  --wskey: string # wskey
+  --wskey: string # wskey (required)
 ]: nothing -> record<empty: bool, model: record, modelMap: record, reference: bool, status: string, view: record<contentType: string>, viewName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionId' must be non-empty" } }
   if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'recordId' must be non-empty" } }
+  if ($wskey == null) { error make --unspanned { msg: "required query parameter 'wskey' missing: pass --wskey" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "wskey" $wskey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), record_id: (encode-path-segment $record_id)} | format pattern "/record/v2/{collection_id}/{record_id}.ttl") $qp $auth.query)
   let accept_val = ($accept | default "application/x-turtle")

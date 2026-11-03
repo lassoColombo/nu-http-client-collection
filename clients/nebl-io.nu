@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -764,14 +764,14 @@ export def "burn-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   burn: list # Array of objects representing tokens to be burned — item shape: {amount?: float, tokenId?: string}
   fee: float # Fee in satoshi to include in the issuance transaction min 10000 (0.0001 NEBL)
-  --body-from: list<string> # Array of addresses to send the token from
+  --from: list<string> # Array of addresses to send the token from
   --transfer: list # item shape: {address?: string, amount?: float, tokenId?: string}
 ]: any -> record<multisigOutputs: list<float>, ntp1OutputIndexes: list<float>, txHex: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ntp1/burntoken" $auth.query)
-  let req_body = {"burn": $burn, "fee": $fee, "from": $body_from, "transfer": $transfer} | compact
+  let req_body = {"burn": $burn, "fee": $fee, "from": $from, "transfer": $transfer} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -821,6 +821,7 @@ export def "issue-token" [
   let full_url = (build-url $base "/ntp1/issue" $auth.query)
   let req_body = {"amount": $amount, "divisibility": $divisibility, "fee": $fee, "flags": $flags, "issueAddress": $issue_address, "metadata": $metadata, "reissuable": $reissuable, "transfer": $transfer} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "reissuable") == null) { error make --unspanned { msg: "required body field 'reissuable' missing: pass --reissuable or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -856,16 +857,16 @@ export def "send-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   fee: float # Fee in satoshi to include in the issuance transaction min 10000 (0.0001 NEBL)
   --flags: record # Object representing flags that potentialy modify this transaction — shape: {splitChange?: bool}
-  --body-from: list<string> # Array of addresses to send the token from
+  --from: list<string> # Array of addresses to send the token from
   --metadata: record # Object representing all metadata at token issuance — shape: {description?: string, encryptions?: list, issuer?: string, rules?: record, tokenName?: string, urls?: list, userData?: record}
   --sendutxo: list<string> # Array of UTXOs to send the token from
-  --body-to: list # item shape: {address?: string, amount?: float, tokenId?: string}
+  to: list # item shape: {address?: string, amount?: float, tokenId?: string}
 ]: any -> record<multisigOutputs: list<float>, ntp1OutputIndexes: list<float>, txHex: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ntp1/sendtoken" $auth.query)
-  let req_body = {"fee": $fee, "flags": $flags, "from": $body_from, "metadata": $metadata, "sendutxo": $sendutxo, "to": $body_to} | compact
+  let req_body = {"fee": $fee, "flags": $flags, "from": $from, "metadata": $metadata, "sendutxo": $sendutxo, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1083,11 +1084,12 @@ export def "testnet-get-faucet" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --address: string # Your Neblio Testnet Address
+  --address: string # Your Neblio Testnet Address (required)
   --amount: float # Amount of NEBL to withdrawal in satoshis
 ]: nothing -> record<data: record<txId: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($address == null) { error make --unspanned { msg: "required query parameter 'address' missing: pass --address" } }
   let qp = [(serialize-qp "address" $address "scalar") (serialize-qp "amount" $amount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/testnet/faucet" $qp $auth.query)
   let accept_val = "application/json"
@@ -1704,14 +1706,14 @@ export def "testnet-burn-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   burn: list # Array of objects representing tokens to be burned — item shape: {amount?: float, tokenId?: string}
   fee: float # Fee in satoshi to include in the issuance transaction min 10000 (0.0001 NEBL)
-  --body-from: list<string> # Array of addresses to send the token from
+  --from: list<string> # Array of addresses to send the token from
   --transfer: list # item shape: {address?: string, amount?: float, tokenId?: string}
 ]: any -> record<multisigOutputs: list<float>, ntp1OutputIndexes: list<float>, txHex: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/testnet/ntp1/burntoken" $auth.query)
-  let req_body = {"burn": $burn, "fee": $fee, "from": $body_from, "transfer": $transfer} | compact
+  let req_body = {"burn": $burn, "fee": $fee, "from": $from, "transfer": $transfer} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1761,6 +1763,7 @@ export def "testnet-issue-token" [
   let full_url = (build-url $base "/testnet/ntp1/issue" $auth.query)
   let req_body = {"amount": $amount, "divisibility": $divisibility, "fee": $fee, "flags": $flags, "issueAddress": $issue_address, "metadata": $metadata, "reissuable": $reissuable, "transfer": $transfer} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "reissuable") == null) { error make --unspanned { msg: "required body field 'reissuable' missing: pass --reissuable or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1796,16 +1799,16 @@ export def "testnet-send-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   fee: float # Fee in satoshi to include in the issuance transaction min 10000 (0.0001 NEBL)
   --flags: record # Object representing flags that potentialy modify this transaction — shape: {splitChange?: bool}
-  --body-from: list<string> # Array of addresses to send the token from
+  --from: list<string> # Array of addresses to send the token from
   --metadata: record # Object representing all metadata at token issuance — shape: {description?: string, encryptions?: list, issuer?: string, rules?: record, tokenName?: string, urls?: list, userData?: record}
   --sendutxo: list<string> # Array of UTXOs to send the token from
-  --body-to: list # item shape: {address?: string, amount?: float, tokenId?: string}
+  to: list # item shape: {address?: string, amount?: float, tokenId?: string}
 ]: any -> record<multisigOutputs: list<float>, ntp1OutputIndexes: list<float>, txHex: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/testnet/ntp1/sendtoken" $auth.query)
-  let req_body = {"fee": $fee, "flags": $flags, "from": $body_from, "metadata": $metadata, "sendutxo": $sendutxo, "to": $body_to} | compact
+  let req_body = {"fee": $fee, "flags": $flags, "from": $from, "metadata": $metadata, "sendutxo": $sendutxo, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

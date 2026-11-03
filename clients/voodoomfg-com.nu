@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "api_key" => { {scheme: $scheme, headers: {api_key: $token_val}, query: "", location: "header"} }
+    "api_key" => { {scheme: $scheme, headers: {"api_key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -240,14 +240,18 @@ export def "get-model-quote" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --model-id: int # The unique id of the model you'd like to quote.
-  --material-id: float # The unique id of the desired material.
-  --quantity: float # The number of units in this quote.
-  --units: string # The units of the model file. Either "mm", "cm", or "in". The correct value to pass here depends on which design program you're using. Defaults to "mm".
+  --model-id: int # The unique id of the model you'd like to quote. (required)
+  --material-id: float # The unique id of the desired material. (required)
+  --quantity: float # The number of units in this quote. (required)
+  --units: string # The units of the model file. Either "mm", "cm", or "in". The correct value to pass here depends on which design program you're using. Defaults to "mm". (required)
   --options-orientation: oneof<nothing, bool> # Indicates whether or not this model needs to be oriented prior to printing. If your model is already oriented for 3D printing, you can omit this flag (or set it to false) and it will not be re-oriented prior to printing. If true, it will be re-oriented prior to printing. If you're not sure if your model is oriented, you should set this flag to true. There is an additional charge for orientation.
 ]: nothing -> record<material_id: int, model_id: int, options: record<orientation: float>, quote: float, unit_cost: float, units: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($model_id == null) { error make --unspanned { msg: "required query parameter 'model_id' missing: pass --model-id" } }
+  if ($material_id == null) { error make --unspanned { msg: "required query parameter 'material_id' missing: pass --material-id" } }
+  if ($quantity == null) { error make --unspanned { msg: "required query parameter 'quantity' missing: pass --quantity" } }
+  if ($units == null) { error make --unspanned { msg: "required query parameter 'units' missing: pass --units" } }
   let qp = [(serialize-qp "model_id" $model_id "scalar") (serialize-qp "material_id" $material_id "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "options[orientation]" $options_orientation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/model/quote" $qp $auth.query)
   let accept_val = "application/json"
@@ -279,18 +283,26 @@ export def "get-model-quote-attrs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x: float # The calculated unitless x dimension of this model's bounding box.
-  --y: float # The calculated unitless y dimension of this model's bounding box.
-  --z: float # The calculated unitless z dimension of this model's bounding box.
-  --volume: float # The calculated unitless volume of the model.
-  --surface-area: float # The calculated unitless surface area of the model.
-  --material-id: float # The unique id of the desired material.
-  --quantity: float # The number of units in this quote.
-  --units: string # The units of the model file. Either "mm", "cm", or "in". The correct value to pass here depends on which design program you're using. Defaults to "mm".
+  --x: float # The calculated unitless x dimension of this model's bounding box. (required)
+  --y: float # The calculated unitless y dimension of this model's bounding box. (required)
+  --z: float # The calculated unitless z dimension of this model's bounding box. (required)
+  --volume: float # The calculated unitless volume of the model. (required)
+  --surface-area: float # The calculated unitless surface area of the model. (required)
+  --material-id: float # The unique id of the desired material. (required)
+  --quantity: float # The number of units in this quote. (required)
+  --units: string # The units of the model file. Either "mm", "cm", or "in". The correct value to pass here depends on which design program you're using. Defaults to "mm". (required)
   --options-orientation: oneof<nothing, bool> # Indicates whether or not this model needs to be oriented prior to printing. If your model is already oriented for 3D printing, you can omit this flag (or set it to false) and it will not be re-oriented prior to printing. If true, it will be re-oriented prior to printing. If you're not sure if your model is oriented, you should set this flag to true. There is an additional charge for orientation.
 ]: nothing -> record<material_id: int, model_id: int, options: record<orientation: float>, quote: float, unit_cost: float, units: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($x == null) { error make --unspanned { msg: "required query parameter 'x' missing: pass --x" } }
+  if ($y == null) { error make --unspanned { msg: "required query parameter 'y' missing: pass --y" } }
+  if ($z == null) { error make --unspanned { msg: "required query parameter 'z' missing: pass --z" } }
+  if ($volume == null) { error make --unspanned { msg: "required query parameter 'volume' missing: pass --volume" } }
+  if ($surface_area == null) { error make --unspanned { msg: "required query parameter 'surface_area' missing: pass --surface-area" } }
+  if ($material_id == null) { error make --unspanned { msg: "required query parameter 'material_id' missing: pass --material-id" } }
+  if ($quantity == null) { error make --unspanned { msg: "required query parameter 'quantity' missing: pass --quantity" } }
+  if ($units == null) { error make --unspanned { msg: "required query parameter 'units' missing: pass --units" } }
   let qp = [(serialize-qp "x" $x "scalar") (serialize-qp "y" $y "scalar") (serialize-qp "z" $z "scalar") (serialize-qp "volume" $volume "scalar") (serialize-qp "surface_area" $surface_area "scalar") (serialize-qp "material_id" $material_id "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "options[orientation]" $options_orientation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/model/quote_attrs" $qp $auth.query)
   let accept_val = "application/json"

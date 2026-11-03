@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -159,13 +159,14 @@ export def "failover-groups-list-by-server" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<location: string, properties: record, tags: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<location: string, properties: record, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/failoverGroups") $qp $auth.query)
   let accept_val = "application/json"
@@ -202,7 +203,7 @@ export def "failover-groups-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -210,6 +211,7 @@ export def "failover-groups-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($failover_group_name | is-empty) { error make --unspanned { msg: "path parameter 'failoverGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), failover_group_name: (encode-path-segment $failover_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/failoverGroups/{failover_group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -246,14 +248,15 @@ export def "failover-groups-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<location: string, properties: record<databases: list<string>, partnerServers: list<record>, readOnlyEndpoint: record<failoverPolicy: string>, readWriteEndpoint: record<failoverPolicy: string, failoverWithDataLossGracePeriodMinutes: int>, replicationRole: string, replicationState: string>, tags: record> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<location: string, properties: record<databases: list<string>, partnerServers: list<record>, readOnlyEndpoint: record<failoverPolicy: string>, readWriteEndpoint: record<failoverPolicy: string, failoverWithDataLossGracePeriodMinutes: int>, replicationRole: string, replicationState: string>, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($failover_group_name | is-empty) { error make --unspanned { msg: "path parameter 'failoverGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), failover_group_name: (encode-path-segment $failover_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/failoverGroups/{failover_group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -291,10 +294,10 @@ export def "failover-groups-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: record # Properties of a failover group update. — shape: {databases?: list<string>, readOnlyEndpoint?: record, readWriteEndpoint?: record}
   --tags: record # Resource tags.
-]: any -> record<location: string, properties: record<databases: list<string>, partnerServers: list<record>, readOnlyEndpoint: record<failoverPolicy: string>, readWriteEndpoint: record<failoverPolicy: string, failoverWithDataLossGracePeriodMinutes: int>, replicationRole: string, replicationState: string>, tags: record> {
+]: any -> record<location: string, properties: record<databases: list<string>, partnerServers: list<record>, readOnlyEndpoint: record<failoverPolicy: string>, readWriteEndpoint: record<failoverPolicy: string, failoverWithDataLossGracePeriodMinutes: int>, replicationRole: string, replicationState: string>, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -302,6 +305,7 @@ export def "failover-groups-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($failover_group_name | is-empty) { error make --unspanned { msg: "path parameter 'failoverGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), failover_group_name: (encode-path-segment $failover_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/failoverGroups/{failover_group_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -341,10 +345,10 @@ export def "failover-groups-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: record # Properties of a failover group. — shape: {databases?: list<string>, partnerServers: list, readOnlyEndpoint?: record, readWriteEndpoint: record}
   --tags: record # Resource tags.
-]: any -> record<location: string, properties: record<databases: list<string>, partnerServers: list<record>, readOnlyEndpoint: record<failoverPolicy: string>, readWriteEndpoint: record<failoverPolicy: string, failoverWithDataLossGracePeriodMinutes: int>, replicationRole: string, replicationState: string>, tags: record> {
+]: any -> record<location: string, properties: record<databases: list<string>, partnerServers: list<record>, readOnlyEndpoint: record<failoverPolicy: string>, readWriteEndpoint: record<failoverPolicy: string, failoverWithDataLossGracePeriodMinutes: int>, replicationRole: string, replicationState: string>, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -352,6 +356,7 @@ export def "failover-groups-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($failover_group_name | is-empty) { error make --unspanned { msg: "path parameter 'failoverGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), failover_group_name: (encode-path-segment $failover_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/failoverGroups/{failover_group_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -390,14 +395,15 @@ export def "failover-groups-failover" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<location: string, properties: record<databases: list<string>, partnerServers: list<record>, readOnlyEndpoint: record<failoverPolicy: string>, readWriteEndpoint: record<failoverPolicy: string, failoverWithDataLossGracePeriodMinutes: int>, replicationRole: string, replicationState: string>, tags: record> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<location: string, properties: record<databases: list<string>, partnerServers: list<record>, readOnlyEndpoint: record<failoverPolicy: string>, readWriteEndpoint: record<failoverPolicy: string, failoverWithDataLossGracePeriodMinutes: int>, replicationRole: string, replicationState: string>, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($failover_group_name | is-empty) { error make --unspanned { msg: "path parameter 'failoverGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), failover_group_name: (encode-path-segment $failover_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/failoverGroups/{failover_group_name}/failover") $qp $auth.query)
   let accept_val = "application/json"
@@ -434,14 +440,15 @@ export def "failover-groups-force-failover-allow-data-loss" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<location: string, properties: record<databases: list<string>, partnerServers: list<record>, readOnlyEndpoint: record<failoverPolicy: string>, readWriteEndpoint: record<failoverPolicy: string, failoverWithDataLossGracePeriodMinutes: int>, replicationRole: string, replicationState: string>, tags: record> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<location: string, properties: record<databases: list<string>, partnerServers: list<record>, readOnlyEndpoint: record<failoverPolicy: string>, readWriteEndpoint: record<failoverPolicy: string, failoverWithDataLossGracePeriodMinutes: int>, replicationRole: string, replicationState: string>, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($failover_group_name | is-empty) { error make --unspanned { msg: "path parameter 'failoverGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), failover_group_name: (encode-path-segment $failover_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/failoverGroups/{failover_group_name}/forceFailoverAllowDataLoss") $qp $auth.query)
   let accept_val = "application/json"

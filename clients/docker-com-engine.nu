@@ -258,7 +258,7 @@ export def "image-build" [
   --squash: oneof<nothing, bool> # Squash the resulting images layers into a single layer. *(Experimental release only.)*
   --labels: string # Arbitrary key/value labels to set on the image, as a JSON map of string pairs.
   --networkmode: string # Sets the networking mode for the run commands during build. Supported standard values are: `bridge`, `host`, `none`, and `container:<name|id>`. Any other value is taken as a custom network's name to which this container should connect to.
-  --content-type: string@content-type-completer
+  --content-type: string@content-type-completer # default: application/x-tar
   --x-registry-config: string # This is a base64-encoded JSON object with auth configurations for multiple registries that a build may refer to. The key is a registry URL, and the value is an auth configuration object, [as described in the authentication section](#section/Authentication). For example: ``` { "docker.example.com": { "username": "janedoe", "password": "hunter2" }, "https://index.docker.io/v1/": { "username": "mobydock", "password": "conta1n3rize14" } } ``` Only the registry domain name (and port if not the default 443) are required. However, for legacy reasons, the Docker Hub registry must be specified with both a `https://` prefix and a `/v1/` suffix even though Docker will prefer to use the v2 registry API.
   --body: string
 ]: any -> any {
@@ -558,7 +558,7 @@ export def "config-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --version: int # The version number of the config object being updated. This is required to avoid conflicting writes. (format: int64)
+  --version: int # The version number of the config object being updated. This is required to avoid conflicting writes. (required, format: int64)
   --data: string # Base64-url-safe-encoded ([RFC 4648](https://tools.ietf.org/html/rfc4648#section-3.2)) config data.
   --labels: record # User-defined key/value metadata.
   --name: string # User-defined name of the config.
@@ -567,6 +567,7 @@ export def "config-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/configs/{id}/update") $qp $auth.query)
   let req_body = {"Data": $data, "Labels": $labels, "Name": $name} | compact
@@ -593,6 +594,7 @@ export def "config-update" [
 # operationId: ContainerCreate
 # --Healthcheck shape: {Interval?: int, Retries?: int, StartPeriod?: int, Test?: list<string>, Timeout?: int}
 # --Volumes shape: {additionalProperties?: "{}"}
+# --HostConfig shape: {BlkioDeviceReadBps?: list, BlkioDeviceReadIOps?: list, BlkioDeviceWriteBps?: list, BlkioDeviceWriteIOps?: list, BlkioWeight?: int, BlkioWeightDevice?: list, CgroupParent?: string, CpuCount?: int, CpuPercent?: int, CpuPeriod?: int, CpuQuota?: int, CpuRealtimePeriod?: int, CpuRealtimeRuntime?: int, CpuShares?: int, CpusetCpus?: string, CpusetMems?: string, DeviceCgroupRules?: list<string>, Devices?: list, DiskQuota?: int, IOMaximumBandwidth?: int, IOMaximumIOps?: int, KernelMemory?: int, ... (43 more fields)}
 # --NetworkingConfig shape: {EndpointsConfig?: record}
 export def "container-create" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -630,7 +632,7 @@ export def "container-create" [
   --user: string # The user that commands are run as inside the container.
   --volumes: record # An object mapping mount point paths inside the container to empty objects. — shape: {additionalProperties?: "{}"}
   --working-dir: string # The working directory for commands to run in.
-  --host-config: any # Container configuration that depends on the host we are running on
+  --host-config: record # Container configuration that depends on the host we are running on — shape: {BlkioDeviceReadBps?: list, BlkioDeviceReadIOps?: list, BlkioDeviceWriteBps?: list, BlkioDeviceWriteIOps?: list, BlkioWeight?: int, BlkioWeightDevice?: list, CgroupParent?: string, CpuCount?: int, CpuPercent?: int, CpuPeriod?: int, CpuQuota?: int, CpuRealtimePeriod?: int, CpuRealtimeRuntime?: int, CpuShares?: int, CpusetCpus?: string, CpusetMems?: string, DeviceCgroupRules?: list<string>, Devices?: list, DiskQuota?: int, IOMaximumBandwidth?: int, IOMaximumIOps?: int, KernelMemory?: int, ... (43 more fields)}
   --networking-config: record # This container's networking configuration. — shape: {EndpointsConfig?: record}
 ]: any -> record<Id: string, Warnings: list<string>> {
   let input = $in
@@ -786,11 +788,12 @@ export def "container-archive" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --path: string # Resource in the container’s filesystem to archive.
+  --path: string # Resource in the container’s filesystem to archive. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/containers/{id}/archive") $qp $auth.query)
   let accept_val = "application/json"
@@ -824,11 +827,12 @@ export def "container-archive-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --path: string # Resource in the container’s filesystem to archive.
+  --path: string # Resource in the container’s filesystem to archive. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/containers/{id}/archive") $qp $auth.query)
   let accept_val = "application/json"
@@ -862,7 +866,7 @@ export def "put-container-archive" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --path: string # Path to a directory in the container to extract the archive’s contents into.
+  --path: string # Path to a directory in the container to extract the archive’s contents into. (required)
   --no-overwrite-dir-non-dir: string # If “1”, “true”, or “True” then it will be an error if unpacking the given content would cause an existing directory to be replaced with a non-directory and vice versa.
   --body: string
 ]: any -> any {
@@ -870,6 +874,7 @@ export def "put-container-archive" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "noOverwriteDirNonDir" $no_overwrite_dir_non_dir "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/containers/{id}/archive") $qp $auth.query)
   let req_body = $body
@@ -1267,11 +1272,12 @@ export def "container-rename" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # New name for the container
+  --name: string # New name for the container (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/containers/{id}/rename") $qp $auth.query)
   let accept_val = "application/json"
@@ -2072,12 +2078,13 @@ export def "image-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --term: string # Term to search
+  --term: string # Term to search (required)
   --limit: int # Maximum number of results to return
   --filters: string # A JSON encoded value of the filters (a `map[string][]string`) to process on the images list. Available filters: - `is-automated=(true|false)` - `is-official=(true|false)` - `stars=` Matches images that has at least 'number' stars.
 ]: nothing -> table<description: string, is_automated: bool, is_official: bool, name: string, star_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($term == null) { error make --unspanned { msg: "required query parameter 'term' missing: pass --term" } }
   let qp = [(serialize-qp "term" $term "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/images/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -2259,11 +2266,12 @@ export def "image-push" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # The tag to associate with the image on the registry.
-  --x-registry-auth: string # A base64-encoded auth configuration. [See the authentication section for details.](#section/Authentication)
+  --x-registry-auth: string # A base64-encoded auth configuration. [See the authentication section for details.](#section/Authentication) (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_registry_auth == null) { error make --unspanned { msg: "required header parameter 'X-Registry-Auth' missing: pass --x-registry-auth" } }
   let qp = [(serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/images/{name}/push") $qp $auth.query)
   let accept_val = "application/json"
@@ -2760,7 +2768,7 @@ export def "node-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --version: int # The version number of the node object being updated. This is required to avoid conflicting writes. (format: int64)
+  --version: int # The version number of the node object being updated. This is required to avoid conflicting writes. (required, format: int64)
   --availability: string@availability-completer # Availability of the node. (e.g. active)
   --labels: record # User-defined key/value metadata.
   --name: string # Name for the node. (e.g. my-node)
@@ -2770,6 +2778,7 @@ export def "node-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/nodes/{id}/update") $qp $auth.query)
   let req_body = {"Availability": $availability, "Labels": $labels, "Name": $name, "Role": $role} | compact
@@ -2840,12 +2849,13 @@ export def "plugin-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # The name of the plugin. The `:latest` tag is optional, and is the default if omitted.
+  --name: string # The name of the plugin. The `:latest` tag is optional, and is the default if omitted. (required)
   --body: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/plugins/create" $qp $auth.query)
   let req_body = $body
@@ -2881,10 +2891,11 @@ export def "get-plugin-privileges" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --remote: string # The name of the plugin. The `:latest` tag is optional, and is the default if omitted.
+  --remote: string # The name of the plugin. The `:latest` tag is optional, and is the default if omitted. (required)
 ]: nothing -> table<Description: string, Name: string, Value: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($remote == null) { error make --unspanned { msg: "required query parameter 'remote' missing: pass --remote" } }
   let qp = [(serialize-qp "remote" $remote "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/plugins/privileges" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2917,7 +2928,7 @@ export def "plugin-pull" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --remote: string # Remote reference for plugin to install. The `:latest` tag is optional, and is used as the default if omitted.
+  --remote: string # Remote reference for plugin to install. The `:latest` tag is optional, and is used as the default if omitted. (required)
   --name: string # Local name for the pulled plugin. The `:latest` tag is optional, and is used as the default if omitted.
   --x-registry-auth: string # A base64-encoded auth configuration to use when pulling a plugin from a registry. [See the authentication section for details.](#section/Authentication)
   --body: list
@@ -2925,6 +2936,7 @@ export def "plugin-pull" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($remote == null) { error make --unspanned { msg: "required query parameter 'remote' missing: pass --remote" } }
   let qp = [(serialize-qp "remote" $remote "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/plugins/pull" $qp $auth.query)
   let req_body = $body
@@ -3188,7 +3200,7 @@ export def "plugin-upgrade" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --remote: string # Remote reference to upgrade to. The `:latest` tag is optional, and is used as the default if omitted.
+  --remote: string # Remote reference to upgrade to. The `:latest` tag is optional, and is used as the default if omitted. (required)
   --x-registry-auth: string # A base64-encoded auth configuration to use when pulling a plugin from a registry. [See the authentication section for details.](#section/Authentication)
   --body: list
 ]: any -> any {
@@ -3196,6 +3208,7 @@ export def "plugin-upgrade" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($remote == null) { error make --unspanned { msg: "required query parameter 'remote' missing: pass --remote" } }
   let qp = [(serialize-qp "remote" $remote "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/plugins/{name}/upgrade") $qp $auth.query)
   let req_body = $body
@@ -3384,7 +3397,7 @@ export def "secret-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --version: int # The version number of the secret object being updated. This is required to avoid conflicting writes. (format: int64)
+  --version: int # The version number of the secret object being updated. This is required to avoid conflicting writes. (required, format: int64)
   --data: string # Base64-url-safe-encoded ([RFC 4648](https://tools.ietf.org/html/rfc4648#section-3.2)) data to store as secret. This field is only used to _create_ a secret, and is not returned by other endpoints. (e.g. )
   --driver: record # Driver represents a driver (network, logging, secrets). — shape: {Name: string, Options?: record}
   --labels: record # User-defined key/value metadata. (e.g. {com.example.some-label: some-value, com.example.some-other-label: some-other-value})
@@ -3394,6 +3407,7 @@ export def "secret-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/secrets/{id}/update") $qp $auth.query)
   let req_body = {"Data": $data, "Driver": $driver, "Labels": $labels, "Name": $name} | compact
@@ -3646,7 +3660,7 @@ export def "service-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --version: int # The version number of the service object being updated. This is required to avoid conflicting writes.
+  --version: int # The version number of the service object being updated. This is required to avoid conflicting writes. (required)
   --registry-auth-from: string # If the X-Registry-Auth header is not specified, this parameter indicates where to find registry authorization credentials. The valid values are `spec` and `previous-spec`. (default: spec)
   --rollback: string # Set to this parameter to `previous` to cause a server-side rollback to the previous service spec. The supplied spec will be ignored in this case.
   --x-registry-auth: string # A base64-encoded auth configuration for pulling from private registries. [See the authentication section for details.](#section/Authentication)
@@ -3663,6 +3677,7 @@ export def "service-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
   let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "registryAuthFrom" $registry_auth_from "scalar") (serialize-qp "rollback" $rollback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/services/{id}/update") $qp $auth.query)
   let req_body = {"EndpointSpec": $endpoint_spec, "Labels": $labels, "Mode": $mode, "Name": $name, "Networks": $networks, "RollbackConfig": $rollback_config, "TaskTemplate": $task_template, "UpdateConfig": $update_config} | compact
@@ -3734,7 +3749,7 @@ export def "swarm-inspect" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> record<CreatedAt: string, ID: string, RootRotationInProgress: bool, Spec: record<CAConfig: record<ExternalCAs: list, ForceRotate: int, NodeCertExpiry: int, SigningCACert: string, SigningCAKey: string>, Dispatcher: record<HeartbeatPeriod: int>, EncryptionConfig: record<AutoLockManagers: bool>, Labels: record, Name: string, Orchestration: record<TaskHistoryRetentionLimit: int>, Raft: record<ElectionTick: int, HeartbeatTick: int, KeepOldSnapshots: int, LogEntriesForSlowFollowers: int, SnapshotInterval: int>, TaskDefaults: record<LogDriver: record>>, TLSInfo: record<CertIssuerPublicKey: string, CertIssuerSubject: string, TrustRoot: string>, UpdatedAt: string, Version: record<Index: int>, JoinTokens: record<Manager: string, Worker: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/swarm" $auth.query)
@@ -3969,7 +3984,7 @@ export def "swarm-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --version: int # The version number of the swarm object being updated. This is required to avoid conflicting writes. (format: int64)
+  --version: int # The version number of the swarm object being updated. This is required to avoid conflicting writes. (required, format: int64)
   --rotate-worker-token: oneof<nothing, bool> # Rotate the worker join token. (default: false)
   --rotate-manager-token: oneof<nothing, bool> # Rotate the manager join token. (default: false)
   --rotate-manager-unlock-key: oneof<nothing, bool> # Rotate the manager unlock key. (default: false)
@@ -3985,6 +4000,7 @@ export def "swarm-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
   let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "rotateWorkerToken" $rotate_worker_token "scalar") (serialize-qp "rotateManagerToken" $rotate_manager_token "scalar") (serialize-qp "rotateManagerUnlockKey" $rotate_manager_unlock_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/swarm/update" $qp $auth.query)
   let req_body = {"CAConfig": $ca_config, "Dispatcher": $dispatcher, "EncryptionConfig": $encryption_config, "Labels": $labels, "Name": $name, "Orchestration": $orchestration, "Raft": $raft, "TaskDefaults": $task_defaults} | compact

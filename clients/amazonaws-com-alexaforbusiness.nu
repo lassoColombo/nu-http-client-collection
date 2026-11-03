@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -104,11 +104,18 @@ def x-amz-target-completer-4 [] { ["AlexaForBusiness.AssociateSkillGroupWithRoom
 def x-amz-target-completer-5 [] { ["AlexaForBusiness.AssociateSkillWithSkillGroup"] }
 def x-amz-target-completer-6 [] { ["AlexaForBusiness.AssociateSkillWithUsers"] }
 def x-amz-target-completer-7 [] { ["AlexaForBusiness.CreateAddressBook"] }
+def format-completer [] { ["CSV" "CSV_ZIP"] }
 def x-amz-target-completer-8 [] { ["AlexaForBusiness.CreateBusinessReportSchedule"] }
+def conference-provider-type-completer [] { ["BLUEJEANS" "CHIME" "CUSTOM" "FUZE" "GOOGLE_HANGOUTS" "POLYCOM" "RINGCENTRAL" "SKYPE_FOR_BUSINESS" "WEBEX" "ZOOM"] }
 def x-amz-target-completer-9 [] { ["AlexaForBusiness.CreateConferenceProvider"] }
 def x-amz-target-completer-10 [] { ["AlexaForBusiness.CreateContact"] }
 def x-amz-target-completer-11 [] { ["AlexaForBusiness.CreateGatewayGroup"] }
+def security-type-completer [] { ["OPEN" "WEP" "WPA2_ENTERPRISE" "WPA2_PSK" "WPA_PSK"] }
+def eap-method-completer [] { ["EAP_TLS"] }
 def x-amz-target-completer-12 [] { ["AlexaForBusiness.CreateNetworkProfile"] }
+def distance-unit-completer [] { ["IMPERIAL" "METRIC"] }
+def temperature-unit-completer [] { ["CELSIUS" "FAHRENHEIT"] }
+def wake-word-completer [] { ["ALEXA" "AMAZON" "COMPUTER" "ECHO"] }
 def x-amz-target-completer-13 [] { ["AlexaForBusiness.CreateProfile"] }
 def x-amz-target-completer-14 [] { ["AlexaForBusiness.CreateRoom"] }
 def x-amz-target-completer-15 [] { ["AlexaForBusiness.CreateSkillGroup"] }
@@ -118,6 +125,7 @@ def x-amz-target-completer-18 [] { ["AlexaForBusiness.DeleteBusinessReportSchedu
 def x-amz-target-completer-19 [] { ["AlexaForBusiness.DeleteConferenceProvider"] }
 def x-amz-target-completer-20 [] { ["AlexaForBusiness.DeleteContact"] }
 def x-amz-target-completer-21 [] { ["AlexaForBusiness.DeleteDevice"] }
+def device-usage-type-completer [] { ["VOICE"] }
 def x-amz-target-completer-22 [] { ["AlexaForBusiness.DeleteDeviceUsageData"] }
 def x-amz-target-completer-23 [] { ["AlexaForBusiness.DeleteGatewayGroup"] }
 def x-amz-target-completer-24 [] { ["AlexaForBusiness.DeleteNetworkProfile"] }
@@ -148,9 +156,12 @@ def x-amz-target-completer-48 [] { ["AlexaForBusiness.GetRoomSkillParameter"] }
 def x-amz-target-completer-49 [] { ["AlexaForBusiness.GetSkillGroup"] }
 def x-amz-target-completer-50 [] { ["AlexaForBusiness.ListBusinessReportSchedules"] }
 def x-amz-target-completer-51 [] { ["AlexaForBusiness.ListConferenceProviders"] }
+def event-type-completer [] { ["CONNECTION_STATUS" "DEVICE_STATUS"] }
 def x-amz-target-completer-52 [] { ["AlexaForBusiness.ListDeviceEvents"] }
 def x-amz-target-completer-53 [] { ["AlexaForBusiness.ListGatewayGroups"] }
 def x-amz-target-completer-54 [] { ["AlexaForBusiness.ListGateways"] }
+def enablement-type-completer [] { ["ENABLED" "PENDING"] }
+def skill-type-completer [] { ["ALL" "PRIVATE" "PUBLIC"] }
 def x-amz-target-completer-55 [] { ["AlexaForBusiness.ListSkills"] }
 def x-amz-target-completer-56 [] { ["AlexaForBusiness.ListSkillsStoreCategories"] }
 def x-amz-target-completer-57 [] { ["AlexaForBusiness.ListSkillsStoreSkillsByCategory"] }
@@ -234,12 +245,13 @@ export def "approve-skill" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  skill_id: any
+  --x-amz-target: string@x-amz-target-completer # required
+  skill_id: string # The unique identifier of the skill.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ApproveSkill")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillId": $skill_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -282,13 +294,14 @@ export def "associate-contact-with-address-book" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  contact_arn: any
-  address_book_arn: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  contact_arn: string # The ARN of the contact to associate with an address book.
+  address_book_arn: string # The ARN of the address book with which to associate the contact.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.AssociateContactWithAddressBook")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactArn": $contact_arn, "AddressBookArn": $address_book_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -331,13 +344,14 @@ export def "associate-device-with-network-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  device_arn: any
-  network_profile_arn: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  device_arn: string # The device ARN.
+  network_profile_arn: string # The ARN of the network profile to associate with a device.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.AssociateDeviceWithNetworkProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeviceArn": $device_arn, "NetworkProfileArn": $network_profile_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -380,13 +394,14 @@ export def "associate-device-with-room" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  --device-arn: any
-  --room-arn: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  --device-arn: string # The ARN of the device to associate to a room. Required.
+  --room-arn: string # The ARN of the room with which to associate the device. Required.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.AssociateDeviceWithRoom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeviceArn": $device_arn, "RoomArn": $room_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -429,13 +444,14 @@ export def "associate-skill-group-with-room" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  --skill-group-arn: any
-  --room-arn: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  --skill-group-arn: string # The ARN of the skill group to associate with a room. Required.
+  --room-arn: string # The ARN of the room with which to associate the skill group. Required.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.AssociateSkillGroupWithRoom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillGroupArn": $skill_group_arn, "RoomArn": $room_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -478,13 +494,14 @@ export def "associate-skill-with-skill-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  --skill-group-arn: any
-  skill_id: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  --skill-group-arn: string # The ARN of the skill group to associate the skill to. Required.
+  skill_id: string # The unique identifier of the skill.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.AssociateSkillWithSkillGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillGroupArn": $skill_group_arn, "SkillId": $skill_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -527,12 +544,13 @@ export def "associate-skill-with-users" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  skill_id: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  skill_id: string # The private skill ID you want to make available to enrolled users.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.AssociateSkillWithUsers")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillId": $skill_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -558,6 +576,7 @@ export def "associate-skill-with-users" [
 #
 # POST /
 # operationId: CreateAddressBook
+# --Tags item shape: {Key: string, Value: string}
 export def "create-address-book" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -575,15 +594,16 @@ export def "create-address-book" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  name: any
-  --description: any
-  --client-request-token: any
-  --tags: any
-]: any -> record<AddressBookArn: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  name: string # The name of the address book.
+  --description: string # The description of the address book.
+  --client-request-token: string # A unique, user-specified identifier for the request that ensures idempotency.
+  --tags: list # The tags to be added to the specified resource. Do not provide system tags. — item shape: {Key: string, Value: string}
+]: any -> record<AddressBookArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateAddressBook")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -609,6 +629,9 @@ export def "create-address-book" [
 #
 # POST /
 # operationId: CreateBusinessReportSchedule
+# --ContentRange shape: {Interval: "ONE_DAY"|"ONE_WEEK"|"THIRTY_DAYS"}
+# --Recurrence shape: {StartDate?: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-business-report-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -626,19 +649,20 @@ export def "create-business-report-schedule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  --schedule-name: any
-  --s3-bucket-name: any
-  --s3-key-prefix: any
-  format: any
-  content_range: any
-  --recurrence: any
-  --client-request-token: any
-  --tags: any
-]: any -> record<ScheduleArn: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  --schedule-name: string # The name identifier of the schedule.
+  --s3-bucket-name: string # The S3 bucket name of the output reports. If this isn't specified, the report can be retrieved from a download link by calling ListBusinessReportSchedule.
+  --s3-key-prefix: string # The S3 key where the report is delivered.
+  format: string@format-completer # The format of the generated report (individual CSV files or zipped files of individual files).
+  content_range: record # The content range of the report. — shape: {Interval: "ONE_DAY"|"ONE_WEEK"|"THIRTY_DAYS"}
+  --recurrence: record # The recurrence of the reports. — shape: {StartDate?: string}
+  --client-request-token: string # A unique, user-specified identifier for the request that ensures idempotency.
+  --tags: list # The tags for the business report schedule. — item shape: {Key: string, Value: string}
+]: any -> record<ScheduleArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateBusinessReportSchedule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScheduleName": $schedule_name, "S3BucketName": $s3_bucket_name, "S3KeyPrefix": $s3_key_prefix, "Format": $format, "ContentRange": $content_range, "Recurrence": $recurrence, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -664,6 +688,10 @@ export def "create-business-report-schedule" [
 #
 # POST /
 # operationId: CreateConferenceProvider
+# --IPDialIn shape: {Endpoint: string, CommsProtocol: "SIP"|"SIPS"|"H323"}
+# --PSTNDialIn shape: {CountryCode: string, PhoneNumber: string, OneClickIdDelay: string, OneClickPinDelay: string}
+# --MeetingSetting shape: {RequirePin: "YES"|"NO"|"OPTIONAL"}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-conference-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -681,18 +709,19 @@ export def "create-conference-provider" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  conference_provider_name: any
-  conference_provider_type: any
-  --ip-dial-in: any
-  --pstn-dial-in: any
-  meeting_setting: any
-  --client-request-token: any
-  --tags: any
-]: any -> record<ConferenceProviderArn: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  conference_provider_name: string # The name of the conference provider.
+  conference_provider_type: string@conference-provider-type-completer # Represents a type within a list of predefined types.
+  --ip-dial-in: record # The IP endpoint and protocol for calling. — shape: {Endpoint: string, CommsProtocol: "SIP"|"SIPS"|"H323"}
+  --pstn-dial-in: record # The information for public switched telephone network (PSTN) conferencing. — shape: {CountryCode: string, PhoneNumber: string, OneClickIdDelay: string, OneClickPinDelay: string}
+  meeting_setting: record # The values that indicate whether a pin is always required (YES), never required (NO), or OPTIONAL. If YES, Alexa will always ask for a meeting pin. If NO, Alexa will never ask for a meeting pin. If OPTIONAL, Alexa will ask if you have a meeting pin and if the customer responds with yes, it will ask for the meeting pin. — shape: {RequirePin: "YES"|"NO"|"OPTIONAL"}
+  --client-request-token: string # A unique, user-specified identifier for the request that ensures idempotency.
+  --tags: list # The tags to be added to the specified resource. Do not provide system tags. — item shape: {Key: string, Value: string}
+]: any -> record<ConferenceProviderArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateConferenceProvider")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConferenceProviderName": $conference_provider_name, "ConferenceProviderType": $conference_provider_type, "IPDialIn": $ip_dial_in, "PSTNDialIn": $pstn_dial_in, "MeetingSetting": $meeting_setting, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -718,6 +747,9 @@ export def "create-conference-provider" [
 #
 # POST /
 # operationId: CreateContact
+# --PhoneNumbers item shape: {Number: string, Type: "MOBILE"|"WORK"|"HOME"}
+# --SipAddresses item shape: {Uri: string, Type: "WORK"}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -735,19 +767,20 @@ export def "create-contact" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  --display-name: any
-  first_name: any
-  --last-name: any
-  --phone-number: any
-  --phone-numbers: any
-  --sip-addresses: any
-  --client-request-token: any
-  --tags: any
-]: any -> record<ContactArn: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  --display-name: string # The name of the contact to display on the console.
+  first_name: string # The first name of the contact that is used to call the contact on the device.
+  --last-name: string # The last name of the contact that is used to call the contact on the device.
+  --phone-number: string # The phone number of the contact in E.164 format. The phone number type defaults to WORK. You can specify PhoneNumber or PhoneNumbers. We recommend that you use PhoneNumbers, which lets you specify the phone number type and multiple numbers. (format: password)
+  --phone-numbers: list # The list of phone numbers for the contact. — item shape: {Number: string, Type: "MOBILE"|"WORK"|"HOME"}
+  --sip-addresses: list # The list of SIP addresses for the contact. — item shape: {Uri: string, Type: "WORK"}
+  --client-request-token: string # A unique, user-specified identifier for the request that ensures idempotency.
+  --tags: list # The tags to be added to the specified resource. Do not provide system tags. — item shape: {Key: string, Value: string}
+]: any -> record<ContactArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateContact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DisplayName": $display_name, "FirstName": $first_name, "LastName": $last_name, "PhoneNumber": $phone_number, "PhoneNumbers": $phone_numbers, "SipAddresses": $sip_addresses, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -773,6 +806,7 @@ export def "create-contact" [
 #
 # POST /
 # operationId: CreateGatewayGroup
+# --Tags item shape: {Key: string, Value: string}
 export def "create-gateway-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -790,15 +824,16 @@ export def "create-gateway-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  name: any
-  --description: any
-  client_request_token: any
-  --tags: any
-]: any -> record<GatewayGroupArn: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  name: string # The name of the gateway group.
+  --description: string # The description of the gateway group.
+  client_request_token: string # A unique, user-specified identifier for the request that ensures idempotency.
+  --tags: list # The tags to be added to the specified resource. Do not provide system tags. — item shape: {Key: string, Value: string}
+]: any -> record<GatewayGroupArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateGatewayGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -824,6 +859,7 @@ export def "create-gateway-group" [
 #
 # POST /
 # operationId: CreateNetworkProfile
+# --Tags item shape: {Key: string, Value: string}
 export def "create-network-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -841,22 +877,23 @@ export def "create-network-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  network_profile_name: any
-  --description: any
-  ssid: any
-  security_type: any
-  --eap-method: any
-  --current-password: any
-  --next-password: any
-  --certificate-authority-arn: any
-  --trust-anchors: any
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  network_profile_name: string # The name of the network profile associated with a device.
+  --description: string # Detailed information about a device's network profile.
+  ssid: string # The SSID of the Wi-Fi network.
+  security_type: string@security-type-completer # The security type of the Wi-Fi network. This can be WPA2_ENTERPRISE, WPA2_PSK, WPA_PSK, WEP, or OPEN.
+  --eap-method: string@eap-method-completer # The authentication standard that is used in the EAP framework. Currently, EAP_TLS is supported.
+  --current-password: string # The current password of the Wi-Fi network. (format: password)
+  --next-password: string # The next, or subsequent, password of the Wi-Fi network. This password is asynchronously transmitted to the device and is used when the password of the network changes to NextPassword. (format: password)
+  --certificate-authority-arn: string # The ARN of the Private Certificate Authority (PCA) created in AWS Certificate Manager (ACM). This is used to issue certificates to the devices.
+  --trust-anchors: list<string> # The root certificates of your authentication server that is installed on your devices and used to trust your authentication server during EAP negotiation.
   client_request_token: string # A unique, user-specified identifier for the request that ensures idempotency.
-  --tags: any
-]: any -> record<NetworkProfileArn: record> {
+  --tags: list # The tags to be added to the specified resource. Do not provide system tags. — item shape: {Key: string, Value: string}
+]: any -> record<NetworkProfileArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateNetworkProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NetworkProfileName": $network_profile_name, "Description": $description, "Ssid": $ssid, "SecurityType": $security_type, "EapMethod": $eap_method, "CurrentPassword": $current_password, "NextPassword": $next_password, "CertificateAuthorityArn": $certificate_authority_arn, "TrustAnchors": $trust_anchors, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -882,6 +919,8 @@ export def "create-network-profile" [
 #
 # POST /
 # operationId: CreateProfile
+# --MeetingRoomConfiguration shape: {RoomUtilizationMetricsEnabled?: bool, EndOfMeetingReminder?: record, InstantBooking?: record, RequireCheckIn?: record}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -899,25 +938,26 @@ export def "create-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  profile_name: any
-  timezone: any
-  address: any
-  distance_unit: any
-  temperature_unit: any
-  wake_word: any
-  --locale: any
-  --client-request-token: any
-  --setup-mode-disabled: any
-  --max-volume-limit: any
-  --pstn-enabled: any
-  --data-retention-opt-in: any
-  --meeting-room-configuration: any
-  --tags: any
-]: any -> record<ProfileArn: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  profile_name: string # The name of a room profile.
+  timezone: string # The time zone used by a room profile.
+  address: string # The valid address for the room.
+  distance_unit: string@distance-unit-completer # The distance unit to be used by devices in the profile.
+  temperature_unit: string@temperature-unit-completer # The temperature unit to be used by devices in the profile.
+  wake_word: string@wake-word-completer # A wake word for Alexa, Echo, Amazon, or a computer.
+  --locale: string # The locale of the room profile. (This is currently only available to a limited preview audience.)
+  --client-request-token: string # A unique, user-specified identifier for the request that ensures idempotency.
+  --setup-mode-disabled: oneof<nothing, bool> # Whether room profile setup is enabled.
+  --max-volume-limit: int # The maximum volume limit for a room profile.
+  --pstn-enabled: oneof<nothing, bool> # Whether PSTN calling is enabled.
+  --data-retention-opt-in: oneof<nothing, bool> # Whether data retention of the profile is enabled.
+  --meeting-room-configuration: record # Creates meeting room settings of a room profile. — shape: {RoomUtilizationMetricsEnabled?: bool, EndOfMeetingReminder?: record, InstantBooking?: record, RequireCheckIn?: record}
+  --tags: list # The tags for the profile. — item shape: {Key: string, Value: string}
+]: any -> record<ProfileArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProfileName": $profile_name, "Timezone": $timezone, "Address": $address, "DistanceUnit": $distance_unit, "TemperatureUnit": $temperature_unit, "WakeWord": $wake_word, "Locale": $locale, "ClientRequestToken": $client_request_token, "SetupModeDisabled": $setup_mode_disabled, "MaxVolumeLimit": $max_volume_limit, "PSTNEnabled": $pstn_enabled, "DataRetentionOptIn": $data_retention_opt_in, "MeetingRoomConfiguration": $meeting_room_configuration, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -943,6 +983,7 @@ export def "create-profile" [
 #
 # POST /
 # operationId: CreateRoom
+# --Tags item shape: {Key: string, Value: string}
 export def "create-room" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -960,17 +1001,18 @@ export def "create-room" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  room_name: any
-  --description: any
-  --profile-arn: any
-  --provider-calendar-id: any
-  --client-request-token: any
-  --tags: any
-]: any -> record<RoomArn: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  room_name: string # The name for the room.
+  --description: string # The description for the room.
+  --profile-arn: string # The profile ARN for the room. This is required.
+  --provider-calendar-id: string # The calendar ARN for the room.
+  --client-request-token: string # A unique, user-specified identifier for the request that ensures idempotency.
+  --tags: list # The tags for the room. — item shape: {Key: string, Value: string}
+]: any -> record<RoomArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateRoom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomName": $room_name, "Description": $description, "ProfileArn": $profile_arn, "ProviderCalendarId": $provider_calendar_id, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -996,6 +1038,7 @@ export def "create-room" [
 #
 # POST /
 # operationId: CreateSkillGroup
+# --Tags item shape: {Key: string, Value: string}
 export def "create-skill-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1013,15 +1056,16 @@ export def "create-skill-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  skill_group_name: any
-  --description: any
-  --client-request-token: any
-  --tags: any
-]: any -> record<SkillGroupArn: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  skill_group_name: string # The name for the skill group.
+  --description: string # The description for the skill group.
+  --client-request-token: string # A unique, user-specified identifier for the request that ensures idempotency.
+  --tags: list # The tags for the skill group. — item shape: {Key: string, Value: string}
+]: any -> record<SkillGroupArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateSkillGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillGroupName": $skill_group_name, "Description": $description, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1047,6 +1091,7 @@ export def "create-skill-group" [
 #
 # POST /
 # operationId: CreateUser
+# --Tags item shape: {Key: string, Value: string}
 export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1064,17 +1109,18 @@ export def "create-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  user_id: any
-  --first-name: any
-  --last-name: any
-  --email: any
-  --client-request-token: any
-  --tags: any
-]: any -> record<UserArn: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  user_id: string # The ARN for the user.
+  --first-name: string # The first name for the user.
+  --last-name: string # The last name for the user.
+  --email: string # The email address for the user.
+  --client-request-token: string # A unique, user-specified identifier for the request that ensures idempotency.
+  --tags: list # The tags for the user. — item shape: {Key: string, Value: string}
+]: any -> record<UserArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UserId": $user_id, "FirstName": $first_name, "LastName": $last_name, "Email": $email, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1117,12 +1163,13 @@ export def "delete-address-book" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  address_book_arn: any
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  address_book_arn: string # The ARN of the address book to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteAddressBook")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AddressBookArn": $address_book_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1165,12 +1212,13 @@ export def "delete-business-report-schedule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  schedule_arn: any
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  schedule_arn: string # The ARN of the business report schedule.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteBusinessReportSchedule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScheduleArn": $schedule_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1213,12 +1261,13 @@ export def "delete-conference-provider" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  conference_provider_arn: any
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  conference_provider_arn: string # The ARN of the conference provider.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteConferenceProvider")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConferenceProviderArn": $conference_provider_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1261,12 +1310,13 @@ export def "delete-contact" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  contact_arn: any
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  contact_arn: string # The ARN of the contact to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteContact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactArn": $contact_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1309,12 +1359,13 @@ export def "delete-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  device_arn: any
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  device_arn: string # The ARN of the device for which to request details.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteDevice")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeviceArn": $device_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1357,13 +1408,14 @@ export def "delete-device-usage-data" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  device_arn: any
-  device_usage_type: any
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  device_arn: string # The ARN of the device.
+  device_usage_type: string@device-usage-type-completer # The type of usage data to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteDeviceUsageData")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeviceArn": $device_arn, "DeviceUsageType": $device_usage_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1406,12 +1458,13 @@ export def "delete-gateway-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  gateway_group_arn: any
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  gateway_group_arn: string # The ARN of the gateway group to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteGatewayGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GatewayGroupArn": $gateway_group_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1454,12 +1507,13 @@ export def "delete-network-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  network_profile_arn: any
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  network_profile_arn: string # The ARN of the network profile associated with a device.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteNetworkProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NetworkProfileArn": $network_profile_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1502,12 +1556,13 @@ export def "delete-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  --profile-arn: any
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  --profile-arn: string # The ARN of the room profile to delete. Required.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProfileArn": $profile_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1550,12 +1605,13 @@ export def "delete-room" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  --room-arn: any
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  --room-arn: string # The ARN of the room to delete. Required.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteRoom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomArn": $room_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1598,14 +1654,15 @@ export def "delete-room-skill-parameter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  --room-arn: any
-  skill_id: any
-  parameter_key: any
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  --room-arn: string # The ARN of the room from which to remove the room skill parameter details.
+  skill_id: string # The ID of the skill from which to remove the room skill parameter details.
+  parameter_key: string # The room skill parameter key for which to remove details.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteRoomSkillParameter")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomArn": $room_arn, "SkillId": $skill_id, "ParameterKey": $parameter_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1648,13 +1705,14 @@ export def "delete-skill-authorization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  skill_id: any
-  --room-arn: any
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  skill_id: string # The unique identifier of a skill.
+  --room-arn: string # The room that the skill is authorized for.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteSkillAuthorization")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillId": $skill_id, "RoomArn": $room_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1697,12 +1755,13 @@ export def "delete-skill-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  --skill-group-arn: any
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  --skill-group-arn: string # The ARN of the skill group to delete. Required.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteSkillGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillGroupArn": $skill_group_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1745,13 +1804,14 @@ export def "delete-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  --user-arn: any
-  enrollment_id: any
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  --user-arn: string # The ARN of the user to delete in the organization. Required.
+  enrollment_id: string # The ARN of the user's enrollment in the organization. Required.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UserArn": $user_arn, "EnrollmentId": $enrollment_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1794,13 +1854,14 @@ export def "disassociate-contact-from-address-book" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  contact_arn: any
-  address_book_arn: any
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  contact_arn: string # The ARN of the contact to disassociate from an address book.
+  address_book_arn: string # The ARN of the address from which to disassociate the contact.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DisassociateContactFromAddressBook")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactArn": $contact_arn, "AddressBookArn": $address_book_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1843,12 +1904,13 @@ export def "disassociate-device-from-room" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  --device-arn: any
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  --device-arn: string # The ARN of the device to disassociate from a room. Required.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DisassociateDeviceFromRoom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeviceArn": $device_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1891,13 +1953,14 @@ export def "disassociate-skill-from-skill-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  --skill-group-arn: any
-  skill_id: any
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  --skill-group-arn: string # The unique identifier of a skill. Required.
+  skill_id: string # The ARN of a skill group to associate to a skill.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DisassociateSkillFromSkillGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillGroupArn": $skill_group_arn, "SkillId": $skill_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1940,12 +2003,13 @@ export def "disassociate-skill-from-users" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  skill_id: any
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  skill_id: string # The private skill ID you want to make unavailable for enrolled users.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DisassociateSkillFromUsers")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillId": $skill_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1988,13 +2052,14 @@ export def "disassociate-skill-group-from-room" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  --skill-group-arn: any
-  --room-arn: any
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  --skill-group-arn: string # The ARN of the skill group to disassociate from a room. Required.
+  --room-arn: string # The ARN of the room from which the skill group is to be disassociated. Required.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DisassociateSkillGroupFromRoom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillGroupArn": $skill_group_arn, "RoomArn": $room_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2037,12 +2102,13 @@ export def "forget-smart-home-appliances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  room_arn: any
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  room_arn: string # The room that the appliances are associated with.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ForgetSmartHomeAppliances")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomArn": $room_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2085,12 +2151,13 @@ export def "get-address-book" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  address_book_arn: any
-]: any -> record<AddressBook: record<AddressBookArn: record, Name: record, Description: record>> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  address_book_arn: string # The ARN of the address book for which to request details.
+]: any -> record<AddressBook: record<AddressBookArn: string, Name: string, Description: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetAddressBook")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AddressBookArn": $address_book_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2133,12 +2200,13 @@ export def "get-conference-preference" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
+  --x-amz-target: string@x-amz-target-completer-38 # required
   --body: record
-]: any -> record<Preference: record<DefaultConferenceProviderArn: record>> {
+]: any -> record<Preference: record<DefaultConferenceProviderArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetConferencePreference")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2181,12 +2249,13 @@ export def "get-conference-provider" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  conference_provider_arn: any
-]: any -> record<ConferenceProvider: record<Arn: record, Name: record, Type: record, IPDialIn: record<Endpoint: record, CommsProtocol: record>, PSTNDialIn: record<CountryCode: record, PhoneNumber: record, OneClickIdDelay: record, OneClickPinDelay: record>, MeetingSetting: record<RequirePin: record>>> {
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  conference_provider_arn: string # The ARN of the newly created conference provider.
+]: any -> record<ConferenceProvider: record<Arn: string, Name: string, Type: string, IPDialIn: record<Endpoint: string, CommsProtocol: string>, PSTNDialIn: record<CountryCode: string, PhoneNumber: string, OneClickIdDelay: string, OneClickPinDelay: string>, MeetingSetting: record<RequirePin: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetConferenceProvider")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConferenceProviderArn": $conference_provider_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2229,12 +2298,13 @@ export def "get-contact" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  contact_arn: any
-]: any -> record<Contact: record<ContactArn: record, DisplayName: record, FirstName: record, LastName: record, PhoneNumber: record, PhoneNumbers: record, SipAddresses: record>> {
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  contact_arn: string # The ARN of the contact for which to request details.
+]: any -> record<Contact: record<ContactArn: string, DisplayName: string, FirstName: string, LastName: string, PhoneNumber: string, PhoneNumbers: list<record>, SipAddresses: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetContact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactArn": $contact_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2277,12 +2347,13 @@ export def "get-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  --device-arn: any
-]: any -> record<Device: record<DeviceArn: record, DeviceSerialNumber: record, DeviceType: record, DeviceName: record, SoftwareVersion: record, MacAddress: record, RoomArn: record, DeviceStatus: record, DeviceStatusInfo: record<DeviceStatusDetails: record, ConnectionStatus: record, ConnectionStatusUpdatedTime: record>, NetworkProfileInfo: record<NetworkProfileArn: record, CertificateArn: record, CertificateExpirationTime: record>>> {
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  --device-arn: string # The ARN of the device for which to request details. Required.
+]: any -> record<Device: record<DeviceArn: string, DeviceSerialNumber: string, DeviceType: string, DeviceName: string, SoftwareVersion: string, MacAddress: string, RoomArn: string, DeviceStatus: string, DeviceStatusInfo: record<DeviceStatusDetails: list, ConnectionStatus: string, ConnectionStatusUpdatedTime: string>, NetworkProfileInfo: record<NetworkProfileArn: string, CertificateArn: string, CertificateExpirationTime: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetDevice")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeviceArn": $device_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2325,12 +2396,13 @@ export def "get-gateway" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  gateway_arn: any
-]: any -> record<Gateway: record<Arn: record, Name: record, Description: record, GatewayGroupArn: record, SoftwareVersion: record>> {
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  gateway_arn: string # The ARN of the gateway to get.
+]: any -> record<Gateway: record<Arn: string, Name: string, Description: string, GatewayGroupArn: string, SoftwareVersion: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetGateway")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GatewayArn": $gateway_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2373,12 +2445,13 @@ export def "get-gateway-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  gateway_group_arn: any
-]: any -> record<GatewayGroup: record<Arn: record, Name: record, Description: record>> {
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  gateway_group_arn: string # The ARN of the gateway group to get.
+]: any -> record<GatewayGroup: record<Arn: string, Name: string, Description: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetGatewayGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GatewayGroupArn": $gateway_group_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2421,12 +2494,13 @@ export def "get-invitation-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
+  --x-amz-target: string@x-amz-target-completer-44 # required
   --body: record
-]: any -> record<OrganizationName: record, ContactEmail: record, PrivateSkillIds: record> {
+]: any -> record<OrganizationName: string, ContactEmail: string, PrivateSkillIds: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetInvitationConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2469,12 +2543,13 @@ export def "get-network-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  network_profile_arn: any
-]: any -> record<NetworkProfile: record<NetworkProfileArn: record, NetworkProfileName: record, Description: record, Ssid: record, SecurityType: record, EapMethod: record, CurrentPassword: record, NextPassword: record, CertificateAuthorityArn: record, TrustAnchors: record>> {
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  network_profile_arn: string # The ARN of the network profile associated with a device.
+]: any -> record<NetworkProfile: record<NetworkProfileArn: string, NetworkProfileName: string, Description: string, Ssid: string, SecurityType: string, EapMethod: string, CurrentPassword: string, NextPassword: string, CertificateAuthorityArn: string, TrustAnchors: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetNetworkProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NetworkProfileArn": $network_profile_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2517,12 +2592,13 @@ export def "get-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  --profile-arn: any
-]: any -> record<Profile: record<ProfileArn: record, ProfileName: record, IsDefault: record, Address: record, Timezone: record, DistanceUnit: record, TemperatureUnit: record, WakeWord: record, Locale: record, SetupModeDisabled: record, MaxVolumeLimit: record, PSTNEnabled: record, DataRetentionOptIn: record, AddressBookArn: record, MeetingRoomConfiguration: record<RoomUtilizationMetricsEnabled: record, EndOfMeetingReminder: record, InstantBooking: record, RequireCheckIn: record>>> {
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  --profile-arn: string # The ARN of the room profile for which to request details. Required.
+]: any -> record<Profile: record<ProfileArn: string, ProfileName: string, IsDefault: bool, Address: string, Timezone: string, DistanceUnit: string, TemperatureUnit: string, WakeWord: string, Locale: string, SetupModeDisabled: bool, MaxVolumeLimit: int, PSTNEnabled: bool, DataRetentionOptIn: bool, AddressBookArn: string, MeetingRoomConfiguration: record<RoomUtilizationMetricsEnabled: bool, EndOfMeetingReminder: record, InstantBooking: record, RequireCheckIn: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProfileArn": $profile_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2565,12 +2641,13 @@ export def "get-room" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  --room-arn: any
-]: any -> record<Room: record<RoomArn: record, RoomName: record, Description: record, ProviderCalendarId: record, ProfileArn: record>> {
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  --room-arn: string # The ARN of the room for which to request details. Required.
+]: any -> record<Room: record<RoomArn: string, RoomName: string, Description: string, ProviderCalendarId: string, ProfileArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetRoom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomArn": $room_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2613,14 +2690,15 @@ export def "get-room-skill-parameter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-48
-  --room-arn: any
-  skill_id: any
-  parameter_key: any
-]: any -> record<RoomSkillParameter: record<ParameterKey: record, ParameterValue: record>> {
+  --x-amz-target: string@x-amz-target-completer-48 # required
+  --room-arn: string # The ARN of the room from which to get the room skill parameter details.
+  skill_id: string # The ARN of the skill from which to get the room skill parameter details. Required.
+  parameter_key: string # The room skill parameter key for which to get details. Required.
+]: any -> record<RoomSkillParameter: record<ParameterKey: string, ParameterValue: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetRoomSkillParameter")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomArn": $room_arn, "SkillId": $skill_id, "ParameterKey": $parameter_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2663,12 +2741,13 @@ export def "get-skill-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-49
-  --skill-group-arn: any
-]: any -> record<SkillGroup: record<SkillGroupArn: record, SkillGroupName: record, Description: record>> {
+  --x-amz-target: string@x-amz-target-completer-49 # required
+  --skill-group-arn: string # The ARN of the skill group for which to get details. Required.
+]: any -> record<SkillGroup: record<SkillGroupArn: string, SkillGroupName: string, Description: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetSkillGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillGroupArn": $skill_group_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2713,13 +2792,14 @@ export def "list-business-report-schedules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-50
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<BusinessReportSchedules: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-50 # required
+  --next-token-body: string # The token used to list the remaining schedules from the previous API call. (body field)
+  --max-results-body: int # The maximum number of schedules listed in the call. (body field)
+]: any -> record<BusinessReportSchedules: table<ScheduleArn: string, ScheduleName: string, S3BucketName: string, S3KeyPrefix: string, Format: string, ContentRange: record, Recurrence: record, LastBusinessReport: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListBusinessReportSchedules")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2765,13 +2845,14 @@ export def "list-conference-providers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-51
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<ConferenceProviders: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-51 # required
+  --next-token-body: string # The tokens used for pagination. (body field)
+  --max-results-body: int # The maximum number of conference providers to be returned, per paginated calls. (body field)
+]: any -> record<ConferenceProviders: table<Arn: string, Name: string, Type: string, IPDialIn: record, PSTNDialIn: record, MeetingSetting: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListConferenceProviders")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2817,15 +2898,16 @@ export def "list-device-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-52
-  device_arn: any
-  --event-type: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<DeviceEvents: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-52 # required
+  device_arn: string # The ARN of a device.
+  --event-type: string@event-type-completer # The event type to filter device events. If EventType isn't specified, this returns a list of all device events in reverse chronological order. If EventType is specified, this returns a list of device events for that EventType in reverse chronological order.
+  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response only includes results beyond the token, up to the value specified by MaxResults. When the end of results is reached, the response has a value of null. (body field)
+  --max-results-body: int # The maximum number of results to include in the response. The default value is 50. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+]: any -> record<DeviceEvents: table<Type: string, Value: string, Timestamp: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListDeviceEvents")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DeviceArn": $device_arn, "EventType": $event_type, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2871,13 +2953,14 @@ export def "list-gateway-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-53
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<GatewayGroups: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-53 # required
+  --next-token-body: string # The token used to paginate though multiple pages of gateway group summaries. (body field)
+  --max-results-body: int # The maximum number of gateway group summaries to return. The default is 50. (body field)
+]: any -> record<GatewayGroups: table<Arn: string, Name: string, Description: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListGatewayGroups")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2923,14 +3006,15 @@ export def "list-gateways" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-54
-  --gateway-group-arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Gateways: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-54 # required
+  --gateway-group-arn: string # The gateway group ARN for which to list gateways.
+  --next-token-body: string # The token used to paginate though multiple pages of gateway summaries. (body field)
+  --max-results-body: int # The maximum number of gateway summaries to return. The default is 50. (body field)
+]: any -> record<Gateways: table<Arn: string, Name: string, Description: string, GatewayGroupArn: string, SoftwareVersion: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListGateways")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"GatewayGroupArn": $gateway_group_arn, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2976,16 +3060,17 @@ export def "list-skills" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-55
-  --skill-group-arn: any
-  --enablement-type: any
-  --skill-type: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<SkillSummaries: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-55 # required
+  --skill-group-arn: string # The ARN of the skill group for which to list enabled skills.
+  --enablement-type: string@enablement-type-completer # Whether the skill is enabled under the user's account.
+  --skill-type: string@skill-type-completer # Whether the skill is publicly available or is a private skill.
+  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (body field)
+  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+]: any -> record<SkillSummaries: table<SkillId: string, SkillName: string, SupportsLinking: bool, EnablementType: string, SkillType: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListSkills")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"SkillGroupArn": $skill_group_arn, "EnablementType": $enablement_type, "SkillType": $skill_type, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -3031,13 +3116,14 @@ export def "list-skills-store-categories" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-56
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<CategoryList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-56 # required
+  --next-token-body: string # The tokens used for pagination. (body field)
+  --max-results-body: int # The maximum number of categories returned, per paginated calls. (body field)
+]: any -> record<CategoryList: table<CategoryId: int, CategoryName: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListSkillsStoreCategories")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -3083,14 +3169,15 @@ export def "list-skills-store-skills-by-category" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-57
-  category_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<SkillsStoreSkills: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-57 # required
+  category_id: int # The category ID for which the skills are being retrieved from the skill store.
+  --next-token-body: string # The tokens used for pagination. (body field)
+  --max-results-body: int # The maximum number of skills returned per paginated calls. (body field)
+]: any -> record<SkillsStoreSkills: table<SkillId: string, SkillName: string, ShortDescription: string, IconUrl: string, SampleUtterances: list, SkillDetails: record, SupportsLinking: bool>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListSkillsStoreSkillsByCategory")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"CategoryId": $category_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -3136,14 +3223,15 @@ export def "list-smart-home-appliances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-58
-  room_arn: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<SmartHomeAppliances: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-58 # required
+  room_arn: string # The room that the appliances are associated with.
+  --max-results-body: int # The maximum number of appliances to be returned, per paginated calls. (body field)
+  --next-token-body: string # The tokens used for pagination. (body field)
+]: any -> record<SmartHomeAppliances: table<FriendlyName: string, Description: string, ManufacturerName: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListSmartHomeAppliances")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"RoomArn": $room_arn, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -3189,14 +3277,15 @@ export def "list-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-59
-  arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Tags: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-59 # required
+  arn: string # The ARN of the specified resource for which to list tags.
+  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (body field)
+  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListTags")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Arn": $arn, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -3223,6 +3312,7 @@ export def "list-tags" [
 #
 # POST /
 # operationId: PutConferencePreference
+# --ConferencePreference shape: {DefaultConferenceProviderArn?: string}
 export def "put-conference-preference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3240,12 +3330,13 @@ export def "put-conference-preference" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-60
-  conference_preference: any
+  --x-amz-target: string@x-amz-target-completer-60 # required
+  conference_preference: record # The default conference provider that is used if no other scheduled meetings are detected. — shape: {DefaultConferenceProviderArn?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.PutConferencePreference")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConferencePreference": $conference_preference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3288,14 +3379,15 @@ export def "put-invitation-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-61
-  organization_name: any
-  --contact-email: any
-  --private-skill-ids: any
+  --x-amz-target: string@x-amz-target-completer-61 # required
+  organization_name: string # The name of the organization sending the enrollment invite to a user.
+  --contact-email: string # The email ID of the organization or individual contact that the enrolled user can use.
+  --private-skill-ids: list<string> # The list of private skill IDs that you want to recommend to the user to enable in the invitation.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.PutInvitationConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationName": $organization_name, "ContactEmail": $contact_email, "PrivateSkillIds": $private_skill_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3321,6 +3413,7 @@ export def "put-invitation-configuration" [
 #
 # POST /
 # operationId: PutRoomSkillParameter
+# --RoomSkillParameter shape: {ParameterKey: string, ParameterValue: string}
 export def "put-room-skill-parameter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3338,14 +3431,15 @@ export def "put-room-skill-parameter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-62
-  --room-arn: any
-  skill_id: any
-  room_skill_parameter: any
+  --x-amz-target: string@x-amz-target-completer-62 # required
+  --room-arn: string # The ARN of the room associated with the room skill parameter. Required.
+  skill_id: string # The ARN of the skill associated with the room skill parameter. Required.
+  room_skill_parameter: record # A skill parameter associated with a room. — shape: {ParameterKey: string, ParameterValue: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.PutRoomSkillParameter")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomArn": $room_arn, "SkillId": $skill_id, "RoomSkillParameter": $room_skill_parameter} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3388,14 +3482,15 @@ export def "put-skill-authorization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-63
-  authorization_result: any
-  skill_id: any
-  --room-arn: any
+  --x-amz-target: string@x-amz-target-completer-63 # required
+  authorization_result: record # The authorization result specific to OAUTH code grant output. "Code” must be populated in the AuthorizationResult map to establish the authorization.
+  skill_id: string # The unique identifier of a skill.
+  --room-arn: string # The room that the skill is authorized for.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.PutSkillAuthorization")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AuthorizationResult": $authorization_result, "SkillId": $skill_id, "RoomArn": $room_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3421,6 +3516,7 @@ export def "put-skill-authorization" [
 #
 # POST /
 # operationId: RegisterAVSDevice
+# --Tags item shape: {Key: string, Value: string}
 export def "register-avs-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3438,18 +3534,19 @@ export def "register-avs-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-64
-  client_id: any
-  user_code: any
-  product_id: any
-  --device-serial-number: any
-  amazon_id: any
-  --room-arn: any
-  --tags: any
-]: any -> record<DeviceArn: record> {
+  --x-amz-target: string@x-amz-target-completer-64 # required
+  client_id: string # The client ID of the OEM used for code-based linking authorization on an AVS device.
+  user_code: string # The code that is obtained after your AVS device has made a POST request to LWA as a part of the Device Authorization Request component of the OAuth code-based linking specification.
+  product_id: string # The product ID used to identify your AVS device during authorization.
+  --device-serial-number: string # The key generated by the OEM that uniquely identifies a specified instance of your AVS device.
+  amazon_id: string # The device type ID for your AVS device generated by Amazon when the OEM creates a new product on Amazon's Developer Console.
+  --room-arn: string # The Amazon Resource Name (ARN) of the room with which to associate your AVS device.
+  --tags: list # The tags to be added to the specified resource. Do not provide system tags. — item shape: {Key: string, Value: string}
+]: any -> record<DeviceArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.RegisterAVSDevice")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClientId": $client_id, "UserCode": $user_code, "ProductId": $product_id, "DeviceSerialNumber": $device_serial_number, "AmazonId": $amazon_id, "RoomArn": $room_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3492,12 +3589,13 @@ export def "reject-skill" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-65
-  skill_id: any
+  --x-amz-target: string@x-amz-target-completer-65 # required
+  skill_id: string # The unique identifier of the skill.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.RejectSkill")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillId": $skill_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3540,13 +3638,14 @@ export def "resolve-room" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-66
-  user_id: any
-  skill_id: any
-]: any -> record<RoomArn: record, RoomName: record, RoomSkillParameters: record> {
+  --x-amz-target: string@x-amz-target-completer-66 # required
+  user_id: string # The ARN of the user. Required.
+  skill_id: string # The ARN of the skill that was requested. Required.
+]: any -> record<RoomArn: string, RoomName: string, RoomSkillParameters: table<ParameterKey: string, ParameterValue: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ResolveRoom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UserId": $user_id, "SkillId": $skill_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3589,13 +3688,14 @@ export def "revoke-invitation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-67
-  --user-arn: any
-  --enrollment-id: any
+  --x-amz-target: string@x-amz-target-completer-67 # required
+  --user-arn: string # The ARN of the user for whom to revoke an enrollment invitation. Required.
+  --enrollment-id: string # The ARN of the enrollment invitation to revoke. Required.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.RevokeInvitation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UserArn": $user_arn, "EnrollmentId": $enrollment_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3621,6 +3721,8 @@ export def "revoke-invitation" [
 #
 # POST /
 # operationId: SearchAddressBooks
+# --Filters item shape: {Key: string, Values: list<string>}
+# --SortCriteria item shape: {Key: string, Value: "ASC"|"DESC"}
 export def "search-address-books" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3640,15 +3742,16 @@ export def "search-address-books" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-68
-  --filters: any
-  --sort-criteria: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<AddressBooks: record, NextToken: record, TotalCount: record> {
+  --x-amz-target: string@x-amz-target-completer-68 # required
+  --filters: list # The filters to use to list a specified set of address books. The supported filter key is AddressBookName. — item shape: {Key: string, Values: list<string>}
+  --sort-criteria: list # The sort order to use in listing the specified set of address books. The supported sort key is AddressBookName. — item shape: {Key: string, Value: "ASC"|"DESC"}
+  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response only includes results beyond the token, up to the value specified by MaxResults. (body field)
+  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+]: any -> record<AddressBooks: table<AddressBookArn: string, Name: string, Description: string>, NextToken: string, TotalCount: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SearchAddressBooks")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Filters": $filters, "SortCriteria": $sort_criteria, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -3675,6 +3778,8 @@ export def "search-address-books" [
 #
 # POST /
 # operationId: SearchContacts
+# --Filters item shape: {Key: string, Values: list<string>}
+# --SortCriteria item shape: {Key: string, Value: "ASC"|"DESC"}
 export def "search-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3694,15 +3799,16 @@ export def "search-contacts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-69
-  --filters: any
-  --sort-criteria: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Contacts: record, NextToken: record, TotalCount: record> {
+  --x-amz-target: string@x-amz-target-completer-69 # required
+  --filters: list # The filters to use to list a specified set of address books. The supported filter keys are DisplayName, FirstName, LastName, and AddressBookArns. — item shape: {Key: string, Values: list<string>}
+  --sort-criteria: list # The sort order to use in listing the specified set of contacts. The supported sort keys are DisplayName, FirstName, and LastName. — item shape: {Key: string, Value: "ASC"|"DESC"}
+  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response only includes results beyond the token, up to the value specified by MaxResults. (body field)
+  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+]: any -> record<Contacts: table<ContactArn: string, DisplayName: string, FirstName: string, LastName: string, PhoneNumber: string, PhoneNumbers: list, SipAddresses: list>, NextToken: string, TotalCount: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SearchContacts")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Filters": $filters, "SortCriteria": $sort_criteria, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -3729,6 +3835,8 @@ export def "search-contacts" [
 #
 # POST /
 # operationId: SearchDevices
+# --Filters item shape: {Key: string, Values: list<string>}
+# --SortCriteria item shape: {Key: string, Value: "ASC"|"DESC"}
 export def "search-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3748,15 +3856,16 @@ export def "search-devices" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-70
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-  --sort-criteria: any
-]: any -> record<Devices: record, NextToken: record, TotalCount: record> {
+  --x-amz-target: string@x-amz-target-completer-70 # required
+  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (body field)
+  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+  --filters: list # The filters to use to list a specified set of devices. Supported filter keys are DeviceName, DeviceStatus, DeviceStatusDetailCode, RoomName, DeviceType, DeviceSerialNumber, UnassociatedOnly, ConnectionStatus (ONLINE and OFFLINE), NetworkProfileName, NetworkProfileArn, Feature, and FailureCode. — item shape: {Key: string, Values: list<string>}
+  --sort-criteria: list # The sort order to use in listing the specified set of devices. Supported sort keys are DeviceName, DeviceStatus, RoomName, DeviceType, DeviceSerialNumber, ConnectionStatus, NetworkProfileName, NetworkProfileArn, Feature, and FailureCode. — item shape: {Key: string, Value: "ASC"|"DESC"}
+]: any -> record<Devices: table<DeviceArn: string, DeviceSerialNumber: string, DeviceType: string, DeviceName: string, SoftwareVersion: string, MacAddress: string, DeviceStatus: string, NetworkProfileArn: string, NetworkProfileName: string, RoomArn: string, RoomName: string, DeviceStatusInfo: record, CreatedTime: string>, NextToken: string, TotalCount: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SearchDevices")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters, "SortCriteria": $sort_criteria} | compact
@@ -3783,6 +3892,8 @@ export def "search-devices" [
 #
 # POST /
 # operationId: SearchNetworkProfiles
+# --Filters item shape: {Key: string, Values: list<string>}
+# --SortCriteria item shape: {Key: string, Value: "ASC"|"DESC"}
 export def "search-network-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3802,15 +3913,16 @@ export def "search-network-profiles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-71
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-  --sort-criteria: any
-]: any -> record<NetworkProfiles: record, NextToken: record, TotalCount: record> {
+  --x-amz-target: string@x-amz-target-completer-71 # required
+  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (body field)
+  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+  --filters: list # The filters to use to list a specified set of network profiles. Valid filters are NetworkProfileName, Ssid, and SecurityType. — item shape: {Key: string, Values: list<string>}
+  --sort-criteria: list # The sort order to use to list the specified set of network profiles. Valid sort criteria includes NetworkProfileName, Ssid, and SecurityType. — item shape: {Key: string, Value: "ASC"|"DESC"}
+]: any -> record<NetworkProfiles: table<NetworkProfileArn: string, NetworkProfileName: string, Description: string, Ssid: string, SecurityType: string, EapMethod: string, CertificateAuthorityArn: string>, NextToken: string, TotalCount: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SearchNetworkProfiles")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters, "SortCriteria": $sort_criteria} | compact
@@ -3837,6 +3949,8 @@ export def "search-network-profiles" [
 #
 # POST /
 # operationId: SearchProfiles
+# --Filters item shape: {Key: string, Values: list<string>}
+# --SortCriteria item shape: {Key: string, Value: "ASC"|"DESC"}
 export def "search-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3856,15 +3970,16 @@ export def "search-profiles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-72
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-  --sort-criteria: any
-]: any -> record<Profiles: record, NextToken: record, TotalCount: record> {
+  --x-amz-target: string@x-amz-target-completer-72 # required
+  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (body field)
+  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+  --filters: list # The filters to use to list a specified set of room profiles. Supported filter keys are ProfileName and Address. Required. — item shape: {Key: string, Values: list<string>}
+  --sort-criteria: list # The sort order to use in listing the specified set of room profiles. Supported sort keys are ProfileName and Address. — item shape: {Key: string, Value: "ASC"|"DESC"}
+]: any -> record<Profiles: table<ProfileArn: string, ProfileName: string, IsDefault: bool, Address: string, Timezone: string, DistanceUnit: string, TemperatureUnit: string, WakeWord: string, Locale: string>, NextToken: string, TotalCount: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SearchProfiles")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters, "SortCriteria": $sort_criteria} | compact
@@ -3891,6 +4006,8 @@ export def "search-profiles" [
 #
 # POST /
 # operationId: SearchRooms
+# --Filters item shape: {Key: string, Values: list<string>}
+# --SortCriteria item shape: {Key: string, Value: "ASC"|"DESC"}
 export def "search-rooms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3910,15 +4027,16 @@ export def "search-rooms" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-73
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-  --sort-criteria: any
-]: any -> record<Rooms: record, NextToken: record, TotalCount: record> {
+  --x-amz-target: string@x-amz-target-completer-73 # required
+  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (body field)
+  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+  --filters: list # The filters to use to list a specified set of rooms. The supported filter keys are RoomName and ProfileName. — item shape: {Key: string, Values: list<string>}
+  --sort-criteria: list # The sort order to use in listing the specified set of rooms. The supported sort keys are RoomName and ProfileName. — item shape: {Key: string, Value: "ASC"|"DESC"}
+]: any -> record<Rooms: table<RoomArn: string, RoomName: string, Description: string, ProviderCalendarId: string, ProfileArn: string, ProfileName: string>, NextToken: string, TotalCount: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SearchRooms")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters, "SortCriteria": $sort_criteria} | compact
@@ -3945,6 +4063,8 @@ export def "search-rooms" [
 #
 # POST /
 # operationId: SearchSkillGroups
+# --Filters item shape: {Key: string, Values: list<string>}
+# --SortCriteria item shape: {Key: string, Value: "ASC"|"DESC"}
 export def "search-skill-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3964,15 +4084,16 @@ export def "search-skill-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-74
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-  --sort-criteria: any
-]: any -> record<SkillGroups: record, NextToken: record, TotalCount: record> {
+  --x-amz-target: string@x-amz-target-completer-74 # required
+  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. Required. (body field)
+  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+  --filters: list # The filters to use to list a specified set of skill groups. The supported filter key is SkillGroupName. — item shape: {Key: string, Values: list<string>}
+  --sort-criteria: list # The sort order to use in listing the specified set of skill groups. The supported sort key is SkillGroupName. — item shape: {Key: string, Value: "ASC"|"DESC"}
+]: any -> record<SkillGroups: table<SkillGroupArn: string, SkillGroupName: string, Description: string>, NextToken: string, TotalCount: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SearchSkillGroups")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters, "SortCriteria": $sort_criteria} | compact
@@ -3999,6 +4120,8 @@ export def "search-skill-groups" [
 #
 # POST /
 # operationId: SearchUsers
+# --Filters item shape: {Key: string, Values: list<string>}
+# --SortCriteria item shape: {Key: string, Value: "ASC"|"DESC"}
 export def "search-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4018,15 +4141,16 @@ export def "search-users" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-75
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-  --sort-criteria: any
-]: any -> record<Users: record, NextToken: record, TotalCount: record> {
+  --x-amz-target: string@x-amz-target-completer-75 # required
+  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. Required. (body field)
+  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. Required. (body field)
+  --filters: list # The filters to use for listing a specific set of users. Required. Supported filter keys are UserId, FirstName, LastName, Email, and EnrollmentStatus. — item shape: {Key: string, Values: list<string>}
+  --sort-criteria: list # The sort order to use in listing the filtered set of users. Required. Supported sort keys are UserId, FirstName, LastName, Email, and EnrollmentStatus. — item shape: {Key: string, Value: "ASC"|"DESC"}
+]: any -> record<Users: table<UserArn: string, FirstName: string, LastName: string, Email: string, EnrollmentStatus: string, EnrollmentId: string>, NextToken: string, TotalCount: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SearchUsers")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters, "SortCriteria": $sort_criteria} | compact
@@ -4053,6 +4177,8 @@ export def "search-users" [
 #
 # POST /
 # operationId: SendAnnouncement
+# --RoomFilters item shape: {Key: string, Values: list<string>}
+# --Content shape: {TextList?: list, SsmlList?: list, AudioList?: list}
 export def "send-announcement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4070,15 +4196,16 @@ export def "send-announcement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-76
-  room_filters: any
-  content: any
-  --time-to-live-in-seconds: any
-  client_request_token: any
-]: any -> record<AnnouncementArn: record> {
+  --x-amz-target: string@x-amz-target-completer-76 # required
+  room_filters: list # The filters to use to send an announcement to a specified list of rooms. The supported filter keys are RoomName, ProfileName, RoomArn, and ProfileArn. To send to all rooms, specify an empty RoomFilters list. — item shape: {Key: string, Values: list<string>}
+  content: record # The content definition. This can contain only one text, SSML, or audio list object. — shape: {TextList?: list, SsmlList?: list, AudioList?: list}
+  --time-to-live-in-seconds: int # The time to live for an announcement. Default is 300. If delivery doesn't occur within this time, the announcement is not delivered.
+  client_request_token: string # A unique, user-specified identifier for the request that ensures idempotency.
+]: any -> record<AnnouncementArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SendAnnouncement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomFilters": $room_filters, "Content": $content, "TimeToLiveInSeconds": $time_to_live_in_seconds, "ClientRequestToken": $client_request_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4121,12 +4248,13 @@ export def "send-invitation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-77
-  --user-arn: any
+  --x-amz-target: string@x-amz-target-completer-77 # required
+  --user-arn: string # The ARN of the user to whom to send an invitation. Required.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SendInvitation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UserArn": $user_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4169,14 +4297,15 @@ export def "start-device-sync" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-78
-  --room-arn: any
-  --device-arn: any
-  features: any
+  --x-amz-target: string@x-amz-target-completer-78 # required
+  --room-arn: string # The ARN of the room with which the device to sync is associated. Required.
+  --device-arn: string # The ARN of the device to sync. Required.
+  features: list<string> # Request structure to start the device sync. Required.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.StartDeviceSync")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomArn": $room_arn, "DeviceArn": $device_arn, "Features": $features} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4219,12 +4348,13 @@ export def "start-smart-home-appliance-discovery" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-79
-  room_arn: any
+  --x-amz-target: string@x-amz-target-completer-79 # required
+  room_arn: string # The room where smart home appliance discovery was initiated.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.StartSmartHomeApplianceDiscovery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomArn": $room_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4250,6 +4380,7 @@ export def "start-smart-home-appliance-discovery" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4267,13 +4398,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-80
-  arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-80 # required
+  arn: string # The ARN of the resource to which to add metadata tags. Required.
+  tags: list # The tags to be added to the specified resource. Do not provide system tags. Required. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Arn": $arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4316,13 +4448,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-81
-  arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-81 # required
+  arn: string # The ARN of the resource from which to remove metadata tags. Required.
+  tag_keys: list<string> # The tags to be removed from the specified resource. Do not provide system tags. Required.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Arn": $arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4365,14 +4498,15 @@ export def "update-address-book" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-82
-  address_book_arn: any
-  --name: any
-  --description: any
+  --x-amz-target: string@x-amz-target-completer-82 # required
+  address_book_arn: string # The ARN of the room to update.
+  --name: string # The updated name of the room.
+  --description: string # The updated description of the room.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateAddressBook")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AddressBookArn": $address_book_arn, "Name": $name, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4398,6 +4532,7 @@ export def "update-address-book" [
 #
 # POST /
 # operationId: UpdateBusinessReportSchedule
+# --Recurrence shape: {StartDate?: string}
 export def "update-business-report-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4415,17 +4550,18 @@ export def "update-business-report-schedule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-83
-  schedule_arn: any
-  --s3-bucket-name: any
-  --s3-key-prefix: any
-  --format: any
-  --schedule-name: any
-  --recurrence: any
+  --x-amz-target: string@x-amz-target-completer-83 # required
+  schedule_arn: string # The ARN of the business report schedule.
+  --s3-bucket-name: string # The S3 location of the output reports.
+  --s3-key-prefix: string # The S3 key where the report is delivered.
+  --format: string@format-completer # The format of the generated report (individual CSV files or zipped files of individual files).
+  --schedule-name: string # The name identifier of the schedule.
+  --recurrence: record # The recurrence of the reports. — shape: {StartDate?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateBusinessReportSchedule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScheduleArn": $schedule_arn, "S3BucketName": $s3_bucket_name, "S3KeyPrefix": $s3_key_prefix, "Format": $format, "ScheduleName": $schedule_name, "Recurrence": $recurrence} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4451,6 +4587,9 @@ export def "update-business-report-schedule" [
 #
 # POST /
 # operationId: UpdateConferenceProvider
+# --IPDialIn shape: {Endpoint: string, CommsProtocol: "SIP"|"SIPS"|"H323"}
+# --PSTNDialIn shape: {CountryCode: string, PhoneNumber: string, OneClickIdDelay: string, OneClickPinDelay: string}
+# --MeetingSetting shape: {RequirePin: "YES"|"NO"|"OPTIONAL"}
 export def "update-conference-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4468,16 +4607,17 @@ export def "update-conference-provider" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-84
-  conference_provider_arn: any
-  conference_provider_type: any
-  --ip-dial-in: any
-  --pstn-dial-in: any
-  meeting_setting: any
+  --x-amz-target: string@x-amz-target-completer-84 # required
+  conference_provider_arn: string # The ARN of the conference provider.
+  conference_provider_type: string@conference-provider-type-completer # The type of the conference provider.
+  --ip-dial-in: record # The IP endpoint and protocol for calling. — shape: {Endpoint: string, CommsProtocol: "SIP"|"SIPS"|"H323"}
+  --pstn-dial-in: record # The information for public switched telephone network (PSTN) conferencing. — shape: {CountryCode: string, PhoneNumber: string, OneClickIdDelay: string, OneClickPinDelay: string}
+  meeting_setting: record # The values that indicate whether a pin is always required (YES), never required (NO), or OPTIONAL. If YES, Alexa will always ask for a meeting pin. If NO, Alexa will never ask for a meeting pin. If OPTIONAL, Alexa will ask if you have a meeting pin and if the customer responds with yes, it will ask for the meeting pin. — shape: {RequirePin: "YES"|"NO"|"OPTIONAL"}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateConferenceProvider")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConferenceProviderArn": $conference_provider_arn, "ConferenceProviderType": $conference_provider_type, "IPDialIn": $ip_dial_in, "PSTNDialIn": $pstn_dial_in, "MeetingSetting": $meeting_setting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4503,6 +4643,8 @@ export def "update-conference-provider" [
 #
 # POST /
 # operationId: UpdateContact
+# --PhoneNumbers item shape: {Number: string, Type: "MOBILE"|"WORK"|"HOME"}
+# --SipAddresses item shape: {Uri: string, Type: "WORK"}
 export def "update-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4520,18 +4662,19 @@ export def "update-contact" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-85
-  contact_arn: any
-  --display-name: any
-  --first-name: any
-  --last-name: any
-  --phone-number: any
-  --phone-numbers: any
-  --sip-addresses: any
+  --x-amz-target: string@x-amz-target-completer-85 # required
+  contact_arn: string # The ARN of the contact to update.
+  --display-name: string # The updated display name of the contact.
+  --first-name: string # The updated first name of the contact.
+  --last-name: string # The updated last name of the contact.
+  --phone-number: string # The updated phone number of the contact. The phone number type defaults to WORK. You can either specify PhoneNumber or PhoneNumbers. We recommend that you use PhoneNumbers, which lets you specify the phone number type and multiple numbers. (format: password)
+  --phone-numbers: list # The list of phone numbers for the contact. — item shape: {Number: string, Type: "MOBILE"|"WORK"|"HOME"}
+  --sip-addresses: list # The list of SIP addresses for the contact. — item shape: {Uri: string, Type: "WORK"}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateContact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactArn": $contact_arn, "DisplayName": $display_name, "FirstName": $first_name, "LastName": $last_name, "PhoneNumber": $phone_number, "PhoneNumbers": $phone_numbers, "SipAddresses": $sip_addresses} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4574,13 +4717,14 @@ export def "update-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-86
-  --device-arn: any
-  --device-name: any
+  --x-amz-target: string@x-amz-target-completer-86 # required
+  --device-arn: string # The ARN of the device to update. Required.
+  --device-name: string # The updated device name. Required.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateDevice")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeviceArn": $device_arn, "DeviceName": $device_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4623,15 +4767,16 @@ export def "update-gateway" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-87
-  gateway_arn: any
-  --name: any
-  --description: any
-  --software-version: any
+  --x-amz-target: string@x-amz-target-completer-87 # required
+  gateway_arn: string # The ARN of the gateway to update.
+  --name: string # The updated name of the gateway.
+  --description: string # The updated description of the gateway.
+  --software-version: string # The updated software version of the gateway. The gateway automatically updates its software version during normal operation.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateGateway")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GatewayArn": $gateway_arn, "Name": $name, "Description": $description, "SoftwareVersion": $software_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4674,14 +4819,15 @@ export def "update-gateway-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-88
-  gateway_group_arn: any
-  --name: any
-  --description: any
+  --x-amz-target: string@x-amz-target-completer-88 # required
+  gateway_group_arn: string # The ARN of the gateway group to update.
+  --name: string # The updated name of the gateway group.
+  --description: string # The updated description of the gateway group.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateGatewayGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GatewayGroupArn": $gateway_group_arn, "Name": $name, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4724,18 +4870,19 @@ export def "update-network-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-89
-  network_profile_arn: any
-  --network-profile-name: any
-  --description: any
-  --current-password: any
-  --next-password: any
-  --certificate-authority-arn: any
-  --trust-anchors: any
+  --x-amz-target: string@x-amz-target-completer-89 # required
+  network_profile_arn: string # The ARN of the network profile associated with a device.
+  --network-profile-name: string # The name of the network profile associated with a device.
+  --description: string # Detailed information about a device's network profile.
+  --current-password: string # The current password of the Wi-Fi network. (format: password)
+  --next-password: string # The next, or subsequent, password of the Wi-Fi network. This password is asynchronously transmitted to the device and is used when the password of the network changes to NextPassword. (format: password)
+  --certificate-authority-arn: string # The ARN of the Private Certificate Authority (PCA) created in AWS Certificate Manager (ACM). This is used to issue certificates to the devices.
+  --trust-anchors: list<string> # The root certificate(s) of your authentication server that will be installed on your devices and used to trust your authentication server during EAP negotiation.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateNetworkProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NetworkProfileArn": $network_profile_arn, "NetworkProfileName": $network_profile_name, "Description": $description, "CurrentPassword": $current_password, "NextPassword": $next_password, "CertificateAuthorityArn": $certificate_authority_arn, "TrustAnchors": $trust_anchors} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4761,6 +4908,7 @@ export def "update-network-profile" [
 #
 # POST /
 # operationId: UpdateProfile
+# --MeetingRoomConfiguration shape: {RoomUtilizationMetricsEnabled?: bool, EndOfMeetingReminder?: record, InstantBooking?: record, RequireCheckIn?: record}
 export def "update-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4778,25 +4926,26 @@ export def "update-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-90
-  --profile-arn: any
-  --profile-name: any
-  --is-default: any
-  --timezone: any
-  --address: any
-  --distance-unit: any
-  --temperature-unit: any
-  --wake-word: any
-  --locale: any
-  --setup-mode-disabled: any
-  --max-volume-limit: any
-  --pstn-enabled: any
-  --data-retention-opt-in: any
-  --meeting-room-configuration: any
+  --x-amz-target: string@x-amz-target-completer-90 # required
+  --profile-arn: string # The ARN of the room profile to update. Required.
+  --profile-name: string # The updated name for the room profile.
+  --is-default: oneof<nothing, bool> # Sets the profile as default if selected. If this is missing, no update is done to the default status.
+  --timezone: string # The updated timezone for the room profile.
+  --address: string # The updated address for the room profile.
+  --distance-unit: string@distance-unit-completer # The updated distance unit for the room profile.
+  --temperature-unit: string@temperature-unit-completer # The updated temperature unit for the room profile.
+  --wake-word: string@wake-word-completer # The updated wake word for the room profile.
+  --locale: string # The updated locale for the room profile. (This is currently only available to a limited preview audience.)
+  --setup-mode-disabled: oneof<nothing, bool> # Whether the setup mode of the profile is enabled.
+  --max-volume-limit: int # The updated maximum volume limit for the room profile.
+  --pstn-enabled: oneof<nothing, bool> # Whether the PSTN setting of the room profile is enabled.
+  --data-retention-opt-in: oneof<nothing, bool> # Whether data retention of the profile is enabled.
+  --meeting-room-configuration: record # Updates meeting room settings of a room profile. — shape: {RoomUtilizationMetricsEnabled?: bool, EndOfMeetingReminder?: record, InstantBooking?: record, RequireCheckIn?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProfileArn": $profile_arn, "ProfileName": $profile_name, "IsDefault": $is_default, "Timezone": $timezone, "Address": $address, "DistanceUnit": $distance_unit, "TemperatureUnit": $temperature_unit, "WakeWord": $wake_word, "Locale": $locale, "SetupModeDisabled": $setup_mode_disabled, "MaxVolumeLimit": $max_volume_limit, "PSTNEnabled": $pstn_enabled, "DataRetentionOptIn": $data_retention_opt_in, "MeetingRoomConfiguration": $meeting_room_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4839,16 +4988,17 @@ export def "update-room" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-91
-  --room-arn: any
-  --room-name: any
-  --description: any
-  --provider-calendar-id: any
-  --profile-arn: any
+  --x-amz-target: string@x-amz-target-completer-91 # required
+  --room-arn: string # The ARN of the room to update.
+  --room-name: string # The updated name for the room.
+  --description: string # The updated description for the room.
+  --provider-calendar-id: string # The updated provider calendar ARN for the room.
+  --profile-arn: string # The updated profile ARN for the room.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateRoom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomArn": $room_arn, "RoomName": $room_name, "Description": $description, "ProviderCalendarId": $provider_calendar_id, "ProfileArn": $profile_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4891,14 +5041,15 @@ export def "update-skill-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-92
-  --skill-group-arn: any
-  --skill-group-name: any
-  --description: any
+  --x-amz-target: string@x-amz-target-completer-92 # required
+  --skill-group-arn: string # The ARN of the skill group to update.
+  --skill-group-name: string # The updated name for the skill group.
+  --description: string # The updated description for the skill group.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateSkillGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillGroupArn": $skill_group_arn, "SkillGroupName": $skill_group_name, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

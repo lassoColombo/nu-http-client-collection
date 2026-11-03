@@ -1,4 +1,4 @@
-# Auto-generated client for My Business Lodging API vv1
+# Auto-generated client for My Business Lodging API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/mybusinesslodging/v1/openapi.json
 # Auth: --token flag or $env.MY_BUSINESS_LODGING_API_TOKEN
 

@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {X-API-Key: $token_val}, query: "", location: "header"} }
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "x-api-key" => { {scheme: $scheme, headers: {"X-API-Key": $token_val}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -958,11 +958,12 @@ export def "get-companies-company-id-terminal-logos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T.
+  --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T. (required)
 ]: nothing -> record<data: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($model == null) { error make --unspanned { msg: "required query parameter 'model' missing: pass --model" } }
   let qp = [(serialize-qp "model" $model "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/terminalLogos") $qp $auth.query)
   let accept_val = "application/json"
@@ -996,13 +997,14 @@ export def "patch-companies-company-id-terminal-logos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T.
+  --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T. (required)
   --data: string # The image file, converted to a Base64-encoded string, of the logo to be shown on the terminal.
 ]: any -> record<data: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($model == null) { error make --unspanned { msg: "required query parameter 'model' missing: pass --model" } }
   let qp = [(serialize-qp "model" $model "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/terminalLogos") $qp $auth.query)
   let req_body = {"data": $data} | compact
@@ -1283,7 +1285,7 @@ export def "get-companies-company-id-terminal-products" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country: string # The country to return products for, in [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) format. For example, **US**
+  --country: string # The country to return products for, in [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) format. For example, **US** (required)
   --terminal-model-id: string # The terminal model to return products for. Use the ID returned in the [GET `/terminalModels`](https://docs.adyen.com/api-explorer/#/ManagementService/latest/get/companies/{companyId}/terminalModels) response. For example, **Verifone.M400**
   --offset: int # The number of products to skip. (format: int32)
   --limit: int # The number of products to return. (format: int32)
@@ -1291,6 +1293,7 @@ export def "get-companies-company-id-terminal-products" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "terminalModelId" $terminal_model_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/terminalProducts") $qp $auth.query)
   let accept_val = "application/json"
@@ -1674,6 +1677,7 @@ export def "post-companies-company-id-webhooks" [
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/webhooks") $auth.query)
   let req_body = {"acceptsExpiredCertificate": $accepts_expired_certificate, "acceptsSelfSignedCertificate": $accepts_self_signed_certificate, "acceptsUntrustedRootCertificate": $accepts_untrusted_root_certificate, "active": $active, "additionalSettings": $additional_settings, "communicationFormat": $communication_format, "description": $description, "filterMerchantAccountType": $filter_merchant_account_type, "filterMerchantAccounts": $filter_merchant_accounts, "networkType": $network_type, "password": $password, "populateSoapActionHeader": $populate_soap_action_header, "sslVersion": $ssl_version, "type": $type, "url": $url, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "active") == null) { error make --unspanned { msg: "required body field 'active' missing: pass --active or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3343,12 +3347,13 @@ export def "get-merchants-merchant-id-stores-reference-terminal-logos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T.
+  --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T. (required)
 ]: nothing -> record<data: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
   if ($reference | is-empty) { error make --unspanned { msg: "path parameter 'reference' must be non-empty" } }
+  if ($model == null) { error make --unspanned { msg: "required query parameter 'model' missing: pass --model" } }
   let qp = [(serialize-qp "model" $model "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), reference: (encode-path-segment $reference)} | format pattern "/merchants/{merchant_id}/stores/{reference}/terminalLogos") $qp $auth.query)
   let accept_val = "application/json"
@@ -3383,7 +3388,7 @@ export def "patch-merchants-merchant-id-stores-reference-terminal-logos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T
+  --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T (required)
   --data: string # The image file, converted to a Base64-encoded string, of the logo to be shown on the terminal.
 ]: any -> record<data: string> {
   let input = $in
@@ -3391,6 +3396,7 @@ export def "patch-merchants-merchant-id-stores-reference-terminal-logos" [
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
   if ($reference | is-empty) { error make --unspanned { msg: "path parameter 'reference' must be non-empty" } }
+  if ($model == null) { error make --unspanned { msg: "required query parameter 'model' missing: pass --model" } }
   let qp = [(serialize-qp "model" $model "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), reference: (encode-path-segment $reference)} | format pattern "/merchants/{merchant_id}/stores/{reference}/terminalLogos") $qp $auth.query)
   let req_body = {"data": $data} | compact
@@ -3626,11 +3632,12 @@ export def "get-merchants-merchant-id-terminal-logos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T.
+  --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T. (required)
 ]: nothing -> record<data: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
+  if ($model == null) { error make --unspanned { msg: "required query parameter 'model' missing: pass --model" } }
   let qp = [(serialize-qp "model" $model "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/merchants/{merchant_id}/terminalLogos") $qp $auth.query)
   let accept_val = "application/json"
@@ -3664,13 +3671,14 @@ export def "patch-merchants-merchant-id-terminal-logos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --model: string # The terminal model. Allowed values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T.
+  --model: string # The terminal model. Allowed values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T. (required)
   --data: string # The image file, converted to a Base64-encoded string, of the logo to be shown on the terminal.
 ]: any -> record<data: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
+  if ($model == null) { error make --unspanned { msg: "required query parameter 'model' missing: pass --model" } }
   let qp = [(serialize-qp "model" $model "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/merchants/{merchant_id}/terminalLogos") $qp $auth.query)
   let req_body = {"data": $data} | compact
@@ -3951,7 +3959,7 @@ export def "get-merchants-merchant-id-terminal-products" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country: string # The country to return products for, in [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) format. For example, **US**
+  --country: string # The country to return products for, in [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) format. For example, **US** (required)
   --terminal-model-id: string # The terminal model to return products for. Use the ID returned in the [GET `/terminalModels`](https://docs.adyen.com/api-explorer/#/ManagementService/latest/get/merchants/{merchantId}/terminalModels) response. For example, **Verifone.M400**
   --offset: int # The number of products to skip. (format: int32)
   --limit: int # The number of products to return. (format: int32)
@@ -3959,6 +3967,7 @@ export def "get-merchants-merchant-id-terminal-products" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "terminalModelId" $terminal_model_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/merchants/{merchant_id}/terminalProducts") $qp $auth.query)
   let accept_val = "application/json"
@@ -4338,6 +4347,7 @@ export def "post-merchants-merchant-id-webhooks" [
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/merchants/{merchant_id}/webhooks") $auth.query)
   let req_body = {"acceptsExpiredCertificate": $accepts_expired_certificate, "acceptsSelfSignedCertificate": $accepts_self_signed_certificate, "acceptsUntrustedRootCertificate": $accepts_untrusted_root_certificate, "active": $active, "additionalSettings": $additional_settings, "communicationFormat": $communication_format, "description": $description, "networkType": $network_type, "password": $password, "populateSoapActionHeader": $populate_soap_action_header, "sslVersion": $ssl_version, "type": $type, "url": $url, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "active") == null) { error make --unspanned { msg: "required body field 'active' missing: pass --active or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -4752,11 +4762,12 @@ export def "get-stores-store-id-terminal-logos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T.
+  --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T. (required)
 ]: nothing -> record<data: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
+  if ($model == null) { error make --unspanned { msg: "required query parameter 'model' missing: pass --model" } }
   let qp = [(serialize-qp "model" $model "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/stores/{store_id}/terminalLogos") $qp $auth.query)
   let accept_val = "application/json"
@@ -4790,13 +4801,14 @@ export def "patch-stores-store-id-terminal-logos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T.
+  --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T. (required)
   --data: string # The image file, converted to a Base64-encoded string, of the logo to be shown on the terminal.
 ]: any -> record<data: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
+  if ($model == null) { error make --unspanned { msg: "required query parameter 'model' missing: pass --model" } }
   let qp = [(serialize-qp "model" $model "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/stores/{store_id}/terminalLogos") $qp $auth.query)
   let req_body = {"data": $data} | compact

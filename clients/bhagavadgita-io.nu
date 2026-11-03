@@ -101,6 +101,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def language-completer [] { ["hi"] }
+def chapter-number-completer [] { ["1" "2" "3"] }
+def verse-number-completer [] { ["1" "2" "3"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -138,11 +140,12 @@ export def "get-api-v1-chapters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-token: string # Your app's access token.
+  --access-token: string # Your app's access token. (required)
   --language: string@language-completer # Language to query. Leave blank for english.
 ]: nothing -> record<chapter_number: int, chapter_summary: string, name: string, name_meaning: string, name_translation: string, name_transliterated: string, verses_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_token == null) { error make --unspanned { msg: "required query parameter 'access_token' missing: pass --access-token" } }
   let qp = [(serialize-qp "access_token" $access_token "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/chapters" $qp $auth.query)
   let accept_val = "application/json"
@@ -165,7 +168,7 @@ export def "get-api-v1-chapters" [
 #
 # GET /api/v1/chapters/{chapter_number}
 export def "get-api-v1-chapters-chapter-number" [
-  chapter_number: int
+  chapter_number: int@chapter-number-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,12 +178,13 @@ export def "get-api-v1-chapters-chapter-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-token: string # Your app's access token.
+  --access-token: string # Your app's access token. (required)
   --language: string@language-completer # Language to query. Leave blank for english.
 ]: nothing -> record<chapter_number: int, chapter_summary: string, name: string, name_meaning: string, name_translation: string, name_transliterated: string, verses_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($chapter_number | is-empty) { error make --unspanned { msg: "path parameter 'chapter_number' must be non-empty" } }
+  if ($access_token == null) { error make --unspanned { msg: "required query parameter 'access_token' missing: pass --access-token" } }
   let qp = [(serialize-qp "access_token" $access_token "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({chapter_number: (encode-path-segment $chapter_number)} | format pattern "/api/v1/chapters/{chapter_number}") $qp $auth.query)
   let accept_val = "application/json"
@@ -203,7 +207,7 @@ export def "get-api-v1-chapters-chapter-number" [
 #
 # GET /api/v1/chapters/{chapter_number}/verses
 export def "get-api-v1-chapters-chapter-number-verses" [
-  chapter_number: int
+  chapter_number: int@chapter-number-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,12 +217,13 @@ export def "get-api-v1-chapters-chapter-number-verses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-token: string # Your app's access token.
+  --access-token: string # Your app's access token. (required)
   --language: string@language-completer # Language to query. Leave blank for english.
 ]: nothing -> record<meaning: string, text: string, transliteration: string, verse_number: string, word_meanings: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($chapter_number | is-empty) { error make --unspanned { msg: "path parameter 'chapter_number' must be non-empty" } }
+  if ($access_token == null) { error make --unspanned { msg: "required query parameter 'access_token' missing: pass --access-token" } }
   let qp = [(serialize-qp "access_token" $access_token "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({chapter_number: (encode-path-segment $chapter_number)} | format pattern "/api/v1/chapters/{chapter_number}/verses") $qp $auth.query)
   let accept_val = "application/json"
@@ -241,8 +246,8 @@ export def "get-api-v1-chapters-chapter-number-verses" [
 #
 # GET /api/v1/chapters/{chapter_number}/verses/{verse_number}
 export def "get-api-v1-chapters-chapter-number-verses-verse-number" [
-  chapter_number: int
-  verse_number: string
+  chapter_number: int@chapter-number-completer
+  verse_number: string@verse-number-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,13 +257,14 @@ export def "get-api-v1-chapters-chapter-number-verses-verse-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-token: string # Your app's access token.
+  --access-token: string # Your app's access token. (required)
   --language: string@language-completer # Language to query. Leave blank for english.
 ]: nothing -> record<meaning: string, text: string, transliteration: string, verse_number: string, word_meanings: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($chapter_number | is-empty) { error make --unspanned { msg: "path parameter 'chapter_number' must be non-empty" } }
   if ($verse_number | is-empty) { error make --unspanned { msg: "path parameter 'verse_number' must be non-empty" } }
+  if ($access_token == null) { error make --unspanned { msg: "required query parameter 'access_token' missing: pass --access-token" } }
   let qp = [(serialize-qp "access_token" $access_token "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({chapter_number: (encode-path-segment $chapter_number), verse_number: (encode-path-segment $verse_number)} | format pattern "/api/v1/chapters/{chapter_number}/verses/{verse_number}") $qp $auth.query)
   let accept_val = "application/json"
@@ -290,11 +296,12 @@ export def "get-api-v1-verses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-token: string # Your app's access token.
+  --access-token: string # Your app's access token. (required)
   --language: string@language-completer # Language to query. Leave blank for english.
 ]: nothing -> record<meaning: string, text: string, transliteration: string, verse_number: string, word_meanings: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_token == null) { error make --unspanned { msg: "required query parameter 'access_token' missing: pass --access-token" } }
   let qp = [(serialize-qp "access_token" $access_token "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/verses" $qp $auth.query)
   let accept_val = "application/json"

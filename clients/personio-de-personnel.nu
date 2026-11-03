@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -151,16 +151,18 @@ export def "get-company-attendances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # First day of the period to be queried. It is inclusive, so the day specified as start_date will also be considered on the results (format: date)
-  --end-date: string # Last day of the period to be queried. It is inclusive, so the day specified as end_date will also be considered on the results. (format: date)
+  --start-date: string # First day of the period to be queried. It is inclusive, so the day specified as start_date will also be considered on the results (required, format: date)
+  --end-date: string # Last day of the period to be queried. It is inclusive, so the day specified as end_date will also be considered on the results. (required, format: date)
   --updated-from: string # Datetime from when the queried periods have been updated. Same format as updated_at. It is inclusive, so the day specified as updated_from will also be considered on the results. Can be just the date, or the date and the time, with or without the timezone. (format: datetime)
   --updated-to: string # Datetime until when the queried periods have been updated. Same format as updated_at. It is inclusive, so the day specified as updated_to will also be considered on the results. Can be just the date, or the date and the time, with or without the timezone. (format: datetime)
   --employees: list<int> # A list of Personio employee identifiers to filter the results. Only those employees specified here will be returned.
   --limit: int # Pagination attribute to limit how many attendances will be returned per page (default: 200)
   --offset: int # Pagination attribute to identify which page you are requesting, by the form of telling an offset from the first record that would be returned. (default: 0)
-]: nothing -> record {
+]: nothing -> record<data: table<attributes: list, id: int, type: string>, success: bool, limit: int, offset: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "updated_from" $updated_from "scalar") (serialize-qp "updated_to" $updated_to "scalar") (serialize-qp "employees" $employees "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company/attendances" $qp $auth.query)
   let accept_val = "application/json"
@@ -194,7 +196,7 @@ export def "post-company-attendances" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --attendances: list # item shape: {break: int, comment: string, date: string, employee: int, end_time: string, start_time: string}
-]: any -> record {
+]: any -> record<data: record<id: list<int>, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -266,7 +268,7 @@ export def "patch-company-attendances-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-break: int # Break in minutes (format: int32)
+  --break: int # Break in minutes (format: int32)
   --comment: string # Optional comment
   --date: string # Attendance date as YYYY-MM-DD (format: date)
   --end-time: string # End time as HH:MM
@@ -277,7 +279,7 @@ export def "patch-company-attendances-id" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/company/attendances/{id}") $auth.query)
-  let req_body = {"break": $body_break, "comment": $comment, "date": $date, "end_time": $end_time, "start_time": $start_time} | compact
+  let req_body = {"break": $break, "comment": $comment, "date": $date, "end_time": $end_time, "start_time": $start_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -308,7 +310,7 @@ export def "get-company-employees" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> record<data: table<attributes: list, type: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/company/employees" $auth.query)
@@ -387,7 +389,7 @@ export def "get-company-employees-employee-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record, success: bool> {
+]: nothing -> record<data: record<attributes: list<record>, type: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employee_id' must be non-empty" } }
@@ -501,7 +503,7 @@ export def "get-company-time-offs" [
   --employees: list<int> # A list of Personio employee identifiers to filter the results. Only those employees specified here will be returned.
   --limit: int # Pagination attribute to limit how many attendances will be returned per page (default: 200)
   --offset: int # Pagination attribute to identify which page you are requesting, by the form of telling an offset from the first record that would be returned. (default: 0)
-]: nothing -> record {
+]: nothing -> record<data: record<attributes: list<record>, type: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "updated_from" $updated_from "scalar") (serialize-qp "updated_to" $updated_to "scalar") (serialize-qp "employees" $employees "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -549,6 +551,8 @@ export def "post-company-time-offs" [
   let full_url = (build-url $base "/company/time-offs" $auth.query)
   let req_body = {"comment": $comment, "employee_id": $employee_id, "end_date": $end_date, "half_day_end": $half_day_end, "half_day_start": $half_day_start, "start_date": $start_date, "time_off_type_id": $time_off_type_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "half_day_end") == null) { error make --unspanned { msg: "required body field 'half_day_end' missing: pass --half-day-end or pipe a record" } }
+  if (($req_body | get -o "half_day_start") == null) { error make --unspanned { msg: "required body field 'half_day_start' missing: pass --half-day-start or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

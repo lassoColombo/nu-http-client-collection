@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -106,6 +106,8 @@ def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors
 def base-url-completer [] { ["https://openbanking.org.uk" "http://localhost/open-banking/v3.1/aisp"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def accept-completer [] { ["application/jose+jwe" "application/json" "application/json; charset=utf-8"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -145,21 +147,23 @@ export def "create-account-access-consents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
   data: record # shape: {ExpirationDateTime?: string, Permissions: list<string>, TransactionFromDateTime?: string, TransactionToDateTime?: string}
   risk: record # The Risk section is sent by the initiating party to the ASPSP. It is used to specify additional details for risk scoring for Account Info.
-]: any -> any {
+]: any -> record<Data: record<ConsentId: string, CreationDateTime: string, ExpirationDateTime: string, Permissions: list<string>, Status: string, StatusUpdateDateTime: string, TransactionFromDateTime: string, TransactionToDateTime: string>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>, Risk: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/account-access-consents" $auth.query)
   let req_body = {"Data": $data, "Risk": $risk} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -195,12 +199,13 @@ export def "delete-account-access-consents-consent-id" [
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'ConsentId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/account-access-consents/{consent_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -235,17 +240,19 @@ export def "get-account-access-consents-consent-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<ConsentId: string, CreationDateTime: string, ExpirationDateTime: string, Permissions: list<string>, Status: string, StatusUpdateDateTime: string, TransactionFromDateTime: string, TransactionToDateTime: string>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>, Risk: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'ConsentId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/account-access-consents/{consent_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -277,16 +284,18 @@ export def "get-accounts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Account: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/accounts" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -319,17 +328,19 @@ export def "get-accounts-account-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Account: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -362,17 +373,19 @@ export def "get-accounts-account-id-balances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Balance: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/balances") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -405,17 +418,19 @@ export def "get-accounts-account-id-beneficiaries" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Beneficiary: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/beneficiaries") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -448,17 +463,19 @@ export def "get-accounts-account-id-direct-debits" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<DirectDebit: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/direct-debits") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -491,17 +508,19 @@ export def "get-accounts-account-id-offers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Offer: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/offers") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -534,17 +553,19 @@ export def "get-accounts-account-id-parties" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Party: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/parties") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -577,17 +598,19 @@ export def "get-accounts-account-id-party" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Party: record<AccountRole: string, Address: list, BeneficialOwnership: bool, EmailAddress: string, FullLegalName: string, LegalStructure: string, Mobile: string, Name: string, PartyId: string, PartyNumber: string, PartyType: string, Phone: string, Relationships: record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/party") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -620,17 +643,19 @@ export def "get-accounts-account-id-product" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Product: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/product") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -663,17 +688,19 @@ export def "get-accounts-account-id-scheduled-payments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<ScheduledPayment: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/scheduled-payments") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -706,17 +733,19 @@ export def "get-accounts-account-id-standing-orders" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<StandingOrder: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/standing-orders") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -749,20 +778,22 @@ export def "get-accounts-account-id-statements" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --from-statement-date-time: string # The UTC ISO 8601 Date Time to filter statements FROM NB Time component is optional - set to 00:00:00 for just Date. If the Date Time contains a timezone, the ASPSP must ignore the timezone component. (format: date-time)
   --to-statement-date-time: string # The UTC ISO 8601 Date Time to filter statements TO NB Time component is optional - set to 00:00:00 for just Date. If the Date Time contains a timezone, the ASPSP must ignore the timezone component. (format: date-time)
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Statement: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "fromStatementDateTime" $from_statement_date_time "scalar") (serialize-qp "toStatementDateTime" $to_statement_date_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/statements") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -796,18 +827,20 @@ export def "get-accounts-account-id-statements-statement-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Statement: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountId' must be non-empty" } }
   if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'StatementId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), statement_id: (encode-path-segment $statement_id)} | format pattern "/accounts/{account_id}/statements/{statement_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -841,18 +874,20 @@ export def "get-accounts-account-id-statements-statement-id-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountId' must be non-empty" } }
   if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'StatementId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), statement_id: (encode-path-segment $statement_id)} | format pattern "/accounts/{account_id}/statements/{statement_id}/file") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -886,18 +921,20 @@ export def "get-accounts-account-id-statements-statement-id-transactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Transaction: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountId' must be non-empty" } }
   if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'StatementId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), statement_id: (encode-path-segment $statement_id)} | format pattern "/accounts/{account_id}/statements/{statement_id}/transactions") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -930,20 +967,22 @@ export def "get-accounts-account-id-transactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --from-booking-date-time: string # The UTC ISO 8601 Date Time to filter transactions FROM NB Time component is optional - set to 00:00:00 for just Date. If the Date Time contains a timezone, the ASPSP must ignore the timezone component. (format: date-time)
   --to-booking-date-time: string # The UTC ISO 8601 Date Time to filter transactions TO NB Time component is optional - set to 00:00:00 for just Date. If the Date Time contains a timezone, the ASPSP must ignore the timezone component. (format: date-time)
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Transaction: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "fromBookingDateTime" $from_booking_date_time "scalar") (serialize-qp "toBookingDateTime" $to_booking_date_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/transactions") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -975,16 +1014,18 @@ export def "get-balances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Balance: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/balances" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1016,16 +1057,18 @@ export def "get-beneficiaries" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Beneficiary: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/beneficiaries" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1057,16 +1100,18 @@ export def "get-direct-debits" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<DirectDebit: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/direct-debits" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1098,16 +1143,18 @@ export def "get-offers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Offer: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/offers" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1139,16 +1186,18 @@ export def "get-party" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Party: record<AccountRole: string, Address: list, BeneficialOwnership: bool, EmailAddress: string, FullLegalName: string, LegalStructure: string, Mobile: string, Name: string, PartyId: string, PartyNumber: string, PartyType: string, Phone: string, Relationships: record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/party" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1180,16 +1229,18 @@ export def "get-products" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Product: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/products" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1221,16 +1272,18 @@ export def "get-scheduled-payments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<ScheduledPayment: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/scheduled-payments" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1262,16 +1315,18 @@ export def "get-standing-orders" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<StandingOrder: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/standing-orders" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1303,19 +1358,21 @@ export def "get-statements" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --from-statement-date-time: string # The UTC ISO 8601 Date Time to filter statements FROM NB Time component is optional - set to 00:00:00 for just Date. If the Date Time contains a timezone, the ASPSP must ignore the timezone component. (format: date-time)
   --to-statement-date-time: string # The UTC ISO 8601 Date Time to filter statements TO NB Time component is optional - set to 00:00:00 for just Date. If the Date Time contains a timezone, the ASPSP must ignore the timezone component. (format: date-time)
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Statement: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "fromStatementDateTime" $from_statement_date_time "scalar") (serialize-qp "toStatementDateTime" $to_statement_date_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/statements" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1347,19 +1404,21 @@ export def "get-transactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --from-booking-date-time: string # The UTC ISO 8601 Date Time to filter transactions FROM NB Time component is optional - set to 00:00:00 for just Date. If the Date Time contains a timezone, the ASPSP must ignore the timezone component. (format: date-time)
   --to-booking-date-time: string # The UTC ISO 8601 Date Time to filter transactions TO NB Time component is optional - set to 00:00:00 for just Date. If the Date Time contains a timezone, the ASPSP must ignore the timezone component. (format: date-time)
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750 (required)
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-]: nothing -> any {
+]: nothing -> record<Data: record<Transaction: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "fromBookingDateTime" $from_booking_date_time "scalar") (serialize-qp "toBookingDateTime" $to_booking_date_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/transactions" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/jose+jwe")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

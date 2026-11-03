@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -140,8 +140,8 @@ export def commands []: nothing -> table {
 #
 # POST /experimentTemplates
 # operationId: CreateExperimentTemplate
-# --stopConditions item shape: {source: any, value?: any}
-# --logConfiguration shape: {cloudWatchLogsConfiguration?: any, s3Configuration?: any, logSchemaVersion?: any}
+# --stopConditions item shape: {source: string, value?: string}
+# --logConfiguration shape: {cloudWatchLogsConfiguration?: record, s3Configuration?: record, logSchemaVersion?: int}
 export def "create-experiment-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -161,13 +161,13 @@ export def "create-experiment-template" [
   --x-amz-signed-headers: string
   client_token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
   description: string # A description for the experiment template.
-  stop_conditions: list # The stop conditions. — item shape: {source: any, value?: any}
+  stop_conditions: list # The stop conditions. — item shape: {source: string, value?: string}
   --targets: record # The targets for the experiment.
   actions: record # The actions for the experiment.
   role_arn: string # The Amazon Resource Name (ARN) of an IAM role that grants the FIS service permission to perform service actions on your behalf.
   --tags: record # The tags to apply to the experiment template.
-  --log-configuration: record # Specifies the configuration for experiment logging. — shape: {cloudWatchLogsConfiguration?: any, s3Configuration?: any, logSchemaVersion?: any}
-]: any -> record<experimentTemplate: record<id: record, description: record, targets: record, actions: record, stopConditions: record, creationTime: record, lastUpdateTime: record, roleArn: record, tags: record, logConfiguration: record<cloudWatchLogsConfiguration: record, s3Configuration: record, logSchemaVersion: record>>> {
+  --log-configuration: record # Specifies the configuration for experiment logging. — shape: {cloudWatchLogsConfiguration?: record, s3Configuration?: record, logSchemaVersion?: int}
+]: any -> record<experimentTemplate: record<id: string, description: string, targets: record, actions: record, stopConditions: list<record>, creationTime: string, lastUpdateTime: string, roleArn: string, tags: record, logConfiguration: record<cloudWatchLogsConfiguration: record, s3Configuration: record, logSchemaVersion: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -215,7 +215,7 @@ export def "list-experiment-templates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<experimentTemplates: record, nextToken: record> {
+]: nothing -> record<experimentTemplates: table<id: string, description: string, creationTime: string, lastUpdateTime: string, tags: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -260,7 +260,7 @@ export def "delete-experiment-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<experimentTemplate: record<id: record, description: record, targets: record, actions: record, stopConditions: record, creationTime: record, lastUpdateTime: record, roleArn: record, tags: record, logConfiguration: record<cloudWatchLogsConfiguration: record, s3Configuration: record, logSchemaVersion: record>>> {
+]: nothing -> record<experimentTemplate: record<id: string, description: string, targets: record, actions: record, stopConditions: list<record>, creationTime: string, lastUpdateTime: string, roleArn: string, tags: record, logConfiguration: record<cloudWatchLogsConfiguration: record, s3Configuration: record, logSchemaVersion: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -305,7 +305,7 @@ export def "get-experiment-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<experimentTemplate: record<id: record, description: record, targets: record, actions: record, stopConditions: record, creationTime: record, lastUpdateTime: record, roleArn: record, tags: record, logConfiguration: record<cloudWatchLogsConfiguration: record, s3Configuration: record, logSchemaVersion: record>>> {
+]: nothing -> record<experimentTemplate: record<id: string, description: string, targets: record, actions: record, stopConditions: list<record>, creationTime: string, lastUpdateTime: string, roleArn: string, tags: record, logConfiguration: record<cloudWatchLogsConfiguration: record, s3Configuration: record, logSchemaVersion: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -332,8 +332,8 @@ export def "get-experiment-template" [
 #
 # PATCH /experimentTemplates/{id}
 # operationId: UpdateExperimentTemplate
-# --stopConditions item shape: {source: any, value?: any}
-# --logConfiguration shape: {cloudWatchLogsConfiguration?: any, s3Configuration?: any, logSchemaVersion?: any}
+# --stopConditions item shape: {source: string, value?: string}
+# --logConfiguration shape: {cloudWatchLogsConfiguration?: record, s3Configuration?: record, logSchemaVersion?: int}
 export def "update-experiment-template" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -353,12 +353,12 @@ export def "update-experiment-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # A description for the template.
-  --stop-conditions: list # The stop conditions for the experiment. — item shape: {source: any, value?: any}
+  --stop-conditions: list # The stop conditions for the experiment. — item shape: {source: string, value?: string}
   --targets: record # The targets for the experiment.
   --actions: record # The actions for the experiment.
   --role-arn: string # The Amazon Resource Name (ARN) of an IAM role that grants the FIS service permission to perform service actions on your behalf.
-  --log-configuration: record # Specifies the configuration for experiment logging. — shape: {cloudWatchLogsConfiguration?: any, s3Configuration?: any, logSchemaVersion?: any}
-]: any -> record<experimentTemplate: record<id: record, description: record, targets: record, actions: record, stopConditions: record, creationTime: record, lastUpdateTime: record, roleArn: record, tags: record, logConfiguration: record<cloudWatchLogsConfiguration: record, s3Configuration: record, logSchemaVersion: record>>> {
+  --log-configuration: record # Specifies the configuration for experiment logging. — shape: {cloudWatchLogsConfiguration?: record, s3Configuration?: record, logSchemaVersion?: int}
+]: any -> record<experimentTemplate: record<id: string, description: string, targets: record, actions: record, stopConditions: list<record>, creationTime: string, lastUpdateTime: string, roleArn: string, tags: record, logConfiguration: record<cloudWatchLogsConfiguration: record, s3Configuration: record, logSchemaVersion: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -406,7 +406,7 @@ export def "get-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<action: record<id: record, description: record, parameters: record, targets: record, tags: record>> {
+]: nothing -> record<action: record<id: string, description: string, parameters: record, targets: record, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -451,7 +451,7 @@ export def "get-experiment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<experiment: record<id: record, experimentTemplateId: record, roleArn: record, state: record<status: record, reason: record>, targets: record, actions: record, stopConditions: record, creationTime: record, startTime: record, endTime: record, tags: record, logConfiguration: record<cloudWatchLogsConfiguration: record, s3Configuration: record, logSchemaVersion: record>>> {
+]: nothing -> record<experiment: record<id: string, experimentTemplateId: string, roleArn: string, state: record<status: string, reason: string>, targets: record, actions: record, stopConditions: list<record>, creationTime: string, startTime: string, endTime: string, tags: record, logConfiguration: record<cloudWatchLogsConfiguration: record, s3Configuration: record, logSchemaVersion: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -496,7 +496,7 @@ export def "stop-experiment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<experiment: record<id: record, experimentTemplateId: record, roleArn: record, state: record<status: record, reason: record>, targets: record, actions: record, stopConditions: record, creationTime: record, startTime: record, endTime: record, tags: record, logConfiguration: record<cloudWatchLogsConfiguration: record, s3Configuration: record, logSchemaVersion: record>>> {
+]: nothing -> record<experiment: record<id: string, experimentTemplateId: string, roleArn: string, state: record<status: string, reason: string>, targets: record, actions: record, stopConditions: list<record>, creationTime: string, startTime: string, endTime: string, tags: record, logConfiguration: record<cloudWatchLogsConfiguration: record, s3Configuration: record, logSchemaVersion: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -541,7 +541,7 @@ export def "get-target-resource-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<targetResourceType: record<resourceType: record, description: record, parameters: record>> {
+]: nothing -> record<targetResourceType: record<resourceType: string, description: string, parameters: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
@@ -587,7 +587,7 @@ export def "list-actions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<actions: record, nextToken: record> {
+]: nothing -> record<actions: table<id: string, description: string, targets: record, tags: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -633,7 +633,7 @@ export def "list-experiments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<experiments: record, nextToken: record> {
+]: nothing -> record<experiments: table<id: string, experimentTemplateId: string, state: record, creationTime: string, tags: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -680,7 +680,7 @@ export def "start-experiment" [
   client_token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
   experiment_template_id: string # The ID of the experiment template.
   --tags: record # The tags to apply to the experiment.
-]: any -> record<experiment: record<id: record, experimentTemplateId: record, roleArn: record, state: record<status: record, reason: record>, targets: record, actions: record, stopConditions: record, creationTime: record, startTime: record, endTime: record, tags: record, logConfiguration: record<cloudWatchLogsConfiguration: record, s3Configuration: record, logSchemaVersion: record>>> {
+]: any -> record<experiment: record<id: string, experimentTemplateId: string, roleArn: string, state: record<status: string, reason: string>, targets: record, actions: record, stopConditions: list<record>, creationTime: string, startTime: string, endTime: string, tags: record, logConfiguration: record<cloudWatchLogsConfiguration: record, s3Configuration: record, logSchemaVersion: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -869,7 +869,7 @@ export def "list-target-resource-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<targetResourceTypes: record, nextToken: record> {
+]: nothing -> record<targetResourceTypes: table<resourceType: string, description: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"

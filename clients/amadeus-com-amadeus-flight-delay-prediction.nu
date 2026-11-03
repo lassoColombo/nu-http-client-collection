@@ -134,19 +134,29 @@ export def "get-flight-delay-prediction" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --origin-location-code: string # city/airport [IATA code](http://www.iata.org/publications/Pages/code-search.aspx) from which the traveler is departing, e.g. PAR for Paris (e.g. NCE)
-  --destination-location-code: string # city/airport [IATA code](http://www.iata.org/publications/Pages/code-search.aspx) to which the traveler is going, e.g. PAR for Paris (e.g. IST)
-  --departure-date: string # the date on which the traveler will depart from the origin to go to the destination. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2019-12-25 (format: date, e.g. 2020-08-01)
-  --departure-time: string # local time relative to originLocationCode on which the traveler will depart from the origin. Time respects ISO 8601 standard. e.g. 13:22:00 (format: time, e.g. 18:20:00)
-  --arrival-date: string # the date on which the traveler will arrive to the destination from the origin. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2019-12-25 (format: date, e.g. 2020-08-01)
-  --arrival-time: string # local time relative to destinationLocationCode on which the traveler will arrive to destination. Time respects ISO 8601 standard. e.g. 13:22:00 (format: time, e.g. 22:15:00)
-  --aircraft-code: string # IATA aircraft code (http://www.flugzeuginfo.net/table_accodes_iata_en.php) (e.g. 321)
-  --carrier-code: string # airline / carrier code (e.g. TK)
-  --flight-number: string # flight number as assigned by the carrier (e.g. 1816)
-  --duration: string # flight duration in [ISO8601](https://en.wikipedia.org/wiki/ISO_8601) PnYnMnDTnHnMnS format, e.g. PT2H10M (e.g. PT31H10M)
-]: nothing -> any {
+  --origin-location-code: string # city/airport [IATA code](http://www.iata.org/publications/Pages/code-search.aspx) from which the traveler is departing, e.g. PAR for Paris (required, e.g. NCE)
+  --destination-location-code: string # city/airport [IATA code](http://www.iata.org/publications/Pages/code-search.aspx) to which the traveler is going, e.g. PAR for Paris (required, e.g. IST)
+  --departure-date: string # the date on which the traveler will depart from the origin to go to the destination. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2019-12-25 (required, format: date, e.g. 2020-08-01)
+  --departure-time: string # local time relative to originLocationCode on which the traveler will depart from the origin. Time respects ISO 8601 standard. e.g. 13:22:00 (required, format: time, e.g. 18:20:00)
+  --arrival-date: string # the date on which the traveler will arrive to the destination from the origin. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2019-12-25 (required, format: date, e.g. 2020-08-01)
+  --arrival-time: string # local time relative to destinationLocationCode on which the traveler will arrive to destination. Time respects ISO 8601 standard. e.g. 13:22:00 (required, format: time, e.g. 22:15:00)
+  --aircraft-code: string # IATA aircraft code (http://www.flugzeuginfo.net/table_accodes_iata_en.php) (required, e.g. 321)
+  --carrier-code: string # airline / carrier code (required, e.g. TK)
+  --flight-number: string # flight number as assigned by the carrier (required, e.g. 1816)
+  --duration: string # flight duration in [ISO8601](https://en.wikipedia.org/wiki/ISO_8601) PnYnMnDTnHnMnS format, e.g. PT2H10M (required, e.g. PT31H10M)
+]: nothing -> record<data: table<id: string, probability: string, result: string, subType: string, type: string>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($origin_location_code == null) { error make --unspanned { msg: "required query parameter 'originLocationCode' missing: pass --origin-location-code" } }
+  if ($destination_location_code == null) { error make --unspanned { msg: "required query parameter 'destinationLocationCode' missing: pass --destination-location-code" } }
+  if ($departure_date == null) { error make --unspanned { msg: "required query parameter 'departureDate' missing: pass --departure-date" } }
+  if ($departure_time == null) { error make --unspanned { msg: "required query parameter 'departureTime' missing: pass --departure-time" } }
+  if ($arrival_date == null) { error make --unspanned { msg: "required query parameter 'arrivalDate' missing: pass --arrival-date" } }
+  if ($arrival_time == null) { error make --unspanned { msg: "required query parameter 'arrivalTime' missing: pass --arrival-time" } }
+  if ($aircraft_code == null) { error make --unspanned { msg: "required query parameter 'aircraftCode' missing: pass --aircraft-code" } }
+  if ($carrier_code == null) { error make --unspanned { msg: "required query parameter 'carrierCode' missing: pass --carrier-code" } }
+  if ($flight_number == null) { error make --unspanned { msg: "required query parameter 'flightNumber' missing: pass --flight-number" } }
+  if ($duration == null) { error make --unspanned { msg: "required query parameter 'duration' missing: pass --duration" } }
   let qp = [(serialize-qp "originLocationCode" $origin_location_code "scalar") (serialize-qp "destinationLocationCode" $destination_location_code "scalar") (serialize-qp "departureDate" $departure_date "scalar") (serialize-qp "departureTime" $departure_time "scalar") (serialize-qp "arrivalDate" $arrival_date "scalar") (serialize-qp "arrivalTime" $arrival_time "scalar") (serialize-qp "aircraftCode" $aircraft_code "scalar") (serialize-qp "carrierCode" $carrier_code "scalar") (serialize-qp "flightNumber" $flight_number "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/travel/predictions/flight-delay" $qp $auth.query)
   let accept_val = ($accept | default "application/vnd.amadeus+json")

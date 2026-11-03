@@ -179,10 +179,11 @@ export def "src-searchly-api-v1-controllers-similarity-by-song" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --song-id: int # Song identifier. (e.g. 234)
+  --song-id: int # Song identifier. (required, e.g. 234)
 ]: nothing -> record<error: bool, message: string, response: record<similarity_list: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($song_id == null) { error make --unspanned { msg: "required query parameter 'song_id' missing: pass --song-id" } }
   let qp = [(serialize-qp "song_id" $song_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/similarity/by_song" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -216,10 +217,11 @@ export def "src-searchly-api-v1-controllers-song-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --query: string # Query. (e.g. Miley Cyrus)
+  --query: string # Query. (required, e.g. Miley Cyrus)
 ]: nothing -> record<error: bool, message: string, response: record<results: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/song/search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "apikey" => { {scheme: $scheme, headers: {apikey: $token_val}, query: "", location: "header"} }
+    "apikey" => { {scheme: $scheme, headers: {"apikey": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -95,6 +95,7 @@ def base-url-completer [] { ["https://geocoder.api.gov.bc.ca" "https://geocodert
 def auth-scheme-completer [] { ["apikey"] }
 
 # Completers for enum parameters
+def output-format-completer [] { ["csv" "geojson" "gml" "json" "kml" "shpz" "xhtml"] }
 def location-descriptor-completer [] { ["accessPoint" "any" "frontDoorPoint" "parcelPoint" "rooftopPoint" "routingPoint"] }
 def interpolation-completer [] { ["adaptive" "linear" "none"] }
 def output-srs-completer [] { ["26907" "26908" "26909" "26910" "26911" "3005" "4269" "4326"] }
@@ -128,7 +129,7 @@ export def commands []: nothing -> table {
 #
 # GET /addresses.{outputFormat}
 export def "get-addresses-output-format" [
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +196,7 @@ export def "get-addresses-output-format" [
 #
 # GET /intersections/near.{outputFormat}
 export def "get-intersections-near-output-format" [
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,9 +206,9 @@ export def "get-intersections-near-output-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --point: string # The point (x,y) from which the nearest site will be identified. The coordinates must be specified in the same SRS as given by the 'outputSRS' parameter. (e.g. -122.377,50.121)
+  --point: string # The point (x,y) from which the nearest site will be identified. The coordinates must be specified in the same SRS as given by the 'outputSRS' parameter. (required, e.g. -122.377,50.121)
   --max-distance: int # The maximum distance (in metres) to search from the given point. If not specified, the search distance is unlimited.
-  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (required, default: 4326)
   --max-results: int # The maximum number of search results to return. (default: 1)
   --min-degree: int # The minimum degree an intersection can have to be included in results. A dead-end has a degree of 1. (default: 2)
   --max-degree: int # The maximum degree an interesection can have to be included in results. A four-way stop has a degree of 4. (default: 100)
@@ -215,6 +216,8 @@ export def "get-intersections-near-output-format" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'outputFormat' must be non-empty" } }
+  if ($point == null) { error make --unspanned { msg: "required query parameter 'point' missing: pass --point" } }
+  let output_srs = ($output_srs | default 4326)
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "minDegree" $min_degree "scalar") (serialize-qp "maxDegree" $max_degree "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/intersections/near.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
@@ -237,7 +240,7 @@ export def "get-intersections-near-output-format" [
 #
 # GET /intersections/nearest.{outputFormat}
 export def "get-intersections-nearest-output-format" [
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +250,7 @@ export def "get-intersections-nearest-output-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --point: string # Example: -122.377,50.121 The point (x,y) from which the nearest site will be identified. The coordinates must be specified in the same SRS as given by the 'outputSRS' parameter. (e.g. -122.377,50.121)
+  --point: string # Example: -122.377,50.121 The point (x,y) from which the nearest site will be identified. The coordinates must be specified in the same SRS as given by the 'outputSRS' parameter. (required, e.g. -122.377,50.121)
   --max-distance: int # The maximum distance (in metres) to search from the given point. If not specified, the search distance is unlimited.
   --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
   --min-degree: int # The minimum degree an intersection can have to be included in results. A dead-end has a degree of 1. (default: 2)
@@ -256,6 +259,7 @@ export def "get-intersections-nearest-output-format" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'outputFormat' must be non-empty" } }
+  if ($point == null) { error make --unspanned { msg: "required query parameter 'point' missing: pass --point" } }
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "minDegree" $min_degree "scalar") (serialize-qp "maxDegree" $max_degree "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/intersections/nearest.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
@@ -278,7 +282,7 @@ export def "get-intersections-nearest-output-format" [
 #
 # GET /intersections/within.{outputFormat}
 export def "get-intersections-within-output-format" [
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -288,7 +292,7 @@ export def "get-intersections-within-output-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --bbox: string # A bounding box (xmin,ymin,xmax,ymax) used to limit the search area. See bbox (e.g. -119.51,49.48,-119.53,49.50)
+  --bbox: string # A bounding box (xmin,ymin,xmax,ymax) used to limit the search area. See bbox (required, e.g. -119.51,49.48,-119.53,49.50)
   --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
   --max-results: int # The maximum number of search results (default: 200)
   --min-degree: int # The minimum degree an intersection can have to be included in results. A dead-end has a degree of 1. (default: 2)
@@ -297,6 +301,7 @@ export def "get-intersections-within-output-format" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'outputFormat' must be non-empty" } }
+  if ($bbox == null) { error make --unspanned { msg: "required query parameter 'bbox' missing: pass --bbox" } }
   let qp = [(serialize-qp "bbox" $bbox "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "minDegree" $min_degree "scalar") (serialize-qp "maxDegree" $max_degree "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/intersections/within.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
@@ -320,7 +325,7 @@ export def "get-intersections-within-output-format" [
 # GET /intersections/{intersectionID}.{outputFormat}
 export def "get-intersections-intersection-id-output-format" [
   intersection_id: string
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,7 +363,7 @@ export def "get-intersections-intersection-id-output-format" [
 #
 # GET /occupants/addresses.{outputFormat}
 export def "get-occupants-addresses-output-format" [
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,7 +431,7 @@ export def "get-occupants-addresses-output-format" [
 #
 # GET /occupants/near.{outputFormat}
 export def "get-occupants-near-output-format" [
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -436,7 +441,7 @@ export def "get-occupants-near-output-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --point: string # The point (x,y) from which the nearest site will be identified. The coordinates must be specified in the same SRS as given by the 'outputSRS' parameter. (e.g. -122.377,50.121)
+  --point: string # The point (x,y) from which the nearest site will be identified. The coordinates must be specified in the same SRS as given by the 'outputSRS' parameter. (required, e.g. -122.377,50.121)
   --tags: string # Example: schools;courts;employmentA list of tags separated by semicolons.
   --max-distance: int # The maximum distance (in metres) to search from the given point. If not specified, the search distance is unlimited.
   --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
@@ -448,6 +453,7 @@ export def "get-occupants-near-output-format" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'outputFormat' must be non-empty" } }
+  if ($point == null) { error make --unspanned { msg: "required query parameter 'point' missing: pass --point" } }
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "setBack" $set_back "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/occupants/near.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
@@ -470,7 +476,7 @@ export def "get-occupants-near-output-format" [
 #
 # GET /occupants/nearest.{outputFormat}
 export def "get-occupants-nearest-output-format" [
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,7 +486,7 @@ export def "get-occupants-nearest-output-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --point: string # The point (x,y) from which the nearest site will be identified. The coordinates must be specified in the same SRS as given by the 'outputSRS' parameter. (e.g. -122.377,50.121)
+  --point: string # The point (x,y) from which the nearest site will be identified. The coordinates must be specified in the same SRS as given by the 'outputSRS' parameter. (required, e.g. -122.377,50.121)
   --max-distance: int # The maximum distance (in metres) to search from the given point. If not specified, the search distance is unlimited.
   --tags: string # Example: schools;courts;employmentA list of tags separated by semicolons.
   --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
@@ -491,6 +497,7 @@ export def "get-occupants-nearest-output-format" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'outputFormat' must be non-empty" } }
+  if ($point == null) { error make --unspanned { msg: "required query parameter 'point' missing: pass --point" } }
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "setBack" $set_back "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/occupants/nearest.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
@@ -513,7 +520,7 @@ export def "get-occupants-nearest-output-format" [
 #
 # GET /occupants/within.{outputFormat}
 export def "get-occupants-within-output-format" [
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,7 +530,7 @@ export def "get-occupants-within-output-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --bbox: string # A bounding box (xmin,ymin,xmax,ymax) used to limit the search area. See bbox (e.g. -123.14,49.28,-123.13,49.29)
+  --bbox: string # A bounding box (xmin,ymin,xmax,ymax) used to limit the search area. See bbox (required, e.g. -123.14,49.28,-123.13,49.29)
   --tags: string # Example: schools;courts;employmentA list of tags separated by semicolons.
   --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
   --max-results: int # The maximum number of search results to return. (default: 200)
@@ -534,6 +541,7 @@ export def "get-occupants-within-output-format" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'outputFormat' must be non-empty" } }
+  if ($bbox == null) { error make --unspanned { msg: "required query parameter 'bbox' missing: pass --bbox" } }
   let qp = [(serialize-qp "bbox" $bbox "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "setBack" $set_back "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/occupants/within.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
@@ -557,7 +565,7 @@ export def "get-occupants-within-output-format" [
 # GET /occupants/{occupantID}.{outputFormat}
 export def "get-occupants-occupant-id-output-format" [
   occupant_id: string
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,7 +607,7 @@ export def "get-occupants-occupant-id-output-format" [
 # GET /parcels/pids/{siteID}.{outputFormat}
 export def "get-parcels-pids-site-id-output-format" [
   site_id: string
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -635,7 +643,7 @@ export def "get-parcels-pids-site-id-output-format" [
 #
 # GET /sites/near.{outputFormat}
 export def "get-sites-near-output-format" [
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -645,7 +653,7 @@ export def "get-sites-near-output-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --point: string # The point (x,y) from which the nearby sites will be identified. The coordinates must be specified in the same SRS as given by the 'outputSRS' parameter. (e.g. -122.377,50.121)
+  --point: string # The point (x,y) from which the nearby sites will be identified. The coordinates must be specified in the same SRS as given by the 'outputSRS' parameter. (required, e.g. -122.377,50.121)
   --max-distance: int # The maximum distance (in metres) to search from the given point. If not specified, the search distance is unlimited.
   --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
   --max-results: int # The maximum number of search results to return. (default: 1)
@@ -658,6 +666,7 @@ export def "get-sites-near-output-format" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'outputFormat' must be non-empty" } }
+  if ($point == null) { error make --unspanned { msg: "required query parameter 'point' missing: pass --point" } }
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "setBack" $set_back "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "excludeUnits" $exclude_units "scalar") (serialize-qp "onlyCivic" $only_civic "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/sites/near.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
@@ -680,7 +689,7 @@ export def "get-sites-near-output-format" [
 #
 # GET /sites/nearest.{outputFormat}
 export def "get-sites-nearest-output-format" [
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -690,7 +699,7 @@ export def "get-sites-nearest-output-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --point: string # Centre point of search. See point (e.g. -122.377,50.121)
+  --point: string # Centre point of search. See point (required, e.g. -122.377,50.121)
   --max-distance: int # The maximum distance (in metres) to search from the given point. If not specified, the search distance is unlimited.
   --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
   --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See locationDescriptor (default: any)
@@ -702,6 +711,7 @@ export def "get-sites-nearest-output-format" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'outputFormat' must be non-empty" } }
+  if ($point == null) { error make --unspanned { msg: "required query parameter 'point' missing: pass --point" } }
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "setBack" $set_back "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "excludeUnits" $exclude_units "scalar") (serialize-qp "onlyCivic" $only_civic "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/sites/nearest.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
@@ -724,7 +734,7 @@ export def "get-sites-nearest-output-format" [
 #
 # GET /sites/within.{outputFormat}
 export def "get-sites-within-output-format" [
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -734,7 +744,7 @@ export def "get-sites-within-output-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --bbox: string # A bounding box (xmin,ymin,xmax,ymax) used to limit the search area. See bbox (e.g. -119.51,49.48,-119.53,49.50)
+  --bbox: string # A bounding box (xmin,ymin,xmax,ymax) used to limit the search area. See bbox (required, e.g. -119.51,49.48,-119.53,49.50)
   --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
   --max-results: int # The maximum number of search results to return. (default: 1)
   --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See locationDescriptor (default: any)
@@ -746,6 +756,7 @@ export def "get-sites-within-output-format" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'outputFormat' must be non-empty" } }
+  if ($bbox == null) { error make --unspanned { msg: "required query parameter 'bbox' missing: pass --bbox" } }
   let qp = [(serialize-qp "bbox" $bbox "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "setBack" $set_back "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "excludeUnits" $exclude_units "scalar") (serialize-qp "onlyCivic" $only_civic "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/sites/within.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
@@ -769,7 +780,7 @@ export def "get-sites-within-output-format" [
 # GET /sites/{siteID}.{outputFormat}
 export def "get-sites-site-id-output-format" [
   site_id: string
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -811,7 +822,7 @@ export def "get-sites-site-id-output-format" [
 # GET /sites/{siteID}/subsites.{outputFormat}
 export def "get-sites-site-id-subsites-output-format" [
   site_id: string
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

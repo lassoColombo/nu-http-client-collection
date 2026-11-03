@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -225,7 +225,7 @@ export def "private-articles-list" [
   --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10)
   --limit: int # Number of results included on a page. Used for pagination with query (format: int64)
   --offset: int # Where to start the listing(the offset of the first result). Used for pagination with limit (format: int64)
-]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -269,19 +269,19 @@ export def "private-article-create" [
   --custom-fields: record # List of key, values pairs to be associated with the article (e.g. {defined_key: value for it})
   --custom-fields-list: list # List of custom fields values, supersedes custom_fields parameter — item shape: {name: string, value: any}
   --defined-type: string # One of: figure online resource preprint book conference contribution media dataset poster journal contribution presentation thesis software (e.g. media)
-  --description: string # The article description. In a publisher case, usually this is the remote article description (default: , e.g. Test description of article)
-  --doi: string # Not applicable for regular users. In an institutional case, make sure your group supports setting DOIs. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: )
-  --funding: string # Grant number or funding authority (default: )
+  --description: string # The article description. In a publisher case, usually this is the remote article description (default: "", e.g. Test description of article)
+  --doi: string # Not applicable for regular users. In an institutional case, make sure your group supports setting DOIs. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: "")
+  --funding: string # Grant number or funding authority (default: "")
   --funding-list: list # Funding creation / update items — item shape: {id?: int, title?: string}
   --group-id: int # Not applicable to regular users. This field is reserved to institutions/publishers with access to assign to specific groups (format: int64)
-  --handle: string # Not applicable for regular users. In an institutional case, make sure your group supports setting Handles. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: )
+  --handle: string # Not applicable for regular users. In an institutional case, make sure your group supports setting Handles. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: "")
   --is-metadata-record: oneof<nothing, bool> # True if article has no files (e.g. true)
   --keywords: list<string> # List of tags to be associated with the article. Tags can be used instead (default: [], e.g. [tag1, tag2])
   --license: int # License id for this article. (format: int64, default: 0, e.g. 1)
   --metadata-reason: string # Article metadata reason (e.g. hosted somewhere else)
   --references: list<string> # List of links to be associated with the article (e.g ["http://link1", "http://link2", "http://link3"]) (default: [], e.g. [http://figshare.com, http://api.figshare.com])
-  --resource-doi: string # Not applicable to regular users. In a publisher case, this is the publisher article DOI. (default: )
-  --resource-title: string # Not applicable to regular users. In a publisher case, this is the publisher article title. (default: )
+  --resource-doi: string # Not applicable to regular users. In a publisher case, this is the publisher article DOI. (default: "")
+  --resource-title: string # Not applicable to regular users. In a publisher case, this is the publisher article title. (default: "")
   --tags: list<string> # List of tags to be associated with the article. Keywords can be used instead (default: [], e.g. [tag1, tag2])
   --timeline: record # shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
   title: string # Title of article (e.g. Test article title)
@@ -399,7 +399,7 @@ export def "private-articles-search" [
   --order: string@order-completer # The field by which to order (default: created_date, e.g. published_date)
   --project-id: int # Only return articles in this project (format: int64, e.g. 1)
   --resource-doi: string # Only return articles with this resource_doi (e.g. 10.6084/m9.figshare.1407024)
-]: any -> table<project_id: int> {
+]: any -> table<project_id: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -473,7 +473,7 @@ export def "private-article-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_id: int, group_resource_id: string> {
+]: nothing -> record<account_id: int, group_resource_id: string, authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, custom_fields: table<is_mandatory: bool, name: string, value: string>, embargo_options: table<id: int, ip_name: string, type: string>, figshare_url: string, files: table<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, resource_doi: string, resource_title: string, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, confidential_reason: string, created_date: string, description: string, embargo_date: string, embargo_reason: string, embargo_title: string, embargo_type: string, funding: string, funding_list: list<int>, has_linked_file: bool, is_active: bool, is_confidential: bool, is_embargoed: bool, is_metadata_record: bool, is_public: bool, license: record<name: string, url: string, value: int>, metadata_reason: string, modified_date: string, references: list<string>, size: int, status: string, tags: list<string>, version: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -518,19 +518,19 @@ export def "private-article-update" [
   --custom-fields: record # List of key, values pairs to be associated with the article (e.g. {defined_key: value for it})
   --custom-fields-list: list # List of custom fields values, supersedes custom_fields parameter — item shape: {name: string, value: any}
   --defined-type: string # One of: figure online resource preprint book conference contribution media dataset poster journal contribution presentation thesis software (e.g. media)
-  --description: string # The article description. In a publisher case, usually this is the remote article description (default: , e.g. Test description of article)
-  --doi: string # Not applicable for regular users. In an institutional case, make sure your group supports setting DOIs. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: )
-  --funding: string # Grant number or funding authority (default: )
+  --description: string # The article description. In a publisher case, usually this is the remote article description (default: "", e.g. Test description of article)
+  --doi: string # Not applicable for regular users. In an institutional case, make sure your group supports setting DOIs. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: "")
+  --funding: string # Grant number or funding authority (default: "")
   --funding-list: list # Funding creation / update items — item shape: {id?: int, title?: string}
   --group-id: int # Not applicable to regular users. This field is reserved to institutions/publishers with access to assign to specific groups (format: int64)
-  --handle: string # Not applicable for regular users. In an institutional case, make sure your group supports setting Handles. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: )
+  --handle: string # Not applicable for regular users. In an institutional case, make sure your group supports setting Handles. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: "")
   --is-metadata-record: oneof<nothing, bool> # True if article has no files (e.g. true)
   --keywords: list<string> # List of tags to be associated with the article. Tags can be used instead (default: [], e.g. [tag1, tag2])
   --license: int # License id for this article. (format: int64, default: 0, e.g. 1)
   --metadata-reason: string # Article metadata reason (e.g. hosted somewhere else)
   --references: list<string> # List of links to be associated with the article (e.g ["http://link1", "http://link2", "http://link3"]) (default: [], e.g. [http://figshare.com, http://api.figshare.com])
-  --resource-doi: string # Not applicable to regular users. In a publisher case, this is the publisher article DOI. (default: )
-  --resource-title: string # Not applicable to regular users. In a publisher case, this is the publisher article title. (default: )
+  --resource-doi: string # Not applicable to regular users. In a publisher case, this is the publisher article DOI. (default: "")
+  --resource-title: string # Not applicable to regular users. In a publisher case, this is the publisher article title. (default: "")
   --tags: list<string> # List of tags to be associated with the article. Keywords can be used instead (default: [], e.g. [tag1, tag2])
   --timeline: record # shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
   --title: string # Title of article (e.g. Test article title)
@@ -1079,6 +1079,7 @@ export def "private-article-embargo-update" [
   let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/account/articles/{article_id}/embargo") $auth.query)
   let req_body = {"embargo_date": $embargo_date, "embargo_options": $embargo_options, "embargo_reason": $embargo_reason, "embargo_title": $embargo_title, "embargo_type": $embargo_type, "is_embargoed": $is_embargoed} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "is_embargoed") == null) { error make --unspanned { msg: "required body field 'is_embargoed' missing: pass --is-embargoed or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1110,7 +1111,7 @@ export def "private-article-files-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<is_attached_to_public_version: bool, preview_state: string, status: string, upload_token: string, upload_url: string, viewer_type: string> {
+]: nothing -> table<is_attached_to_public_version: bool, preview_state: string, status: string, upload_token: string, upload_url: string, viewer_type: string, computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -1228,7 +1229,7 @@ export def "private-article-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<is_attached_to_public_version: bool, preview_state: string, status: string, upload_token: string, upload_url: string, viewer_type: string> {
+]: nothing -> record<is_attached_to_public_version: bool, preview_state: string, status: string, upload_token: string, upload_url: string, viewer_type: string, computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -1569,11 +1570,11 @@ export def "private-article-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --doi: string # DOI of resource item (default: )
-  --id: string # ID of resource item (default: , e.g. aaaa23512)
-  --link: string # Link of resource item (default: , e.g. https://docs.figshare.com)
-  --status: string # Status of resource item (default: , e.g. frozen)
-  --title: string # Title of resource item (default: , e.g. Test title)
+  --doi: string # DOI of resource item (default: "")
+  --id: string # ID of resource item (default: "", e.g. aaaa23512)
+  --link: string # Link of resource item (default: "", e.g. https://docs.figshare.com)
+  --status: string # Status of resource item (default: "", e.g. frozen)
+  --title: string # Title of resource item (default: "", e.g. Test title)
   --version: int # Version of resource item (format: int64, default: 0, e.g. 1)
 ]: any -> any {
   let input = $in
@@ -1624,19 +1625,19 @@ export def "article-version-update" [
   --custom-fields: record # List of key, values pairs to be associated with the article (e.g. {defined_key: value for it})
   --custom-fields-list: list # List of custom fields values, supersedes custom_fields parameter — item shape: {name: string, value: any}
   --defined-type: string # One of: figure online resource preprint book conference contribution media dataset poster journal contribution presentation thesis software (e.g. media)
-  --description: string # The article description. In a publisher case, usually this is the remote article description (default: , e.g. Test description of article)
-  --doi: string # Not applicable for regular users. In an institutional case, make sure your group supports setting DOIs. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: )
-  --funding: string # Grant number or funding authority (default: )
+  --description: string # The article description. In a publisher case, usually this is the remote article description (default: "", e.g. Test description of article)
+  --doi: string # Not applicable for regular users. In an institutional case, make sure your group supports setting DOIs. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: "")
+  --funding: string # Grant number or funding authority (default: "")
   --funding-list: list # Funding creation / update items — item shape: {id?: int, title?: string}
   --group-id: int # Not applicable to regular users. This field is reserved to institutions/publishers with access to assign to specific groups (format: int64)
-  --handle: string # Not applicable for regular users. In an institutional case, make sure your group supports setting Handles. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: )
+  --handle: string # Not applicable for regular users. In an institutional case, make sure your group supports setting Handles. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: "")
   --is-metadata-record: oneof<nothing, bool> # True if article has no files (e.g. true)
   --keywords: list<string> # List of tags to be associated with the article. Tags can be used instead (default: [], e.g. [tag1, tag2])
   --license: int # License id for this article. (format: int64, default: 0, e.g. 1)
   --metadata-reason: string # Article metadata reason (e.g. hosted somewhere else)
   --references: list<string> # List of links to be associated with the article (e.g ["http://link1", "http://link2", "http://link3"]) (default: [], e.g. [http://figshare.com, http://api.figshare.com])
-  --resource-doi: string # Not applicable to regular users. In a publisher case, this is the publisher article DOI. (default: )
-  --resource-title: string # Not applicable to regular users. In a publisher case, this is the publisher article title. (default: )
+  --resource-doi: string # Not applicable to regular users. In a publisher case, this is the publisher article DOI. (default: "")
+  --resource-title: string # Not applicable to regular users. In a publisher case, this is the publisher article title. (default: "")
   --tags: list<string> # List of tags to be associated with the article. Keywords can be used instead (default: [], e.g. [tag1, tag2])
   --timeline: record # shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
   --title: string # Title of article (e.g. Test article title)
@@ -1771,7 +1772,7 @@ export def "private-author-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<first_name: string, group_id: int, institution_id: int, is_public: int, job_title: string, last_name: string> {
+]: nothing -> record<first_name: string, group_id: int, institution_id: int, is_public: int, job_title: string, last_name: string, full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($author_id | is-empty) { error make --unspanned { msg: "path parameter 'author_id' must be non-empty" } }
@@ -1846,7 +1847,7 @@ export def "private-collections-list" [
   --offset: int # Where to start the listing(the offset of the first result). Used for pagination with limit (format: int64)
   --order: string@order-completer-1 # The field by which to order. Default varies by endpoint/resource. (default: published_date)
   --order-direction: string@order-direction-completer # default: desc
-]: nothing -> table<doi: string, handle: string, id: int, published_date: string, timeline: record<posted: string, revision: string, submission: string>, title: string, url: string> {
+]: nothing -> table<doi: string, handle: string, id: int, published_date: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar")] | flatten | str join "&"
@@ -1890,18 +1891,18 @@ export def "private-collection-create" [
   --categories-by-source-id: list<string> # List of category source ids to be associated with the collection, supersedes the categories property (default: [], e.g. [300204, 400207])
   --custom-fields: record # List of key, values pairs to be associated with the collection (e.g. {defined_key: value for it})
   --custom-fields-list: list # List of custom fields values, supersedes custom_fields parameter — item shape: {name: string, value: any}
-  --description: string # The collection description. In a publisher case, usually this is the remote collection description (default: , e.g. Test description of article)
-  --doi: string # Not applicable for regular users. In an institutional case, make sure your group supports setting DOIs. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: )
-  --funding: string # Grant number or funding authority (default: )
+  --description: string # The collection description. In a publisher case, usually this is the remote collection description (default: "", e.g. Test description of article)
+  --doi: string # Not applicable for regular users. In an institutional case, make sure your group supports setting DOIs. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: "")
+  --funding: string # Grant number or funding authority (default: "")
   --funding-list: list # Funding creation / update items — item shape: {id?: int, title?: string}
   --group-id: int # Not applicable to regular users. This field is reserved to institutions/publishers with access to assign to specific groups (format: int64)
-  --handle: string # Not applicable for regular users. In an institutional case, make sure your group supports setting Handles. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: )
+  --handle: string # Not applicable for regular users. In an institutional case, make sure your group supports setting Handles. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: "")
   --keywords: list<string> # List of tags to be associated with the collection. Tags can be used instead (default: [], e.g. [tag1, tag2])
   --references: list<string> # List of links to be associated with the collection (e.g ["http://link1", "http://link2", "http://link3"]) (default: [], e.g. [http://figshare.com, http://api.figshare.com])
-  --resource-doi: string # Not applicable to regular users. In a publisher case, this is the publisher article DOI. (default: )
+  --resource-doi: string # Not applicable to regular users. In a publisher case, this is the publisher article DOI. (default: "")
   --resource-id: string # Not applicable to regular users. In a publisher case, this is the publisher article id
   --resource-link: string # Not applicable to regular users. In a publisher case, this is the publisher article link
-  --resource-title: string # Not applicable to regular users. In a publisher case, this is the publisher article title. (default: )
+  --resource-title: string # Not applicable to regular users. In a publisher case, this is the publisher article title. (default: "")
   --resource-version: int # Not applicable to regular users. In a publisher case, this is the publisher article version
   --tags: list<string> # List of tags to be associated with the collection. Keywords can be used instead (default: [], e.g. [tag1, tag2])
   --timeline: record # shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
@@ -1948,7 +1949,7 @@ export def "private-collections-search" [
   --handle: string # Only return collections with this handle (e.g. 10084/figshare.1407024)
   --order: string@order-completer-1 # The field by which to order. (default: created_date, e.g. published_date)
   --resource-doi: string # Only return collections with this resource_doi (e.g. 10.6084/m9.figshare.1407024)
-]: any -> table<doi: string, handle: string, id: int, published_date: string, timeline: record<posted: string, revision: string, submission: string>, title: string, url: string> {
+]: any -> table<doi: string, handle: string, id: int, published_date: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2022,7 +2023,7 @@ export def "private-collection-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_id: int, articles_count: int, authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, created_date: string, custom_fields: table<is_mandatory: bool, name: string, value: string>, description: string, funding: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, group_id: int, group_resource_id: string, institution_id: int, modified_date: string, public: bool, references: list<string>, resource_doi: string, resource_id: string, resource_link: string, resource_title: string, resource_version: int, tags: list<string>, timeline: record<posted: string, revision: string, submission: string>, version: int> {
+]: nothing -> record<account_id: int, articles_count: int, authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, created_date: string, custom_fields: table<is_mandatory: bool, name: string, value: string>, description: string, funding: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, group_id: int, group_resource_id: string, institution_id: int, modified_date: string, public: bool, references: list<string>, resource_doi: string, resource_id: string, resource_link: string, resource_title: string, resource_version: int, tags: list<string>, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, version: int, doi: string, handle: string, id: int, published_date: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -2067,18 +2068,18 @@ export def "private-collection-update" [
   --categories-by-source-id: list<string> # List of category source ids to be associated with the article, supersedes the categories property (default: [], e.g. [300204, 400207])
   --custom-fields: record # List of key, values pairs to be associated with the collection (e.g. {defined_key: value for it})
   --custom-fields-list: list # List of custom fields values, supersedes custom_fields parameter — item shape: {name: string, value: any}
-  --description: string # The collection description. In a publisher case, usually this is the remote collection description (default: , e.g. Test description of collection)
-  --doi: string # Not applicable for regular users. In an institutional case, make sure your group supports setting DOIs. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: )
-  --funding: string # Grant number or funding authority (default: )
+  --description: string # The collection description. In a publisher case, usually this is the remote collection description (default: "", e.g. Test description of collection)
+  --doi: string # Not applicable for regular users. In an institutional case, make sure your group supports setting DOIs. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: "")
+  --funding: string # Grant number or funding authority (default: "")
   --funding-list: list # Funding creation / update items — item shape: {id?: int, title?: string}
   --group-id: int # Not applicable to regular users. This field is reserved to institutions/publishers with access to assign to specific groups (format: int64)
-  --handle: string # Not applicable for regular users. In an institutional case, make sure your group supports setting Handles. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: )
+  --handle: string # Not applicable for regular users. In an institutional case, make sure your group supports setting Handles. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: "")
   --keywords: list<string> # List of tags to be associated with the collection. Tags can be used instead (default: [], e.g. [tag1, tag2])
   --references: list<string> # List of links to be associated with the collection (e.g ["http://link1", "http://link2", "http://link3"]) (default: [], e.g. [http://figshare.com, http://api.figshare.com])
-  --resource-doi: string # Not applicable to regular users. In a publisher case, this is the publisher article DOI. (default: )
+  --resource-doi: string # Not applicable to regular users. In a publisher case, this is the publisher article DOI. (default: "")
   --resource-id: string # Not applicable to regular users. In a publisher case, this is the publisher article id
   --resource-link: string # Not applicable to regular users. In a publisher case, this is the publisher article link
-  --resource-title: string # Not applicable to regular users. In a publisher case, this is the publisher article title. (default: )
+  --resource-title: string # Not applicable to regular users. In a publisher case, this is the publisher article title. (default: "")
   --resource-version: int # Not applicable to regular users. In a publisher case, this is the publisher article version
   --tags: list<string> # List of tags to be associated with the collection. Keywords can be used instead (default: [], e.g. [tag1, tag2])
   --timeline: record # shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
@@ -2126,7 +2127,7 @@ export def "private-collection-articles-list" [
   --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10)
   --limit: int # Number of results included on a page. Used for pagination with query (format: int64)
   --offset: int # Where to start the listing(the offset of the first result). Used for pagination with limit (format: int64)
-]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -2855,11 +2856,11 @@ export def "private-collection-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --doi: string # DOI of resource item (default: )
-  --id: string # ID of resource item (default: , e.g. aaaa23512)
-  --link: string # Link of resource item (default: , e.g. https://docs.figshare.com)
-  --status: string # Status of resource item (default: , e.g. frozen)
-  --title: string # Title of resource item (default: , e.g. Test title)
+  --doi: string # DOI of resource item (default: "")
+  --id: string # ID of resource item (default: "", e.g. aaaa23512)
+  --link: string # Link of resource item (default: "", e.g. https://docs.figshare.com)
+  --status: string # Status of resource item (default: "", e.g. frozen)
+  --title: string # Title of resource item (default: "", e.g. Test title)
   --version: int # Version of resource item (format: int64, default: 0, e.g. 1)
 ]: any -> any {
   let input = $in
@@ -3016,13 +3017,13 @@ export def "private-institution-accounts-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   email: string # Email of account (e.g. johndoe@example.com)
-  first_name: string # First Name (default: , e.g. John)
+  first_name: string # First Name (default: "", e.g. John)
   --group-id: int # Not applicable to regular users. This field is reserved to institutions/publishers with access to assign to specific groups (format: int64)
-  --institution-user-id: string # Institution user id (default: , e.g. johndoe)
+  --institution-user-id: string # Institution user id (default: "", e.g. johndoe)
   --is-active: oneof<nothing, bool> # Is account active
-  --last-name: string # Last Name (default: , e.g. Doe)
+  --last-name: string # Last Name (default: "", e.g. Doe)
   --quota: int # Account quota (format: int64, e.g. 1000)
-  --symplectic-user-id: string # Symplectic user id (default: , e.g. johndoe)
+  --symplectic-user-id: string # Symplectic user id (default: "", e.g. johndoe)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3116,6 +3117,7 @@ export def "private-institution-accounts-update" [
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/account/institution/accounts/{account_id}") $auth.query)
   let req_body = {"group_id": $group_id, "is_active": $is_active} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "is_active") == null) { error make --unspanned { msg: "required body field 'is_active' missing: pass --is-active or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3157,7 +3159,7 @@ export def "private-institution-articles" [
   --status: int # only return collections with this status (format: int64)
   --resource-doi: string # only return collections with this resource_doi
   --item-type: int # Only return articles with the respective type. Mapping for item_type is: 1 - Figure, 2 - Media, 3 - Dataset, 5 - Poster, 6 - Journal contribution, 7 - Presentation, 8 - Thesis, 9 - Software, 11 - Online resource, 12 - Preprint, 13 - Book, 14 - Conference contribution, 15 - Chapter, 16 - Peer review, 17 - Educational resource, 18 - Report, 19 - Standard, 20 - Composition, 21 - Funding, 22 - Physical object, 23 - Data management plan, 24 - Workflow, 25 - Monograph, 26 - Performance, 27 - Event, 28 - Service, 29 - Model (format: int64)
-]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar") (serialize-qp "published_since" $published_since "scalar") (serialize-qp "modified_since" $modified_since "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "resource_doi" $resource_doi "scalar") (serialize-qp "item_type" $item_type "scalar")] | flatten | str join "&"
@@ -3240,8 +3242,8 @@ export def "custom-fields-upload" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["external_file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["external_file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -3375,7 +3377,7 @@ export def "account-institution-curation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<item: record<authors: list<record>, custom_fields: list<record>, embargo_options: list<record>, figshare_url: string, files: list<record>, resource_doi: string, resource_title: string>> {
+]: nothing -> record<item: record<authors: list<record>, custom_fields: list<record>, embargo_options: list<record>, figshare_url: string, files: list<record>, resource_doi: string, resource_title: string, categories: list<record>, citation: string, confidential_reason: string, created_date: string, description: string, embargo_date: string, embargo_reason: string, embargo_title: string, embargo_type: string, funding: string, funding_list: list<int>, has_linked_file: bool, is_active: bool, is_confidential: bool, is_embargoed: bool, is_metadata_record: bool, is_public: bool, license: record<name: string, url: string, value: int>, metadata_reason: string, modified_date: string, references: list<string>, size: int, status: string, tags: list<string>, version: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string>, account_id: int, article_id: int, assigned_to: int, comments_count: int, created_date: string, group_id: int, id: int, modified_date: string, review_date: string, status: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($curation_id | is-empty) { error make --unspanned { msg: "path parameter 'curation_id' must be non-empty" } }
@@ -3756,7 +3758,7 @@ export def "private-projects-list" [
   --order-direction: string@order-direction-completer # default: desc
   --storage: string@storage-completer # only return collections from this institution
   --roles: string # Any combination of owner, collaborator, viewer separated by comma. Examples: "owner" or "owner,collaborator".
-]: nothing -> table<role: string, storage: string> {
+]: nothing -> table<role: string, storage: string, id: int, published_date: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar") (serialize-qp "storage" $storage "scalar") (serialize-qp "roles" $roles "scalar")] | flatten | str join "&"
@@ -3848,7 +3850,7 @@ export def "private-projects-search" [
   --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10, e.g. 10)
   --published-since: string # Filter by article publishing date. Will only return articles published after the date. date(ISO 8601) YYYY-MM-DD (e.g. 2017-12-22)
   --search-for: string # Search term (e.g. figshare)
-]: any -> table<role: string, storage: string> {
+]: any -> table<role: string, storage: string, id: int, published_date: string, title: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -3922,7 +3924,7 @@ export def "private-project-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_id: int, collaborators: table<name: string, role_name: string, user_id: int>, created_date: string, custom_fields: table<is_mandatory: bool, name: string, value: string>, description: string, figshare_url: string, funding: string, funding_list: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, group_id: int, modified_date: string, quota: int, used_quota: int, used_quota_private: int, used_quota_public: int> {
+]: nothing -> record<account_id: int, collaborators: table<name: string, role_name: string, user_id: int>, created_date: string, custom_fields: table<is_mandatory: bool, name: string, value: string>, description: string, figshare_url: string, funding: string, funding_list: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, group_id: int, modified_date: string, quota: int, used_quota: int, used_quota_private: int, used_quota_public: int, role: string, storage: string, id: int, published_date: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -4009,7 +4011,7 @@ export def "private-project-articles-list" [
   --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10)
   --limit: int # Number of results included on a page. Used for pagination with query (format: int64)
   --offset: int # Where to start the listing(the offset of the first result). Used for pagination with limit (format: int64)
-]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -4059,16 +4061,16 @@ export def "private-project-articles-create" [
   --custom-fields: record # List of key, values pairs to be associated with the article (e.g. {defined_key: value for it})
   --custom-fields-list: list # List of custom fields values, supersedes custom_fields parameter — item shape: {name: string, value: any}
   --defined-type: string # One of: figure online resource preprint book conference contribution media dataset poster journal contribution presentation thesis software (e.g. media)
-  --description: string # The article description. In a publisher case, usually this is the remote article description (default: , e.g. Test description of article)
-  --doi: string # Not applicable for regular users. In an institutional case, make sure your group supports setting DOIs. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: )
-  --funding: string # Grant number or funding authority (default: )
+  --description: string # The article description. In a publisher case, usually this is the remote article description (default: "", e.g. Test description of article)
+  --doi: string # Not applicable for regular users. In an institutional case, make sure your group supports setting DOIs. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: "")
+  --funding: string # Grant number or funding authority (default: "")
   --funding-list: list # Funding creation / update items — item shape: {id?: int, title?: string}
-  --handle: string # Not applicable for regular users. In an institutional case, make sure your group supports setting Handles. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: )
+  --handle: string # Not applicable for regular users. In an institutional case, make sure your group supports setting Handles. This setting is applied by figshare via opening a ticket through our support/helpdesk system. (default: "")
   --keywords: list<string> # List of tags to be associated with the article. Tags can be used instead (default: [], e.g. [tag1, tag2])
   --license: int # License id for this article. (format: int64, default: 0, e.g. 1)
   --references: list<string> # List of links to be associated with the article (e.g ["http://link1", "http://link2", "http://link3"]) (default: [], e.g. [http://figshare.com, http://api.figshare.com])
-  --resource-doi: string # Not applicable to regular users. In a publisher case, this is the publisher article DOI. (default: )
-  --resource-title: string # Not applicable to regular users. In a publisher case, this is the publisher article title. (default: )
+  --resource-doi: string # Not applicable to regular users. In a publisher case, this is the publisher article DOI. (default: "")
+  --resource-title: string # Not applicable to regular users. In a publisher case, this is the publisher article title. (default: "")
   --tags: list<string> # List of tags to be associated with the article. Keywords can be used instead (default: [], e.g. [tag1, tag2])
   --timeline: record # shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
   title: string # Title of article (e.g. Test article title)
@@ -4151,7 +4153,7 @@ export def "private-project-article-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, confidential_reason: string, created_date: string, description: string, embargo_date: string, embargo_reason: string, embargo_title: string, embargo_type: string, funding: string, funding_list: list<int>, has_linked_file: bool, is_active: bool, is_confidential: bool, is_embargoed: bool, is_metadata_record: bool, is_public: bool, license: record<name: string, url: string, value: int>, metadata_reason: string, modified_date: string, references: list<string>, size: int, status: string, tags: list<string>, version: int> {
+]: nothing -> record<categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, confidential_reason: string, created_date: string, description: string, embargo_date: string, embargo_reason: string, embargo_title: string, embargo_type: string, funding: string, funding_list: list<int>, has_linked_file: bool, is_active: bool, is_confidential: bool, is_embargoed: bool, is_metadata_record: bool, is_public: bool, license: record<name: string, url: string, value: int>, metadata_reason: string, modified_date: string, references: list<string>, size: int, status: string, tags: list<string>, version: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -4189,7 +4191,7 @@ export def "private-project-article-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<is_attached_to_public_version: bool, preview_state: string, status: string, upload_token: string, upload_url: string, viewer_type: string> {
+]: nothing -> table<is_attached_to_public_version: bool, preview_state: string, status: string, upload_token: string, upload_url: string, viewer_type: string, computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -4228,7 +4230,7 @@ export def "private-project-article-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<is_attached_to_public_version: bool, preview_state: string, status: string, upload_token: string, upload_url: string, viewer_type: string> {
+]: nothing -> record<is_attached_to_public_version: bool, preview_state: string, status: string, upload_token: string, upload_url: string, viewer_type: string, computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -4539,7 +4541,7 @@ export def "private-project-note" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<text: string> {
+]: nothing -> record<text: string, abstract: string, created_date: string, id: int, modified_date: string, user_id: int, user_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -4667,8 +4669,8 @@ export def "articles-list" [
   --item-type: int # Only return articles with the respective type. Mapping for item_type is: 1 - Figure, 2 - Media, 3 - Dataset, 5 - Poster, 6 - Journal contribution, 7 - Presentation, 8 - Thesis, 9 - Software, 11 - Online resource, 12 - Preprint, 13 - Book, 14 - Conference contribution, 15 - Chapter, 16 - Peer review, 17 - Educational resource, 18 - Report, 19 - Standard, 20 - Composition, 21 - Funding, 22 - Physical object, 23 - Data management plan, 24 - Workflow, 25 - Monograph, 26 - Performance, 27 - Event, 28 - Service, 29 - Model (format: int64)
   --doi: string # only return articles with this doi
   --handle: string # only return articles with this handle
-  --x-cursor: string # Unique hash used for bypassing the item retrieval limit of 9,000 entities. When using this parameter, please note that the offset parameter will not be available, but the limit parameter will still work as expected.
-]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+  --x-cursor: string # Unique hash used for bypassing the item retrieval limit of 9,000 entities. When using this parameter, please note that the offset parameter will not be available, but the limit parameter will still work as expected. (format: uuid)
+]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar") (serialize-qp "institution" $institution "scalar") (serialize-qp "published_since" $published_since "scalar") (serialize-qp "modified_since" $modified_since "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "resource_doi" $resource_doi "scalar") (serialize-qp "item_type" $item_type "scalar") (serialize-qp "doi" $doi "scalar") (serialize-qp "handle" $handle "scalar")] | flatten | str join "&"
@@ -4705,7 +4707,7 @@ export def "articles-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-cursor: string # Unique hash used for bypassing the item retrieval limit of 9,000 entities. When using this parameter, please note that the offset parameter will not be available, but the limit parameter will still work as expected.
+  --x-cursor: string # Unique hash used for bypassing the item retrieval limit of 9,000 entities. When using this parameter, please note that the offset parameter will not be available, but the limit parameter will still work as expected. (format: uuid)
   --doi: string # Only return articles with this doi (e.g. 10.6084/m9.figshare.1407024)
   --handle: string # Only return articles with this handle (e.g. 111084/m9.figshare.14074)
   --item-type: int # Only return articles with the respective type. Mapping for item_type is: 1 - Figure, 2 - Media, 3 - Dataset, 5 - Poster, 6 - Journal contribution, 7 - Presentation, 8 - Thesis, 9 - Software, 11 - Online resource, 12 - Preprint, 13 - Book, 14 - Conference contribution, 15 - Chapter, 16 - Peer review, 17 - Educational resource, 18 - Report, 19 - Standard, 20 - Composition, 21 - Funding, 22 - Physical object, 23 - Data management plan, 24 - Workflow, 25 - Monograph, 26 - Performance, 27 - Event, 28 - Service, 29 - Model (format: int64, e.g. 1)
@@ -4722,7 +4724,7 @@ export def "articles-search" [
   --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10, e.g. 10)
   --published-since: string # Filter by article publishing date. Will only return articles published after the date. date(ISO 8601) YYYY-MM-DD (e.g. 2017-12-22)
   --search-for: string # Search term (e.g. figshare)
-]: any -> table<project_id: int> {
+]: any -> table<project_id: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -4762,7 +4764,7 @@ export def "article-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, custom_fields: table<is_mandatory: bool, name: string, value: string>, embargo_options: table<id: int, ip_name: string, type: string>, figshare_url: string, files: table<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, resource_doi: string, resource_title: string> {
+]: nothing -> record<authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, custom_fields: table<is_mandatory: bool, name: string, value: string>, embargo_options: table<id: int, ip_name: string, type: string>, figshare_url: string, files: table<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, resource_doi: string, resource_title: string, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, confidential_reason: string, created_date: string, description: string, embargo_date: string, embargo_reason: string, embargo_title: string, embargo_type: string, funding: string, funding_list: list<int>, has_linked_file: bool, is_active: bool, is_confidential: bool, is_embargoed: bool, is_metadata_record: bool, is_public: bool, license: record<name: string, url: string, value: int>, metadata_reason: string, modified_date: string, references: list<string>, size: int, status: string, tags: list<string>, version: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -4909,7 +4911,7 @@ export def "article-version-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, custom_fields: table<is_mandatory: bool, name: string, value: string>, embargo_options: table<id: int, ip_name: string, type: string>, figshare_url: string, files: table<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, resource_doi: string, resource_title: string> {
+]: nothing -> record<authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, custom_fields: table<is_mandatory: bool, name: string, value: string>, embargo_options: table<id: int, ip_name: string, type: string>, figshare_url: string, files: table<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, resource_doi: string, resource_title: string, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, confidential_reason: string, created_date: string, description: string, embargo_date: string, embargo_reason: string, embargo_title: string, embargo_type: string, funding: string, funding_list: list<int>, has_linked_file: bool, is_active: bool, is_confidential: bool, is_embargoed: bool, is_metadata_record: bool, is_public: bool, license: record<name: string, url: string, value: int>, metadata_reason: string, modified_date: string, references: list<string>, size: int, status: string, tags: list<string>, version: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -5068,8 +5070,8 @@ export def "collections-list" [
   --resource-doi: string # only return collections with this resource_doi
   --doi: string # only return collections with this doi
   --handle: string # only return collections with this handle
-  --x-cursor: string # Unique hash used for bypassing the item retrieval limit of 9,000 entities. When using this parameter, please note that the offset parameter will not be available, but the limit parameter will still work as expected.
-]: nothing -> table<doi: string, handle: string, id: int, published_date: string, timeline: record<posted: string, revision: string, submission: string>, title: string, url: string> {
+  --x-cursor: string # Unique hash used for bypassing the item retrieval limit of 9,000 entities. When using this parameter, please note that the offset parameter will not be available, but the limit parameter will still work as expected. (format: uuid)
+]: nothing -> table<doi: string, handle: string, id: int, published_date: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar") (serialize-qp "institution" $institution "scalar") (serialize-qp "published_since" $published_since "scalar") (serialize-qp "modified_since" $modified_since "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "resource_doi" $resource_doi "scalar") (serialize-qp "doi" $doi "scalar") (serialize-qp "handle" $handle "scalar")] | flatten | str join "&"
@@ -5106,7 +5108,7 @@ export def "collections-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-cursor: string # Unique hash used for bypassing the item retrieval limit of 9,000 entities. When using this parameter, please note that the offset parameter will not be available, but the limit parameter will still work as expected.
+  --x-cursor: string # Unique hash used for bypassing the item retrieval limit of 9,000 entities. When using this parameter, please note that the offset parameter will not be available, but the limit parameter will still work as expected. (format: uuid)
   --doi: string # Only return collections with this doi (e.g. 10.6084/m9.figshare.1407024)
   --handle: string # Only return collections with this handle (e.g. 10084/figshare.1407024)
   --order: string@order-completer-1 # The field by which to order. (default: created_date, e.g. published_date)
@@ -5121,7 +5123,7 @@ export def "collections-search" [
   --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10, e.g. 10)
   --published-since: string # Filter by article publishing date. Will only return articles published after the date. date(ISO 8601) YYYY-MM-DD (e.g. 2017-12-22)
   --search-for: string # Search term (e.g. figshare)
-]: any -> table<doi: string, handle: string, id: int, published_date: string, timeline: record<posted: string, revision: string, submission: string>, title: string, url: string> {
+]: any -> table<doi: string, handle: string, id: int, published_date: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -5161,7 +5163,7 @@ export def "collection-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<articles_count: int, authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, created_date: string, custom_fields: table<is_mandatory: bool, name: string, value: string>, description: string, funding: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, group_id: int, group_resource_id: string, institution_id: int, modified_date: string, public: bool, references: list<string>, resource_doi: string, resource_id: string, resource_link: string, resource_title: string, resource_version: int, tags: list<string>, timeline: record<posted: string, revision: string, submission: string>, version: int> {
+]: nothing -> record<articles_count: int, authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, created_date: string, custom_fields: table<is_mandatory: bool, name: string, value: string>, description: string, funding: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, group_id: int, group_resource_id: string, institution_id: int, modified_date: string, public: bool, references: list<string>, resource_doi: string, resource_id: string, resource_link: string, resource_title: string, resource_version: int, tags: list<string>, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, version: int, doi: string, handle: string, id: int, published_date: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -5201,7 +5203,7 @@ export def "collection-articles" [
   --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10)
   --limit: int # Number of results included on a page. Used for pagination with query (format: int64)
   --offset: int # Where to start the listing(the offset of the first result). Used for pagination with limit (format: int64)
-]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -5275,7 +5277,7 @@ export def "collection-version-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<articles_count: int, authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, created_date: string, custom_fields: table<is_mandatory: bool, name: string, value: string>, description: string, funding: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, group_id: int, group_resource_id: string, institution_id: int, modified_date: string, public: bool, references: list<string>, resource_doi: string, resource_id: string, resource_link: string, resource_title: string, resource_version: int, tags: list<string>, timeline: record<posted: string, revision: string, submission: string>, version: int> {
+]: nothing -> record<articles_count: int, authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, created_date: string, custom_fields: table<is_mandatory: bool, name: string, value: string>, description: string, funding: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, group_id: int, group_resource_id: string, institution_id: int, modified_date: string, public: bool, references: list<string>, resource_doi: string, resource_id: string, resource_link: string, resource_title: string, resource_version: int, tags: list<string>, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, version: int, doi: string, handle: string, id: int, published_date: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -5357,8 +5359,8 @@ export def "institution-hrfeed-upload" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["hrfeed"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["hrfeed"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -5388,12 +5390,14 @@ export def "institution-articles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-id: string
-  --filename: string
-]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+  --resource-id: string # required
+  --filename: string # required
+]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($institution_string_id | is-empty) { error make --unspanned { msg: "path parameter 'institution_string_id' must be non-empty" } }
+  if ($resource_id == null) { error make --unspanned { msg: "required query parameter 'resource_id' missing: pass --resource-id" } }
+  if ($filename == null) { error make --unspanned { msg: "required query parameter 'filename' missing: pass --filename" } }
   let qp = [(serialize-qp "resource_id" $resource_id "scalar") (serialize-qp "filename" $filename "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({institution_string_id: (encode-path-segment $institution_string_id)} | format pattern "/institutions/{institution_string_id}/articles/filter-by") $qp $auth.query)
   let accept_val = "application/json"
@@ -5505,7 +5509,7 @@ export def "projects-list" [
   --institution: int # only return collections from this institution (format: int64)
   --published-since: string # Filter by article publishing date. Will only return articles published after the date. date(ISO 8601) YYYY-MM-DD
   --group: int # only return collections from this group (format: int64)
-  --x-cursor: string # Unique hash used for bypassing the item retrieval limit of 9,000 entities. When using this parameter, please note that the offset parameter will not be available, but the limit parameter will still work as expected.
+  --x-cursor: string # Unique hash used for bypassing the item retrieval limit of 9,000 entities. When using this parameter, please note that the offset parameter will not be available, but the limit parameter will still work as expected. (format: uuid)
 ]: nothing -> table<id: int, published_date: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -5543,7 +5547,7 @@ export def "projects-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-cursor: string # Unique hash used for bypassing the item retrieval limit of 9,000 entities. When using this parameter, please note that the offset parameter will not be available, but the limit parameter will still work as expected.
+  --x-cursor: string # Unique hash used for bypassing the item retrieval limit of 9,000 entities. When using this parameter, please note that the offset parameter will not be available, but the limit parameter will still work as expected. (format: uuid)
   --order: string@order-completer-2 # The field by which to order. (default: published_date, e.g. published_date)
   --group: int # only return collections from this group (format: int32, e.g. 2000013)
   --institution: int # only return collections from this institution (format: int32, e.g. 2000013)
@@ -5595,7 +5599,7 @@ export def "project-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<collaborators: table<name: string, role_name: string, user_id: int>, description: string, figshare_url: string, funding: string, funding_list: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>> {
+]: nothing -> record<collaborators: table<name: string, role_name: string, user_id: int>, description: string, figshare_url: string, funding: string, funding_list: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, id: int, published_date: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -5631,7 +5635,7 @@ export def "project-articles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }

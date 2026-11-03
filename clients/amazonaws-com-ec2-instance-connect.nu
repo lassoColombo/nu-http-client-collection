@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -143,15 +143,16 @@ export def "send-ssh-public-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  instance_id: any
-  instance_os_user: any
-  ssh_public_key: any
-  --availability-zone: any
-]: any -> record<RequestId: record, Success: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  instance_id: string # The ID of the EC2 instance.
+  instance_os_user: string # The OS user on the EC2 instance for whom the key can be used to authenticate.
+  ssh_public_key: string # The public key material. To use the public key, you must have the matching private key.
+  --availability-zone: string # The Availability Zone in which the EC2 instance was launched.
+]: any -> record<RequestId: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEC2InstanceConnectService.SendSSHPublicKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceId": $instance_id, "InstanceOSUser": $instance_os_user, "SSHPublicKey": $ssh_public_key, "AvailabilityZone": $availability_zone} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -194,14 +195,15 @@ export def "send-serial-console-ssh-public-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  instance_id: any
-  --serial-port: any
-  ssh_public_key: any
-]: any -> record<RequestId: record, Success: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  instance_id: string # The ID of the EC2 instance.
+  --serial-port: int # The serial port of the EC2 instance. Currently only port 0 is supported. Default: 0
+  ssh_public_key: string # The public key material. To use the public key, you must have the matching private key. For information about the supported key formats and lengths, see Requirements for key pairs (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#how-to-generate-your-own-key-and-import-it-to-aws) in the Amazon EC2 User Guide.
+]: any -> record<RequestId: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEC2InstanceConnectService.SendSerialConsoleSSHPublicKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceId": $instance_id, "SerialPort": $serial_port, "SSHPublicKey": $ssh_public_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

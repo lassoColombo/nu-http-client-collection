@@ -1,4 +1,4 @@
-# Auto-generated client for Cloud Debugger API vv2
+# Auto-generated client for Cloud Debugger API v2
 # Source: https://api.apis.guru/v2/specs/googleapis.com/clouddebugger/v2/openapi.json
 # Auth: --token flag or $env.CLOUD_DEBUGGER_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -161,8 +151,8 @@ export def commands []: nothing -> table {
 # --debuggee shape: {agentVersion?: string, canaryMode?: "CANARY_MODE_UNSPECIFIED"|"CANARY_MODE_ALWAYS_ENABLED"|"CANARY_MODE_ALWAYS_DISABLED"|"CANARY_MODE_DEFAULT_ENABLED"|"CANARY_MODE_DEFAULT_DISABLED", description?: string, extSourceContexts?: list, id?: string, isDisabled?: bool, isInactive?: bool, labels?: record, project?: string, sourceContexts?: list, status?: record, uniquifier?: string}
 export def "clouddebugger-controller-debuggees-register" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -183,7 +173,7 @@ export def "clouddebugger-controller-debuggees-register" [
   --debuggee: record # Represents the debugged application. The application may include one or more replicated processes executing the same code. Each of these processes is attached with a debugger agent, carrying out the debugging commands. Agents attached to the same debuggee identify themselves as such by using exactly the same Debuggee message value when registering. — shape: {agentVersion?: string, canaryMode?: "CANARY_MODE_UNSPECIFIED"|"CANARY_MODE_ALWAYS_ENABLED"|"CANARY_MODE_ALWAYS_DISABLED"|"CANARY_MODE_DEFAULT_ENABLED"|"CANARY_MODE_DEFAULT_DISABLED", description?: string, extSourceContexts?: list, id?: string, isDisabled?: bool, isInactive?: bool, labels?: record, project?: string, sourceContexts?: list, status?: record, uniquifier?: string}
 ]: any -> record<agentId: string, debuggee: record<agentVersion: string, canaryMode: string, description: string, extSourceContexts: list<record>, id: string, isDisabled: bool, isInactive: bool, labels: record, project: string, sourceContexts: list<record>, status: record<description: record, isError: bool, refersTo: string>, uniquifier: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEBUGGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEBUGGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/controller/debuggees/register" $qp $auth.query)
@@ -212,8 +202,8 @@ export def "clouddebugger-controller-debuggees-register" [
 export def "clouddebugger-controller-debuggees-breakpoints-list" [
   debuggee_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -235,7 +225,7 @@ export def "clouddebugger-controller-debuggees-breakpoints-list" [
   --success-on-timeout: oneof<nothing, bool> # If set to `true` (recommended), returns `google.rpc.Code.OK` status and sets the `wait_expired` response field to `true` when the server-selected timeout has expired. If set to `false` (deprecated), returns `google.rpc.Code.ABORTED` status when the server-selected timeout has expired.
   --wait-token: string # A token that, if specified, blocks the method call until the list of active breakpoints has changed, or a server-selected timeout has expired. The value should be set from the `next_wait_token` field in the last response. The initial value should be set to `"init"`.
 ]: nothing -> record<breakpoints: table<action: string, canaryExpireTime: string, condition: string, createTime: string, evaluatedExpressions: list, expressions: list, finalTime: string, id: string, isFinalState: bool, labels: record, location: record, logLevel: string, logMessageFormat: string, stackFrames: list, state: string, status: record, userEmail: string, variableTable: list>, nextWaitToken: string, waitExpired: bool> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEBUGGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEBUGGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debuggee_id | is-empty) { error make --unspanned { msg: "path parameter 'debuggeeId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "agentId" $agent_id "scalar") (serialize-qp "successOnTimeout" $success_on_timeout "scalar") (serialize-qp "waitToken" $wait_token "scalar")] | flatten | str join "&"
@@ -265,8 +255,8 @@ export def "clouddebugger-controller-debuggees-breakpoints-update" [
   debuggee_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -287,7 +277,7 @@ export def "clouddebugger-controller-debuggees-breakpoints-update" [
   --breakpoint: record # ------------------------------------------------------------------------------ ## Breakpoint (the resource) Represents the breakpoint specification, status and results. — shape: {action?: "CAPTURE"|"LOG", canaryExpireTime?: string, condition?: string, createTime?: string, evaluatedExpressions?: list, expressions?: list<string>, finalTime?: string, id?: string, isFinalState?: bool, labels?: record, location?: record, logLevel?: "INFO"|"WARNING"|"ERROR", logMessageFormat?: string, stackFrames?: list, state?: "STATE_UNSPECIFIED"|"STATE_CANARY_PENDING_AGENTS"|"STATE_CANARY_ACTIVE"|"STATE_ROLLING_TO_ALL"|"STATE_IS_FINAL", status?: record, userEmail?: string, ... (1 more fields)}
 ]: any -> record {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEBUGGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEBUGGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debuggee_id | is-empty) { error make --unspanned { msg: "path parameter 'debuggeeId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -317,8 +307,8 @@ export def "clouddebugger-controller-debuggees-breakpoints-update" [
 # operationId: clouddebugger.debugger.debuggees.list
 export def "clouddebugger-debugger-debuggees-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -340,7 +330,7 @@ export def "clouddebugger-debugger-debuggees-list" [
   --include-inactive: oneof<nothing, bool> # When set to `true`, the result includes all debuggees. Otherwise, the result includes only debuggees that are active.
   --project: string # Required. Project number of a Google Cloud project whose debuggees to list.
 ]: nothing -> record<debuggees: table<agentVersion: string, canaryMode: string, description: string, extSourceContexts: list, id: string, isDisabled: bool, isInactive: bool, labels: record, project: string, sourceContexts: list, status: record, uniquifier: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEBUGGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEBUGGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientVersion" $client_version "scalar") (serialize-qp "includeInactive" $include_inactive "scalar") (serialize-qp "project" $project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/debugger/debuggees" $qp $auth.query)
@@ -367,8 +357,8 @@ export def "clouddebugger-debugger-debuggees-list" [
 export def "clouddebugger-debugger-debuggees-breakpoints-list" [
   debuggee_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -393,7 +383,7 @@ export def "clouddebugger-debugger-debuggees-breakpoints-list" [
   --strip-results: oneof<nothing, bool> # This field is deprecated. The following fields are always stripped out of the result: `stack_frames`, `evaluated_expressions` and `variable_table`.
   --wait-token: string # A wait token that, if specified, blocks the call until the breakpoints list has changed, or a server selected timeout has expired. The value should be set from the last response. The error code `google.rpc.Code.ABORTED` (RPC) is returned on wait timeout, which should be called again with the same `wait_token`.
 ]: nothing -> record<breakpoints: table<action: string, canaryExpireTime: string, condition: string, createTime: string, evaluatedExpressions: list, expressions: list, finalTime: string, id: string, isFinalState: bool, labels: record, location: record, logLevel: string, logMessageFormat: string, stackFrames: list, state: string, status: record, userEmail: string, variableTable: list>, nextWaitToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEBUGGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEBUGGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debuggee_id | is-empty) { error make --unspanned { msg: "path parameter 'debuggeeId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "action.value" $action_value "scalar") (serialize-qp "clientVersion" $client_version "scalar") (serialize-qp "includeAllUsers" $include_all_users "scalar") (serialize-qp "includeInactive" $include_inactive "scalar") (serialize-qp "stripResults" $strip_results "scalar") (serialize-qp "waitToken" $wait_token "scalar")] | flatten | str join "&"
@@ -426,8 +416,8 @@ export def "clouddebugger-debugger-debuggees-breakpoints-list" [
 export def "clouddebugger-debugger-debuggees-breakpoints-set" [
   debuggee_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -467,7 +457,7 @@ export def "clouddebugger-debugger-debuggees-breakpoints-set" [
   --variable-table: list # The `variable_table` exists to aid with computation, memory and network traffic optimization. It enables storing a variable once and reference it from multiple variables, including variables stored in the `variable_table` itself. For example, the same `this` object, which may appear at many levels of the stack, can have all of its data stored once in this table. The stack frame variables then would hold only a reference to it. The variable `var_table_index` field is an index into this repeated field. The stored objects are nameless and get their name from the referencing variable. The effective variable is a merge of the referencing variable and the referenced variable. — item shape: {members?: list, name?: string, status?: record, type?: string, value?: string, varTableIndex?: int}
 ]: any -> record<breakpoint: record<action: string, canaryExpireTime: string, condition: string, createTime: string, evaluatedExpressions: list<record>, expressions: list<string>, finalTime: string, id: string, isFinalState: bool, labels: record, location: record<column: int, line: int, path: string>, logLevel: string, logMessageFormat: string, stackFrames: list<record>, state: string, status: record<description: record, isError: bool, refersTo: string>, userEmail: string, variableTable: list<record>>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEBUGGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEBUGGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debuggee_id | is-empty) { error make --unspanned { msg: "path parameter 'debuggeeId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "canaryOption" $canary_option "scalar") (serialize-qp "clientVersion" $client_version "scalar")] | flatten | str join "&"
@@ -498,8 +488,8 @@ export def "clouddebugger-debugger-debuggees-breakpoints-delete" [
   debuggee_id: string
   breakpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -519,7 +509,7 @@ export def "clouddebugger-debugger-debuggees-breakpoints-delete" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --client-version: string # Required. The client version making the call. Schema: `domain/type/version` (e.g., `google.com/intellij/v1`).
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEBUGGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEBUGGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debuggee_id | is-empty) { error make --unspanned { msg: "path parameter 'debuggeeId' must be non-empty" } }
   if ($breakpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'breakpointId' must be non-empty" } }
@@ -549,8 +539,8 @@ export def "clouddebugger-debugger-debuggees-breakpoints-get" [
   debuggee_id: string
   breakpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -570,7 +560,7 @@ export def "clouddebugger-debugger-debuggees-breakpoints-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --client-version: string # Required. The client version making the call. Schema: `domain/type/version` (e.g., `google.com/intellij/v1`).
 ]: nothing -> record<breakpoint: record<action: string, canaryExpireTime: string, condition: string, createTime: string, evaluatedExpressions: list<record>, expressions: list<string>, finalTime: string, id: string, isFinalState: bool, labels: record, location: record<column: int, line: int, path: string>, logLevel: string, logMessageFormat: string, stackFrames: list<record>, state: string, status: record<description: record, isError: bool, refersTo: string>, userEmail: string, variableTable: list<record>>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEBUGGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEBUGGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debuggee_id | is-empty) { error make --unspanned { msg: "path parameter 'debuggeeId' must be non-empty" } }
   if ($breakpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'breakpointId' must be non-empty" } }

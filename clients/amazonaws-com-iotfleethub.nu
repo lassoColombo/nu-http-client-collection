@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -162,7 +162,7 @@ export def "create-application" [
   --client-token: string # A unique case-sensitive identifier that you can provide to ensure the idempotency of the request. Don't reuse this client token if a new idempotent request is required.
   role_arn: string # The ARN of the role that the web application assumes when it interacts with AWS IoT Core. The name of the role must be in the form AWSIotFleetHub_random_string .
   --tags: record # A set of key/value pairs that you can use to manage the web application resource.
-]: any -> record<applicationId: record, applicationArn: record> {
+]: any -> record<applicationId: string, applicationArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -209,7 +209,7 @@ export def "list-applications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<applicationSummaries: record, nextToken: record> {
+]: nothing -> record<applicationSummaries: table<applicationId: string, applicationName: string, applicationDescription: string, applicationUrl: string, applicationCreationDate: int, applicationLastUpdateDate: int, applicationState: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -301,7 +301,7 @@ export def "describe-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<applicationId: record, applicationArn: record, applicationName: record, applicationDescription: record, applicationUrl: record, applicationState: record, applicationCreationDate: record, applicationLastUpdateDate: record, roleArn: record, ssoClientId: record, errorMessage: record, tags: record> {
+]: nothing -> record<applicationId: string, applicationArn: string, applicationName: string, applicationDescription: string, applicationUrl: string, applicationState: string, applicationCreationDate: int, applicationLastUpdateDate: int, roleArn: string, ssoClientId: string, errorMessage: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
@@ -484,7 +484,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # A list of the keys of the tags to be removed from the resource.
+  --tag-keys: list # A list of the keys of the tags to be removed from the resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -496,6 +496,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

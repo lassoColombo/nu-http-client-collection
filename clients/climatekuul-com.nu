@@ -138,7 +138,7 @@ export def "airtravel-coordinates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # e.g. application/x-www-form-urlencoded
+  --content-type: string # required, e.g. application/x-www-form-urlencoded
   api_key_l1: string # Client Api Key (e.g. d95fead6-e8a6-4547-9fb9-7835101a3960)
   api_key_l2: string # Integration Partner Api Key (e.g. c60f8db5-7204-4427-960d-27400c38b166)
   destination_airport_latitude: float # Destination latitude (like: 50.870752, value = -90<=x<=90) (format: double, e.g. 24.9056)
@@ -576,7 +576,7 @@ export def "ecommerce-delivery" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # e.g. application/x-www-form-urlencoded
+  --content-type: string # required, e.g. application/x-www-form-urlencoded
   api_key_l1: string # Client Api Key (e.g. d95fead6-e8a6-4547-9fb9-7835101a3960)
   api_key_l2: string # Integration Partner Api Key (e.g. c60f8db5-7204-4427-960d-27400c38b166)
   --destination-airport-code: string # valid airport code of destination (e.g. BRU)

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "cast-local-authorization-token" => { {scheme: $scheme, headers: {cast-local-authorization-token: $token_val}, query: "", location: "header"} }
+    "cast-local-authorization-token" => { {scheme: $scheme, headers: {"cast-local-authorization-token": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -181,6 +181,8 @@ export def "accessibility" [
   let full_url = (build-url $base "/assistant/a11y_mode" $auth.query)
   let req_body = {"endpoint_enabled": $endpoint_enabled, "hotword_enabled": $hotword_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "endpoint_enabled") == null) { error make --unspanned { msg: "required body field 'endpoint_enabled' missing: pass --endpoint-enabled or pipe a record" } }
+  if (($req_body | get -o "hotword_enabled") == null) { error make --unspanned { msg: "required body field 'hotword_enabled' missing: pass --hotword-enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -330,6 +332,7 @@ export def "check-ready-status" [
   let full_url = (build-url $base "/assistant/check_ready_status" $auth.query)
   let req_body = {"play_ready_message": $play_ready_message, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "play_ready_message") == null) { error make --unspanned { msg: "required body field 'play_ready_message' missing: pass --play-ready-message or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -360,7 +363,7 @@ export def "do-not-disturb" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # e.g. application/json
+  --content-type: string # required, e.g. application/json
 ]: nothing -> record<notifications_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -411,6 +414,9 @@ export def "night-modesettings" [
   let full_url = (build-url $base "/assistant/set_night_mode_params" $auth.query)
   let req_body = {"demo_to_user": $demo_to_user, "do_not_disturb": $do_not_disturb, "enabled": $enabled, "led_brightness": $led_brightness, "volume": $volume, "windows": $windows} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "demo_to_user") == null) { error make --unspanned { msg: "required body field 'demo_to_user' missing: pass --demo-to-user or pipe a record" } }
+  if (($req_body | get -o "do_not_disturb") == null) { error make --unspanned { msg: "required body field 'do_not_disturb' missing: pass --do-not-disturb or pipe a record" } }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -450,6 +456,7 @@ export def "forgetpaireddevice" [
   let full_url = (build-url $base "/bluetooth/bond" $auth.query)
   let req_body = {"bond": $bond, "mac_address": $mac_address} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "bond") == null) { error make --unspanned { msg: "required body field 'bond' missing: pass --bond or pipe a record" } }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -490,6 +497,7 @@ export def "pairwith-speaker" [
   let full_url = (build-url $base "/bluetooth/connect" $auth.query)
   let req_body = {"connect": $connect, "mac_address": $mac_address, "profile": $profile} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "connect") == null) { error make --unspanned { msg: "required body field 'connect' missing: pass --connect or pipe a record" } }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -528,6 +536,7 @@ export def "change-discoverability" [
   let full_url = (build-url $base "/bluetooth/discovery" $auth.query)
   let req_body = {"enable_discovery": $enable_discovery} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "enable_discovery") == null) { error make --unspanned { msg: "required body field 'enable_discovery' missing: pass --enable-discovery or pipe a record" } }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -602,6 +611,8 @@ export def "scanfordevices" [
   let full_url = (build-url $base "/bluetooth/scan" $auth.query)
   let req_body = {"clear_results": $clear_results, "enable": $enable, "timeout": $timeout} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "clear_results") == null) { error make --unspanned { msg: "required body field 'clear_results' missing: pass --clear-results or pipe a record" } }
+  if (($req_body | get -o "enable") == null) { error make --unspanned { msg: "required body field 'enable' missing: pass --enable or pipe a record" } }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -777,12 +788,15 @@ export def "eureka-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --params: string # e.g. version,audio,name,build_info,detail,device_info,net,wifi,setup,settings,opt_in,opencast,multizone,proxy,night_mode_params,user_eq,room_equalizer,sign,aogh,ultrasound,mesh
-  --options: string # e.g. detail,sign
-  --nonce: int # format: int32, e.g. 1234512345
+  --params: string # required, e.g. version,audio,name,build_info,detail,device_info,net,wifi,setup,settings,opt_in,opencast,multizone,proxy,night_mode_params,user_eq,room_equalizer,sign,aogh,ultrasound,mesh
+  --options: string # required, e.g. detail,sign
+  --nonce: int # required, format: int32, e.g. 1234512345
 ]: nothing -> record<aogh: record<aogh_api_version: string>, audio: record<digital: bool>, build_info: record<build_type: int, cast_build_revision: string, cast_control_version: int, preview_channel_state: int, release_track: string, system_build_number: string>, detail: record<icon_list: list<record>, locale: record<display_string: string>, timezone: record<display_string: string, offset: int>>, device_info: record<4k_blocked: int, capabilities: record<aogh_supported: bool, assistant_supported: bool, audio_hdr_supported: bool, audio_surround_mode_supported: bool, ble_supported: bool, bluetooth_audio_sink_supported: bool, bluetooth_audio_source_supported: bool, bluetooth_supported: bool, cloudcast_supported: bool, content_filters_supported: bool, display_supported: bool, fdr_supported: bool, hdmi_prefer_50hz_supported: bool, hdmi_prefer_high_fps_supported: bool, hotspot_supported: bool, https_setup_supported: bool, input_management_supported: bool, keep_hotspot_until_connected_supported: bool, multi_user_supported: bool, multichannel_group_supported: bool, multizone_supported: bool, night_mode_supported: bool, night_mode_supported_v2: bool, opencast_supported: bool, preview_channel_supported: bool, reboot_supported: bool, remote_ducking_supported: bool, separate_tts_volume_supported: bool, setup_supported: bool, sleep_mode_supported: bool, stats_supported: bool, system_sound_effects_supported: bool, user_eq_supported: bool, wifi_auto_save_supported: bool, wifi_regulatory_domain_locked: bool, wifi_supported: bool>, cloud_device_id: string, factory_country_code: string, hotspot_bssid: string, local_authorization_token_hash: string, mac_address: string, manufacturer: string, model_name: string, product_name: string, public_key: string, ssdp_udn: string, uma_client_id: string, uptime: float, weave_device_id: string>, multizone: record<audio_output_delay: int, audio_output_delay_hdmi: int, audio_output_delay_oem: int, aux_in_group: string, dynamic_groups: list<string>, groups: list<string>, multichannel_status: int>, name: string, net: record<ethernet_connected: bool, ip_address: string, online: bool>, night_mode_params: record<device_override_do_not_disturb: int, do_not_disturb: bool, enabled: bool, led_brightness: float, volume: float, windows: list<record>>, opencast: record<pin_code: string>, opt_in: record<audio_hdr: bool, audio_surround_mode: int, autoplay_on_signal: bool, cloud_ipc: bool, hdmi_prefer_50hz: bool, hdmi_prefer_high_fps: bool, managed_mode: bool, opencast: bool, preview_channel: bool, remote_ducking: bool, stats: bool, ui_flipped: bool, wpa3_support_enabled: bool>, proxy: record<mode: string>, settings: record<closed_caption: record, control_notifications: int, country_code: string, locale: string, network_standby: int, system_sound_effects: bool, time_format: int, timezone: string, wake_on_cast: int>, setup: record<qr_ssid_suffix: string, setup_state: int, ssid_suffix: string, stats: record<num_check_connectivity: int, num_connect_wifi: int, num_connected_wifi_not_saved: int, num_initial_eureka_info: int, num_obtain_ip: int>, tos_accepted: bool>, sign: record<certificate: string, intermediate_certs: list<string>, nonce: string, signed_data: string>, user_eq: record<high_shelf: record<frequency: int, gain_db: int, quality: float>, low_shelf: record<frequency: int, gain_db: int, quality: float>, max_peaking_eqs: int, peaking_eqs: list<string>>, version: int, wifi: record<bssid: string, has_changes: bool, noise_level: int, signal_level: int, ssid: string, wpa_configured: bool, wpa_id: int, wpa_state: int>> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($params == null) { error make --unspanned { msg: "required query parameter 'params' missing: pass --params" } }
+  if ($options == null) { error make --unspanned { msg: "required query parameter 'options' missing: pass --options" } }
+  if ($nonce == null) { error make --unspanned { msg: "required query parameter 'nonce' missing: pass --nonce" } }
   let qp = [(serialize-qp "params" $params "scalar") (serialize-qp "options" $options "scalar") (serialize-qp "nonce" $nonce "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/eureka_info" $qp $auth.query)
   let accept_val = "application/json"

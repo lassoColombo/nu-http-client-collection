@@ -1,6 +1,7 @@
 # Auto-generated client for Numbers API v1.0.20
 # Source: https://api.apis.guru/v2/specs/nexmo.com/numbers/1.0.20/openapi.json
-# Auth: --token flag or $env.NUMBERS_API_TOKEN
+# Auth (apiKey): --token-apikey flag or $env.NUMBERS_API_APIKEY_TOKEN
+# Auth (apiSecret): --token-apisecret flag or $env.NUMBERS_API_APISECRET_TOKEN
 
 const BASE_URL = "https://rest.nexmo.com"
 
@@ -121,7 +122,7 @@ def voice-callback-type-completer [] { ["app" "sip" "tel"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-apikey" "token-apisecret"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-owned-numbers" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -284,7 +285,7 @@ export def "get-available-numbers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --country: string # The two character country code to filter on (in ISO 3166-1 alpha-2 format) (e.g. GB)
+  --country: string # The two character country code to filter on (in ISO 3166-1 alpha-2 format) (required, e.g. GB)
   --type: string@type-completer # Set this parameter to filter the type of number, such as mobile or landline (e.g. mobile-lvn)
   --pattern: string # The number pattern you want to search for. Use in conjunction with `search_pattern`. (e.g. 12345)
   --search-pattern: int@search-pattern-completer # The strategy you want to use for matching: * `0` - Search for numbers that start with `pattern` (Note: all numbers are in E.164 format, so the starting pattern includes the country code, such as 1 for USA) * `1` - Search for numbers that contain `pattern` * `2` - Search for numbers that end with `pattern` (default: 0, e.g. 1)
@@ -294,6 +295,7 @@ export def "get-available-numbers" [
 ]: nothing -> record<count: int, numbers: table<cost: string, country: string, features: list, msisdn: string, type: string>> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBERS_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBERS_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "pattern" $pattern "scalar") (serialize-qp "search_pattern" $search_pattern "scalar") (serialize-qp "features" $features "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "index" $index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/number/search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

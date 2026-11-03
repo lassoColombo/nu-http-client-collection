@@ -1,4 +1,4 @@
-# Auto-generated client for Send Person to Merchant vV1
+# Auto-generated client for Send Person to Merchant V1
 # Source: https://api.apis.guru/v2/specs/mastercard.com/masterpassqr/V1/swagger.json
 # Auth: --token flag or $env.SEND_PERSON_TO_MERCHANT_TOKEN
 
@@ -195,11 +195,12 @@ export def "get-merchant-transfer-by-ref" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --ref: string # Query Param - Is the client specified transfer reference when initiating the transfer. Allowable characters are alphanumeric and * , - . _ ~. Details- 6-40 Example- DEF123456
+  --ref: string # Query Param - Is the client specified transfer reference when initiating the transfer. Allowable characters are alphanumeric and * , - . _ ~. Details- 6-40 Example- DEF123456 (required)
 ]: nothing -> record<merchant_transfers: record<data: record<merchant_transfer: list>, item_count: int, resource_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  if ($ref == null) { error make --unspanned { msg: "required query parameter 'ref' missing: pass --ref" } }
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/send/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-theysaidso-api-secret" => { {scheme: $scheme, headers: {X-TheySaidSo-Api-Secret: $token_val}, query: "", location: "header"} }
+    "x-theysaidso-api-secret" => { {scheme: $scheme, headers: {"X-TheySaidSo-Api-Secret": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -291,10 +291,11 @@ export def "delete-qshow" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Qshow ID (format: string)
+  --id: string # Qshow ID (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/qshow" $qp $auth.query)
   let accept_val = "application/xml"
@@ -327,10 +328,11 @@ export def "get-qshow" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --id: string # Qshow ID (format: string)
+  --id: string # Qshow ID (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/qshow" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -362,13 +364,14 @@ export def "patch-qshow" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Qshow ID (format: string)
+  --id: string # Qshow ID (required, format: string)
   --title: string # Qshow title (format: string)
   --description: string # Qshow description (format: string)
   --tags: list<string> # Tags for the qshow
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "tags" $tags "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/qshow" $qp $auth.query)
   let accept_val = "application/json"
@@ -400,12 +403,13 @@ export def "put-qshow" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --title: string # Qshow title (format: string)
+  --title: string # Qshow title (required, format: string)
   --description: string # Qshow description (format: string)
   --tags: list<string> # Tags for the qshow
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($title == null) { error make --unspanned { msg: "required query parameter 'title' missing: pass --title" } }
   let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "tags" $tags "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/qshow" $qp $auth.query)
   let accept_val = "application/json"
@@ -473,10 +477,11 @@ export def "get-qshow-quotes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Qshow ID (format: string)
+  --id: string # Qshow ID (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/qshow/quotes" $qp $auth.query)
   let accept_val = "application/json"
@@ -508,11 +513,13 @@ export def "post-qshow-quotes-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Qshow ID (format: string)
-  --quoteid: string # Quote ID to add the qshow collection (format: string)
+  --id: string # Qshow ID (required, format: string)
+  --quoteid: string # Quote ID to add the qshow collection (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($quoteid == null) { error make --unspanned { msg: "required query parameter 'quoteid' missing: pass --quoteid" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "quoteid" $quoteid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/qshow/quotes/add" $qp $auth.query)
   let accept_val = "application/json"
@@ -544,11 +551,13 @@ export def "post-qshow-quotes-remove" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Qshow ID (format: string)
-  --quoteid: string # Quote ID to remove from the qshow collection (format: string)
+  --id: string # Qshow ID (required, format: string)
+  --quoteid: string # Quote ID to remove from the qshow collection (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($quoteid == null) { error make --unspanned { msg: "required query parameter 'quoteid' missing: pass --quoteid" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "quoteid" $quoteid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/qshow/quotes/remove" $qp $auth.query)
   let accept_val = "application/json"
@@ -580,10 +589,11 @@ export def "delete-quote" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Quote ID (format: string)
+  --id: string # Quote ID (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote" $qp $auth.query)
   let accept_val = "application/xml"
@@ -651,7 +661,7 @@ export def "patch-quote" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Quote ID (format: string)
+  --id: string # Quote ID (required, format: string)
   --quote: string # Quote (format: string)
   --author: string # Quote Author (format: string)
   --language: string # Language. If not supplied an auto detection mechanism will be used to detect a language. (format: string, default: en)
@@ -659,6 +669,7 @@ export def "patch-quote" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "quote" $quote "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote" $qp $auth.query)
   let accept_val = "application/json"
@@ -690,13 +701,14 @@ export def "post-quote" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --quote: string # Quote (format: string)
+  --quote: string # Quote (required, format: string)
   --author: string # Quote Author (format: string)
   --tags: string # Comma Separated tags (format: string)
   --language: string # Language. If not supplied an auto detection mechanism will be used to detect a language. (format: string, default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote == null) { error make --unspanned { msg: "required query parameter 'quote' missing: pass --quote" } }
   let qp = [(serialize-qp "quote" $quote "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote" $qp $auth.query)
   let accept_val = "application/json"
@@ -728,13 +740,14 @@ export def "put-quote" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --quote: string # Quote (format: string)
+  --quote: string # Quote (required, format: string)
   --author: string # Quote Author (format: string)
   --tags: string # Comma Separated tags (format: string)
   --language: string # Language. If not supplied an auto detection mechanism will be used to detect a language. (format: string, default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote == null) { error make --unspanned { msg: "required query parameter 'quote' missing: pass --quote" } }
   let qp = [(serialize-qp "quote" $quote "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote" $qp $auth.query)
   let accept_val = "application/json"
@@ -916,10 +929,11 @@ export def "delete-quote-dislike" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --quote-id: string # Quote ID (format: string)
+  --quote-id: string # Quote ID (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id == null) { error make --unspanned { msg: "required query parameter 'quote_id' missing: pass --quote-id" } }
   let qp = [(serialize-qp "quote_id" $quote_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/dislike" $qp $auth.query)
   let accept_val = "application/json"
@@ -951,10 +965,11 @@ export def "post-quote-dislike" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --quote-id: string # Quote ID (format: string)
+  --quote-id: string # Quote ID (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id == null) { error make --unspanned { msg: "required query parameter 'quote_id' missing: pass --quote-id" } }
   let qp = [(serialize-qp "quote_id" $quote_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/dislike" $qp $auth.query)
   let accept_val = "application/json"
@@ -986,10 +1001,11 @@ export def "put-quote-dislike" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --quote-id: string # Quote ID (format: string)
+  --quote-id: string # Quote ID (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id == null) { error make --unspanned { msg: "required query parameter 'quote_id' missing: pass --quote-id" } }
   let qp = [(serialize-qp "quote_id" $quote_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/dislike" $qp $auth.query)
   let accept_val = "application/json"
@@ -1021,10 +1037,11 @@ export def "delete-quote-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Quote Image ID (format: string)
+  --id: string # Quote Image ID (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/image" $qp $auth.query)
   let accept_val = "application/xml"
@@ -1056,11 +1073,12 @@ export def "get-quote-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Quote Image id (format: string)
+  --id: string # Quote Image id (required, format: string)
   --binary: oneof<nothing, bool> # Should the response be a direct file download of the image or a base64 encoded image file wrapped in json? (format: boolean, default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "binary" $binary "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/image" $qp $auth.query)
   let accept_val = "application/json"
@@ -1092,7 +1110,7 @@ export def "put-quote-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --quote-id: string # Quote id (format: string)
+  --quote-id: string # Quote id (required, format: string)
   --bgimage-id: string # Background Image id ( Will override bgcolor if supplied) (format: string, default: theysaidso_default_background_image)
   --bg-color: string # Background Color(if background image id is not supplied) (format: string)
   --font-id: string # Font id (format: string, default: theysaidso_default_font)
@@ -1107,6 +1125,7 @@ export def "put-quote-image" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id == null) { error make --unspanned { msg: "required query parameter 'quote_id' missing: pass --quote-id" } }
   let qp = [(serialize-qp "quote_id" $quote_id "scalar") (serialize-qp "bgimage_id" $bgimage_id "scalar") (serialize-qp "bg_color" $bg_color "scalar") (serialize-qp "font_id" $font_id "scalar") (serialize-qp "text_color" $text_color "scalar") (serialize-qp "text_size" $text_size "scalar") (serialize-qp "halign" $halign "scalar") (serialize-qp "valign" $valign "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "branding" $branding "scalar") (serialize-qp "include_transparent_layer" $include_transparent_layer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/image" $qp $auth.query)
   let accept_val = "application/json"
@@ -1138,10 +1157,11 @@ export def "delete-quote-image-background" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Font ID (format: string)
+  --id: string # Font ID (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/image/background" $qp $auth.query)
   let accept_val = "application/xml"
@@ -1184,8 +1204,8 @@ export def "post-quote-image-background" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["image"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["image"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1283,11 +1303,13 @@ export def "post-quote-image-background-tags-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Image ID (format: string)
-  --tags: string # Comma Separated tags (format: string)
+  --id: string # Image ID (required, format: string)
+  --tags: string # Comma Separated tags (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($tags == null) { error make --unspanned { msg: "required query parameter 'tags' missing: pass --tags" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/image/background/tags/add" $qp $auth.query)
   let accept_val = "application/json"
@@ -1319,11 +1341,13 @@ export def "post-quote-image-background-tags-remove" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Image ID (format: string)
-  --tags: string # Comma Separated tags (format: string)
+  --id: string # Image ID (required, format: string)
+  --tags: string # Comma Separated tags (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($tags == null) { error make --unspanned { msg: "required query parameter 'tags' missing: pass --tags" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/image/background/tags/remove" $qp $auth.query)
   let accept_val = "application/json"
@@ -1355,10 +1379,11 @@ export def "delete-quote-image-font" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Font ID (format: string)
+  --id: string # Font ID (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/image/font" $qp $auth.query)
   let accept_val = "application/xml"
@@ -1401,8 +1426,8 @@ export def "post-quote-image-font" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["font"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["font"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1500,11 +1525,13 @@ export def "post-quote-image-font-tags-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Font ID (format: string)
-  --tags: string # Comma Separated tags (format: string)
+  --id: string # Font ID (required, format: string)
+  --tags: string # Comma Separated tags (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($tags == null) { error make --unspanned { msg: "required query parameter 'tags' missing: pass --tags" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/image/font/tags/add" $qp $auth.query)
   let accept_val = "application/json"
@@ -1536,11 +1563,13 @@ export def "post-quote-image-font-tags-remove" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Font ID (format: string)
-  --tags: string # Comma Separated tags (format: string)
+  --id: string # Font ID (required, format: string)
+  --tags: string # Comma Separated tags (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($tags == null) { error make --unspanned { msg: "required query parameter 'tags' missing: pass --tags" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/image/font/tags/remove" $qp $auth.query)
   let accept_val = "application/json"
@@ -1609,10 +1638,11 @@ export def "delete-quote-like" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --quote-id: string # Quote ID (format: string)
+  --quote-id: string # Quote ID (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id == null) { error make --unspanned { msg: "required query parameter 'quote_id' missing: pass --quote-id" } }
   let qp = [(serialize-qp "quote_id" $quote_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/like" $qp $auth.query)
   let accept_val = "application/json"
@@ -1644,10 +1674,11 @@ export def "post-quote-like" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --quote-id: string # Quote ID (format: string)
+  --quote-id: string # Quote ID (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id == null) { error make --unspanned { msg: "required query parameter 'quote_id' missing: pass --quote-id" } }
   let qp = [(serialize-qp "quote_id" $quote_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/like" $qp $auth.query)
   let accept_val = "application/json"
@@ -1679,10 +1710,11 @@ export def "put-quote-like" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --quote-id: string # Quote ID (format: string)
+  --quote-id: string # Quote ID (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id == null) { error make --unspanned { msg: "required query parameter 'quote_id' missing: pass --quote-id" } }
   let qp = [(serialize-qp "quote_id" $quote_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/like" $qp $auth.query)
   let accept_val = "application/json"
@@ -1831,11 +1863,13 @@ export def "post-quote-tags-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Quote ID (format: string)
-  --tags: string # Comma Separated tags (format: string)
+  --id: string # Quote ID (required, format: string)
+  --tags: string # Comma Separated tags (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($tags == null) { error make --unspanned { msg: "required query parameter 'tags' missing: pass --tags" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/tags/add" $qp $auth.query)
   let accept_val = "application/json"
@@ -1867,11 +1901,13 @@ export def "post-quote-tags-remove" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Quote ID (format: string)
-  --tags: string # Comma Separated tags (format: string)
+  --id: string # Quote ID (required, format: string)
+  --tags: string # Comma Separated tags (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($tags == null) { error make --unspanned { msg: "required query parameter 'tags' missing: pass --tags" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quote/tags/remove" $qp $auth.query)
   let accept_val = "application/json"

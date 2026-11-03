@@ -1,6 +1,8 @@
 # Auto-generated client for GiftCard Hub API v1.0
 # Source: https://api.apis.guru/v2/specs/vtex.local/GiftCard-Hub-API/1.0/openapi.json
 # Auth: --token flag or $env.GIFTCARD_HUB_API_TOKEN
+# Auth (appKey): --token-appkey flag or $env.GIFTCARD_HUB_API_APPKEY_TOKEN
+# Auth (appToken): --token-apptoken flag or $env.GIFTCARD_HUB_API_APPTOKEN_TOKEN
 
 const BASE_URL = "https://vtex.local"
 
@@ -12,8 +14,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {X-VTEX-API-AppKey: $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {X-VTEX-API-AppToken: $token_val}, query: "", location: "header"} }
+    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
+    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -126,7 +128,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken" "none"
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-all-gift-card-providers" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -161,14 +163,18 @@ export def "list-all-gift-card-providers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json.
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json.
-  --rest-range: string # Pagination control. This query variable must follow the format _resources={from}-{to}_.
-  --x-vtex-api-app-key: string # VTEX API AppKey
-  --x-vtex-api-app-token: string # VTEX API AppToken
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --rest-range: string # Pagination control. This query variable must follow the format _resources={from}-{to}_. (default: resources=0-49)
+  --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
+  --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
+  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
+  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
   let full_url = (build-url $base "/giftcardproviders" $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -203,14 +209,18 @@ export def "delete-gift-card-providerby-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json.
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json.
-  --x-vtex-api-app-key: string # VTEX API AppKey
-  --x-vtex-api-app-token: string # VTEX API AppToken
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
+  --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
 ]: nothing -> record {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
+  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
+  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}") $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -245,16 +255,20 @@ export def "create-update-gift-card-providerby-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json.
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --x-vtex-api-app-key: string # VTEX API AppKey
-  --x-vtex-api-app-token: string # VTEX API AppToken
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
+  --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
+  --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
   --body: any
 ]: any -> record {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
+  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
+  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -293,16 +307,20 @@ export def "create-gift-cardin-gift-card-provider" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json.
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --x-vtex-api-app-key: string # VTEX API AppKey
-  --x-vtex-api-app-token: string # VTEX API AppToken
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
+  --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
+  --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
   --body: any
 ]: any -> record {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
+  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
+  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -341,17 +359,22 @@ export def "get-gift-cardfrom-gift-card-provider" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json.
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --x-vtex-api-app-key: string # VTEX API AppKey
-  --x-vtex-api-app-token: string # VTEX API AppToken
-  --rest-range: string # Range of documents to show.
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
+  --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
+  --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
+  --rest-range: string # Range of documents to show. (required, default: resources=0-49)
   --body: any
 ]: any -> record {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
+  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
+  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
+  let rest_range = ($rest_range | default "resources=0-49")
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/_search") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -391,15 +414,19 @@ export def "get-gift-cardfrom-gift-card-providerby-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json.
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json.
-  --x-vtex-api-app-key: string # VTEX API AppKey
-  --x-vtex-api-app-token: string # VTEX API AppToken
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
+  --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
 ]: nothing -> record {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
+  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
+  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id), gift_card_id: (encode-path-segment $gift_card_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/{gift_card_id}") $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -435,15 +462,19 @@ export def "list-all-gift-card-transactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json.
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json.
-  --x-vtex-api-app-key: string # VTEX API AppKey
-  --x-vtex-api-app-token: string # VTEX API AppToken
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
+  --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
 ]: nothing -> record {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
+  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
+  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id), gift_card_id: (encode-path-segment $gift_card_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/{gift_card_id}/transactions") $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -479,10 +510,10 @@ export def "create-gift-card-transaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json.
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --x-vtex-api-app-key: string # VTEX API AppKey
-  --x-vtex-api-app-token: string # VTEX API AppToken
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
+  --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
+  --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
   --body: any
 ]: any -> record {
   let input = $in
@@ -490,6 +521,10 @@ export def "create-gift-card-transaction" [
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
+  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
+  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id), gift_card_id: (encode-path-segment $gift_card_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/{gift_card_id}/transactions") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -530,16 +565,20 @@ export def "list-all-gift-card-cancellation-transactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json.
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json.
-  --x-vtex-api-app-key: string # VTEX API AppKey
-  --x-vtex-api-app-token: string # VTEX API AppToken
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
+  --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
 ]: nothing -> record {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
   if ($t_id | is-empty) { error make --unspanned { msg: "path parameter 'tId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
+  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
+  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id), gift_card_id: (encode-path-segment $gift_card_id), t_id: (encode-path-segment $t_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/{gift_card_id}/transactions/{t_id}/cancellations") $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -576,10 +615,10 @@ export def "create-gift-card-cancellation-transaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json.
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --x-vtex-api-app-key: string # VTEX API AppKey
-  --x-vtex-api-app-token: string # VTEX API AppToken
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
+  --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
+  --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
   --body: any
 ]: any -> record {
   let input = $in
@@ -588,6 +627,10 @@ export def "create-gift-card-cancellation-transaction" [
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
   if ($t_id | is-empty) { error make --unspanned { msg: "path parameter 'tId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
+  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
+  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id), gift_card_id: (encode-path-segment $gift_card_id), t_id: (encode-path-segment $t_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/{gift_card_id}/transactions/{t_id}/cancellations") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -628,16 +671,20 @@ export def "list-all-gift-card-settlement-transactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json.
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json.
-  --x-vtex-api-app-key: string # VTEX API AppKey
-  --x-vtex-api-app-token: string # VTEX API AppToken
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
+  --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
 ]: nothing -> record {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
   if ($t_id | is-empty) { error make --unspanned { msg: "path parameter 'tId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
+  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
+  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id), gift_card_id: (encode-path-segment $gift_card_id), t_id: (encode-path-segment $t_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/{gift_card_id}/transactions/{t_id}/settlements") $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -676,8 +723,8 @@ export def "create-gift-card-settlement-transaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   cart: record # e.g. {discounts: -20, grandTotal: 182, items: [{id: 2000002, name: , price: 200, productId: 2000000, quantity: 1, refId: MEV41}], itemsTotal: 200, redemptionCode: FASD-ASDS-ASDA-ASDA, relationName: loyalty-program, shipping: 2, taxes: 0} — shape: {discounts: int, grandTotal: int, items: list, itemsTotal: int, redemptionCode: string, relationName: string, shipping: int, taxes: int}
   client: record # default: {document: 42151783120, email: email@domain.com, id: 3b1ab} — shape: {document: string, email: string, id: string}
 ]: any -> record {
@@ -687,6 +734,8 @@ export def "create-gift-card-settlement-transaction" [
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
   if ($t_id | is-empty) { error make --unspanned { msg: "path parameter 'tId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id), gift_card_id: (encode-path-segment $gift_card_id), t_id: (encode-path-segment $t_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/{gift_card_id}/transactions/{t_id}/settlements") $auth.query)
   let req_body = {"cart": $cart, "client": $client} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -727,16 +776,20 @@ export def "get-gift-card-transactionby-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json.
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json.
-  --x-vtex-api-app-key: string # VTEX API AppKey
-  --x-vtex-api-app-token: string # VTEX API AppToken
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
+  --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
 ]: nothing -> record {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionID' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
+  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
+  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id), gift_card_id: (encode-path-segment $gift_card_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/{gift_card_id}/transactions/{transaction_id}") $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -773,16 +826,20 @@ export def "get-gift-card-authorization-transaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json.
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json.
-  --x-vtex-api-app-key: string # VTEX API AppKey
-  --x-vtex-api-app-token: string # VTEX API AppToken
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
+  --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
 ]: nothing -> record {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionID' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
+  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
+  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id), gift_card_id: (encode-path-segment $gift_card_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/{gift_card_id}/transactions/{transaction_id}/authorization") $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -817,14 +874,18 @@ export def "get-gift-card-providerby-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json.
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json.
-  --x-vtex-api-app-key: string # VTEX API AppKey
-  --x-vtex-api-app-token: string # VTEX API AppToken
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json. (required, default: application/json)
+  --x-vtex-api-app-key: string # VTEX API AppKey (required, default: {{X-VTEX-API-AppKey}})
+  --x-vtex-api-app-token: string # VTEX API AppToken (required, default: {{X-VTEX-API-AppToken}})
 ]: nothing -> record {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
+  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
+  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}") $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

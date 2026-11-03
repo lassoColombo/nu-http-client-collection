@@ -171,7 +171,7 @@ export def "filesystem-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource: string@resource-completer # The value must be "account" for all account operations.
+  --resource: string@resource-completer # The value must be "account" for all account operations. (required)
   --prefix: string # Filters results to filesystems within the specified prefix.
   --continuation: string # The number of filesystems returned with each invocation is limited. If the number of filesystems to be returned exceeds this limit, a continuation token is returned in the response header x-ms-continuation. When a continuation token is returned in the response, it must be specified in a subsequent invocation of the list operation to continue listing the filesystems.
   --max-results: int # An optional value that specifies the maximum number of items to return. If omitted or greater than 5,000, the response will include up to 5,000 items. (format: int32)
@@ -182,6 +182,7 @@ export def "filesystem-list" [
 ]: nothing -> record<filesystems: table<eTag: string, lastModified: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let resource = ($resource | default "account")
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "continuation" $continuation "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -217,7 +218,7 @@ export def "filesystem-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource: string@resource-completer-1 # The value must be "filesystem" for all filesystem operations.
+  --resource: string@resource-completer-1 # The value must be "filesystem" for all filesystem operations. (required)
   --timeout: int # An optional operation timeout value in seconds. The period begins when the request is received by the service. If the timeout value elapses before the operation completes, the operation fails. (format: int32)
   --x-ms-client-request-id: string # A UUID recorded in the analytics logs for troubleshooting and correlation.
   --x-ms-date: string # Specifies the Coordinated Universal Time (UTC) for the request. This is required when using shared key authorization.
@@ -228,6 +229,7 @@ export def "filesystem-delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($filesystem | is-empty) { error make --unspanned { msg: "path parameter 'filesystem' must be non-empty" } }
+  let resource = ($resource | default "filesystem")
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem)} | format pattern "/{filesystem}") $qp $auth.query)
   let accept_val = "application/json"
@@ -263,10 +265,10 @@ export def "path-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource: string@resource-completer-1 # The value must be "filesystem" for all filesystem operations.
+  --resource: string@resource-completer-1 # The value must be "filesystem" for all filesystem operations. (required)
   --timeout: int # An optional operation timeout value in seconds. The period begins when the request is received by the service. If the timeout value elapses before the operation completes, the operation fails. (format: int32)
   --directory: string # Filters results to paths within the specified directory. An error occurs if the directory does not exist.
-  --recursive: oneof<nothing, bool> # If "true", all paths are listed; otherwise, only paths at the root of the filesystem are listed. If "directory" is specified, the list will only include paths that share the same root.
+  --recursive: oneof<nothing, bool> # If "true", all paths are listed; otherwise, only paths at the root of the filesystem are listed. If "directory" is specified, the list will only include paths that share the same root. (required)
   --continuation: string # The number of paths returned with each invocation is limited. If the number of paths to be returned exceeds this limit, a continuation token is returned in the response header x-ms-continuation. When a continuation token is returned in the response, it must be specified in a subsequent invocation of the list operation to continue listing the paths.
   --max-results: int # An optional value that specifies the maximum number of items to return. If omitted or greater than 5,000, the response will include up to 5,000 items. (format: int32)
   --upn: oneof<nothing, bool> # Optional. Valid only when Hierarchical Namespace is enabled for the account. If "true", the user identity values returned in the owner and group fields of each list entry will be transformed from Azure Active Directory Object IDs to User Principal Names. If "false", the values will be returned as Azure Active Directory Object IDs. The default value is false. Note that group and application Object IDs are not translated because they do not have unique friendly names.
@@ -277,6 +279,8 @@ export def "path-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($filesystem | is-empty) { error make --unspanned { msg: "path parameter 'filesystem' must be non-empty" } }
+  let resource = ($resource | default "filesystem")
+  if ($recursive == null) { error make --unspanned { msg: "required query parameter 'recursive' missing: pass --recursive" } }
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "directory" $directory "scalar") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "continuation" $continuation "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "upn" $upn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem)} | format pattern "/{filesystem}") $qp $auth.query)
   let accept_val = "application/json"
@@ -312,7 +316,7 @@ export def "filesystem-get-properties" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource: string@resource-completer-1 # The value must be "filesystem" for all filesystem operations.
+  --resource: string@resource-completer-1 # The value must be "filesystem" for all filesystem operations. (required)
   --timeout: int # An optional operation timeout value in seconds. The period begins when the request is received by the service. If the timeout value elapses before the operation completes, the operation fails. (format: int32)
   --x-ms-client-request-id: string # A UUID recorded in the analytics logs for troubleshooting and correlation.
   --x-ms-date: string # Specifies the Coordinated Universal Time (UTC) for the request. This is required when using shared key authorization.
@@ -321,6 +325,7 @@ export def "filesystem-get-properties" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($filesystem | is-empty) { error make --unspanned { msg: "path parameter 'filesystem' must be non-empty" } }
+  let resource = ($resource | default "filesystem")
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem)} | format pattern "/{filesystem}") $qp $auth.query)
   let accept_val = "application/json"
@@ -356,7 +361,7 @@ export def "filesystem-set-properties" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource: string@resource-completer-1 # The value must be "filesystem" for all filesystem operations.
+  --resource: string@resource-completer-1 # The value must be "filesystem" for all filesystem operations. (required)
   --timeout: int # An optional operation timeout value in seconds. The period begins when the request is received by the service. If the timeout value elapses before the operation completes, the operation fails. (format: int32)
   --x-ms-client-request-id: string # A UUID recorded in the analytics logs for troubleshooting and correlation.
   --x-ms-date: string # Specifies the Coordinated Universal Time (UTC) for the request. This is required when using shared key authorization.
@@ -368,6 +373,7 @@ export def "filesystem-set-properties" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($filesystem | is-empty) { error make --unspanned { msg: "path parameter 'filesystem' must be non-empty" } }
+  let resource = ($resource | default "filesystem")
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem)} | format pattern "/{filesystem}") $qp $auth.query)
   let accept_val = "application/json"
@@ -403,7 +409,7 @@ export def "filesystem-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource: string@resource-completer-1 # The value must be "filesystem" for all filesystem operations.
+  --resource: string@resource-completer-1 # The value must be "filesystem" for all filesystem operations. (required)
   --timeout: int # An optional operation timeout value in seconds. The period begins when the request is received by the service. If the timeout value elapses before the operation completes, the operation fails. (format: int32)
   --x-ms-client-request-id: string # A UUID recorded in the analytics logs for troubleshooting and correlation.
   --x-ms-date: string # Specifies the Coordinated Universal Time (UTC) for the request. This is required when using shared key authorization.
@@ -413,6 +419,7 @@ export def "filesystem-create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($filesystem | is-empty) { error make --unspanned { msg: "path parameter 'filesystem' must be non-empty" } }
+  let resource = ($resource | default "filesystem")
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem)} | format pattern "/{filesystem}") $qp $auth.query)
   let accept_val = "application/json"
@@ -608,14 +615,14 @@ export def "path-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # An optional operation timeout value in seconds. The period begins when the request is received by the service. If the timeout value elapses before the operation completes, the operation fails. (format: int32)
-  --action: string@action-completer-1 # The action must be "append" to upload data to be appended to a file, "flush" to flush previously uploaded data to a file, "setProperties" to set the properties of a file or directory, or "setAccessControl" to set the owner, group, permissions, or access control list for a file or directory. Note that Hierarchical Namespace must be enabled for the account in order to use access control. Also note that the Access Control List (ACL) includes permissions for the owner, owning group, and others, so the x-ms-permissions and x-ms-acl request headers are mutually exclusive.
+  --action: string@action-completer-1 # The action must be "append" to upload data to be appended to a file, "flush" to flush previously uploaded data to a file, "setProperties" to set the properties of a file or directory, or "setAccessControl" to set the owner, group, permissions, or access control list for a file or directory. Note that Hierarchical Namespace must be enabled for the account in order to use access control. Also note that the Access Control List (ACL) includes permissions for the owner, owning group, and others, so the x-ms-permissions and x-ms-acl request headers are mutually exclusive. (required)
   --position: int # This parameter allows the caller to upload data in parallel and control the order in which it is appended to the file. It is required when uploading data to be appended to the file and when flushing previously uploaded data to the file. The value must be the position where the data is to be appended. Uploaded data is not immediately flushed, or written, to the file. To flush, the previously uploaded data must be contiguous, the position parameter must be specified and equal to the length of the file after all data has been written, and there must not be a request entity body included with the request. (format: int64)
   --retain-uncommitted-data: oneof<nothing, bool> # Valid only for flush operations. If "true", uncommitted data is retained after the flush operation completes; otherwise, the uncommitted data is deleted after the flush operation. The default is false. Data at offsets less than the specified position are written to the file when flush succeeds, but this optional parameter allows data after the flush position to be retained for a future flush operation.
   --close: oneof<nothing, bool> # Azure Storage Events allow applications to receive notifications when files change. When Azure Storage Events are enabled, a file changed event is raised. This event has a property indicating whether this is the final change to distinguish the difference between an intermediate flush to a file stream and the final close of a file stream. The close query parameter is valid only when the action is "flush" and change notifications are enabled. If the value of close is "true" and the flush operation completes successfully, the service raises a file change notification with a property indicating that this is the final update (the file stream has been closed). If "false" a change notification is raised indicating the file has changed. The default is false. This query parameter is set to true by the Hadoop ABFS driver to indicate that the file stream has been closed."
   --x-ms-client-request-id: string # A UUID recorded in the analytics logs for troubleshooting and correlation.
   --x-ms-date: string # Specifies the Coordinated Universal Time (UTC) for the request. This is required when using shared key authorization.
   --x-ms-version: string # Specifies the version of the REST protocol used for processing the request. This is required when using shared key authorization.
-  --content-length: int # Required for "Append Data" and "Flush Data". Must be 0 for "Flush Data". Must be the length of the request content in bytes for "Append Data".
+  --content-length: int # Required for "Append Data" and "Flush Data". Must be 0 for "Flush Data". Must be the length of the request content in bytes for "Append Data". (format: int64)
   --content-md5: string # Optional. An MD5 hash of the request content. This header is valid on "Append" and "Flush" operations. This hash is used to verify the integrity of the request content during transport. When this header is specified, the storage service compares the hash of the content that has arrived with this header value. If the two hashes do not match, the operation will fail with error code 400 (Bad Request). Note that this MD5 hash is not stored with the file. This header is associated with the request content, and not with the stored content of the file itself.
   --x-ms-lease-id: string # The lease ID must be specified if there is an active lease.
   --x-ms-cache-control: string # Optional and only valid for flush and set properties operations. The service stores this value and includes it in the "Cache-Control" response header for "Read File" operations.
@@ -640,6 +647,7 @@ export def "path-update" [
   let base = ($base_url | default $BASE_URL)
   if ($filesystem | is-empty) { error make --unspanned { msg: "path parameter 'filesystem' must be non-empty" } }
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
+  if ($action == null) { error make --unspanned { msg: "required query parameter 'action' missing: pass --action" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "retainUncommittedData" $retain_uncommitted_data "scalar") (serialize-qp "close" $close "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem), path: (encode-path-segment $path)} | format pattern "/{filesystem}/{path}") $qp $auth.query)
   let req_body = $body
@@ -682,9 +690,9 @@ export def "path-lease" [
   --x-ms-client-request-id: string # A UUID recorded in the analytics logs for troubleshooting and correlation.
   --x-ms-date: string # Specifies the Coordinated Universal Time (UTC) for the request. This is required when using shared key authorization.
   --x-ms-version: string # Specifies the version of the REST protocol used for processing the request. This is required when using shared key authorization.
-  --x-ms-lease-action: string@x-ms-lease-action-completer # There are five lease actions: "acquire", "break", "change", "renew", and "release". Use "acquire" and specify the "x-ms-proposed-lease-id" and "x-ms-lease-duration" to acquire a new lease. Use "break" to break an existing lease. When a lease is broken, the lease break period is allowed to elapse, during which time no lease operation except break and release can be performed on the file. When a lease is successfully broken, the response indicates the interval in seconds until a new lease can be acquired. Use "change" and specify the current lease ID in "x-ms-lease-id" and the new lease ID in "x-ms-proposed-lease-id" to change the lease ID of an active lease. Use "renew" and specify the "x-ms-lease-id" to renew an existing lease. Use "release" and specify the "x-ms-lease-id" to release a lease.
-  --x-ms-lease-duration: int # The lease duration is required to acquire a lease, and specifies the duration of the lease in seconds. The lease duration must be between 15 and 60 seconds or -1 for infinite lease.
-  --x-ms-lease-break-period: int # The lease break period duration is optional to break a lease, and specifies the break period of the lease in seconds. The lease break duration must be between 0 and 60 seconds.
+  --x-ms-lease-action: string@x-ms-lease-action-completer # There are five lease actions: "acquire", "break", "change", "renew", and "release". Use "acquire" and specify the "x-ms-proposed-lease-id" and "x-ms-lease-duration" to acquire a new lease. Use "break" to break an existing lease. When a lease is broken, the lease break period is allowed to elapse, during which time no lease operation except break and release can be performed on the file. When a lease is successfully broken, the response indicates the interval in seconds until a new lease can be acquired. Use "change" and specify the current lease ID in "x-ms-lease-id" and the new lease ID in "x-ms-proposed-lease-id" to change the lease ID of an active lease. Use "renew" and specify the "x-ms-lease-id" to renew an existing lease. Use "release" and specify the "x-ms-lease-id" to release a lease. (required)
+  --x-ms-lease-duration: int # The lease duration is required to acquire a lease, and specifies the duration of the lease in seconds. The lease duration must be between 15 and 60 seconds or -1 for infinite lease. (format: int32)
+  --x-ms-lease-break-period: int # The lease break period duration is optional to break a lease, and specifies the break period of the lease in seconds. The lease break duration must be between 0 and 60 seconds. (format: int32)
   --x-ms-lease-id: string # Required when "x-ms-lease-action" is "renew", "change" or "release". For the renew and release actions, this must match the current lease ID.
   --x-ms-proposed-lease-id: string # Required when "x-ms-lease-action" is "acquire" or "change". A lease will be acquired with this lease ID if the operation is successful.
   --if-match: string # Optional. An ETag value. Specify this header to perform the operation only if the resource's ETag matches the value specified. The ETag must be specified in quotes.
@@ -696,6 +704,7 @@ export def "path-lease" [
   let base = ($base_url | default $BASE_URL)
   if ($filesystem | is-empty) { error make --unspanned { msg: "path parameter 'filesystem' must be non-empty" } }
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
+  if ($x_ms_lease_action == null) { error make --unspanned { msg: "required header parameter 'x-ms-lease-action' missing: pass --x-ms-lease-action" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem), path: (encode-path-segment $path)} | format pattern "/{filesystem}/{path}") $qp $auth.query)
   let accept_val = "application/json"

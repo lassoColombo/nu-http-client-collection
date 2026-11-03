@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/bridges/{bridgeArn}/outputs
 # operationId: AddBridgeOutputs
-# --outputs item shape: {NetworkOutput?: any}
+# --outputs item shape: {NetworkOutput?: record}
 export def "add-bridge-outputs" [
   bridge_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -165,8 +165,8 @@ export def "add-bridge-outputs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  outputs: list # The outputs that you want to add to this bridge. — item shape: {NetworkOutput?: any}
-]: any -> record<BridgeArn: record, Outputs: record> {
+  outputs: list # The outputs that you want to add to this bridge. — item shape: {NetworkOutput?: record}
+]: any -> record<BridgeArn: string, Outputs: table<FlowOutput: record, NetworkOutput: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -196,7 +196,7 @@ export def "add-bridge-outputs" [
 #
 # POST /v1/bridges/{bridgeArn}/sources
 # operationId: AddBridgeSources
-# --sources item shape: {FlowSource?: any, NetworkSource?: any}
+# --sources item shape: {FlowSource?: record, NetworkSource?: record}
 export def "add-bridge-sources" [
   bridge_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -215,8 +215,8 @@ export def "add-bridge-sources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  sources: list # The sources that you want to add to this bridge. — item shape: {FlowSource?: any, NetworkSource?: any}
-]: any -> record<BridgeArn: record, Sources: record> {
+  sources: list # The sources that you want to add to this bridge. — item shape: {FlowSource?: record, NetworkSource?: record}
+]: any -> record<BridgeArn: string, Sources: table<FlowSource: record, NetworkSource: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -246,7 +246,7 @@ export def "add-bridge-sources" [
 #
 # POST /v1/flows/{flowArn}/mediaStreams
 # operationId: AddFlowMediaStreams
-# --mediaStreams item shape: {Attributes?: any, ClockRate?: any, Description?: any, MediaStreamId: any, MediaStreamName: any, MediaStreamType: any, VideoFormat?: any}
+# --mediaStreams item shape: {Attributes?: record, ClockRate?: int, Description?: string, MediaStreamId: int, MediaStreamName: string, MediaStreamType: "video"|"audio"|"ancillary-data", VideoFormat?: string}
 export def "add-flow-media-streams" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -265,8 +265,8 @@ export def "add-flow-media-streams" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  media_streams: list # The media streams that you want to add to the flow. — item shape: {Attributes?: any, ClockRate?: any, Description?: any, MediaStreamId: any, MediaStreamName: any, MediaStreamType: any, VideoFormat?: any}
-]: any -> record<FlowArn: record, MediaStreams: record> {
+  media_streams: list # The media streams that you want to add to the flow. — item shape: {Attributes?: record, ClockRate?: int, Description?: string, MediaStreamId: int, MediaStreamName: string, MediaStreamType: "video"|"audio"|"ancillary-data", VideoFormat?: string}
+]: any -> record<FlowArn: string, MediaStreams: table<Attributes: record, ClockRate: int, Description: string, Fmt: int, MediaStreamId: int, MediaStreamName: string, MediaStreamType: string, VideoFormat: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -296,7 +296,7 @@ export def "add-flow-media-streams" [
 #
 # POST /v1/flows/{flowArn}/outputs
 # operationId: AddFlowOutputs
-# --outputs item shape: {CidrAllowList?: any, Description?: any, Destination?: any, Encryption?: any, MaxLatency?: any, MediaStreamOutputConfigurations?: any, MinLatency?: any, Name?: any, Port?: any, Protocol: any, RemoteId?: any, SenderControlPort?: any, SmoothingLatency?: any, StreamId?: any, VpcInterfaceAttachment?: any}
+# --outputs item shape: {CidrAllowList?: list<string>, Description?: string, Destination?: string, Encryption?: record, MaxLatency?: int, MediaStreamOutputConfigurations?: list, MinLatency?: int, Name?: string, Port?: int, Protocol: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", RemoteId?: string, SenderControlPort?: int, SmoothingLatency?: int, StreamId?: string, VpcInterfaceAttachment?: record}
 export def "add-flow-outputs" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -315,8 +315,8 @@ export def "add-flow-outputs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  outputs: list # A list of outputs that you want to add. — item shape: {CidrAllowList?: any, Description?: any, Destination?: any, Encryption?: any, MaxLatency?: any, MediaStreamOutputConfigurations?: any, MinLatency?: any, Name?: any, Port?: any, Protocol: any, RemoteId?: any, SenderControlPort?: any, SmoothingLatency?: any, StreamId?: any, VpcInterfaceAttachment?: any}
-]: any -> record<FlowArn: record, Outputs: record> {
+  outputs: list # A list of outputs that you want to add. — item shape: {CidrAllowList?: list<string>, Description?: string, Destination?: string, Encryption?: record, MaxLatency?: int, MediaStreamOutputConfigurations?: list, MinLatency?: int, Name?: string, Port?: int, Protocol: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", RemoteId?: string, SenderControlPort?: int, SmoothingLatency?: int, StreamId?: string, VpcInterfaceAttachment?: record}
+]: any -> record<FlowArn: string, Outputs: table<DataTransferSubscriberFeePercent: int, Description: string, Destination: string, Encryption: record, EntitlementArn: string, ListenerAddress: string, MediaLiveInputArn: string, MediaStreamOutputConfigurations: list, Name: string, OutputArn: string, Port: int, Transport: record, VpcInterfaceAttachment: record, BridgeArn: string, BridgePorts: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -346,7 +346,7 @@ export def "add-flow-outputs" [
 #
 # POST /v1/flows/{flowArn}/source
 # operationId: AddFlowSources
-# --sources item shape: {Decryption?: any, Description?: any, EntitlementArn?: any, IngestPort?: any, MaxBitrate?: any, MaxLatency?: any, MaxSyncBuffer?: any, MediaStreamSourceConfigurations?: any, MinLatency?: any, Name?: any, Protocol?: any, SenderControlPort?: any, SenderIpAddress?: any, SourceListenerAddress?: any, SourceListenerPort?: any, StreamId?: any, VpcInterfaceName?: any, WhitelistCidr?: any, GatewayBridgeSource?: any}
+# --sources item shape: {Decryption?: record, Description?: string, EntitlementArn?: string, IngestPort?: int, MaxBitrate?: int, MaxLatency?: int, MaxSyncBuffer?: int, MediaStreamSourceConfigurations?: list, MinLatency?: int, Name?: string, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", SenderControlPort?: int, SenderIpAddress?: string, SourceListenerAddress?: string, SourceListenerPort?: int, StreamId?: string, VpcInterfaceName?: string, ... (2 more fields)}
 export def "add-flow-sources" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -365,8 +365,8 @@ export def "add-flow-sources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  sources: list # A list of sources that you want to add. — item shape: {Decryption?: any, Description?: any, EntitlementArn?: any, IngestPort?: any, MaxBitrate?: any, MaxLatency?: any, MaxSyncBuffer?: any, MediaStreamSourceConfigurations?: any, MinLatency?: any, Name?: any, Protocol?: any, SenderControlPort?: any, SenderIpAddress?: any, SourceListenerAddress?: any, SourceListenerPort?: any, StreamId?: any, VpcInterfaceName?: any, WhitelistCidr?: any, GatewayBridgeSource?: any}
-]: any -> record<FlowArn: record, Sources: record> {
+  sources: list # A list of sources that you want to add. — item shape: {Decryption?: record, Description?: string, EntitlementArn?: string, IngestPort?: int, MaxBitrate?: int, MaxLatency?: int, MaxSyncBuffer?: int, MediaStreamSourceConfigurations?: list, MinLatency?: int, Name?: string, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", SenderControlPort?: int, SenderIpAddress?: string, SourceListenerAddress?: string, SourceListenerPort?: int, StreamId?: string, VpcInterfaceName?: string, ... (2 more fields)}
+]: any -> record<FlowArn: string, Sources: table<DataTransferSubscriberFeePercent: int, Decryption: record, Description: string, EntitlementArn: string, IngestIp: string, IngestPort: int, MediaStreamSourceConfigurations: list, Name: string, SenderControlPort: int, SenderIpAddress: string, SourceArn: string, Transport: record, VpcInterfaceName: string, WhitelistCidr: string, GatewayBridgeSource: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -396,7 +396,7 @@ export def "add-flow-sources" [
 #
 # POST /v1/flows/{flowArn}/vpcInterfaces
 # operationId: AddFlowVpcInterfaces
-# --vpcInterfaces item shape: {Name: any, NetworkInterfaceType?: any, RoleArn: any, SecurityGroupIds: any, SubnetId: any}
+# --vpcInterfaces item shape: {Name: string, NetworkInterfaceType?: "ena"|"efa", RoleArn: string, SecurityGroupIds: list<string>, SubnetId: string}
 export def "add-flow-vpc-interfaces" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -415,8 +415,8 @@ export def "add-flow-vpc-interfaces" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  vpc_interfaces: list # A list of VPC interfaces that you want to add. — item shape: {Name: any, NetworkInterfaceType?: any, RoleArn: any, SecurityGroupIds: any, SubnetId: any}
-]: any -> record<FlowArn: record, VpcInterfaces: record> {
+  vpc_interfaces: list # A list of VPC interfaces that you want to add. — item shape: {Name: string, NetworkInterfaceType?: "ena"|"efa", RoleArn: string, SecurityGroupIds: list<string>, SubnetId: string}
+]: any -> record<FlowArn: string, VpcInterfaces: table<Name: string, NetworkInterfaceIds: list, NetworkInterfaceType: string, RoleArn: string, SecurityGroupIds: list, SubnetId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -446,11 +446,11 @@ export def "add-flow-vpc-interfaces" [
 #
 # POST /v1/bridges
 # operationId: CreateBridge
-# --egressGatewayBridge shape: {MaxBitrate?: any}
-# --ingressGatewayBridge shape: {MaxBitrate?: any, MaxOutputs?: any}
-# --outputs item shape: {NetworkOutput?: any}
-# --sourceFailoverConfig shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
-# --sources item shape: {FlowSource?: any, NetworkSource?: any}
+# --egressGatewayBridge shape: {MaxBitrate?: int}
+# --ingressGatewayBridge shape: {MaxBitrate?: int, MaxOutputs?: int}
+# --outputs item shape: {NetworkOutput?: record}
+# --sourceFailoverConfig shape: {FailoverMode?: "MERGE"|"FAILOVER", RecoveryWindow?: int, SourcePriority?: record, State?: "ENABLED"|"DISABLED"}
+# --sources item shape: {FlowSource?: record, NetworkSource?: record}
 export def "create-bridge" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -468,14 +468,14 @@ export def "create-bridge" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --egress-gateway-bridge: record # Create a bridge with the egress bridge type. An egress bridge is a cloud-to-ground bridge. The content comes from an existing MediaConnect flow and is delivered to your premises. — shape: {MaxBitrate?: any}
-  --ingress-gateway-bridge: record # Create a bridge with the ingress bridge type. An ingress bridge is a ground-to-cloud bridge. The content originates at your premises and is delivered to the cloud. — shape: {MaxBitrate?: any, MaxOutputs?: any}
+  --egress-gateway-bridge: record # Create a bridge with the egress bridge type. An egress bridge is a cloud-to-ground bridge. The content comes from an existing MediaConnect flow and is delivered to your premises. — shape: {MaxBitrate?: int}
+  --ingress-gateway-bridge: record # Create a bridge with the ingress bridge type. An ingress bridge is a ground-to-cloud bridge. The content originates at your premises and is delivered to the cloud. — shape: {MaxBitrate?: int, MaxOutputs?: int}
   name: string # The name of the bridge. This name can not be modified after the bridge is created.
-  --outputs: list # The outputs that you want to add to this bridge. — item shape: {NetworkOutput?: any}
+  --outputs: list # The outputs that you want to add to this bridge. — item shape: {NetworkOutput?: record}
   placement_arn: string # The bridge placement Amazon Resource Number (ARN).
-  --source-failover-config: record # The settings for source failover. — shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
-  sources: list # The sources that you want to add to this bridge. — item shape: {FlowSource?: any, NetworkSource?: any}
-]: any -> record<Bridge: record<BridgeArn: record, BridgeMessages: record, BridgeState: record, EgressGatewayBridge: record<InstanceId: record, MaxBitrate: record>, IngressGatewayBridge: record<InstanceId: record, MaxBitrate: record, MaxOutputs: record>, Name: record, Outputs: record, PlacementArn: record, SourceFailoverConfig: record<FailoverMode: record, RecoveryWindow: record, SourcePriority: record, State: record>, Sources: record>> {
+  --source-failover-config: record # The settings for source failover. — shape: {FailoverMode?: "MERGE"|"FAILOVER", RecoveryWindow?: int, SourcePriority?: record, State?: "ENABLED"|"DISABLED"}
+  sources: list # The sources that you want to add to this bridge. — item shape: {FlowSource?: record, NetworkSource?: record}
+]: any -> record<Bridge: record<BridgeArn: string, BridgeMessages: list<record>, BridgeState: string, EgressGatewayBridge: record<InstanceId: string, MaxBitrate: int>, IngressGatewayBridge: record<InstanceId: string, MaxBitrate: int, MaxOutputs: int>, Name: string, Outputs: list<record>, PlacementArn: string, SourceFailoverConfig: record<FailoverMode: string, RecoveryWindow: int, SourcePriority: record, State: string>, Sources: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -526,7 +526,7 @@ export def "list-bridges" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Bridges: record, NextToken: record> {
+]: nothing -> record<Bridges: table<BridgeArn: string, BridgeState: string, BridgeType: string, Name: string, PlacementArn: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filterArn" $filter_arn "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -553,14 +553,14 @@ export def "list-bridges" [
 #
 # POST /v1/flows
 # operationId: CreateFlow
-# --entitlements item shape: {DataTransferSubscriberFeePercent?: any, Description?: any, Encryption?: any, EntitlementStatus?: any, Name?: any, Subscribers: any}
-# --mediaStreams item shape: {Attributes?: any, ClockRate?: any, Description?: any, MediaStreamId: any, MediaStreamName: any, MediaStreamType: any, VideoFormat?: any}
-# --outputs item shape: {CidrAllowList?: any, Description?: any, Destination?: any, Encryption?: any, MaxLatency?: any, MediaStreamOutputConfigurations?: any, MinLatency?: any, Name?: any, Port?: any, Protocol: any, RemoteId?: any, SenderControlPort?: any, SmoothingLatency?: any, StreamId?: any, VpcInterfaceAttachment?: any}
-# --source shape: {Decryption?: any, Description?: any, EntitlementArn?: any, IngestPort?: any, MaxBitrate?: any, MaxLatency?: any, MaxSyncBuffer?: any, MediaStreamSourceConfigurations?: any, MinLatency?: any, Name?: any, Protocol?: any, SenderControlPort?: any, SenderIpAddress?: any, SourceListenerAddress?: any, SourceListenerPort?: any, StreamId?: any, VpcInterfaceName?: any, WhitelistCidr?: any, GatewayBridgeSource?: any}
-# --sourceFailoverConfig shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
-# --sources item shape: {Decryption?: any, Description?: any, EntitlementArn?: any, IngestPort?: any, MaxBitrate?: any, MaxLatency?: any, MaxSyncBuffer?: any, MediaStreamSourceConfigurations?: any, MinLatency?: any, Name?: any, Protocol?: any, SenderControlPort?: any, SenderIpAddress?: any, SourceListenerAddress?: any, SourceListenerPort?: any, StreamId?: any, VpcInterfaceName?: any, WhitelistCidr?: any, GatewayBridgeSource?: any}
-# --vpcInterfaces item shape: {Name: any, NetworkInterfaceType?: any, RoleArn: any, SecurityGroupIds: any, SubnetId: any}
-# --maintenance shape: {MaintenanceDay?: any, MaintenanceStartHour?: any}
+# --entitlements item shape: {DataTransferSubscriberFeePercent?: int, Description?: string, Encryption?: record, EntitlementStatus?: "ENABLED"|"DISABLED", Name?: string, Subscribers: list<string>}
+# --mediaStreams item shape: {Attributes?: record, ClockRate?: int, Description?: string, MediaStreamId: int, MediaStreamName: string, MediaStreamType: "video"|"audio"|"ancillary-data", VideoFormat?: string}
+# --outputs item shape: {CidrAllowList?: list<string>, Description?: string, Destination?: string, Encryption?: record, MaxLatency?: int, MediaStreamOutputConfigurations?: list, MinLatency?: int, Name?: string, Port?: int, Protocol: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", RemoteId?: string, SenderControlPort?: int, SmoothingLatency?: int, StreamId?: string, VpcInterfaceAttachment?: record}
+# --source shape: {Decryption?: record, Description?: string, EntitlementArn?: string, IngestPort?: int, MaxBitrate?: int, MaxLatency?: int, MaxSyncBuffer?: int, MediaStreamSourceConfigurations?: list, MinLatency?: int, Name?: string, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", SenderControlPort?: int, SenderIpAddress?: string, SourceListenerAddress?: string, SourceListenerPort?: int, StreamId?: string, VpcInterfaceName?: string, ... (2 more fields)}
+# --sourceFailoverConfig shape: {FailoverMode?: "MERGE"|"FAILOVER", RecoveryWindow?: int, SourcePriority?: record, State?: "ENABLED"|"DISABLED"}
+# --sources item shape: {Decryption?: record, Description?: string, EntitlementArn?: string, IngestPort?: int, MaxBitrate?: int, MaxLatency?: int, MaxSyncBuffer?: int, MediaStreamSourceConfigurations?: list, MinLatency?: int, Name?: string, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", SenderControlPort?: int, SenderIpAddress?: string, SourceListenerAddress?: string, SourceListenerPort?: int, StreamId?: string, VpcInterfaceName?: string, ... (2 more fields)}
+# --vpcInterfaces item shape: {Name: string, NetworkInterfaceType?: "ena"|"efa", RoleArn: string, SecurityGroupIds: list<string>, SubnetId: string}
+# --maintenance shape: {MaintenanceDay?: "Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"Saturday"|"Sunday", MaintenanceStartHour?: string}
 export def "create-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -579,21 +579,21 @@ export def "create-flow" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --availability-zone: string # The Availability Zone that you want to create the flow in. These options are limited to the Availability Zones within the current AWS Region.
-  --entitlements: list # The entitlements that you want to grant on a flow. — item shape: {DataTransferSubscriberFeePercent?: any, Description?: any, Encryption?: any, EntitlementStatus?: any, Name?: any, Subscribers: any}
-  --media-streams: list # The media streams that you want to add to the flow. You can associate these media streams with sources and outputs on the flow. — item shape: {Attributes?: any, ClockRate?: any, Description?: any, MediaStreamId: any, MediaStreamName: any, MediaStreamType: any, VideoFormat?: any}
+  --entitlements: list # The entitlements that you want to grant on a flow. — item shape: {DataTransferSubscriberFeePercent?: int, Description?: string, Encryption?: record, EntitlementStatus?: "ENABLED"|"DISABLED", Name?: string, Subscribers: list<string>}
+  --media-streams: list # The media streams that you want to add to the flow. You can associate these media streams with sources and outputs on the flow. — item shape: {Attributes?: record, ClockRate?: int, Description?: string, MediaStreamId: int, MediaStreamName: string, MediaStreamType: "video"|"audio"|"ancillary-data", VideoFormat?: string}
   name: string # The name of the flow.
-  --outputs: list # The outputs that you want to add to this flow. — item shape: {CidrAllowList?: any, Description?: any, Destination?: any, Encryption?: any, MaxLatency?: any, MediaStreamOutputConfigurations?: any, MinLatency?: any, Name?: any, Port?: any, Protocol: any, RemoteId?: any, SenderControlPort?: any, SmoothingLatency?: any, StreamId?: any, VpcInterfaceAttachment?: any}
-  --body-source: record # The settings for the source of the flow. — shape: {Decryption?: any, Description?: any, EntitlementArn?: any, IngestPort?: any, MaxBitrate?: any, MaxLatency?: any, MaxSyncBuffer?: any, MediaStreamSourceConfigurations?: any, MinLatency?: any, Name?: any, Protocol?: any, SenderControlPort?: any, SenderIpAddress?: any, SourceListenerAddress?: any, SourceListenerPort?: any, StreamId?: any, VpcInterfaceName?: any, WhitelistCidr?: any, GatewayBridgeSource?: any}
-  --source-failover-config: record # The settings for source failover. — shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
-  --sources: list # item shape: {Decryption?: any, Description?: any, EntitlementArn?: any, IngestPort?: any, MaxBitrate?: any, MaxLatency?: any, MaxSyncBuffer?: any, MediaStreamSourceConfigurations?: any, MinLatency?: any, Name?: any, Protocol?: any, SenderControlPort?: any, SenderIpAddress?: any, SourceListenerAddress?: any, SourceListenerPort?: any, StreamId?: any, VpcInterfaceName?: any, WhitelistCidr?: any, GatewayBridgeSource?: any}
-  --vpc-interfaces: list # The VPC interfaces you want on the flow. — item shape: {Name: any, NetworkInterfaceType?: any, RoleArn: any, SecurityGroupIds: any, SubnetId: any}
-  --maintenance: record # Create maintenance setting for a flow — shape: {MaintenanceDay?: any, MaintenanceStartHour?: any}
-]: any -> record<Flow: record<AvailabilityZone: record, Description: record, EgressIp: record, Entitlements: record, FlowArn: record, MediaStreams: record, Name: record, Outputs: record, Source: record<DataTransferSubscriberFeePercent: record, Decryption: record, Description: record, EntitlementArn: record, IngestIp: record, IngestPort: record, MediaStreamSourceConfigurations: record, Name: record, SenderControlPort: record, SenderIpAddress: record, SourceArn: record, Transport: record, VpcInterfaceName: record, WhitelistCidr: record, GatewayBridgeSource: record>, SourceFailoverConfig: record<FailoverMode: record, RecoveryWindow: record, SourcePriority: record, State: record>, Sources: record, Status: record, VpcInterfaces: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartHour: record>>> {
+  --outputs: list # The outputs that you want to add to this flow. — item shape: {CidrAllowList?: list<string>, Description?: string, Destination?: string, Encryption?: record, MaxLatency?: int, MediaStreamOutputConfigurations?: list, MinLatency?: int, Name?: string, Port?: int, Protocol: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", RemoteId?: string, SenderControlPort?: int, SmoothingLatency?: int, StreamId?: string, VpcInterfaceAttachment?: record}
+  --source: record # The settings for the source of the flow. — shape: {Decryption?: record, Description?: string, EntitlementArn?: string, IngestPort?: int, MaxBitrate?: int, MaxLatency?: int, MaxSyncBuffer?: int, MediaStreamSourceConfigurations?: list, MinLatency?: int, Name?: string, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", SenderControlPort?: int, SenderIpAddress?: string, SourceListenerAddress?: string, SourceListenerPort?: int, StreamId?: string, VpcInterfaceName?: string, ... (2 more fields)}
+  --source-failover-config: record # The settings for source failover. — shape: {FailoverMode?: "MERGE"|"FAILOVER", RecoveryWindow?: int, SourcePriority?: record, State?: "ENABLED"|"DISABLED"}
+  --sources: list # item shape: {Decryption?: record, Description?: string, EntitlementArn?: string, IngestPort?: int, MaxBitrate?: int, MaxLatency?: int, MaxSyncBuffer?: int, MediaStreamSourceConfigurations?: list, MinLatency?: int, Name?: string, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", SenderControlPort?: int, SenderIpAddress?: string, SourceListenerAddress?: string, SourceListenerPort?: int, StreamId?: string, VpcInterfaceName?: string, ... (2 more fields)}
+  --vpc-interfaces: list # The VPC interfaces you want on the flow. — item shape: {Name: string, NetworkInterfaceType?: "ena"|"efa", RoleArn: string, SecurityGroupIds: list<string>, SubnetId: string}
+  --maintenance: record # Create maintenance setting for a flow — shape: {MaintenanceDay?: "Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"Saturday"|"Sunday", MaintenanceStartHour?: string}
+]: any -> record<Flow: record<AvailabilityZone: string, Description: string, EgressIp: string, Entitlements: list<record>, FlowArn: string, MediaStreams: list<record>, Name: string, Outputs: list<record>, Source: record<DataTransferSubscriberFeePercent: int, Decryption: record, Description: string, EntitlementArn: string, IngestIp: string, IngestPort: int, MediaStreamSourceConfigurations: list, Name: string, SenderControlPort: int, SenderIpAddress: string, SourceArn: string, Transport: record, VpcInterfaceName: string, WhitelistCidr: string, GatewayBridgeSource: record>, SourceFailoverConfig: record<FailoverMode: string, RecoveryWindow: int, SourcePriority: record, State: string>, Sources: list<record>, Status: string, VpcInterfaces: list<record>, Maintenance: record<MaintenanceDay: string, MaintenanceDeadline: string, MaintenanceScheduledDate: string, MaintenanceStartHour: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/flows" $auth.query)
-  let req_body = {"availabilityZone": $availability_zone, "entitlements": $entitlements, "mediaStreams": $media_streams, "name": $name, "outputs": $outputs, "source": $body_source, "sourceFailoverConfig": $source_failover_config, "sources": $sources, "vpcInterfaces": $vpc_interfaces, "maintenance": $maintenance} | compact
+  let req_body = {"availabilityZone": $availability_zone, "entitlements": $entitlements, "mediaStreams": $media_streams, "name": $name, "outputs": $outputs, "source": $source, "sourceFailoverConfig": $source_failover_config, "sources": $sources, "vpcInterfaces": $vpc_interfaces, "maintenance": $maintenance} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -638,7 +638,7 @@ export def "list-flows" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Flows: record, NextToken: record> {
+]: nothing -> record<Flows: table<AvailabilityZone: string, Description: string, FlowArn: string, Name: string, SourceType: string, Status: string, Maintenance: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -665,7 +665,7 @@ export def "list-flows" [
 #
 # POST /v1/gateways
 # operationId: CreateGateway
-# --networks item shape: {CidrBlock: any, Name: any}
+# --networks item shape: {CidrBlock: string, Name: string}
 export def "create-gateway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -685,8 +685,8 @@ export def "create-gateway" [
   --x-amz-signed-headers: string
   egress_cidr_blocks: list<string> # The range of IP addresses that are allowed to contribute content or initiate output requests for flows communicating with this gateway. These IP addresses should be in the form of a Classless Inter-Domain Routing (CIDR) block; for example, 10.0.0.0/16.
   name: string # The name of the gateway. This name can not be modified after the gateway is created.
-  networks: list # The list of networks that you want to add. — item shape: {CidrBlock: any, Name: any}
-]: any -> record<Gateway: record<EgressCidrBlocks: record, GatewayArn: record, GatewayMessages: record, GatewayState: record, Name: record, Networks: record>> {
+  networks: list # The list of networks that you want to add. — item shape: {CidrBlock: string, Name: string}
+]: any -> record<Gateway: record<EgressCidrBlocks: list<string>, GatewayArn: string, GatewayMessages: list<record>, GatewayState: string, Name: string, Networks: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -736,7 +736,7 @@ export def "list-gateways" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Gateways: record, NextToken: record> {
+]: nothing -> record<Gateways: table<GatewayArn: string, GatewayState: string, Name: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -781,7 +781,7 @@ export def "delete-bridge" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BridgeArn: record> {
+]: nothing -> record<BridgeArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bridge_arn | is-empty) { error make --unspanned { msg: "path parameter 'bridgeArn' must be non-empty" } }
@@ -826,7 +826,7 @@ export def "describe-bridge" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Bridge: record<BridgeArn: record, BridgeMessages: record, BridgeState: record, EgressGatewayBridge: record<InstanceId: record, MaxBitrate: record>, IngressGatewayBridge: record<InstanceId: record, MaxBitrate: record, MaxOutputs: record>, Name: record, Outputs: record, PlacementArn: record, SourceFailoverConfig: record<FailoverMode: record, RecoveryWindow: record, SourcePriority: record, State: record>, Sources: record>> {
+]: nothing -> record<Bridge: record<BridgeArn: string, BridgeMessages: list<record>, BridgeState: string, EgressGatewayBridge: record<InstanceId: string, MaxBitrate: int>, IngressGatewayBridge: record<InstanceId: string, MaxBitrate: int, MaxOutputs: int>, Name: string, Outputs: list<record>, PlacementArn: string, SourceFailoverConfig: record<FailoverMode: string, RecoveryWindow: int, SourcePriority: record, State: string>, Sources: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bridge_arn | is-empty) { error make --unspanned { msg: "path parameter 'bridgeArn' must be non-empty" } }
@@ -853,9 +853,9 @@ export def "describe-bridge" [
 #
 # PUT /v1/bridges/{bridgeArn}
 # operationId: UpdateBridge
-# --egressGatewayBridge shape: {MaxBitrate?: any}
-# --ingressGatewayBridge shape: {MaxBitrate?: any, MaxOutputs?: any}
-# --sourceFailoverConfig shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
+# --egressGatewayBridge shape: {MaxBitrate?: int}
+# --ingressGatewayBridge shape: {MaxBitrate?: int, MaxOutputs?: int}
+# --sourceFailoverConfig shape: {FailoverMode?: "MERGE"|"FAILOVER", RecoveryWindow?: int, SourcePriority?: record, State?: "ENABLED"|"DISABLED"}
 export def "update-bridge" [
   bridge_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -874,10 +874,10 @@ export def "update-bridge" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --egress-gateway-bridge: record # shape: {MaxBitrate?: any}
-  --ingress-gateway-bridge: record # shape: {MaxBitrate?: any, MaxOutputs?: any}
-  --source-failover-config: record # The settings for source failover. — shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
-]: any -> record<Bridge: record<BridgeArn: record, BridgeMessages: record, BridgeState: record, EgressGatewayBridge: record<InstanceId: record, MaxBitrate: record>, IngressGatewayBridge: record<InstanceId: record, MaxBitrate: record, MaxOutputs: record>, Name: record, Outputs: record, PlacementArn: record, SourceFailoverConfig: record<FailoverMode: record, RecoveryWindow: record, SourcePriority: record, State: record>, Sources: record>> {
+  --egress-gateway-bridge: record # shape: {MaxBitrate?: int}
+  --ingress-gateway-bridge: record # shape: {MaxBitrate?: int, MaxOutputs?: int}
+  --source-failover-config: record # The settings for source failover. — shape: {FailoverMode?: "MERGE"|"FAILOVER", RecoveryWindow?: int, SourcePriority?: record, State?: "ENABLED"|"DISABLED"}
+]: any -> record<Bridge: record<BridgeArn: string, BridgeMessages: list<record>, BridgeState: string, EgressGatewayBridge: record<InstanceId: string, MaxBitrate: int>, IngressGatewayBridge: record<InstanceId: string, MaxBitrate: int, MaxOutputs: int>, Name: string, Outputs: list<record>, PlacementArn: string, SourceFailoverConfig: record<FailoverMode: string, RecoveryWindow: int, SourcePriority: record, State: string>, Sources: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -925,7 +925,7 @@ export def "delete-flow" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FlowArn: record, Status: record> {
+]: nothing -> record<FlowArn: string, Status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flow_arn | is-empty) { error make --unspanned { msg: "path parameter 'flowArn' must be non-empty" } }
@@ -970,7 +970,7 @@ export def "describe-flow" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Flow: record<AvailabilityZone: record, Description: record, EgressIp: record, Entitlements: record, FlowArn: record, MediaStreams: record, Name: record, Outputs: record, Source: record<DataTransferSubscriberFeePercent: record, Decryption: record, Description: record, EntitlementArn: record, IngestIp: record, IngestPort: record, MediaStreamSourceConfigurations: record, Name: record, SenderControlPort: record, SenderIpAddress: record, SourceArn: record, Transport: record, VpcInterfaceName: record, WhitelistCidr: record, GatewayBridgeSource: record>, SourceFailoverConfig: record<FailoverMode: record, RecoveryWindow: record, SourcePriority: record, State: record>, Sources: record, Status: record, VpcInterfaces: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartHour: record>>, Messages: record<Errors: record>> {
+]: nothing -> record<Flow: record<AvailabilityZone: string, Description: string, EgressIp: string, Entitlements: list<record>, FlowArn: string, MediaStreams: list<record>, Name: string, Outputs: list<record>, Source: record<DataTransferSubscriberFeePercent: int, Decryption: record, Description: string, EntitlementArn: string, IngestIp: string, IngestPort: int, MediaStreamSourceConfigurations: list, Name: string, SenderControlPort: int, SenderIpAddress: string, SourceArn: string, Transport: record, VpcInterfaceName: string, WhitelistCidr: string, GatewayBridgeSource: record>, SourceFailoverConfig: record<FailoverMode: string, RecoveryWindow: int, SourcePriority: record, State: string>, Sources: list<record>, Status: string, VpcInterfaces: list<record>, Maintenance: record<MaintenanceDay: string, MaintenanceDeadline: string, MaintenanceScheduledDate: string, MaintenanceStartHour: string>>, Messages: record<Errors: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flow_arn | is-empty) { error make --unspanned { msg: "path parameter 'flowArn' must be non-empty" } }
@@ -997,8 +997,8 @@ export def "describe-flow" [
 #
 # PUT /v1/flows/{flowArn}
 # operationId: UpdateFlow
-# --sourceFailoverConfig shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
-# --maintenance shape: {MaintenanceDay?: any, MaintenanceScheduledDate?: any, MaintenanceStartHour?: any}
+# --sourceFailoverConfig shape: {FailoverMode?: "MERGE"|"FAILOVER", RecoveryWindow?: int, SourcePriority?: record, State?: "ENABLED"|"DISABLED"}
+# --maintenance shape: {MaintenanceDay?: "Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"Saturday"|"Sunday", MaintenanceScheduledDate?: string, MaintenanceStartHour?: string}
 export def "update-flow" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1017,9 +1017,9 @@ export def "update-flow" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --source-failover-config: record # The settings for source failover. — shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
-  --maintenance: record # Update maintenance setting for a flow — shape: {MaintenanceDay?: any, MaintenanceScheduledDate?: any, MaintenanceStartHour?: any}
-]: any -> record<Flow: record<AvailabilityZone: record, Description: record, EgressIp: record, Entitlements: record, FlowArn: record, MediaStreams: record, Name: record, Outputs: record, Source: record<DataTransferSubscriberFeePercent: record, Decryption: record, Description: record, EntitlementArn: record, IngestIp: record, IngestPort: record, MediaStreamSourceConfigurations: record, Name: record, SenderControlPort: record, SenderIpAddress: record, SourceArn: record, Transport: record, VpcInterfaceName: record, WhitelistCidr: record, GatewayBridgeSource: record>, SourceFailoverConfig: record<FailoverMode: record, RecoveryWindow: record, SourcePriority: record, State: record>, Sources: record, Status: record, VpcInterfaces: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartHour: record>>> {
+  --source-failover-config: record # The settings for source failover. — shape: {FailoverMode?: "MERGE"|"FAILOVER", RecoveryWindow?: int, SourcePriority?: record, State?: "ENABLED"|"DISABLED"}
+  --maintenance: record # Update maintenance setting for a flow — shape: {MaintenanceDay?: "Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"Saturday"|"Sunday", MaintenanceScheduledDate?: string, MaintenanceStartHour?: string}
+]: any -> record<Flow: record<AvailabilityZone: string, Description: string, EgressIp: string, Entitlements: list<record>, FlowArn: string, MediaStreams: list<record>, Name: string, Outputs: list<record>, Source: record<DataTransferSubscriberFeePercent: int, Decryption: record, Description: string, EntitlementArn: string, IngestIp: string, IngestPort: int, MediaStreamSourceConfigurations: list, Name: string, SenderControlPort: int, SenderIpAddress: string, SourceArn: string, Transport: record, VpcInterfaceName: string, WhitelistCidr: string, GatewayBridgeSource: record>, SourceFailoverConfig: record<FailoverMode: string, RecoveryWindow: int, SourcePriority: record, State: string>, Sources: list<record>, Status: string, VpcInterfaces: list<record>, Maintenance: record<MaintenanceDay: string, MaintenanceDeadline: string, MaintenanceScheduledDate: string, MaintenanceStartHour: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1067,7 +1067,7 @@ export def "delete-gateway" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GatewayArn: record> {
+]: nothing -> record<GatewayArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($gateway_arn | is-empty) { error make --unspanned { msg: "path parameter 'gatewayArn' must be non-empty" } }
@@ -1112,7 +1112,7 @@ export def "describe-gateway" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Gateway: record<EgressCidrBlocks: record, GatewayArn: record, GatewayMessages: record, GatewayState: record, Name: record, Networks: record>> {
+]: nothing -> record<Gateway: record<EgressCidrBlocks: list<string>, GatewayArn: string, GatewayMessages: list<record>, GatewayState: string, Name: string, Networks: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($gateway_arn | is-empty) { error make --unspanned { msg: "path parameter 'gatewayArn' must be non-empty" } }
@@ -1158,7 +1158,7 @@ export def "deregister-gateway-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GatewayInstanceArn: record, InstanceState: record> {
+]: nothing -> record<GatewayInstanceArn: string, InstanceState: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($gateway_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'gatewayInstanceArn' must be non-empty" } }
@@ -1204,7 +1204,7 @@ export def "describe-gateway-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GatewayInstance: record<BridgePlacement: record, ConnectionStatus: record, GatewayArn: record, GatewayInstanceArn: record, InstanceId: record, InstanceMessages: record, InstanceState: record, RunningBridgeCount: record>> {
+]: nothing -> record<GatewayInstance: record<BridgePlacement: string, ConnectionStatus: string, GatewayArn: string, GatewayInstanceArn: string, InstanceId: string, InstanceMessages: list<record>, InstanceState: string, RunningBridgeCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($gateway_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'gatewayInstanceArn' must be non-empty" } }
@@ -1250,7 +1250,7 @@ export def "update-gateway-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --bridge-placement: string@bridge-placement-completer # The availability of the instance to host new bridges. The bridgePlacement property can be LOCKED or AVAILABLE. If it is LOCKED, no new bridges can be deployed to this instance. If it is AVAILABLE, new bridges can be added to this instance.
-]: any -> record<BridgePlacement: record, GatewayInstanceArn: record> {
+]: any -> record<BridgePlacement: string, GatewayInstanceArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1298,7 +1298,7 @@ export def "describe-offering" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Offering: record<CurrencyCode: record, Duration: record, DurationUnits: record, OfferingArn: record, OfferingDescription: record, PricePerUnit: record, PriceUnits: record, ResourceSpecification: record<ReservedBitrate: record, ResourceType: record>>> {
+]: nothing -> record<Offering: record<CurrencyCode: string, Duration: int, DurationUnits: string, OfferingArn: string, OfferingDescription: string, PricePerUnit: string, PriceUnits: string, ResourceSpecification: record<ReservedBitrate: int, ResourceType: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_arn | is-empty) { error make --unspanned { msg: "path parameter 'offeringArn' must be non-empty" } }
@@ -1345,7 +1345,7 @@ export def "purchase-offering" [
   --x-amz-signed-headers: string
   reservation_name: string # The name that you want to use for the reservation.
   start: string # The date and time that you want the reservation to begin, in Coordinated Universal Time (UTC). You can specify any date and time between 12:00am on the first day of the current month to the current time on today's date, inclusive. Specify the start in a 24-hour notation. Use the following format: YYYY-MM-DDTHH:mm:SSZ, where T and Z are literal characters. For example, to specify 11:30pm on March 5, 2020, enter 2020-03-05T23:30:00Z.
-]: any -> record<Reservation: record<CurrencyCode: record, Duration: record, DurationUnits: record, End: record, OfferingArn: record, OfferingDescription: record, PricePerUnit: record, PriceUnits: record, ReservationArn: record, ReservationName: record, ReservationState: record, ResourceSpecification: record<ReservedBitrate: record, ResourceType: record>, Start: record>> {
+]: any -> record<Reservation: record<CurrencyCode: string, Duration: int, DurationUnits: string, End: string, OfferingArn: string, OfferingDescription: string, PricePerUnit: string, PriceUnits: string, ReservationArn: string, ReservationName: string, ReservationState: string, ResourceSpecification: record<ReservedBitrate: int, ResourceType: string>, Start: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1393,7 +1393,7 @@ export def "describe-reservation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Reservation: record<CurrencyCode: record, Duration: record, DurationUnits: record, End: record, OfferingArn: record, OfferingDescription: record, PricePerUnit: record, PriceUnits: record, ReservationArn: record, ReservationName: record, ReservationState: record, ResourceSpecification: record<ReservedBitrate: record, ResourceType: record>, Start: record>> {
+]: nothing -> record<Reservation: record<CurrencyCode: string, Duration: int, DurationUnits: string, End: string, OfferingArn: string, OfferingDescription: string, PricePerUnit: string, PriceUnits: string, ReservationArn: string, ReservationName: string, ReservationState: string, ResourceSpecification: record<ReservedBitrate: int, ResourceType: string>, Start: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reservation_arn | is-empty) { error make --unspanned { msg: "path parameter 'reservationArn' must be non-empty" } }
@@ -1420,7 +1420,7 @@ export def "describe-reservation" [
 #
 # POST /v1/flows/{flowArn}/entitlements
 # operationId: GrantFlowEntitlements
-# --entitlements item shape: {DataTransferSubscriberFeePercent?: any, Description?: any, Encryption?: any, EntitlementStatus?: any, Name?: any, Subscribers: any}
+# --entitlements item shape: {DataTransferSubscriberFeePercent?: int, Description?: string, Encryption?: record, EntitlementStatus?: "ENABLED"|"DISABLED", Name?: string, Subscribers: list<string>}
 export def "grant-flow-entitlements" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1439,8 +1439,8 @@ export def "grant-flow-entitlements" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  entitlements: list # The list of entitlements that you want to grant. — item shape: {DataTransferSubscriberFeePercent?: any, Description?: any, Encryption?: any, EntitlementStatus?: any, Name?: any, Subscribers: any}
-]: any -> record<Entitlements: record, FlowArn: record> {
+  entitlements: list # The list of entitlements that you want to grant. — item shape: {DataTransferSubscriberFeePercent?: int, Description?: string, Encryption?: record, EntitlementStatus?: "ENABLED"|"DISABLED", Name?: string, Subscribers: list<string>}
+]: any -> record<Entitlements: table<DataTransferSubscriberFeePercent: int, Description: string, Encryption: record, EntitlementArn: string, EntitlementStatus: string, Name: string, Subscribers: list>, FlowArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1491,7 +1491,7 @@ export def "list-entitlements" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Entitlements: record, NextToken: record> {
+]: nothing -> record<Entitlements: table<DataTransferSubscriberFeePercent: int, EntitlementArn: string, EntitlementName: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1540,7 +1540,7 @@ export def "list-gateway-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Instances: record, NextToken: record> {
+]: nothing -> record<Instances: table<GatewayArn: string, GatewayInstanceArn: string, InstanceId: string, InstanceState: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filterArn" $filter_arn "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1588,7 +1588,7 @@ export def "list-offerings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, Offerings: record> {
+]: nothing -> record<NextToken: string, Offerings: table<CurrencyCode: string, Duration: int, DurationUnits: string, OfferingArn: string, OfferingDescription: string, PricePerUnit: string, PriceUnits: string, ResourceSpecification: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1636,7 +1636,7 @@ export def "list-reservations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, Reservations: record> {
+]: nothing -> record<NextToken: string, Reservations: table<CurrencyCode: string, Duration: int, DurationUnits: string, End: string, OfferingArn: string, OfferingDescription: string, PricePerUnit: string, PriceUnits: string, ReservationArn: string, ReservationName: string, ReservationState: string, ResourceSpecification: record, Start: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1776,7 +1776,7 @@ export def "remove-bridge-output" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BridgeArn: record, OutputName: record> {
+]: nothing -> record<BridgeArn: string, OutputName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bridge_arn | is-empty) { error make --unspanned { msg: "path parameter 'bridgeArn' must be non-empty" } }
@@ -1804,7 +1804,7 @@ export def "remove-bridge-output" [
 #
 # PUT /v1/bridges/{bridgeArn}/outputs/{outputName}
 # operationId: UpdateBridgeOutput
-# --networkOutput shape: {IpAddress?: any, NetworkName?: any, Port?: any, Protocol?: any, Ttl?: any}
+# --networkOutput shape: {IpAddress?: string, NetworkName?: string, Port?: int, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", Ttl?: int}
 export def "update-bridge-output" [
   bridge_arn: string
   output_name: string
@@ -1824,8 +1824,8 @@ export def "update-bridge-output" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --network-output: record # Update an existing network output. — shape: {IpAddress?: any, NetworkName?: any, Port?: any, Protocol?: any, Ttl?: any}
-]: any -> record<BridgeArn: record, Output: record<FlowOutput: record<FlowArn: record, FlowSourceArn: record, Name: record>, NetworkOutput: record<IpAddress: record, Name: record, NetworkName: record, Port: record, Protocol: record, Ttl: record>>> {
+  --network-output: record # Update an existing network output. — shape: {IpAddress?: string, NetworkName?: string, Port?: int, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp", Ttl?: int}
+]: any -> record<BridgeArn: string, Output: record<FlowOutput: record<FlowArn: string, FlowSourceArn: string, Name: string>, NetworkOutput: record<IpAddress: string, Name: string, NetworkName: string, Port: int, Protocol: string, Ttl: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1875,7 +1875,7 @@ export def "remove-bridge-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BridgeArn: record, SourceName: record> {
+]: nothing -> record<BridgeArn: string, SourceName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bridge_arn | is-empty) { error make --unspanned { msg: "path parameter 'bridgeArn' must be non-empty" } }
@@ -1903,8 +1903,8 @@ export def "remove-bridge-source" [
 #
 # PUT /v1/bridges/{bridgeArn}/sources/{sourceName}
 # operationId: UpdateBridgeSource
-# --flowSource shape: {FlowArn?: any, FlowVpcInterfaceAttachment?: any}
-# --networkSource shape: {MulticastIp?: any, NetworkName?: any, Port?: any, Protocol?: any}
+# --flowSource shape: {FlowArn?: string, FlowVpcInterfaceAttachment?: record}
+# --networkSource shape: {MulticastIp?: string, NetworkName?: string, Port?: int, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp"}
 export def "update-bridge-source" [
   bridge_arn: string
   source_name: string
@@ -1924,9 +1924,9 @@ export def "update-bridge-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --flow-source: record # Update the flow source of the bridge. — shape: {FlowArn?: any, FlowVpcInterfaceAttachment?: any}
-  --network-source: record # Update the network source of the bridge. — shape: {MulticastIp?: any, NetworkName?: any, Port?: any, Protocol?: any}
-]: any -> record<BridgeArn: record, Source: record<FlowSource: record<FlowArn: record, FlowVpcInterfaceAttachment: record, Name: record, OutputArn: record>, NetworkSource: record<MulticastIp: record, Name: record, NetworkName: record, Port: record, Protocol: record>>> {
+  --flow-source: record # Update the flow source of the bridge. — shape: {FlowArn?: string, FlowVpcInterfaceAttachment?: record}
+  --network-source: record # Update the network source of the bridge. — shape: {MulticastIp?: string, NetworkName?: string, Port?: int, Protocol?: "zixi-push"|"rtp-fec"|"rtp"|"zixi-pull"|"rist"|"st2110-jpegxs"|"cdi"|"srt-listener"|"srt-caller"|"fujitsu-qos"|"udp"}
+]: any -> record<BridgeArn: string, Source: record<FlowSource: record<FlowArn: string, FlowVpcInterfaceAttachment: record, Name: string, OutputArn: string>, NetworkSource: record<MulticastIp: string, Name: string, NetworkName: string, Port: int, Protocol: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1976,7 +1976,7 @@ export def "remove-flow-media-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FlowArn: record, MediaStreamName: record> {
+]: nothing -> record<FlowArn: string, MediaStreamName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flow_arn | is-empty) { error make --unspanned { msg: "path parameter 'flowArn' must be non-empty" } }
@@ -2004,7 +2004,7 @@ export def "remove-flow-media-stream" [
 #
 # PUT /v1/flows/{flowArn}/mediaStreams/{mediaStreamName}
 # operationId: UpdateFlowMediaStream
-# --attributes shape: {Fmtp?: any, Lang?: any}
+# --attributes shape: {Fmtp?: record, Lang?: string}
 export def "update-flow-media-stream" [
   flow_arn: string
   media_stream_name: string
@@ -2024,12 +2024,12 @@ export def "update-flow-media-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --attributes: record # Attributes that are related to the media stream. — shape: {Fmtp?: any, Lang?: any}
+  --attributes: record # Attributes that are related to the media stream. — shape: {Fmtp?: record, Lang?: string}
   --clock-rate: int # The sample rate (in Hz) for the stream. If the media stream type is video or ancillary data, set this value to 90000. If the media stream type is audio, set this value to either 48000 or 96000.
   --description: string # Description
   --media-stream-type: string@media-stream-type-completer # The type of media stream.
   --video-format: string # The resolution of the video.
-]: any -> record<FlowArn: record, MediaStream: record<Attributes: record<Fmtp: record, Lang: record>, ClockRate: record, Description: record, Fmt: record, MediaStreamId: record, MediaStreamName: record, MediaStreamType: record, VideoFormat: record>> {
+]: any -> record<FlowArn: string, MediaStream: record<Attributes: record<Fmtp: record, Lang: string>, ClockRate: int, Description: string, Fmt: int, MediaStreamId: int, MediaStreamName: string, MediaStreamType: string, VideoFormat: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2079,7 +2079,7 @@ export def "remove-flow-output" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FlowArn: record, OutputArn: record> {
+]: nothing -> record<FlowArn: string, OutputArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flow_arn | is-empty) { error make --unspanned { msg: "path parameter 'flowArn' must be non-empty" } }
@@ -2107,9 +2107,9 @@ export def "remove-flow-output" [
 #
 # PUT /v1/flows/{flowArn}/outputs/{outputArn}
 # operationId: UpdateFlowOutput
-# --encryption shape: {Algorithm?: any, ConstantInitializationVector?: any, DeviceId?: any, KeyType?: any, Region?: any, ResourceId?: any, RoleArn?: any, SecretArn?: any, Url?: any}
-# --mediaStreamOutputConfigurations item shape: {DestinationConfigurations?: any, EncodingName: any, EncodingParameters?: any, MediaStreamName: any}
-# --vpcInterfaceAttachment shape: {VpcInterfaceName?: any}
+# --encryption shape: {Algorithm?: "aes128"|"aes192"|"aes256", ConstantInitializationVector?: string, DeviceId?: string, KeyType?: "speke"|"static-key"|"srt-password", Region?: string, ResourceId?: string, RoleArn?: string, SecretArn?: string, Url?: string}
+# --mediaStreamOutputConfigurations item shape: {DestinationConfigurations?: list, EncodingName: "jxsv"|"raw"|"smpte291"|"pcm", EncodingParameters?: record, MediaStreamName: string}
+# --vpcInterfaceAttachment shape: {VpcInterfaceName?: string}
 export def "update-flow-output" [
   flow_arn: string
   output_arn: string
@@ -2132,9 +2132,9 @@ export def "update-flow-output" [
   --cidr-allow-list: list<string> # The range of IP addresses that should be allowed to initiate output requests to this flow. These IP addresses should be in the form of a Classless Inter-Domain Routing (CIDR) block; for example, 10.0.0.0/16.
   --description: string # A description of the output. This description appears only on the AWS Elemental MediaConnect console and will not be seen by the end user.
   --destination: string # The IP address where you want to send the output.
-  --encryption: record # Information about the encryption of the flow. — shape: {Algorithm?: any, ConstantInitializationVector?: any, DeviceId?: any, KeyType?: any, Region?: any, ResourceId?: any, RoleArn?: any, SecretArn?: any, Url?: any}
+  --encryption: record # Information about the encryption of the flow. — shape: {Algorithm?: "aes128"|"aes192"|"aes256", ConstantInitializationVector?: string, DeviceId?: string, KeyType?: "speke"|"static-key"|"srt-password", Region?: string, ResourceId?: string, RoleArn?: string, SecretArn?: string, Url?: string}
   --max-latency: int # The maximum latency in milliseconds. This parameter applies only to RIST-based, Zixi-based, and Fujitsu-based streams.
-  --media-stream-output-configurations: list # The media streams that are associated with the output, and the parameters for those associations. — item shape: {DestinationConfigurations?: any, EncodingName: any, EncodingParameters?: any, MediaStreamName: any}
+  --media-stream-output-configurations: list # The media streams that are associated with the output, and the parameters for those associations. — item shape: {DestinationConfigurations?: list, EncodingName: "jxsv"|"raw"|"smpte291"|"pcm", EncodingParameters?: record, MediaStreamName: string}
   --min-latency: int # The minimum latency in milliseconds for SRT-based streams. In streams that use the SRT protocol, this value that you set on your MediaConnect source or output represents the minimal potential latency of that connection. The latency of the stream is set to the highest number between the sender’s minimum latency and the receiver’s minimum latency.
   --port: int # The port to use when content is distributed to this output.
   --protocol: string@protocol-completer # The protocol to use for the output.
@@ -2143,8 +2143,8 @@ export def "update-flow-output" [
   --sender-ip-address: string # The IP address that the flow communicates with to initiate connection with the sender.
   --smoothing-latency: int # The smoothing latency in milliseconds for RIST, RTP, and RTP-FEC streams.
   --stream-id: string # The stream ID that you want to use for this transport. This parameter applies only to Zixi and SRT caller-based streams.
-  --vpc-interface-attachment: record # The settings for attaching a VPC interface to an resource. — shape: {VpcInterfaceName?: any}
-]: any -> record<FlowArn: record, Output: record<DataTransferSubscriberFeePercent: record, Description: record, Destination: record, Encryption: record<Algorithm: record, ConstantInitializationVector: record, DeviceId: record, KeyType: record, Region: record, ResourceId: record, RoleArn: record, SecretArn: record, Url: record>, EntitlementArn: record, ListenerAddress: record, MediaLiveInputArn: record, MediaStreamOutputConfigurations: record, Name: record, OutputArn: record, Port: record, Transport: record<CidrAllowList: record, MaxBitrate: record, MaxLatency: record, MaxSyncBuffer: record, MinLatency: record, Protocol: record, RemoteId: record, SenderControlPort: record, SenderIpAddress: record, SmoothingLatency: record, SourceListenerAddress: record, SourceListenerPort: record, StreamId: record>, VpcInterfaceAttachment: record<VpcInterfaceName: record>, BridgeArn: record, BridgePorts: record>> {
+  --vpc-interface-attachment: record # The settings for attaching a VPC interface to an resource. — shape: {VpcInterfaceName?: string}
+]: any -> record<FlowArn: string, Output: record<DataTransferSubscriberFeePercent: int, Description: string, Destination: string, Encryption: record<Algorithm: string, ConstantInitializationVector: string, DeviceId: string, KeyType: string, Region: string, ResourceId: string, RoleArn: string, SecretArn: string, Url: string>, EntitlementArn: string, ListenerAddress: string, MediaLiveInputArn: string, MediaStreamOutputConfigurations: list<record>, Name: string, OutputArn: string, Port: int, Transport: record<CidrAllowList: list, MaxBitrate: int, MaxLatency: int, MaxSyncBuffer: int, MinLatency: int, Protocol: string, RemoteId: string, SenderControlPort: int, SenderIpAddress: string, SmoothingLatency: int, SourceListenerAddress: string, SourceListenerPort: int, StreamId: string>, VpcInterfaceAttachment: record<VpcInterfaceName: string>, BridgeArn: string, BridgePorts: list<int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2194,7 +2194,7 @@ export def "remove-flow-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FlowArn: record, SourceArn: record> {
+]: nothing -> record<FlowArn: string, SourceArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flow_arn | is-empty) { error make --unspanned { msg: "path parameter 'flowArn' must be non-empty" } }
@@ -2222,9 +2222,9 @@ export def "remove-flow-source" [
 #
 # PUT /v1/flows/{flowArn}/source/{sourceArn}
 # operationId: UpdateFlowSource
-# --decryption shape: {Algorithm?: any, ConstantInitializationVector?: any, DeviceId?: any, KeyType?: any, Region?: any, ResourceId?: any, RoleArn?: any, SecretArn?: any, Url?: any}
-# --mediaStreamSourceConfigurations item shape: {EncodingName: any, InputConfigurations?: any, MediaStreamName: any}
-# --gatewayBridgeSource shape: {BridgeArn?: any, VpcInterfaceAttachment?: any}
+# --decryption shape: {Algorithm?: "aes128"|"aes192"|"aes256", ConstantInitializationVector?: string, DeviceId?: string, KeyType?: "speke"|"static-key"|"srt-password", Region?: string, ResourceId?: string, RoleArn?: string, SecretArn?: string, Url?: string}
+# --mediaStreamSourceConfigurations item shape: {EncodingName: "jxsv"|"raw"|"smpte291"|"pcm", InputConfigurations?: list, MediaStreamName: string}
+# --gatewayBridgeSource shape: {BridgeArn?: string, VpcInterfaceAttachment?: record}
 export def "update-flow-source" [
   flow_arn: string
   source_arn: string
@@ -2244,14 +2244,14 @@ export def "update-flow-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --decryption: record # Information about the encryption of the flow. — shape: {Algorithm?: any, ConstantInitializationVector?: any, DeviceId?: any, KeyType?: any, Region?: any, ResourceId?: any, RoleArn?: any, SecretArn?: any, Url?: any}
+  --decryption: record # Information about the encryption of the flow. — shape: {Algorithm?: "aes128"|"aes192"|"aes256", ConstantInitializationVector?: string, DeviceId?: string, KeyType?: "speke"|"static-key"|"srt-password", Region?: string, ResourceId?: string, RoleArn?: string, SecretArn?: string, Url?: string}
   --description: string # A description for the source. This value is not used or seen outside of the current AWS Elemental MediaConnect account.
   --entitlement-arn: string # The ARN of the entitlement that allows you to subscribe to this flow. The entitlement is set by the flow originator, and the ARN is generated as part of the originator's flow.
   --ingest-port: int # The port that the flow will be listening on for incoming content.
   --max-bitrate: int # The smoothing max bitrate (in bps) for RIST, RTP, and RTP-FEC streams.
   --max-latency: int # The maximum latency in milliseconds. This parameter applies only to RIST-based, Zixi-based, and Fujitsu-based streams.
   --max-sync-buffer: int # The size of the buffer (in milliseconds) to use to sync incoming source data.
-  --media-stream-source-configurations: list # The media streams that are associated with the source, and the parameters for those associations. — item shape: {EncodingName: any, InputConfigurations?: any, MediaStreamName: any}
+  --media-stream-source-configurations: list # The media streams that are associated with the source, and the parameters for those associations. — item shape: {EncodingName: "jxsv"|"raw"|"smpte291"|"pcm", InputConfigurations?: list, MediaStreamName: string}
   --min-latency: int # The minimum latency in milliseconds for SRT-based streams. In streams that use the SRT protocol, this value that you set on your MediaConnect source or output represents the minimal potential latency of that connection. The latency of the stream is set to the highest number between the sender’s minimum latency and the receiver’s minimum latency.
   --protocol: string@protocol-completer # The protocol that is used by the source.
   --sender-control-port: int # The port that the flow uses to send outbound requests to initiate connection with the sender.
@@ -2261,8 +2261,8 @@ export def "update-flow-source" [
   --stream-id: string # The stream ID that you want to use for this transport. This parameter applies only to Zixi and SRT caller-based streams.
   --vpc-interface-name: string # The name of the VPC interface to use for this source.
   --whitelist-cidr: string # The range of IP addresses that should be allowed to contribute content to your source. These IP addresses should be in the form of a Classless Inter-Domain Routing (CIDR) block; for example, 10.0.0.0/16.
-  --gateway-bridge-source: record # The source configuration for cloud flows receiving a stream from a bridge. — shape: {BridgeArn?: any, VpcInterfaceAttachment?: any}
-]: any -> record<FlowArn: record, Source: record<DataTransferSubscriberFeePercent: record, Decryption: record<Algorithm: record, ConstantInitializationVector: record, DeviceId: record, KeyType: record, Region: record, ResourceId: record, RoleArn: record, SecretArn: record, Url: record>, Description: record, EntitlementArn: record, IngestIp: record, IngestPort: record, MediaStreamSourceConfigurations: record, Name: record, SenderControlPort: record, SenderIpAddress: record, SourceArn: record, Transport: record<CidrAllowList: record, MaxBitrate: record, MaxLatency: record, MaxSyncBuffer: record, MinLatency: record, Protocol: record, RemoteId: record, SenderControlPort: record, SenderIpAddress: record, SmoothingLatency: record, SourceListenerAddress: record, SourceListenerPort: record, StreamId: record>, VpcInterfaceName: record, WhitelistCidr: record, GatewayBridgeSource: record<BridgeArn: record, VpcInterfaceAttachment: record>>> {
+  --gateway-bridge-source: record # The source configuration for cloud flows receiving a stream from a bridge. — shape: {BridgeArn?: string, VpcInterfaceAttachment?: record}
+]: any -> record<FlowArn: string, Source: record<DataTransferSubscriberFeePercent: int, Decryption: record<Algorithm: string, ConstantInitializationVector: string, DeviceId: string, KeyType: string, Region: string, ResourceId: string, RoleArn: string, SecretArn: string, Url: string>, Description: string, EntitlementArn: string, IngestIp: string, IngestPort: int, MediaStreamSourceConfigurations: list<record>, Name: string, SenderControlPort: int, SenderIpAddress: string, SourceArn: string, Transport: record<CidrAllowList: list, MaxBitrate: int, MaxLatency: int, MaxSyncBuffer: int, MinLatency: int, Protocol: string, RemoteId: string, SenderControlPort: int, SenderIpAddress: string, SmoothingLatency: int, SourceListenerAddress: string, SourceListenerPort: int, StreamId: string>, VpcInterfaceName: string, WhitelistCidr: string, GatewayBridgeSource: record<BridgeArn: string, VpcInterfaceAttachment: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2312,7 +2312,7 @@ export def "remove-flow-vpc-interface" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FlowArn: record, NonDeletedNetworkInterfaceIds: record, VpcInterfaceName: record> {
+]: nothing -> record<FlowArn: string, NonDeletedNetworkInterfaceIds: list<string>, VpcInterfaceName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flow_arn | is-empty) { error make --unspanned { msg: "path parameter 'flowArn' must be non-empty" } }
@@ -2359,7 +2359,7 @@ export def "revoke-flow-entitlement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EntitlementArn: record, FlowArn: record> {
+]: nothing -> record<EntitlementArn: string, FlowArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flow_arn | is-empty) { error make --unspanned { msg: "path parameter 'flowArn' must be non-empty" } }
@@ -2387,7 +2387,7 @@ export def "revoke-flow-entitlement" [
 #
 # PUT /v1/flows/{flowArn}/entitlements/{entitlementArn}
 # operationId: UpdateFlowEntitlement
-# --encryption shape: {Algorithm?: any, ConstantInitializationVector?: any, DeviceId?: any, KeyType?: any, Region?: any, ResourceId?: any, RoleArn?: any, SecretArn?: any, Url?: any}
+# --encryption shape: {Algorithm?: "aes128"|"aes192"|"aes256", ConstantInitializationVector?: string, DeviceId?: string, KeyType?: "speke"|"static-key"|"srt-password", Region?: string, ResourceId?: string, RoleArn?: string, SecretArn?: string, Url?: string}
 export def "update-flow-entitlement" [
   flow_arn: string
   entitlement_arn: string
@@ -2408,10 +2408,10 @@ export def "update-flow-entitlement" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # A description of the entitlement. This description appears only on the AWS Elemental MediaConnect console and will not be seen by the subscriber or end user.
-  --encryption: record # Information about the encryption of the flow. — shape: {Algorithm?: any, ConstantInitializationVector?: any, DeviceId?: any, KeyType?: any, Region?: any, ResourceId?: any, RoleArn?: any, SecretArn?: any, Url?: any}
+  --encryption: record # Information about the encryption of the flow. — shape: {Algorithm?: "aes128"|"aes192"|"aes256", ConstantInitializationVector?: string, DeviceId?: string, KeyType?: "speke"|"static-key"|"srt-password", Region?: string, ResourceId?: string, RoleArn?: string, SecretArn?: string, Url?: string}
   --entitlement-status: string@entitlement-status-completer # An indication of whether you want to enable the entitlement to allow access, or disable it to stop streaming content to the subscriber’s flow temporarily. If you don’t specify the entitlementStatus field in your request, MediaConnect leaves the value unchanged.
   --subscribers: list<string> # The AWS account IDs that you want to share your content with. The receiving accounts (subscribers) will be allowed to create their own flow using your content as the source.
-]: any -> record<Entitlement: record<DataTransferSubscriberFeePercent: record, Description: record, Encryption: record<Algorithm: record, ConstantInitializationVector: record, DeviceId: record, KeyType: record, Region: record, ResourceId: record, RoleArn: record, SecretArn: record, Url: record>, EntitlementArn: record, EntitlementStatus: record, Name: record, Subscribers: record>, FlowArn: record> {
+]: any -> record<Entitlement: record<DataTransferSubscriberFeePercent: int, Description: string, Encryption: record<Algorithm: string, ConstantInitializationVector: string, DeviceId: string, KeyType: string, Region: string, ResourceId: string, RoleArn: string, SecretArn: string, Url: string>, EntitlementArn: string, EntitlementStatus: string, Name: string, Subscribers: list<string>>, FlowArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2460,7 +2460,7 @@ export def "start-flow" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FlowArn: record, Status: record> {
+]: nothing -> record<FlowArn: string, Status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flow_arn | is-empty) { error make --unspanned { msg: "path parameter 'flowArn' must be non-empty" } }
@@ -2505,7 +2505,7 @@ export def "stop-flow" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FlowArn: record, Status: record> {
+]: nothing -> record<FlowArn: string, Status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flow_arn | is-empty) { error make --unspanned { msg: "path parameter 'flowArn' must be non-empty" } }
@@ -2543,7 +2543,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The keys of the tags to be removed.
+  --tag-keys: list # The keys of the tags to be removed. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2555,6 +2555,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2598,7 +2599,7 @@ export def "update-bridge-state" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   desired_state: string@desired-state-completer
-]: any -> record<BridgeArn: record, DesiredState: record> {
+]: any -> record<BridgeArn: string, DesiredState: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

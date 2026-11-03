@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -148,7 +148,7 @@ export def "create-savings-plan" [
   --purchase-time: string # The time at which to purchase the Savings Plan, in UTC format (YYYY-MM-DDTHH:MM:SSZ). (format: date-time)
   --client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
   --tags: record # One or more tags.
-]: any -> record<savingsPlanId: record> {
+]: any -> record<savingsPlanId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -224,7 +224,7 @@ export def "delete-queued-savings-plan" [
 #
 # POST /DescribeSavingsPlanRates
 # operationId: DescribeSavingsPlanRates
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: "region"|"instanceType"|"productDescription"|"tenancy"|"productType"|"serviceCode"|"usageType"|"operation", values?: list<string>}
 export def "describe-savings-plan-rates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -243,10 +243,10 @@ export def "describe-savings-plan-rates" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   savings_plan_id: string # The ID of the Savings Plan.
-  --filters: list # The filters. — item shape: {name?: any, values?: any}
+  --filters: list # The filters. — item shape: {name?: "region"|"instanceType"|"productDescription"|"tenancy"|"productType"|"serviceCode"|"usageType"|"operation", values?: list<string>}
   --next-token: string # The token for the next page of results.
   --max-results: int # The maximum number of results to return with a single call. To retrieve additional results, make another call with the returned token value.
-]: any -> record<savingsPlanId: record, searchResults: record, nextToken: record> {
+]: any -> record<savingsPlanId: string, searchResults: table<rate: string, currency: string, unit: string, productType: string, serviceCode: string, usageType: string, operation: string, properties: any>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -275,7 +275,7 @@ export def "describe-savings-plan-rates" [
 #
 # POST /DescribeSavingsPlans
 # operationId: DescribeSavingsPlans
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: "region"|"ec2-instance-family"|"commitment"|"upfront"|"term"|"savings-plan-type"|"payment-option"|"start"|"end", values?: list<string>}
 export def "describe-savings-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -298,8 +298,8 @@ export def "describe-savings-plans" [
   --next-token: string # The token for the next page of results.
   --max-results: int # The maximum number of results to return with a single call. To retrieve additional results, make another call with the returned token value.
   --states: list<string> # The states.
-  --filters: list # The filters. — item shape: {name?: any, values?: any}
-]: any -> record<savingsPlans: record, nextToken: record> {
+  --filters: list # The filters. — item shape: {name?: "region"|"ec2-instance-family"|"commitment"|"upfront"|"term"|"savings-plan-type"|"payment-option"|"start"|"end", values?: list<string>}
+]: any -> record<savingsPlans: table<offeringId: string, savingsPlanId: string, savingsPlanArn: string, description: string, start: string, end: string, state: string, region: string, ec2InstanceFamily: string, savingsPlanType: string, paymentOption: string, productTypes: list, currency: string, commitment: string, upfrontPaymentAmount: string, recurringPaymentAmount: string, termDurationInSeconds: int, tags: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -328,7 +328,7 @@ export def "describe-savings-plans" [
 #
 # POST /DescribeSavingsPlansOfferingRates
 # operationId: DescribeSavingsPlansOfferingRates
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: "region"|"instanceFamily"|"instanceType"|"productDescription"|"tenancy"|"productId", values?: list<string>}
 export def "describe-savings-plans-offering-rates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -353,10 +353,10 @@ export def "describe-savings-plans-offering-rates" [
   --service-codes: list<string> # The services.
   --usage-types: list<string> # The usage details of the line item in the billing report.
   --operations: list<string> # The specific AWS operation for the line item in the billing report.
-  --filters: list # The filters. — item shape: {name?: any, values?: any}
+  --filters: list # The filters. — item shape: {name?: "region"|"instanceFamily"|"instanceType"|"productDescription"|"tenancy"|"productId", values?: list<string>}
   --next-token: string # The token for the next page of results.
   --max-results: int # The maximum number of results to return with a single call. To retrieve additional results, make another call with the returned token value.
-]: any -> record<searchResults: record, nextToken: record> {
+]: any -> record<searchResults: table<savingsPlanOffering: record, rate: string, unit: string, productType: string, serviceCode: string, usageType: string, operation: string, properties: any>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -385,7 +385,7 @@ export def "describe-savings-plans-offering-rates" [
 #
 # POST /DescribeSavingsPlansOfferings
 # operationId: DescribeSavingsPlansOfferings
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: "region"|"instanceFamily", values?: list<string>}
 export def "describe-savings-plans-offerings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -413,10 +413,10 @@ export def "describe-savings-plans-offerings" [
   --service-codes: list<string> # The services.
   --usage-types: list<string> # The usage details of the line item in the billing report.
   --operations: list<string> # The specific AWS operation for the line item in the billing report.
-  --filters: list # The filters. — item shape: {name?: any, values?: any}
+  --filters: list # The filters. — item shape: {name?: "region"|"instanceFamily", values?: list<string>}
   --next-token: string # The token for the next page of results.
   --max-results: int # The maximum number of results to return with a single call. To retrieve additional results, make another call with the returned token value.
-]: any -> record<searchResults: record, nextToken: record> {
+]: any -> record<searchResults: table<offeringId: string, productTypes: list, planType: string, description: string, paymentOption: string, durationSeconds: int, currency: string, serviceCode: string, usageType: string, operation: string, properties: any>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

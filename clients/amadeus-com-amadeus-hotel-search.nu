@@ -134,7 +134,7 @@ export def "get-multi-hotel-offers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hotel-ids: list<string> # Amadeus property codes on 8 chars. Mandatory parameter for a search by predefined list of hotels. (e.g. [MCLONGHM])
+  --hotel-ids: list<string> # Amadeus property codes on 8 chars. Mandatory parameter for a search by predefined list of hotels. (required, e.g. [MCLONGHM])
   --adults: int # Number of adult guests (1-9) per room. (format: int32, default: 1, e.g. 1)
   --check-in-date: string # Check-in date of the stay (hotel local date). Format YYYY-MM-DD. The lowest accepted value is the present date (no dates in the past). If not present, the default value will be today's date in the GMT time zone. (format: date, e.g. 2023-11-22)
   --check-out-date: string # Check-out date of the stay (hotel local date). Format YYYY-MM-DD. The lowest accepted value is checkInDate+1. If not present, it will default to checkInDate +1. (format: date)
@@ -150,6 +150,7 @@ export def "get-multi-hotel-offers" [
 ]: nothing -> record<data: record<available: bool, hotel: record<brandCode: string, chainCode: string, cityCode: string, dupeId: string, hotelId: string, name: string>, offers: list<record>, self: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_ids == null) { error make --unspanned { msg: "required query parameter 'hotelIds' missing: pass --hotel-ids" } }
   let qp = [(serialize-qp "hotelIds" $hotel_ids "csv") (serialize-qp "adults" $adults "scalar") (serialize-qp "checkInDate" $check_in_date "scalar") (serialize-qp "checkOutDate" $check_out_date "scalar") (serialize-qp "countryOfResidence" $country_of_residence "scalar") (serialize-qp "roomQuantity" $room_quantity "scalar") (serialize-qp "priceRange" $price_range "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "paymentPolicy" $payment_policy "scalar") (serialize-qp "boardType" $board_type "scalar") (serialize-qp "includeClosed" $include_closed "scalar") (serialize-qp "bestRateOnly" $best_rate_only "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shopping/hotel-offers" $qp $auth.query)
   let accept_val = "application/vnd.amadeus+json"

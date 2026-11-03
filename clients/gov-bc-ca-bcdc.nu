@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "ckan_api_key" => { {scheme: $scheme, headers: {ckan_api_key: $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "ckan_api_key" => { {scheme: $scheme, headers: {"ckan_api_key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -741,19 +741,19 @@ export def "get-action-related-list" [
   --id: string # id or name of the dataset (optional)
   --dataset: string # Dataset dictionary of the dataset (optional)
   --type-filter: string # The type of related item to show (optional)
-  --qp-sort: string # The order to sort the related items in
+  --sort: string # The order to sort the related items in
   --featured: string # whether or not to restrict the results to only featured items
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "dataset" $dataset "scalar") (serialize-qp "type_filter" $type_filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "featured" $featured "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "dataset" $dataset "scalar") (serialize-qp "type_filter" $type_filter "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "featured" $featured "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/action/related_list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"id": $id, "dataset": $dataset, "type_filter": $type_filter, "sort": $qp_sort, "featured": $featured} | compact)
+    query: ({"id": $id, "dataset": $dataset, "type_filter": $type_filter, "sort": $sort, "featured": $featured} | compact)
     headers: $auth.headers
     body: null
     content_type: null

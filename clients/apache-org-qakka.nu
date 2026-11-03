@@ -1,4 +1,4 @@
-# Auto-generated client for Qakka vv1
+# Auto-generated client for Qakka v1
 # Source: https://api.apis.guru/v2/specs/apache.org/qakka/v1/openapi.json
 # Auth: --token flag or $env.QAKKA_TOKEN
 
@@ -407,13 +407,14 @@ export def "send-message-binary" [
   --regions: string # Regions to which message is to be sent
   --delay: string
   --expiration: string
-  --content-type: string # Content type of the data to be sent with Queue Message
+  --content-type: string # Content type of the data to be sent with Queue Message (required)
   --body: list
 ]: any -> record<count: int, message: string, queueMessages: table<contentType: string, createDate: int, data: string, href: string, messageId: string, queueMessageId: string, queueName: string, receivingRegion: string, sendingRegion: string>, queues: table<name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($queue_name | is-empty) { error make --unspanned { msg: "path parameter 'queueName' must be non-empty" } }
+  if ($content_type == null) { error make --unspanned { msg: "required query parameter 'contentType' missing: pass --content-type" } }
   let qp = [(serialize-qp "regions" $regions "scalar") (serialize-qp "delay" $delay "scalar") (serialize-qp "expiration" $expiration "scalar") (serialize-qp "contentType" $content_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({queue_name: (encode-path-segment $queue_name)} | format pattern "/queues/{queue_name}/messages") $qp $auth.query)
   let req_body = $body

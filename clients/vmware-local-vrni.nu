@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -296,7 +296,7 @@ export def "add-arista-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -370,7 +370,7 @@ export def "get-arista-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -407,7 +407,7 @@ export def "update-arista-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -633,7 +633,7 @@ export def "add-brocade-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -707,7 +707,7 @@ export def "get-brocade-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -744,7 +744,7 @@ export def "update-brocade-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -970,7 +970,7 @@ export def "add-checkpoint-firewall" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1044,7 +1044,7 @@ export def "get-checkpoint-firewall" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1081,7 +1081,7 @@ export def "update-checkpoint-firewall" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1226,7 +1226,7 @@ export def "add-cisco-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --switch-type: string@switch-type-completer
-]: any -> record<switch_type: string> {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1300,7 +1300,7 @@ export def "get-cisco-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<switch_type: string> {
+]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1337,7 +1337,7 @@ export def "update-cisco-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --switch-type: string@switch-type-completer
-]: any -> record<switch_type: string> {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1563,7 +1563,7 @@ export def "add-dell-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --switch-type: string@switch-type-completer-1
-]: any -> record<switch_type: string> {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1637,7 +1637,7 @@ export def "get-dell-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<switch_type: string> {
+]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1674,7 +1674,7 @@ export def "update-dell-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --switch-type: string@switch-type-completer-1
-]: any -> record<switch_type: string> {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>, switch_type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1900,7 +1900,7 @@ export def "add-hpov-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1974,7 +1974,7 @@ export def "get-hpov-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2011,7 +2011,7 @@ export def "update-hpov-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2156,7 +2156,7 @@ export def "add-hpvc-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2230,7 +2230,7 @@ export def "get-hpvc-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2267,7 +2267,7 @@ export def "update-hpvc-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2412,7 +2412,7 @@ export def "add-juniper-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2486,7 +2486,7 @@ export def "get-juniper-switch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2523,7 +2523,7 @@ export def "update-juniper-switch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3104,7 +3104,7 @@ export def "add-panorama-firewall" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3178,7 +3178,7 @@ export def "get-panorama-firewall" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3215,7 +3215,7 @@ export def "update-panorama-firewall" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3360,7 +3360,7 @@ export def "add-ucs-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3434,7 +3434,7 @@ export def "get-ucs-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3471,7 +3471,7 @@ export def "update-ucs-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3980,7 +3980,7 @@ export def "get-cluster" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-4 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record {
+]: nothing -> record<entity_id: string, entity_type: string, name: string, nsx_manager: record<entity_id: string, entity_type: string>, num_cpu_cores: int, num_datastores: int, num_hosts: int, total_cpus: int, total_memory: int, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4059,7 +4059,7 @@ export def "get-datastore" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record {
+]: nothing -> record<entity_id: string, entity_type: string, name: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4138,7 +4138,7 @@ export def "get-distributed-virtual-portgroup" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-6 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record {
+]: nothing -> record<entity_id: string, entity_type: string, name: string, distributed_virtual_switch: record<entity_id: string, entity_type: string>, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4217,7 +4217,7 @@ export def "get-distributed-virtual-switch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-7 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record {
+]: nothing -> record<entity_id: string, entity_type: string, name: string, hosts: table<entity_id: string, entity_type: string>, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4533,7 +4533,7 @@ export def "get-folder" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record {
+]: nothing -> record<entity_id: string, entity_type: string, name: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4926,7 +4926,7 @@ export def "get-nsx-manager" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-14 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record {
+]: nothing -> record<entity_id: string, entity_type: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5005,7 +5005,7 @@ export def "get-problem-event" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-15 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<event_close_time_epoch_ms: int, severity: string> {
+]: nothing -> record<entity_id: string, entity_type: string, name: string, admin_state: string, anchor_entities: table<entity_id: string, entity_type: string>, archived: bool, event_tags: list<string>, event_time_epoch_ms: int, message: string, related_entities: table<entity_id: string, entity_type: string>, event_close_time_epoch_ms: int, severity: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5084,7 +5084,7 @@ export def "get-security-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-16 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<direct_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, direct_members: table<entity_id: string, entity_type: string>, direct_source_rules: table<firewall: record, rule_set_type: string, rules: list>, excluded_members: table<entity_id: string, entity_type: string>, indirect_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, indirect_source_rules: table<firewall: record, rule_set_type: string, rules: list>, members: table<entity_id: string, entity_type: string>, parents: table<entity_id: string, entity_type: string>, translated_vm_count: int, vendor_id: string> {
+]: nothing -> record<entity_id: string, entity_type: string, name: string, members: table<entity_id: string, entity_type: string>, direct_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, direct_members: table<entity_id: string, entity_type: string>, direct_source_rules: table<firewall: record, rule_set_type: string, rules: list>, excluded_members: table<entity_id: string, entity_type: string>, indirect_destination_rules: table<firewall: record, rule_set_type: string, rules: list>, indirect_source_rules: table<firewall: record, rule_set_type: string, rules: list>, parents: table<entity_id: string, entity_type: string>, translated_vm_count: int, vendor_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5242,7 +5242,7 @@ export def "get-service-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-18 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record {
+]: nothing -> record<entity_id: string, entity_type: string, name: string, members: table<entity_id: string, entity_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5400,7 +5400,7 @@ export def "get-datacenter" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record {
+]: nothing -> record<entity_id: string, entity_type: string, name: string, vcenter_manager: record<entity_id: string, entity_type: string>, vendor_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5479,7 +5479,7 @@ export def "get-vcenter-manager" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-20 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record<fqdn: string, ip_address: record<ip_address: string, netmask: string, network_address: string>, nsx_manager: record<entity_id: string, entity_type: string>, vm: record<entity_id: string, entity_type: string>> {
+]: nothing -> record<entity_id: string, entity_type: string, name: string, fqdn: string, ip_address: record<ip_address: string, netmask: string, network_address: string>, nsx_manager: record<entity_id: string, entity_type: string>, vm: record<entity_id: string, entity_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5637,7 +5637,7 @@ export def "get-vm" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-22 # Response content type
   --time: int # time in epoch seconds (format: int64)
-]: nothing -> record {
+]: nothing -> record<entity_id: string, entity_type: string, name: string, default_gateway: string, destination_firewall_rules: table<firewall: record, rule_set_type: string, rules: list>, ip_addresses: table<ip_address: string, netmask: string, network_address: string>, ip_sets: table<entity_id: string, entity_type: string>, security_groups: table<entity_id: string, entity_type: string>, source_firewall_rules: table<firewall: record, rule_set_type: string, rules: list>, vnics: table<entity_id: string, entity_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6063,11 +6063,12 @@ export def "get-tier" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-26 # Response content type
-  --authorization: string # Authorization Header
+  --authorization: string # Authorization Header (required, format: NetworkInsight <token>)
 ]: nothing -> record<entity_id: string, entity_type: string, name: string, application: record<entity_id: string, entity_type: string>, group_membership_criteria: table<ip_address_membership_criteria: record, membership_type: string, search_membership_criteria: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tier_id | is-empty) { error make --unspanned { msg: "path parameter 'tier-id' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({tier_id: (encode-path-segment $tier_id)} | format pattern "/groups/tiers/{tier_id}") $auth.query)
   let accept_val = ($accept | default "application")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

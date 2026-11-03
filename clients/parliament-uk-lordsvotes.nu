@@ -1,4 +1,4 @@
-# Auto-generated client for Lords Votes API vv1
+# Auto-generated client for Lords Votes API v1
 # Source: https://api.apis.guru/v2/specs/parliament.uk/lordsvotes/v1/openapi.json
 # Auth: --token flag or $env.LORDS_VOTES_API_TOKEN
 
@@ -180,7 +180,7 @@ export def "get-data-divisions-membervoting" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --member-id: int # Id number of a Member whose voting records are to be returned (format: int32)
+  --member-id: int # Id number of a Member whose voting records are to be returned (required, format: int32)
   --search-term: string # Divisions containing search term within title or number (nullable)
   --include-when-member-was-teller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted (nullable)
   --start-date: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
@@ -195,6 +195,7 @@ export def "get-data-divisions-membervoting" [
 ]: nothing -> record<memberId: int, memberWasContent: bool, memberWasTeller: bool, publishedDivision: record<amendmentMotionNotes: string, authoritativeContentCount: int, authoritativeNotContentCount: int, contentTellers: list<record>, contents: list<record>, date: string, divisionHadTellers: bool, divisionId: int, divisionWasExclusivelyRemote: bool, isGovernmentContent: bool, isGovernmentWin: bool, isHouse: bool, isWhipped: bool, memberContentCount: int, memberNotContentCount: int, notContentTellers: list<record>, notContents: list<record>, notes: string, number: int, remoteVotingEnd: string, remoteVotingStart: string, sponsoringMemberId: int, tellerContentCount: int, tellerNotContentCount: int, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($member_id == null) { error make --unspanned { msg: "required query parameter 'MemberId' missing: pass --member-id" } }
   let qp = [(serialize-qp "MemberId" $member_id "scalar") (serialize-qp "SearchTerm" $search_term "scalar") (serialize-qp "IncludeWhenMemberWasTeller" $include_when_member_was_teller "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "DivisionNumber" $division_number "scalar") (serialize-qp "TotalVotesCast.Comparator" $total_votes_cast_comparator "scalar") (serialize-qp "TotalVotesCast.ValueToCompare" $total_votes_cast_value_to_compare "scalar") (serialize-qp "Majority.Comparator" $majority_comparator "scalar") (serialize-qp "Majority.ValueToCompare" $majority_value_to_compare "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/data/Divisions/membervoting" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

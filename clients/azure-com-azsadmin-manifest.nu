@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -133,11 +133,12 @@ export def "manifests-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
 ]: nothing -> record<nextLink: string, value: table<alwaysRoutable: bool, displayName: string, enabled: bool, extensionCollection: record, linkedNotificationRules: record, metadata: record, name: string, namespace: string, providerAuthorization: record, providerLocation: string, providerType: string, provisioningState: string, resourceGroupName: string, resourceHydrationAccounts: record, resourceLocation: string, resourceTags: record, resourceTypes: record, routingResourceManagerType: string, subscriptionId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Subscriptions.Admin/manifests") $qp $auth.query)
   let accept_val = "application/json"
@@ -172,12 +173,13 @@ export def "manifests-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
 ]: nothing -> record<alwaysRoutable: bool, displayName: string, enabled: bool, extensionCollection: record<extensions: record<nextLink: string, value: list>, version: string>, linkedNotificationRules: record<nextLink: string, value: list<record>>, metadata: record, name: string, namespace: string, providerAuthorization: record<applicationId: string, roleDefinitionId: string>, providerLocation: string, providerType: string, provisioningState: string, resourceGroupName: string, resourceHydrationAccounts: record<nextLink: string, value: list<record>>, resourceLocation: string, resourceTags: record, resourceTypes: record<nextLink: string, value: list<record>>, routingResourceManagerType: string, subscriptionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($manifest_name | is-empty) { error make --unspanned { msg: "path parameter 'manifestName' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), manifest_name: (encode-path-segment $manifest_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Subscriptions.Admin/manifests/{manifest_name}") $qp $auth.query)
   let accept_val = "application/json"

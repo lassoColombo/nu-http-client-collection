@@ -1,4 +1,4 @@
-# Auto-generated client for Android Device Provisioning Partner API vv1
+# Auto-generated client for Android Device Provisioning Partner API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/androiddeviceprovisioning/v1/openapi.json
 # Auth: --token flag or $env.ANDROID_DEVICE_PROVISIONING_PARTNER_API_TOKEN
 

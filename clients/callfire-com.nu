@@ -1,4 +1,4 @@
-# Auto-generated client for CallFire API Documentation vV2
+# Auto-generated client for CallFire API Documentation V2
 # Source: https://api.apis.guru/v2/specs/callfire.com/V2/openapi.json
 # Auth: --token flag or $env.CALLFIRE_API_DOCUMENTATION_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -1256,8 +1256,8 @@ export def "post-file-campaign-sound" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1559,7 +1559,7 @@ export def "find-do-not-contacts" [
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --prefix: string # Prefix (1-10 digits) of phone numbers
   --campaign-id: int # A campaign id which was used to send a message to a DNC number (format: int64)
-  --qp-source: string # A DNC source name to search for DNCs
+  --source: string # A DNC source name to search for DNCs
   --call: oneof<nothing, bool> # Show only Do-Not-Call numbers
   --text: oneof<nothing, bool> # Show only Do-Not-Text numbers
   --inbound-call: oneof<nothing, bool> # ~
@@ -1568,14 +1568,14 @@ export def "find-do-not-contacts" [
 ]: nothing -> record<items: table<call: bool, campaignId: int, created: int, inboundCall: bool, inboundText: bool, number: string, source: string, text: bool>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "call" $call "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "inboundCall" $inbound_call "scalar") (serialize-qp "inboundText" $inbound_text "scalar") (serialize-qp "number" $number "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "call" $call "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "inboundCall" $inbound_call "scalar") (serialize-qp "inboundText" $inbound_text "scalar") (serialize-qp "number" $number "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/contacts/dncs" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"fields": $fields, "limit": $limit, "offset": $offset, "prefix": $prefix, "campaignId": $campaign_id, "source": $qp_source, "call": $call, "text": $text, "inboundCall": $inbound_call, "inboundText": $inbound_text, "number": $number} | compact)
+    query: ({"fields": $fields, "limit": $limit, "offset": $offset, "prefix": $prefix, "campaignId": $campaign_id, "source": $source, "call": $call, "text": $text, "inboundCall": $inbound_call, "inboundText": $inbound_text, "number": $number} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1604,14 +1604,14 @@ export def "add-do-not-contacts" [
   --inbound-call: oneof<nothing, bool> # ~
   --inbound-text: oneof<nothing, bool> # ~
   --numbers: list<string> # A list of phone numbers in E.164 format (11-digit), example: 12132000384, 14142777322
-  --body-source: string # A list of new contact objects which need to be added. Default value: Api V2
+  --source: string # A list of new contact objects which need to be added. Default value: Api V2
   --text: oneof<nothing, bool> # If set to true add all given numbers to Do-Not-Text list. Default value: true
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contacts/dncs" $auth.query)
-  let req_body = {"call": $call, "inboundCall": $inbound_call, "inboundText": $inbound_text, "numbers": $numbers, "source": $body_source, "text": $text} | compact
+  let req_body = {"call": $call, "inboundCall": $inbound_call, "inboundText": $inbound_text, "numbers": $numbers, "source": $source, "text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1795,7 +1795,7 @@ export def "update-do-not-contact" [
   --inbound-call: oneof<nothing, bool> # ~
   --inbound-text: oneof<nothing, bool> # ~
   --body-number: string # A single DNC number in E.164 format (11-digit). Example: 12132000384
-  --body-source: string # The name of DNC source (can be the name of DNC list that user uploads to CallFire)
+  --source: string # The name of DNC source (can be the name of DNC list that user uploads to CallFire)
   --text: oneof<nothing, bool> # A number on Do-Not-Text list
 ]: any -> any {
   let input = $in
@@ -1803,7 +1803,7 @@ export def "update-do-not-contact" [
   let base = ($base_url | default $BASE_URL)
   if ($number | is-empty) { error make --unspanned { msg: "path parameter 'number' must be non-empty" } }
   let full_url = (build-url $base ({number: (encode-path-segment $number)} | format pattern "/contacts/dncs/{number}") $auth.query)
-  let req_body = {"call": $call, "inboundCall": $inbound_call, "inboundText": $inbound_text, "number": $body_number, "source": $body_source, "text": $text} | compact
+  let req_body = {"call": $call, "inboundCall": $inbound_call, "inboundText": $inbound_text, "number": $body_number, "source": $source, "text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1935,8 +1935,8 @@ export def "create-contact-list-from-file" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -3258,8 +3258,8 @@ export def "create-media" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -4170,7 +4170,7 @@ export def "create-text-auto-reply" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # An id of a text auto reply (format: int64)
   --keyword: string # Setup autoreply for a given keyword
-  --body-match: string # Text to match. If it is set then autoreply will be sent to a person who texted message with matched text. Case insensitive, if parameter is not specified then all texts will be matched
+  --match: string # Text to match. If it is set then autoreply will be sent to a person who texted message with matched text. Case insensitive, if parameter is not specified then all texts will be matched
   --message: string # A text message to return as an auto reply
   --number: string # Setup autoreply for a given phone number, E.164 format (11-digit). Example: 12132000384
 ]: any -> record<id: int> {
@@ -4178,7 +4178,7 @@ export def "create-text-auto-reply" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/texts/auto-replys" $auth.query)
-  let req_body = {"id": $id, "keyword": $keyword, "match": $body_match, "message": $message, "number": $number} | compact
+  let req_body = {"id": $id, "keyword": $keyword, "match": $match, "message": $message, "number": $number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

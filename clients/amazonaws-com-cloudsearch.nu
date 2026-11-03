@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -166,9 +166,9 @@ export def "get-build-suggesters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string
-  --action: string@action-completer
-  --version: string@version-completer
+  --domain-name: string # required
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -179,6 +179,9 @@ export def "get-build-suggesters" [
 ]: nothing -> record<FieldNames: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  let action = ($action | default "BuildSuggesters")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -213,8 +216,8 @@ export def "post-build-suggesters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer
-  --version: string@version-completer
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -227,6 +230,8 @@ export def "post-build-suggesters" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "BuildSuggesters")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -263,9 +268,9 @@ export def "get-create-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # A name for the domain you are creating. Allowed characters are a-z (lower-case letters), 0-9, and hyphen (-). Domain names must start with a letter or number and be at least 3 and no more than 28 characters long.
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --domain-name: string # A name for the domain you are creating. Allowed characters are a-z (lower-case letters), 0-9, and hyphen (-). Domain names must start with a letter or number and be at least 3 and no more than 28 characters long. (required)
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -273,9 +278,12 @@ export def "get-create-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainStatus: record<DomainId: string, DomainName: string, ARN: string, Created: record, Deleted: record, DocService: record<Endpoint: string>, SearchService: record<Endpoint: string>, RequiresIndexDocuments: record, Processing: record, SearchInstanceType: record, SearchPartitionCount: record, SearchInstanceCount: record, Limits: record<MaximumReplicationCount: int, MaximumPartitionCount: int>>> {
+]: nothing -> record<DomainStatus: record<DomainId: string, DomainName: string, ARN: string, Created: bool, Deleted: bool, DocService: record<Endpoint: string>, SearchService: record<Endpoint: string>, RequiresIndexDocuments: bool, Processing: bool, SearchInstanceType: string, SearchPartitionCount: int, SearchInstanceCount: int, Limits: record<MaximumReplicationCount: int, MaximumPartitionCount: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  let action = ($action | default "CreateDomain")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -310,8 +318,8 @@ export def "post-create-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -320,10 +328,12 @@ export def "post-create-domain" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DomainStatus: record<DomainId: string, DomainName: string, ARN: string, Created: record, Deleted: record, DocService: record<Endpoint: string>, SearchService: record<Endpoint: string>, RequiresIndexDocuments: record, Processing: record, SearchInstanceType: record, SearchPartitionCount: record, SearchInstanceCount: record, Limits: record<MaximumReplicationCount: int, MaximumPartitionCount: int>>> {
+]: any -> record<DomainStatus: record<DomainId: string, DomainName: string, ARN: string, Created: bool, Deleted: bool, DocService: record<Endpoint: string>, SearchService: record<Endpoint: string>, RequiresIndexDocuments: bool, Processing: bool, SearchInstanceType: string, SearchPartitionCount: int, SearchInstanceCount: int, Limits: record<MaximumReplicationCount: int, MaximumPartitionCount: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateDomain")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -360,10 +370,10 @@ export def "get-define-analysis-scheme" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string
-  --analysis-scheme: record
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --domain-name: string # required
+  --analysis-scheme: record # required
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -371,9 +381,13 @@ export def "get-define-analysis-scheme" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AnalysisScheme: record<Options: record<AnalysisSchemeName: string, AnalysisSchemeLanguage: string, AnalysisOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: nothing -> record<AnalysisScheme: record<Options: record<AnalysisSchemeName: string, AnalysisSchemeLanguage: string, AnalysisOptions: record>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  if ($analysis_scheme == null) { error make --unspanned { msg: "required query parameter 'AnalysisScheme' missing: pass --analysis-scheme" } }
+  let action = ($action | default "DefineAnalysisScheme")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "AnalysisScheme" $analysis_scheme "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -408,8 +422,8 @@ export def "post-define-analysis-scheme" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -418,10 +432,12 @@ export def "post-define-analysis-scheme" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AnalysisScheme: record<Options: record<AnalysisSchemeName: string, AnalysisSchemeLanguage: string, AnalysisOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: any -> record<AnalysisScheme: record<Options: record<AnalysisSchemeName: string, AnalysisSchemeLanguage: string, AnalysisOptions: record>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DefineAnalysisScheme")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -458,10 +474,10 @@ export def "get-define-expression" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string
-  --expression: record
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --domain-name: string # required
+  --expression: record # required
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -469,9 +485,13 @@ export def "get-define-expression" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Expression: record<Options: record<ExpressionName: string, ExpressionValue: string>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: nothing -> record<Expression: record<Options: record<ExpressionName: string, ExpressionValue: string>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  if ($expression == null) { error make --unspanned { msg: "required query parameter 'Expression' missing: pass --expression" } }
+  let action = ($action | default "DefineExpression")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Expression" $expression "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -506,8 +526,8 @@ export def "post-define-expression" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -516,10 +536,12 @@ export def "post-define-expression" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Expression: record<Options: record<ExpressionName: string, ExpressionValue: string>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: any -> record<Expression: record<Options: record<ExpressionName: string, ExpressionValue: string>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DefineExpression")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -556,10 +578,10 @@ export def "get-define-index-field" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string
-  --index-field: record # The index field and field options you want to configure.
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --domain-name: string # required
+  --index-field: record # The index field and field options you want to configure. (required)
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -567,9 +589,13 @@ export def "get-define-index-field" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<IndexField: record<Options: record<IndexFieldName: record, IndexFieldType: string, IntOptions: record, DoubleOptions: record, LiteralOptions: record, TextOptions: record, DateOptions: record, LatLonOptions: record, IntArrayOptions: record, DoubleArrayOptions: record, LiteralArrayOptions: record, TextArrayOptions: record, DateArrayOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: nothing -> record<IndexField: record<Options: record<IndexFieldName: string, IndexFieldType: string, IntOptions: record, DoubleOptions: record, LiteralOptions: record, TextOptions: record, DateOptions: record, LatLonOptions: record, IntArrayOptions: record, DoubleArrayOptions: record, LiteralArrayOptions: record, TextArrayOptions: record, DateArrayOptions: record>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  if ($index_field == null) { error make --unspanned { msg: "required query parameter 'IndexField' missing: pass --index-field" } }
+  let action = ($action | default "DefineIndexField")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "IndexField" $index_field "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -604,8 +630,8 @@ export def "post-define-index-field" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -614,10 +640,12 @@ export def "post-define-index-field" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<IndexField: record<Options: record<IndexFieldName: record, IndexFieldType: string, IntOptions: record, DoubleOptions: record, LiteralOptions: record, TextOptions: record, DateOptions: record, LatLonOptions: record, IntArrayOptions: record, DoubleArrayOptions: record, LiteralArrayOptions: record, TextArrayOptions: record, DateArrayOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: any -> record<IndexField: record<Options: record<IndexFieldName: string, IndexFieldType: string, IntOptions: record, DoubleOptions: record, LiteralOptions: record, TextOptions: record, DateOptions: record, LatLonOptions: record, IntArrayOptions: record, DoubleArrayOptions: record, LiteralArrayOptions: record, TextArrayOptions: record, DateArrayOptions: record>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DefineIndexField")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -654,10 +682,10 @@ export def "get-define-suggester" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string
-  --suggester: record
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --domain-name: string # required
+  --suggester: record # required
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -665,9 +693,13 @@ export def "get-define-suggester" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Suggester: record<Options: record<SuggesterName: string, DocumentSuggesterOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: nothing -> record<Suggester: record<Options: record<SuggesterName: string, DocumentSuggesterOptions: record>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  if ($suggester == null) { error make --unspanned { msg: "required query parameter 'Suggester' missing: pass --suggester" } }
+  let action = ($action | default "DefineSuggester")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Suggester" $suggester "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -702,8 +734,8 @@ export def "post-define-suggester" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -712,10 +744,12 @@ export def "post-define-suggester" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Suggester: record<Options: record<SuggesterName: string, DocumentSuggesterOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: any -> record<Suggester: record<Options: record<SuggesterName: string, DocumentSuggesterOptions: record>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DefineSuggester")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -752,10 +786,10 @@ export def "get-delete-analysis-scheme" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string
-  --analysis-scheme-name: string # The name of the analysis scheme you want to delete.
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --domain-name: string # required
+  --analysis-scheme-name: string # The name of the analysis scheme you want to delete. (required)
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -763,9 +797,13 @@ export def "get-delete-analysis-scheme" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AnalysisScheme: record<Options: record<AnalysisSchemeName: string, AnalysisSchemeLanguage: string, AnalysisOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: nothing -> record<AnalysisScheme: record<Options: record<AnalysisSchemeName: string, AnalysisSchemeLanguage: string, AnalysisOptions: record>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  if ($analysis_scheme_name == null) { error make --unspanned { msg: "required query parameter 'AnalysisSchemeName' missing: pass --analysis-scheme-name" } }
+  let action = ($action | default "DeleteAnalysisScheme")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "AnalysisSchemeName" $analysis_scheme_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -800,8 +838,8 @@ export def "post-delete-analysis-scheme" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -810,10 +848,12 @@ export def "post-delete-analysis-scheme" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AnalysisScheme: record<Options: record<AnalysisSchemeName: string, AnalysisSchemeLanguage: string, AnalysisOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: any -> record<AnalysisScheme: record<Options: record<AnalysisSchemeName: string, AnalysisSchemeLanguage: string, AnalysisOptions: record>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteAnalysisScheme")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -850,9 +890,9 @@ export def "get-delete-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # The name of the domain you want to permanently delete.
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --domain-name: string # The name of the domain you want to permanently delete. (required)
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -860,9 +900,12 @@ export def "get-delete-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainStatus: record<DomainId: string, DomainName: string, ARN: string, Created: record, Deleted: record, DocService: record<Endpoint: string>, SearchService: record<Endpoint: string>, RequiresIndexDocuments: record, Processing: record, SearchInstanceType: record, SearchPartitionCount: record, SearchInstanceCount: record, Limits: record<MaximumReplicationCount: int, MaximumPartitionCount: int>>> {
+]: nothing -> record<DomainStatus: record<DomainId: string, DomainName: string, ARN: string, Created: bool, Deleted: bool, DocService: record<Endpoint: string>, SearchService: record<Endpoint: string>, RequiresIndexDocuments: bool, Processing: bool, SearchInstanceType: string, SearchPartitionCount: int, SearchInstanceCount: int, Limits: record<MaximumReplicationCount: int, MaximumPartitionCount: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  let action = ($action | default "DeleteDomain")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -897,8 +940,8 @@ export def "post-delete-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -907,10 +950,12 @@ export def "post-delete-domain" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DomainStatus: record<DomainId: string, DomainName: string, ARN: string, Created: record, Deleted: record, DocService: record<Endpoint: string>, SearchService: record<Endpoint: string>, RequiresIndexDocuments: record, Processing: record, SearchInstanceType: record, SearchPartitionCount: record, SearchInstanceCount: record, Limits: record<MaximumReplicationCount: int, MaximumPartitionCount: int>>> {
+]: any -> record<DomainStatus: record<DomainId: string, DomainName: string, ARN: string, Created: bool, Deleted: bool, DocService: record<Endpoint: string>, SearchService: record<Endpoint: string>, RequiresIndexDocuments: bool, Processing: bool, SearchInstanceType: string, SearchPartitionCount: int, SearchInstanceCount: int, Limits: record<MaximumReplicationCount: int, MaximumPartitionCount: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteDomain")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -947,10 +992,10 @@ export def "get-delete-expression" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string
-  --expression-name: string # The name of the Expression to delete.
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --domain-name: string # required
+  --expression-name: string # The name of the Expression to delete. (required)
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -958,9 +1003,13 @@ export def "get-delete-expression" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Expression: record<Options: record<ExpressionName: string, ExpressionValue: string>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: nothing -> record<Expression: record<Options: record<ExpressionName: string, ExpressionValue: string>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  if ($expression_name == null) { error make --unspanned { msg: "required query parameter 'ExpressionName' missing: pass --expression-name" } }
+  let action = ($action | default "DeleteExpression")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ExpressionName" $expression_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -995,8 +1044,8 @@ export def "post-delete-expression" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1005,10 +1054,12 @@ export def "post-delete-expression" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Expression: record<Options: record<ExpressionName: string, ExpressionValue: string>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: any -> record<Expression: record<Options: record<ExpressionName: string, ExpressionValue: string>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteExpression")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1045,10 +1096,10 @@ export def "get-delete-index-field" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string
-  --index-field-name: string # The name of the index field your want to remove from the domain's indexing options.
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --domain-name: string # required
+  --index-field-name: string # The name of the index field your want to remove from the domain's indexing options. (required)
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1056,9 +1107,13 @@ export def "get-delete-index-field" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<IndexField: record<Options: record<IndexFieldName: record, IndexFieldType: string, IntOptions: record, DoubleOptions: record, LiteralOptions: record, TextOptions: record, DateOptions: record, LatLonOptions: record, IntArrayOptions: record, DoubleArrayOptions: record, LiteralArrayOptions: record, TextArrayOptions: record, DateArrayOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: nothing -> record<IndexField: record<Options: record<IndexFieldName: string, IndexFieldType: string, IntOptions: record, DoubleOptions: record, LiteralOptions: record, TextOptions: record, DateOptions: record, LatLonOptions: record, IntArrayOptions: record, DoubleArrayOptions: record, LiteralArrayOptions: record, TextArrayOptions: record, DateArrayOptions: record>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  if ($index_field_name == null) { error make --unspanned { msg: "required query parameter 'IndexFieldName' missing: pass --index-field-name" } }
+  let action = ($action | default "DeleteIndexField")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "IndexFieldName" $index_field_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1093,8 +1148,8 @@ export def "post-delete-index-field" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1103,10 +1158,12 @@ export def "post-delete-index-field" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<IndexField: record<Options: record<IndexFieldName: record, IndexFieldType: string, IntOptions: record, DoubleOptions: record, LiteralOptions: record, TextOptions: record, DateOptions: record, LatLonOptions: record, IntArrayOptions: record, DoubleArrayOptions: record, LiteralArrayOptions: record, TextArrayOptions: record, DateArrayOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: any -> record<IndexField: record<Options: record<IndexFieldName: string, IndexFieldType: string, IntOptions: record, DoubleOptions: record, LiteralOptions: record, TextOptions: record, DateOptions: record, LatLonOptions: record, IntArrayOptions: record, DoubleArrayOptions: record, LiteralArrayOptions: record, TextArrayOptions: record, DateArrayOptions: record>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteIndexField")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1143,10 +1200,10 @@ export def "get-delete-suggester" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string
-  --suggester-name: string # Specifies the name of the suggester you want to delete.
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --domain-name: string # required
+  --suggester-name: string # Specifies the name of the suggester you want to delete. (required)
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1154,9 +1211,13 @@ export def "get-delete-suggester" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Suggester: record<Options: record<SuggesterName: string, DocumentSuggesterOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: nothing -> record<Suggester: record<Options: record<SuggesterName: string, DocumentSuggesterOptions: record>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  if ($suggester_name == null) { error make --unspanned { msg: "required query parameter 'SuggesterName' missing: pass --suggester-name" } }
+  let action = ($action | default "DeleteSuggester")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "SuggesterName" $suggester_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1191,8 +1252,8 @@ export def "post-delete-suggester" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1201,10 +1262,12 @@ export def "post-delete-suggester" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Suggester: record<Options: record<SuggesterName: string, DocumentSuggesterOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: any -> record<Suggester: record<Options: record<SuggesterName: string, DocumentSuggesterOptions: record>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteSuggester")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1241,11 +1304,11 @@ export def "get-describe-analysis-schemes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # The name of the domain you want to describe.
+  --domain-name: string # The name of the domain you want to describe. (required)
   --analysis-scheme-names: list # The analysis schemes you want to describe.
   --deployed: oneof<nothing, bool> # Whether to display the deployed configuration (true) or include any pending changes (false). Defaults to false.
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1253,9 +1316,12 @@ export def "get-describe-analysis-schemes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AnalysisSchemes: record> {
+]: nothing -> record<AnalysisSchemes: table<Options: record, Status: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  let action = ($action | default "DescribeAnalysisSchemes")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "AnalysisSchemeNames" $analysis_scheme_names "multi") (serialize-qp "Deployed" $deployed "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1290,8 +1356,8 @@ export def "post-describe-analysis-schemes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1300,10 +1366,12 @@ export def "post-describe-analysis-schemes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AnalysisSchemes: record> {
+]: any -> record<AnalysisSchemes: table<Options: record, Status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAnalysisSchemes")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1340,10 +1408,10 @@ export def "get-describe-availability-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # The name of the domain you want to describe.
+  --domain-name: string # The name of the domain you want to describe. (required)
   --deployed: oneof<nothing, bool> # Whether to display the deployed configuration (true) or include any pending changes (false). Defaults to false.
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1351,9 +1419,12 @@ export def "get-describe-availability-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AvailabilityOptions: record<Options: record, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: nothing -> record<AvailabilityOptions: record<Options: bool, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  let action = ($action | default "DescribeAvailabilityOptions")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Deployed" $deployed "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1388,8 +1459,8 @@ export def "post-describe-availability-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1398,10 +1469,12 @@ export def "post-describe-availability-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AvailabilityOptions: record<Options: record, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: any -> record<AvailabilityOptions: record<Options: bool, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAvailabilityOptions")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1438,10 +1511,10 @@ export def "get-describe-domain-endpoint-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # A string that represents the name of a domain.
+  --domain-name: string # A string that represents the name of a domain. (required)
   --deployed: oneof<nothing, bool> # Whether to retrieve the latest configuration (which might be in a Processing state) or the current, active configuration. Defaults to false.
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1449,9 +1522,12 @@ export def "get-describe-domain-endpoint-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainEndpointOptions: record<Options: record<EnforceHTTPS: record, TLSSecurityPolicy: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: nothing -> record<DomainEndpointOptions: record<Options: record<EnforceHTTPS: bool, TLSSecurityPolicy: string>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  let action = ($action | default "DescribeDomainEndpointOptions")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Deployed" $deployed "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1486,8 +1562,8 @@ export def "post-describe-domain-endpoint-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1496,10 +1572,12 @@ export def "post-describe-domain-endpoint-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DomainEndpointOptions: record<Options: record<EnforceHTTPS: record, TLSSecurityPolicy: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: any -> record<DomainEndpointOptions: record<Options: record<EnforceHTTPS: bool, TLSSecurityPolicy: string>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeDomainEndpointOptions")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1537,8 +1615,8 @@ export def "get-describe-domains" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-names: list # The names of the domains you want to include in the response.
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1546,9 +1624,11 @@ export def "get-describe-domains" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainStatusList: table<DomainId: string, DomainName: string, ARN: string, Created: record, Deleted: record, DocService: record, SearchService: record, RequiresIndexDocuments: record, Processing: record, SearchInstanceType: record, SearchPartitionCount: record, SearchInstanceCount: record, Limits: record>> {
+]: nothing -> record<DomainStatusList: table<DomainId: string, DomainName: string, ARN: string, Created: bool, Deleted: bool, DocService: record, SearchService: record, RequiresIndexDocuments: bool, Processing: bool, SearchInstanceType: string, SearchPartitionCount: int, SearchInstanceCount: int, Limits: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeDomains")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainNames" $domain_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1583,8 +1663,8 @@ export def "post-describe-domains" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1593,10 +1673,12 @@ export def "post-describe-domains" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DomainStatusList: table<DomainId: string, DomainName: string, ARN: string, Created: record, Deleted: record, DocService: record, SearchService: record, RequiresIndexDocuments: record, Processing: record, SearchInstanceType: record, SearchPartitionCount: record, SearchInstanceCount: record, Limits: record>> {
+]: any -> record<DomainStatusList: table<DomainId: string, DomainName: string, ARN: string, Created: bool, Deleted: bool, DocService: record, SearchService: record, RequiresIndexDocuments: bool, Processing: bool, SearchInstanceType: string, SearchPartitionCount: int, SearchInstanceCount: int, Limits: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeDomains")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1633,11 +1715,11 @@ export def "get-describe-expressions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # The name of the domain you want to describe.
+  --domain-name: string # The name of the domain you want to describe. (required)
   --expression-names: list # Limits the DescribeExpressions response to the specified expressions. If not specified, all expressions are shown.
   --deployed: oneof<nothing, bool> # Whether to display the deployed configuration (true) or include any pending changes (false). Defaults to false.
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1645,9 +1727,12 @@ export def "get-describe-expressions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Expressions: record> {
+]: nothing -> record<Expressions: table<Options: record, Status: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  let action = ($action | default "DescribeExpressions")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ExpressionNames" $expression_names "multi") (serialize-qp "Deployed" $deployed "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1682,8 +1767,8 @@ export def "post-describe-expressions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1692,10 +1777,12 @@ export def "post-describe-expressions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Expressions: record> {
+]: any -> record<Expressions: table<Options: record, Status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeExpressions")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1732,11 +1819,11 @@ export def "get-describe-index-fields" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # The name of the domain you want to describe.
+  --domain-name: string # The name of the domain you want to describe. (required)
   --field-names: list # A list of the index fields you want to describe. If not specified, information is returned for all configured index fields.
   --deployed: oneof<nothing, bool> # Whether to display the deployed configuration (true) or include any pending changes (false). Defaults to false.
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1744,9 +1831,12 @@ export def "get-describe-index-fields" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<IndexFields: record> {
+]: nothing -> record<IndexFields: table<Options: record, Status: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  let action = ($action | default "DescribeIndexFields")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "FieldNames" $field_names "multi") (serialize-qp "Deployed" $deployed "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1781,8 +1871,8 @@ export def "post-describe-index-fields" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1791,10 +1881,12 @@ export def "post-describe-index-fields" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<IndexFields: record> {
+]: any -> record<IndexFields: table<Options: record, Status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeIndexFields")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1831,9 +1923,9 @@ export def "get-describe-scaling-parameters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --domain-name: string # required
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1841,9 +1933,12 @@ export def "get-describe-scaling-parameters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ScalingParameters: record<Options: record<DesiredInstanceType: record, DesiredReplicationCount: record, DesiredPartitionCount: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: nothing -> record<ScalingParameters: record<Options: record<DesiredInstanceType: string, DesiredReplicationCount: int, DesiredPartitionCount: int>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  let action = ($action | default "DescribeScalingParameters")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1878,8 +1973,8 @@ export def "post-describe-scaling-parameters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1888,10 +1983,12 @@ export def "post-describe-scaling-parameters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ScalingParameters: record<Options: record<DesiredInstanceType: record, DesiredReplicationCount: record, DesiredPartitionCount: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: any -> record<ScalingParameters: record<Options: record<DesiredInstanceType: string, DesiredReplicationCount: int, DesiredPartitionCount: int>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeScalingParameters")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1928,10 +2025,10 @@ export def "get-describe-service-access-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # The name of the domain you want to describe.
+  --domain-name: string # The name of the domain you want to describe. (required)
   --deployed: oneof<nothing, bool> # Whether to display the deployed configuration (true) or include any pending changes (false). Defaults to false.
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1939,9 +2036,12 @@ export def "get-describe-service-access-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AccessPolicies: record<Options: string, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: nothing -> record<AccessPolicies: record<Options: string, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  let action = ($action | default "DescribeServiceAccessPolicies")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Deployed" $deployed "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1976,8 +2076,8 @@ export def "post-describe-service-access-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1986,10 +2086,12 @@ export def "post-describe-service-access-policies" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AccessPolicies: record<Options: string, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: any -> record<AccessPolicies: record<Options: string, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeServiceAccessPolicies")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2026,11 +2128,11 @@ export def "get-describe-suggesters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # The name of the domain you want to describe.
+  --domain-name: string # The name of the domain you want to describe. (required)
   --suggester-names: list # The suggesters you want to describe.
   --deployed: oneof<nothing, bool> # Whether to display the deployed configuration (true) or include any pending changes (false). Defaults to false.
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2038,9 +2140,12 @@ export def "get-describe-suggesters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Suggesters: record> {
+]: nothing -> record<Suggesters: table<Options: record, Status: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  let action = ($action | default "DescribeSuggesters")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "SuggesterNames" $suggester_names "multi") (serialize-qp "Deployed" $deployed "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2075,8 +2180,8 @@ export def "post-describe-suggesters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2085,10 +2190,12 @@ export def "post-describe-suggesters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Suggesters: record> {
+]: any -> record<Suggesters: table<Options: record, Status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeSuggesters")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2125,9 +2232,9 @@ export def "get-index-documents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --domain-name: string # required
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2135,9 +2242,12 @@ export def "get-index-documents" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FieldNames: record> {
+]: nothing -> record<FieldNames: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  let action = ($action | default "IndexDocuments")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2172,8 +2282,8 @@ export def "post-index-documents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2182,10 +2292,12 @@ export def "post-index-documents" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<FieldNames: record> {
+]: any -> record<FieldNames: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "IndexDocuments")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2222,8 +2334,8 @@ export def "get-list-domain-names" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2234,6 +2346,8 @@ export def "get-list-domain-names" [
 ]: nothing -> record<DomainNames: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListDomainNames")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2268,8 +2382,8 @@ export def "post-list-domain-names" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2280,6 +2394,8 @@ export def "post-list-domain-names" [
 ]: nothing -> record<DomainNames: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListDomainNames")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2314,10 +2430,10 @@ export def "get-update-availability-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string
-  --multi-az: oneof<nothing, bool> # You expand an existing search domain to a second Availability Zone by setting the Multi-AZ option to true. Similarly, you can turn off the Multi-AZ option to downgrade the domain to a single Availability Zone by setting the Multi-AZ option to false.
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --domain-name: string # required
+  --multi-az: oneof<nothing, bool> # You expand an existing search domain to a second Availability Zone by setting the Multi-AZ option to true. Similarly, you can turn off the Multi-AZ option to downgrade the domain to a single Availability Zone by setting the Multi-AZ option to false. (required)
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2325,9 +2441,13 @@ export def "get-update-availability-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AvailabilityOptions: record<Options: record, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: nothing -> record<AvailabilityOptions: record<Options: bool, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  if ($multi_az == null) { error make --unspanned { msg: "required query parameter 'MultiAZ' missing: pass --multi-az" } }
+  let action = ($action | default "UpdateAvailabilityOptions")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "MultiAZ" $multi_az "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2362,8 +2482,8 @@ export def "post-update-availability-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2372,10 +2492,12 @@ export def "post-update-availability-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AvailabilityOptions: record<Options: record, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: any -> record<AvailabilityOptions: record<Options: bool, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateAvailabilityOptions")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2412,10 +2534,10 @@ export def "get-update-domain-endpoint-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # A string that represents the name of a domain.
-  --domain-endpoint-options: record # Whether to require that all requests to the domain arrive over HTTPS. We recommend Policy-Min-TLS-1-2-2019-07 for TLSSecurityPolicy. For compatibility with older clients, the default is Policy-Min-TLS-1-0-2019-07.
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --domain-name: string # A string that represents the name of a domain. (required)
+  --domain-endpoint-options: record # Whether to require that all requests to the domain arrive over HTTPS. We recommend Policy-Min-TLS-1-2-2019-07 for TLSSecurityPolicy. For compatibility with older clients, the default is Policy-Min-TLS-1-0-2019-07. (required)
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2423,9 +2545,13 @@ export def "get-update-domain-endpoint-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainEndpointOptions: record<Options: record<EnforceHTTPS: record, TLSSecurityPolicy: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: nothing -> record<DomainEndpointOptions: record<Options: record<EnforceHTTPS: bool, TLSSecurityPolicy: string>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  if ($domain_endpoint_options == null) { error make --unspanned { msg: "required query parameter 'DomainEndpointOptions' missing: pass --domain-endpoint-options" } }
+  let action = ($action | default "UpdateDomainEndpointOptions")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "DomainEndpointOptions" $domain_endpoint_options "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2460,8 +2586,8 @@ export def "post-update-domain-endpoint-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2470,10 +2596,12 @@ export def "post-update-domain-endpoint-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DomainEndpointOptions: record<Options: record<EnforceHTTPS: record, TLSSecurityPolicy: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: any -> record<DomainEndpointOptions: record<Options: record<EnforceHTTPS: bool, TLSSecurityPolicy: string>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateDomainEndpointOptions")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2510,10 +2638,10 @@ export def "get-update-scaling-parameters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string
-  --scaling-parameters: record
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --domain-name: string # required
+  --scaling-parameters: record # required
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2521,9 +2649,13 @@ export def "get-update-scaling-parameters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ScalingParameters: record<Options: record<DesiredInstanceType: record, DesiredReplicationCount: record, DesiredPartitionCount: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: nothing -> record<ScalingParameters: record<Options: record<DesiredInstanceType: string, DesiredReplicationCount: int, DesiredPartitionCount: int>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  if ($scaling_parameters == null) { error make --unspanned { msg: "required query parameter 'ScalingParameters' missing: pass --scaling-parameters" } }
+  let action = ($action | default "UpdateScalingParameters")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ScalingParameters" $scaling_parameters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2558,8 +2690,8 @@ export def "post-update-scaling-parameters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2568,10 +2700,12 @@ export def "post-update-scaling-parameters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ScalingParameters: record<Options: record<DesiredInstanceType: record, DesiredReplicationCount: record, DesiredPartitionCount: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: any -> record<ScalingParameters: record<Options: record<DesiredInstanceType: string, DesiredReplicationCount: int, DesiredPartitionCount: int>, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateScalingParameters")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2608,10 +2742,10 @@ export def "get-update-service-access-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string
-  --access-policies: string # The access rules you want to configure. These rules replace any existing rules.
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --domain-name: string # required
+  --access-policies: string # The access rules you want to configure. These rules replace any existing rules. (required)
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2619,9 +2753,13 @@ export def "get-update-service-access-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AccessPolicies: record<Options: string, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: nothing -> record<AccessPolicies: record<Options: string, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  if ($access_policies == null) { error make --unspanned { msg: "required query parameter 'AccessPolicies' missing: pass --access-policies" } }
+  let action = ($action | default "UpdateServiceAccessPolicies")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "AccessPolicies" $access_policies "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2656,8 +2794,8 @@ export def "post-update-service-access-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2666,10 +2804,12 @@ export def "post-update-service-access-policies" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AccessPolicies: record<Options: string, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
+]: any -> record<AccessPolicies: record<Options: string, Status: record<CreationDate: string, UpdateDate: string, UpdateVersion: int, State: string, PendingDeletion: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateServiceAccessPolicies")
+  let version = ($version | default "2013-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body

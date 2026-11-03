@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -194,6 +194,8 @@ export def "accounts-list" [
 #
 # POST /accounts
 # operationId: accounts_create
+# --address shape: {country: string, locality: string, post_office_box_number?: string, postal_code: string, region?: string, street_address: string}
+# --billing_information shape: {address: record, name: string, vat_number?: string}
 export def "accounts-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -204,8 +206,8 @@ export def "accounts-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  address: any
-  --billing-information: any
+  address: record # shape: {country: string, locality: string, post_office_box_number?: string, postal_code: string, region?: string, street_address: string}
+  --billing-information: record # Optional information required for issuing invoices. Only accounts with `billing_information` present can be used as a `billing_account`. — shape: {address: record, name: string, vat_number?: string}
   --discoverable: oneof<nothing, bool> # The account will be included for all members of the ix in the list of accounts. Only `id`, `name` and `present_in_metro_area_networks` are provided to other members. (default: false)
   --external-ref: string # Reference field, free to use for the API user. (nullable, e.g. IX:Service:23042)
   --legal-name: string # Legal name of the organisation. Only required when it's different from the account name. (nullable, e.g. Moon Network Services LLS.)
@@ -351,6 +353,8 @@ export def "accounts-partial-update" [
 #
 # PUT /accounts/{id}
 # operationId: accounts_update
+# --address shape: {country: string, locality: string, post_office_box_number?: string, postal_code: string, region?: string, street_address: string}
+# --billing_information shape: {address: record, name: string, vat_number?: string}
 export def "accounts-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -362,8 +366,8 @@ export def "accounts-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  address: any
-  --billing-information: any
+  address: record # shape: {country: string, locality: string, post_office_box_number?: string, postal_code: string, region?: string, street_address: string}
+  --billing-information: record # Optional information required for issuing invoices. Only accounts with `billing_information` present can be used as a `billing_account`. — shape: {address: record, name: string, vat_number?: string}
   --discoverable: oneof<nothing, bool> # The account will be included for all members of the ix in the list of accounts. Only `id`, `name` and `present_in_metro_area_networks` are provided to other members. (default: false)
   --external-ref: string # Reference field, free to use for the API user. (nullable, e.g. IX:Service:23042)
   --legal-name: string # Legal name of the organisation. Only required when it's different from the account name. (nullable, e.g. Moon Network Services LLS.)

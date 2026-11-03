@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "apikeyauth" => { {scheme: $scheme, headers: {ApiKeyAuth: $token_val}, query: "", location: "header"} }
+    "apikeyauth" => { {scheme: $scheme, headers: {"ApiKeyAuth": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -165,13 +165,17 @@ export def "get-routes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --origin-lat: float
-  --origin-lng: float
-  --destination-lat: float
-  --destination-lng: float
+  --origin-lat: float # required
+  --origin-lng: float # required
+  --destination-lat: float # required
+  --destination-lng: float # required
 ]: nothing -> record<data: record<operators: list<record>, places: list<record>, routes: list<record>>, request: record<distance_miles: float, endpoint: string, environment: string, fields: record<destination_lat: float, destination_lng: float, origin_lat: float, origin_lng: float>, version: string>, response: record<time: float, url: string>, status: record<code: float, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikeyauth"))
   let base = ($base_url | default $BASE_URL)
+  if ($origin_lat == null) { error make --unspanned { msg: "required query parameter 'origin_lat' missing: pass --origin-lat" } }
+  if ($origin_lng == null) { error make --unspanned { msg: "required query parameter 'origin_lng' missing: pass --origin-lng" } }
+  if ($destination_lat == null) { error make --unspanned { msg: "required query parameter 'destination_lat' missing: pass --destination-lat" } }
+  if ($destination_lng == null) { error make --unspanned { msg: "required query parameter 'destination_lng' missing: pass --destination-lng" } }
   let qp = [(serialize-qp "origin_lat" $origin_lat "scalar") (serialize-qp "origin_lng" $origin_lng "scalar") (serialize-qp "destination_lat" $destination_lat "scalar") (serialize-qp "destination_lng" $destination_lng "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/routes" $qp $auth.query)
   let accept_val = "application/json"

@@ -13,7 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "query-api_key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)", location: "query"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -230,8 +230,8 @@ export def "archive-all-conversations" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "put"
     url: $full_url
@@ -270,8 +270,8 @@ export def "mark-all-conversations-read" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "put"
     url: $full_url
@@ -300,13 +300,14 @@ export def "search-conversations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search: string # The search query used to find conversations and messages.
+  --search: string # The search query used to find conversations and messages. (required)
   --page: int # The page of conversations to return. (default: 1)
   --per-page: int # The number of conversations to return per page (must be >= 1 and <= 30). (default: 10)
   --device-pixel-ratio: float # Client device pixel ratio used to determine thumbnail size (default 1.0). (default: 1)
 ]: nothing -> record<conversations: table<archived: bool, blocked: bool, conversation_id: string, last_message_date: string, messages: list, num_unread_messages: int, user: record>, page: int, per_page: int, search: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "device_pixel_ratio" $device_pixel_ratio "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/conversations/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -340,11 +341,12 @@ export def "delete-conversation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --message-id: string # The ID of the newest message in the conversation that the client has downloaded.
+  --message-id: string # The ID of the newest message in the conversation that the client has downloaded. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($conversation_id | is-empty) { error make --unspanned { msg: "path parameter 'conversation_id' must be non-empty" } }
+  if ($message_id == null) { error make --unspanned { msg: "required query parameter 'message_id' missing: pass --message-id" } }
   let qp = [(serialize-qp "message_id" $message_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({conversation_id: (encode-path-segment $conversation_id)} | format pattern "/conversations/{conversation_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -461,8 +463,8 @@ export def "mark-conversation-read" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "put"
     url: $full_url
@@ -546,8 +548,8 @@ export def "reply-to-conversation" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -588,8 +590,8 @@ export def "report-conversation" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -702,8 +704,8 @@ export def "send-feedback" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -776,10 +778,11 @@ export def "get-groups-by-ids" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --group-ids: string # The IDs of the groups to retrieve. If more than 20 group IDs are passed, only the first 20 groups will be returned.
+  --group-ids: string # The IDs of the groups to retrieve. If more than 20 group IDs are passed, only the first 20 groups will be returned. (required)
 ]: nothing -> table<country: record<abbreviation: string, name: string>, group_id: string, has_questions: bool, homepage: string, identifier: string, latitude: float, longitude: float, member_count: int, membership: record<date: string, questionnaire: record, status: string>, name: string, open_archives: bool, open_membership: bool, region: record<abbreviation: string, name: string>, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_ids == null) { error make --unspanned { msg: "required query parameter 'group_ids' missing: pass --group-ids" } }
   let qp = [(serialize-qp "group_ids" $group_ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/groups/multiple" $qp $auth.query)
   let accept_val = "application/json"
@@ -822,8 +825,8 @@ export def "join-groups" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -941,8 +944,8 @@ export def "contact-moderators" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1018,8 +1021,8 @@ export def "upload-photo" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["photo"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["photo"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1048,11 +1051,12 @@ export def "get-photos-by-ids" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --photo-ids: string # The IDs of the photos to retrieve. If more than 50 photo IDs are passed, only the first 50 photos will be returned.
+  --photo-ids: string # The IDs of the photos to retrieve. If more than 50 photo IDs are passed, only the first 50 photos will be returned. (required)
   --device-pixel-ratio: float # Client device pixel ratio used to determine thumbnail size (default 1.0). (default: 1)
 ]: nothing -> table<photo_id: string, thumbnail: record<height: int, url: string, width: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($photo_ids == null) { error make --unspanned { msg: "required query parameter 'photo_ids' missing: pass --photo-ids" } }
   let qp = [(serialize-qp "photo_ids" $photo_ids "scalar") (serialize-qp "device_pixel_ratio" $device_pixel_ratio "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/photos/multiple" $qp $auth.query)
   let accept_val = "application/json"
@@ -1122,12 +1126,13 @@ export def "rotate-photo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --degrees: int # Rotation in degrees - currently only 90, 180 and 270 are supported which correspond to rotate left, rotate upside down and rotate right.
+  --degrees: int # Rotation in degrees - currently only 90, 180 and 270 are supported which correspond to rotate left, rotate upside down and rotate right. (required)
   --device-pixel-ratio: float # Client device pixel ratio used to determine thumbnail size (default 1.0). (default: 1)
 ]: nothing -> record<photo_id: string, thumbnail: record<height: int, url: string, width: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($photo_id | is-empty) { error make --unspanned { msg: "path parameter 'photo_id' must be non-empty" } }
+  if ($degrees == null) { error make --unspanned { msg: "required query parameter 'degrees' missing: pass --degrees" } }
   let qp = [(serialize-qp "degrees" $degrees "scalar") (serialize-qp "device_pixel_ratio" $device_pixel_ratio "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({photo_id: (encode-path-segment $photo_id)} | format pattern "/photos/{photo_id}/rotate") $qp $auth.query)
   let accept_val = "application/json"
@@ -1161,8 +1166,8 @@ export def "get-posts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sort-by: string # How to sort the posts that are returned. One of: date, active, distance Date sorting will sort posts from newest to oldest. Active sorting will sort active posts before satisfied, withdrawn and expired posts and then sort by date. Distance sorting will sort the closest posts first. (default: date)
-  --types: string # A comma separated list of the post types to return. The available post types are: offer, taken, wanted, received, admin
-  --sources: string # A comma separated list of the post sources to retrieve posts from. The available sources are: groups, trashnothing, open_archive_groups. The trashnothing source is for public posts that are posted on trash nothing but are not associated with any group. The open_archive_groups source provides a way to easily request posts from groups that have open_archives set to true without having to pass a group_ids parameter. When passed, it will automatically return posts from open archive groups that are within the area specified by the latitude, longitude and radius parameters (or the current users' location if latitude, longitude and radius aren't passed). NOTE: For requests using an api key instead of oauth, passing the trashnothing source or the open_archive_groups source makes the latitude, longitude and radius parameters required.
+  --types: string # A comma separated list of the post types to return. The available post types are: offer, taken, wanted, received, admin (required)
+  --sources: string # A comma separated list of the post sources to retrieve posts from. The available sources are: groups, trashnothing, open_archive_groups. The trashnothing source is for public posts that are posted on trash nothing but are not associated with any group. The open_archive_groups source provides a way to easily request posts from groups that have open_archives set to true without having to pass a group_ids parameter. When passed, it will automatically return posts from open archive groups that are within the area specified by the latitude, longitude and radius parameters (or the current users' location if latitude, longitude and radius aren't passed). NOTE: For requests using an api key instead of oauth, passing the trashnothing source or the open_archive_groups source makes the latitude, longitude and radius parameters required. (required)
   --group-ids: string # A comma separated list of the group IDs to retrieve posts from. This parameter is only used if the 'groups' source is passed in the sources parameter and only groups that the current user is a member of or that are open archives groups will be used (the group IDs of other groups will be silently discarded*). NOTE: For requests using an api key instead of oauth, this field is required if the 'groups' source is passed. In addition, only posts from groups that have open_archives set to true will be used (the group IDS of other groups will be silently discarded*). *To determine which group IDs were used and which were discarded, use the group_ids field in the response. (default: The group IDs of every group the current user is a member of.)
   --per-page: int # The number of posts to return per page (must be >= 1 and <= 100). (default: 20)
   --page: int # The page of posts to return. (default: 1)
@@ -1172,12 +1177,14 @@ export def "get-posts" [
   --radius: float # The radius in meters of a circle centered at the point defined by the latitude and longitude parameters. When latitude, longitude and radius are passed, only posts within the circle defined by these parameters will be returned.
   --date-min: string # Only posts newer than or equal to this UTC date and time will be returned. If unset, defaults to the current date and time minus 90 days. (format: date-time)
   --date-max: string # Only posts older than this UTC date and time will be returned. If unset, defaults to the current date and time. (format: date-time)
-  --outcomes: string # A comma separated list of the post outcomes to return. The available post outcomes are: satisfied, withdrawn There are also a couple special values that can be passed. If set to an empty string (the default), only posts that are not satisfied and not withdrawn and not expired are returned. If set to 'all', all posts will be returned no matter what outcome the posts have. If set to 'not-promised', only posts that are not satisfied ant not withdrawn and not expired and not promised are returned. (default: )
-  --user-state: string # If user_state is set, only posts matching the state specified will be returned. Only one state may be passed and it must be one of the following: viewed, replied, bookmarked NOTE: This option will only work with oauth requests. (default: )
+  --outcomes: string # A comma separated list of the post outcomes to return. The available post outcomes are: satisfied, withdrawn There are also a couple special values that can be passed. If set to an empty string (the default), only posts that are not satisfied and not withdrawn and not expired are returned. If set to 'all', all posts will be returned no matter what outcome the posts have. If set to 'not-promised', only posts that are not satisfied ant not withdrawn and not expired and not promised are returned. (default: "")
+  --user-state: string # If user_state is set, only posts matching the state specified will be returned. Only one state may be passed and it must be one of the following: viewed, replied, bookmarked NOTE: This option will only work with oauth requests. (default: "")
   --include-reposts: int # If set to 1 (the default), posts that are reposts will be included. If set to 0, reposts will be excluded. See the repost_count field of post objects for details about how reposts are identified. (default: 1)
 ]: nothing -> record<end_index: int, group_ids: list<string>, last_listings_view: string, num_pages: int, num_posts: int, page: int, per_page: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, start_index: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($types == null) { error make --unspanned { msg: "required query parameter 'types' missing: pass --types" } }
+  if ($sources == null) { error make --unspanned { msg: "required query parameter 'sources' missing: pass --sources" } }
   let qp = [(serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "sources" $sources "scalar") (serialize-qp "group_ids" $group_ids "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "device_pixel_ratio" $device_pixel_ratio "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "date_min" $date_min "scalar") (serialize-qp "date_max" $date_max "scalar") (serialize-qp "outcomes" $outcomes "scalar") (serialize-qp "user_state" $user_state "scalar") (serialize-qp "include_reposts" $include_reposts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/posts" $qp $auth.query)
   let accept_val = "application/json"
@@ -1233,8 +1240,8 @@ export def "submit-post" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1263,15 +1270,18 @@ export def "get-all-posts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --types: string # A comma separated list of the post types to return. The available post types are: offer, wanted
-  --date-min: string # Only posts newer than or equal to this UTC date and time will be returned. The UTC date and time used must be within a day or less of date_max. And the date and time must be within the last 30 days. And the date and time must be rounded to the nearest second. (format: date-time)
-  --date-max: string # Only posts older than this UTC date and time will be returned. The UTC date and time used must be within a day or less of date_min. And the date and time must be rounded to the nearest second. (format: date-time)
+  --types: string # A comma separated list of the post types to return. The available post types are: offer, wanted (required)
+  --date-min: string # Only posts newer than or equal to this UTC date and time will be returned. The UTC date and time used must be within a day or less of date_max. And the date and time must be within the last 30 days. And the date and time must be rounded to the nearest second. (required, format: date-time)
+  --date-max: string # Only posts older than this UTC date and time will be returned. The UTC date and time used must be within a day or less of date_min. And the date and time must be rounded to the nearest second. (required, format: date-time)
   --per-page: int # The number of posts to return per page (must be >= 1 and <= 50). (default: 20)
   --page: int # The page of posts to return. (default: 1)
   --device-pixel-ratio: float # Client device pixel ratio used to determine thumbnail size (default 1.0). (default: 1)
 ]: nothing -> record<posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($types == null) { error make --unspanned { msg: "required query parameter 'types' missing: pass --types" } }
+  if ($date_min == null) { error make --unspanned { msg: "required query parameter 'date_min' missing: pass --date-min" } }
+  if ($date_max == null) { error make --unspanned { msg: "required query parameter 'date_max' missing: pass --date-max" } }
   let qp = [(serialize-qp "types" $types "scalar") (serialize-qp "date_min" $date_min "scalar") (serialize-qp "date_max" $date_max "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "device_pixel_ratio" $device_pixel_ratio "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/posts/all" $qp $auth.query)
   let accept_val = "application/json"
@@ -1304,13 +1314,15 @@ export def "get-all-posts-changes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --date-min: string # Only changes newer than or equal to this UTC date and time will be returned. The UTC date and time used must be within a day or less of date_max. And the date and time must be within the last 30 days. And the date and time must be rounded to the nearest second. (format: date-time)
-  --date-max: string # Only changes older than this UTC date and time will be returned. The UTC date and time used must be within a day or less of date_min. And the date and time must be rounded to the nearest second. (format: date-time)
+  --date-min: string # Only changes newer than or equal to this UTC date and time will be returned. The UTC date and time used must be within a day or less of date_max. And the date and time must be within the last 30 days. And the date and time must be rounded to the nearest second. (required, format: date-time)
+  --date-max: string # Only changes older than this UTC date and time will be returned. The UTC date and time used must be within a day or less of date_min. And the date and time must be rounded to the nearest second. (required, format: date-time)
   --per-page: int # The number of changes to return per page (must be >= 1 and <= 50). (default: 20)
   --page: int # The page of changes to return. (default: 1)
 ]: nothing -> record<changes: table<date: string, post_id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($date_min == null) { error make --unspanned { msg: "required query parameter 'date_min' missing: pass --date-min" } }
+  if ($date_max == null) { error make --unspanned { msg: "required query parameter 'date_max' missing: pass --date-max" } }
   let qp = [(serialize-qp "date_min" $date_min "scalar") (serialize-qp "date_max" $date_max "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/posts/all/changes" $qp $auth.query)
   let accept_val = "application/json"
@@ -1343,10 +1355,11 @@ export def "get-posts-by-ids" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --post-ids: string # A comma separated list of the post IDs. If more than 10 post IDs are passed, only the first 10 posts will be returned.
+  --post-ids: string # A comma separated list of the post IDs. If more than 10 post IDs are passed, only the first 10 posts will be returned. (required)
 ]: nothing -> record<forbidden: list<string>, not_found: list<string>, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($post_ids == null) { error make --unspanned { msg: "required query parameter 'post_ids' missing: pass --post-ids" } }
   let qp = [(serialize-qp "post_ids" $post_ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/posts/multiple" $qp $auth.query)
   let accept_val = "application/json"
@@ -1379,10 +1392,10 @@ export def "search-posts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search: string # The search query used to find posts.
+  --search: string # The search query used to find posts. (required)
   --sort-by: string # How to sort the posts that are returned. One of: relevance, date, active, distance Relevance sorting will sort the posts that best match the search query first. Date sorting will sort posts from newest to oldest. Active sorting will sort active posts before satisfied, withdrawn and expired posts and then sort by date. Distance sorting will sort the closest posts first. (default: relevance)
-  --types: string # A comma separated list of the post types to return. The available post types are: offer, taken, wanted, received, admin
-  --sources: string # A comma separated list of the post sources to retrieve posts from. The available sources are: groups, trashnothing, open_archive_groups. The trashnothing source is for public posts that are posted on trash nothing but are not associated with any group. The open_archive_groups source provides a way to easily request posts from groups that have open_archives set to true without having to pass a group_ids parameter. When passed, it will automatically return posts from open archive groups that are within the area specified by the latitude, longitude and radius parameters (or the current users' location if latitude, longitude and radius aren't passed). NOTE: For requests using an api key instead of oauth, passing the trashnothing source or the open_archive_groups source makes the latitude, longitude and radius parameters required.
+  --types: string # A comma separated list of the post types to return. The available post types are: offer, taken, wanted, received, admin (required)
+  --sources: string # A comma separated list of the post sources to retrieve posts from. The available sources are: groups, trashnothing, open_archive_groups. The trashnothing source is for public posts that are posted on trash nothing but are not associated with any group. The open_archive_groups source provides a way to easily request posts from groups that have open_archives set to true without having to pass a group_ids parameter. When passed, it will automatically return posts from open archive groups that are within the area specified by the latitude, longitude and radius parameters (or the current users' location if latitude, longitude and radius aren't passed). NOTE: For requests using an api key instead of oauth, passing the trashnothing source or the open_archive_groups source makes the latitude, longitude and radius parameters required. (required)
   --group-ids: string # A comma separated list of the group IDs to retrieve posts from. This parameter is only used if the 'groups' source is passed in the sources parameter and only groups that the current user is a member of or that are open archives groups will be used (the group IDs of other groups will be silently discarded*). NOTE: For requests using an api key instead of oauth, this field is required if the 'groups' source is passed. In addition, only posts from groups that have open_archives set to true will be used (the group IDS of other groups will be silently discarded*). *To determine which group IDs were used and which were discarded, use the group_ids field in the response. (default: The group IDs of every group the current user is a member of.)
   --per-page: int # The number of posts to return per page (must be >= 1 and <= 100). (default: 20)
   --page: int # The page of posts to return. (default: 1)
@@ -1392,12 +1405,15 @@ export def "search-posts" [
   --radius: float # The radius in meters of a circle centered at the point defined by the latitude and longitude parameters. When latitude, longitude and radius are passed, only posts within the circle defined by these parameters will be returned.
   --date-min: string # Only posts newer than or equal to this UTC date and time will be returned. If unset, defaults to the current date and time minus 90 days. (format: date-time)
   --date-max: string # Only posts older than this UTC date and time will be returned. If unset, defaults to the current date and time. (format: date-time)
-  --outcomes: string # A comma separated list of the post outcomes to return. The available post outcomes are: satisfied, withdrawn There are also a couple special values that can be passed. If set to an empty string (the default), only posts that are not satisfied and not withdrawn and not expired are returned. If set to 'all', all posts will be returned no matter what outcome the posts have. If set to 'not-promised', only posts that are not satisfied ant not withdrawn and not expired and not promised are returned. (default: )
-  --user-state: string # If user_state is set, only posts matching the state specified will be returned. Only one state may be passed and it must be one of the following: viewed, replied, bookmarked NOTE: This option will only work with oauth requests. (default: )
+  --outcomes: string # A comma separated list of the post outcomes to return. The available post outcomes are: satisfied, withdrawn There are also a couple special values that can be passed. If set to an empty string (the default), only posts that are not satisfied and not withdrawn and not expired are returned. If set to 'all', all posts will be returned no matter what outcome the posts have. If set to 'not-promised', only posts that are not satisfied ant not withdrawn and not expired and not promised are returned. (default: "")
+  --user-state: string # If user_state is set, only posts matching the state specified will be returned. Only one state may be passed and it must be one of the following: viewed, replied, bookmarked NOTE: This option will only work with oauth requests. (default: "")
   --include-reposts: int # If set to 1 (the default), posts that are reposts will be included. If set to 0, reposts will be excluded. See the repost_count field of post objects for details about how reposts are identified. (default: 1)
 ]: nothing -> record<end_index: int, group_ids: list<string>, num_pages: int, num_posts: int, page: int, per_page: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string, search_content: string, search_title: string>, start_index: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
+  if ($types == null) { error make --unspanned { msg: "required query parameter 'types' missing: pass --types" } }
+  if ($sources == null) { error make --unspanned { msg: "required query parameter 'sources' missing: pass --sources" } }
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "sources" $sources "scalar") (serialize-qp "group_ids" $group_ids "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "device_pixel_ratio" $device_pixel_ratio "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "date_min" $date_min "scalar") (serialize-qp "date_max" $date_max "scalar") (serialize-qp "outcomes" $outcomes "scalar") (serialize-qp "user_state" $user_state "scalar") (serialize-qp "include_reposts" $include_reposts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/posts/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -1525,8 +1541,8 @@ export def "update-post" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "put"
     url: $full_url
@@ -1712,8 +1728,8 @@ export def "reply-to-post" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1755,8 +1771,8 @@ export def "report-post" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1984,8 +2000,8 @@ export def "submit-story" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2225,8 +2241,8 @@ export def "update-current-user" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "put"
     url: $full_url
@@ -2300,8 +2316,8 @@ export def "create-alert" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "put"
     url: $full_url
@@ -2376,8 +2392,8 @@ export def "change-email" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2489,8 +2505,8 @@ export def "update-location" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "put"
     url: $full_url
@@ -2601,8 +2617,8 @@ export def "save-post-location" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "put"
     url: $full_url
@@ -2632,8 +2648,8 @@ export def "get-current-user-posts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sort-by: string # How to sort the posts that are returned. One of: date, active, distance Date sorting will sort posts from newest to oldest. Active sorting will sort active posts before satisfied, withdrawn and expired posts and then sort by date. Distance sorting will sort the closest posts first. (default: date)
-  --types: string # A comma separated list of the post types to return. The available post types are: offer, taken, wanted, received, admin
-  --sources: string # A comma separated list of the post sources to retrieve posts from. The available sources are: groups, trashnothing, open_archive_groups. The trashnothing source is for public posts that are posted on trash nothing but are not associated with any group. The open_archive_groups source provides a way to easily request posts from groups that have open_archives set to true without having to pass a group_ids parameter. When passed, it will automatically return posts from open archive groups that are within the area specified by the latitude, longitude and radius parameters (or the current users' location if latitude, longitude and radius aren't passed). NOTE: For requests using an api key instead of oauth, passing the trashnothing source or the open_archive_groups source makes the latitude, longitude and radius parameters required.
+  --types: string # A comma separated list of the post types to return. The available post types are: offer, taken, wanted, received, admin (required)
+  --sources: string # A comma separated list of the post sources to retrieve posts from. The available sources are: groups, trashnothing, open_archive_groups. The trashnothing source is for public posts that are posted on trash nothing but are not associated with any group. The open_archive_groups source provides a way to easily request posts from groups that have open_archives set to true without having to pass a group_ids parameter. When passed, it will automatically return posts from open archive groups that are within the area specified by the latitude, longitude and radius parameters (or the current users' location if latitude, longitude and radius aren't passed). NOTE: For requests using an api key instead of oauth, passing the trashnothing source or the open_archive_groups source makes the latitude, longitude and radius parameters required. (required)
   --group-ids: string # A comma separated list of the group IDs to retrieve posts from. This parameter is only used if the 'groups' source is passed in the sources parameter and only groups that the current user is a member of or that are open archives groups will be used (the group IDs of other groups will be silently discarded*). NOTE: For requests using an api key instead of oauth, this field is required if the 'groups' source is passed. In addition, only posts from groups that have open_archives set to true will be used (the group IDS of other groups will be silently discarded*). *To determine which group IDs were used and which were discarded, use the group_ids field in the response. (default: The group IDs of every group the current user is a member of.)
   --per-page: int # The number of posts to return per page (must be >= 1 and <= 100). (default: 20)
   --page: int # The page of posts to return. (default: 1)
@@ -2643,12 +2659,14 @@ export def "get-current-user-posts" [
   --radius: float # The radius in meters of a circle centered at the point defined by the latitude and longitude parameters. When latitude, longitude and radius are passed, only posts within the circle defined by these parameters will be returned.
   --date-min: string # Only posts newer than or equal to this UTC date and time will be returned. (format: date-time)
   --date-max: string # Only posts older than this UTC date and time will be returned. (format: date-time)
-  --outcomes: string # A comma separated list of the post outcomes to return. The available post outcomes are: satisfied, withdrawn There are also a couple special values that can be passed. If set to an empty string (the default), only posts that are not satisfied and not withdrawn and not expired are returned. If set to 'all', all posts will be returned no matter what outcome the posts have. If set to 'not-promised', only posts that are not satisfied ant not withdrawn and not expired and not promised are returned. (default: )
-  --user-state: string # If user_state is set, only posts matching the state specified will be returned. Only one state may be passed and it must be one of the following: viewed, replied, bookmarked NOTE: This option will only work with oauth requests. (default: )
+  --outcomes: string # A comma separated list of the post outcomes to return. The available post outcomes are: satisfied, withdrawn There are also a couple special values that can be passed. If set to an empty string (the default), only posts that are not satisfied and not withdrawn and not expired are returned. If set to 'all', all posts will be returned no matter what outcome the posts have. If set to 'not-promised', only posts that are not satisfied ant not withdrawn and not expired and not promised are returned. (default: "")
+  --user-state: string # If user_state is set, only posts matching the state specified will be returned. Only one state may be passed and it must be one of the following: viewed, replied, bookmarked NOTE: This option will only work with oauth requests. (default: "")
   --include-reposts: int # If set to 1 (the default), posts that are reposts will be included. If set to 0, reposts will be excluded. See the repost_count field of post objects for details about how reposts are identified. (default: 1)
 ]: nothing -> record<end_index: int, group_ids: list<string>, last_listings_view: string, num_pages: int, num_posts: int, page: int, per_page: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, start_index: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($types == null) { error make --unspanned { msg: "required query parameter 'types' missing: pass --types" } }
+  if ($sources == null) { error make --unspanned { msg: "required query parameter 'sources' missing: pass --sources" } }
   let qp = [(serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "sources" $sources "scalar") (serialize-qp "group_ids" $group_ids "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "device_pixel_ratio" $device_pixel_ratio "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "date_min" $date_min "scalar") (serialize-qp "date_max" $date_max "scalar") (serialize-qp "outcomes" $outcomes "scalar") (serialize-qp "user_state" $user_state "scalar") (serialize-qp "include_reposts" $include_reposts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/me/posts" $qp $auth.query)
   let accept_val = "application/json"
@@ -2681,10 +2699,10 @@ export def "search-current-user-posts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search: string # The search query used to find posts.
+  --search: string # The search query used to find posts. (required)
   --sort-by: string # How to sort the posts that are returned. One of: relevance, date, active, distance Relevance sorting will sort the posts that best match the search query first. Date sorting will sort posts from newest to oldest. Active sorting will sort active posts before satisfied, withdrawn and expired posts and then sort by date. Distance sorting will sort the closest posts first. (default: relevance)
-  --types: string # A comma separated list of the post types to return. The available post types are: offer, taken, wanted, received, admin
-  --sources: string # A comma separated list of the post sources to retrieve posts from. The available sources are: groups, trashnothing, open_archive_groups. The trashnothing source is for public posts that are posted on trash nothing but are not associated with any group. The open_archive_groups source provides a way to easily request posts from groups that have open_archives set to true without having to pass a group_ids parameter. When passed, it will automatically return posts from open archive groups that are within the area specified by the latitude, longitude and radius parameters (or the current users' location if latitude, longitude and radius aren't passed). NOTE: For requests using an api key instead of oauth, passing the trashnothing source or the open_archive_groups source makes the latitude, longitude and radius parameters required.
+  --types: string # A comma separated list of the post types to return. The available post types are: offer, taken, wanted, received, admin (required)
+  --sources: string # A comma separated list of the post sources to retrieve posts from. The available sources are: groups, trashnothing, open_archive_groups. The trashnothing source is for public posts that are posted on trash nothing but are not associated with any group. The open_archive_groups source provides a way to easily request posts from groups that have open_archives set to true without having to pass a group_ids parameter. When passed, it will automatically return posts from open archive groups that are within the area specified by the latitude, longitude and radius parameters (or the current users' location if latitude, longitude and radius aren't passed). NOTE: For requests using an api key instead of oauth, passing the trashnothing source or the open_archive_groups source makes the latitude, longitude and radius parameters required. (required)
   --group-ids: string # A comma separated list of the group IDs to retrieve posts from. This parameter is only used if the 'groups' source is passed in the sources parameter and only groups that the current user is a member of or that are open archives groups will be used (the group IDs of other groups will be silently discarded*). NOTE: For requests using an api key instead of oauth, this field is required if the 'groups' source is passed. In addition, only posts from groups that have open_archives set to true will be used (the group IDS of other groups will be silently discarded*). *To determine which group IDs were used and which were discarded, use the group_ids field in the response. (default: The group IDs of every group the current user is a member of.)
   --per-page: int # The number of posts to return per page (must be >= 1 and <= 100). (default: 20)
   --page: int # The page of posts to return. (default: 1)
@@ -2694,12 +2712,15 @@ export def "search-current-user-posts" [
   --radius: float # The radius in meters of a circle centered at the point defined by the latitude and longitude parameters. When latitude, longitude and radius are passed, only posts within the circle defined by these parameters will be returned.
   --date-min: string # Only posts newer than or equal to this UTC date and time will be returned. (format: date-time)
   --date-max: string # Only posts older than this UTC date and time will be returned. (format: date-time)
-  --outcomes: string # A comma separated list of the post outcomes to return. The available post outcomes are: satisfied, withdrawn There are also a couple special values that can be passed. If set to an empty string (the default), only posts that are not satisfied and not withdrawn and not expired are returned. If set to 'all', all posts will be returned no matter what outcome the posts have. If set to 'not-promised', only posts that are not satisfied ant not withdrawn and not expired and not promised are returned. (default: )
-  --user-state: string # If user_state is set, only posts matching the state specified will be returned. Only one state may be passed and it must be one of the following: viewed, replied, bookmarked NOTE: This option will only work with oauth requests. (default: )
+  --outcomes: string # A comma separated list of the post outcomes to return. The available post outcomes are: satisfied, withdrawn There are also a couple special values that can be passed. If set to an empty string (the default), only posts that are not satisfied and not withdrawn and not expired are returned. If set to 'all', all posts will be returned no matter what outcome the posts have. If set to 'not-promised', only posts that are not satisfied ant not withdrawn and not expired and not promised are returned. (default: "")
+  --user-state: string # If user_state is set, only posts matching the state specified will be returned. Only one state may be passed and it must be one of the following: viewed, replied, bookmarked NOTE: This option will only work with oauth requests. (default: "")
   --include-reposts: int # If set to 1 (the default), posts that are reposts will be included. If set to 0, reposts will be excluded. See the repost_count field of post objects for details about how reposts are identified. (default: 1)
 ]: nothing -> record<end_index: int, group_ids: list<string>, num_pages: int, num_posts: int, page: int, per_page: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string, search_content: string, search_title: string>, start_index: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
+  if ($types == null) { error make --unspanned { msg: "required query parameter 'types' missing: pass --types" } }
+  if ($sources == null) { error make --unspanned { msg: "required query parameter 'sources' missing: pass --sources" } }
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "sources" $sources "scalar") (serialize-qp "group_ids" $group_ids "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "device_pixel_ratio" $device_pixel_ratio "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "date_min" $date_min "scalar") (serialize-qp "date_max" $date_max "scalar") (serialize-qp "outcomes" $outcomes "scalar") (serialize-qp "user_state" $user_state "scalar") (serialize-qp "include_reposts" $include_reposts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/me/posts/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -2746,8 +2767,8 @@ export def "set-profile-image" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["photo"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["photo"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2892,8 +2913,8 @@ export def "report-user" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -3044,8 +3065,8 @@ export def "submit-user-feedback" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -3076,8 +3097,8 @@ export def "get-user-posts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sort-by: string # How to sort the posts that are returned. One of: date, active, distance Date sorting will sort posts from newest to oldest. Active sorting will sort active posts before satisfied, withdrawn and expired posts and then sort by date. Distance sorting will sort the closest posts first. (default: date)
-  --types: string # A comma separated list of the post types to return. The available post types are: offer, taken, wanted, received, admin
-  --sources: string # A comma separated list of the post sources to retrieve posts from. The available sources are: groups, trashnothing, open_archive_groups. The trashnothing source is for public posts that are posted on trash nothing but are not associated with any group. The open_archive_groups source provides a way to easily request posts from groups that have open_archives set to true without having to pass a group_ids parameter. When passed, it will automatically return posts from open archive groups that are within the area specified by the latitude, longitude and radius parameters (or all the open archive groups the requested user has posted to if latitude, longitude and radius aren't passed). NOTE: For requests using an api key instead of oauth, passing the trashnothing source or the open_archive_groups source makes the latitude, longitude and radius parameters required.
+  --types: string # A comma separated list of the post types to return. The available post types are: offer, taken, wanted, received, admin (required)
+  --sources: string # A comma separated list of the post sources to retrieve posts from. The available sources are: groups, trashnothing, open_archive_groups. The trashnothing source is for public posts that are posted on trash nothing but are not associated with any group. The open_archive_groups source provides a way to easily request posts from groups that have open_archives set to true without having to pass a group_ids parameter. When passed, it will automatically return posts from open archive groups that are within the area specified by the latitude, longitude and radius parameters (or all the open archive groups the requested user has posted to if latitude, longitude and radius aren't passed). NOTE: For requests using an api key instead of oauth, passing the trashnothing source or the open_archive_groups source makes the latitude, longitude and radius parameters required. (required)
   --group-ids: string # A comma separated list of the group IDs to retrieve posts from. This parameter is only used if the 'groups' source is passed in the sources parameter and only groups that the current user is a member of or that are open archives groups will be used (the group IDs of other groups will be silently discarded*). NOTE: For requests using an api key instead of oauth, this field is required if the 'groups' source is passed. In addition, only posts from groups that have open_archives set to true will be used (the group IDS of other groups will be silently discarded*). *To determine which group IDs were used and which were discarded, use the group_ids field in the response. (default: The group IDs of every group the current user is a member of.)
   --per-page: int # The number of posts to return per page (must be >= 1 and <= 100). (default: 20)
   --page: int # The page of posts to return. (default: 1)
@@ -3087,12 +3108,14 @@ export def "get-user-posts" [
   --radius: float # The radius in meters of a circle centered at the point defined by the latitude and longitude parameters. When latitude, longitude and radius are passed, only posts within the circle defined by these parameters will be returned.
   --date-min: string # Only posts newer than or equal to this UTC date and time will be returned. (format: date-time)
   --date-max: string # Only posts older than this UTC date and time will be returned. (format: date-time)
-  --outcomes: string # A comma separated list of the post outcomes to return. The available post outcomes are: satisfied, withdrawn There are also a couple special values that can be passed. If set to an empty string (the default), only posts that are not satisfied and not withdrawn and not expired are returned. If set to 'all', all posts will be returned no matter what outcome the posts have. If set to 'not-promised', only posts that are not satisfied ant not withdrawn and not expired and not promised are returned. (default: )
+  --outcomes: string # A comma separated list of the post outcomes to return. The available post outcomes are: satisfied, withdrawn There are also a couple special values that can be passed. If set to an empty string (the default), only posts that are not satisfied and not withdrawn and not expired are returned. If set to 'all', all posts will be returned no matter what outcome the posts have. If set to 'not-promised', only posts that are not satisfied ant not withdrawn and not expired and not promised are returned. (default: "")
   --include-reposts: int # If set to 1 (the default), posts that are reposts will be included. If set to 0, reposts will be excluded. See the repost_count field of post objects for details about how reposts are identified. (default: 1)
 ]: nothing -> record<end_index: int, group_ids: list<string>, last_listings_view: string, num_pages: int, num_posts: int, page: int, per_page: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string>, start_index: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($types == null) { error make --unspanned { msg: "required query parameter 'types' missing: pass --types" } }
+  if ($sources == null) { error make --unspanned { msg: "required query parameter 'sources' missing: pass --sources" } }
   let qp = [(serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "sources" $sources "scalar") (serialize-qp "group_ids" $group_ids "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "device_pixel_ratio" $device_pixel_ratio "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "date_min" $date_min "scalar") (serialize-qp "date_max" $date_max "scalar") (serialize-qp "outcomes" $outcomes "scalar") (serialize-qp "include_reposts" $include_reposts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/posts") $qp $auth.query)
   let accept_val = "application/json"
@@ -3126,10 +3149,10 @@ export def "search-user-posts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search: string # The search query used to find posts.
+  --search: string # The search query used to find posts. (required)
   --sort-by: string # How to sort the posts that are returned. One of: relevance, date, active, distance Relevance sorting will sort the posts that best match the search query first. Date sorting will sort posts from newest to oldest. Active sorting will sort active posts before satisfied, withdrawn and expired posts and then sort by date. Distance sorting will sort the closest posts first. (default: relevance)
-  --types: string # A comma separated list of the post types to return. The available post types are: offer, taken, wanted, received, admin
-  --sources: string # A comma separated list of the post sources to retrieve posts from. The available sources are: groups, trashnothing, open_archive_groups. The trashnothing source is for public posts that are posted on trash nothing but are not associated with any group. The open_archive_groups source provides a way to easily request posts from groups that have open_archives set to true without having to pass a group_ids parameter. When passed, it will automatically return posts from open archive groups that are within the area specified by the latitude, longitude and radius parameters (or all the open archive groups the requested user has posted to if latitude, longitude and radius aren't passed). NOTE: For requests using an api key instead of oauth, passing the trashnothing source or the open_archive_groups source makes the latitude, longitude and radius parameters required.
+  --types: string # A comma separated list of the post types to return. The available post types are: offer, taken, wanted, received, admin (required)
+  --sources: string # A comma separated list of the post sources to retrieve posts from. The available sources are: groups, trashnothing, open_archive_groups. The trashnothing source is for public posts that are posted on trash nothing but are not associated with any group. The open_archive_groups source provides a way to easily request posts from groups that have open_archives set to true without having to pass a group_ids parameter. When passed, it will automatically return posts from open archive groups that are within the area specified by the latitude, longitude and radius parameters (or all the open archive groups the requested user has posted to if latitude, longitude and radius aren't passed). NOTE: For requests using an api key instead of oauth, passing the trashnothing source or the open_archive_groups source makes the latitude, longitude and radius parameters required. (required)
   --group-ids: string # A comma separated list of the group IDs to retrieve posts from. This parameter is only used if the 'groups' source is passed in the sources parameter and only groups that the current user is a member of or that are open archives groups will be used (the group IDs of other groups will be silently discarded*). NOTE: For requests using an api key instead of oauth, this field is required if the 'groups' source is passed. In addition, only posts from groups that have open_archives set to true will be used (the group IDS of other groups will be silently discarded*). *To determine which group IDs were used and which were discarded, use the group_ids field in the response. (default: The group IDs of every group the current user is a member of.)
   --per-page: int # The number of posts to return per page (must be >= 1 and <= 100). (default: 20)
   --page: int # The page of posts to return. (default: 1)
@@ -3139,12 +3162,15 @@ export def "search-user-posts" [
   --radius: float # The radius in meters of a circle centered at the point defined by the latitude and longitude parameters. When latitude, longitude and radius are passed, only posts within the circle defined by these parameters will be returned.
   --date-min: string # Only posts newer than or equal to this UTC date and time will be returned. (format: date-time)
   --date-max: string # Only posts older than this UTC date and time will be returned. (format: date-time)
-  --outcomes: string # A comma separated list of the post outcomes to return. The available post outcomes are: satisfied, withdrawn There are also a couple special values that can be passed. If set to an empty string (the default), only posts that are not satisfied and not withdrawn and not expired are returned. If set to 'all', all posts will be returned no matter what outcome the posts have. If set to 'not-promised', only posts that are not satisfied ant not withdrawn and not expired and not promised are returned. (default: )
+  --outcomes: string # A comma separated list of the post outcomes to return. The available post outcomes are: satisfied, withdrawn There are also a couple special values that can be passed. If set to an empty string (the default), only posts that are not satisfied and not withdrawn and not expired are returned. If set to 'all', all posts will be returned no matter what outcome the posts have. If set to 'not-promised', only posts that are not satisfied ant not withdrawn and not expired and not promised are returned. (default: "")
   --include-reposts: int # If set to 1 (the default), posts that are reposts will be included. If set to 0, reposts will be excluded. See the repost_count field of post objects for details about how reposts are identified. (default: 1)
 ]: nothing -> record<end_index: int, group_ids: list<string>, num_pages: int, num_posts: int, page: int, per_page: int, posts: table<content: string, date: string, expiration: string, footer: string, group_id: string, latitude: float, longitude: float, outcome: string, photos: list, post_id: string, repost_count: int, reselling: bool, source: string, title: string, type: string, url: string, user_id: string, search_content: string, search_title: string>, start_index: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
+  if ($types == null) { error make --unspanned { msg: "required query parameter 'types' missing: pass --types" } }
+  if ($sources == null) { error make --unspanned { msg: "required query parameter 'sources' missing: pass --sources" } }
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "sources" $sources "scalar") (serialize-qp "group_ids" $group_ids "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "device_pixel_ratio" $device_pixel_ratio "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "date_min" $date_min "scalar") (serialize-qp "date_max" $date_max "scalar") (serialize-qp "outcomes" $outcomes "scalar") (serialize-qp "include_reposts" $include_reposts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/posts/search") $qp $auth.query)
   let accept_val = "application/json"

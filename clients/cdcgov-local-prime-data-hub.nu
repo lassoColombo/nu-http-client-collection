@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-functions-key" => { {scheme: $scheme, headers: {x-functions-key: $token_val}, query: "", location: "header"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "x-functions-key" => { {scheme: $scheme, headers: {"x-functions-key": $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -161,7 +161,7 @@ export def "post-reports" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --client: string # The client's name that matches the client name in metadata (e.g. simple_report)
+  --client: string # The client's name that matches the client name in metadata (required, e.g. simple_report)
   --option: string@option-completer # Optional ways to process the request (e.g. ValidatePayload)
   --default: list<string> # Dynamic default values for an element. ':' or %3A is used to seperate element name and value (e.g. processing_mode_code%3AD)
   --route-to: list<string> # A comma speparated list of receiver names. Limit the list of possible receivers to these receivers. (e.g. fl-phd.elr,fl-phd.download)
@@ -170,6 +170,7 @@ export def "post-reports" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-functions-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($client == null) { error make --unspanned { msg: "required query parameter 'client' missing: pass --client" } }
   let qp = [(serialize-qp "client" $client "scalar") (serialize-qp "option" $option "scalar") (serialize-qp "default" $default "csv") (serialize-qp "routeTo" $route_to "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/reports" $qp $auth.query)
   let req_body = $body

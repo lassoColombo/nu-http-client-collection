@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -151,11 +151,12 @@ export def "assignments-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record>> {
+  --api-version: string # Client API Version. (required)
+]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, location: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprintAssignments") $qp $auth.query)
   let accept_val = "application/json"
@@ -190,12 +191,13 @@ export def "assignments-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<blueprintId: string, locks: record<excludedPrincipals: list, mode: string>, parameters: record, provisioningState: string, resourceGroups: record, status: record<managedResources: list>>> {
+  --api-version: string # Client API Version. (required)
+]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<blueprintId: string, locks: record<excludedPrincipals: list, mode: string>, parameters: record, provisioningState: string, resourceGroups: record, status: record<managedResources: list, lastModified: string, timeCreated: string>, description: string, displayName: string>, location: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'assignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), assignment_name: (encode-path-segment $assignment_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprintAssignments/{assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -230,12 +232,13 @@ export def "assignments-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<blueprintId: string, locks: record<excludedPrincipals: list, mode: string>, parameters: record, provisioningState: string, resourceGroups: record, status: record<managedResources: list>>> {
+  --api-version: string # Client API Version. (required)
+]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<blueprintId: string, locks: record<excludedPrincipals: list, mode: string>, parameters: record, provisioningState: string, resourceGroups: record, status: record<managedResources: list, lastModified: string, timeCreated: string>, description: string, displayName: string>, location: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'assignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), assignment_name: (encode-path-segment $assignment_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprintAssignments/{assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -272,16 +275,17 @@ export def "assignments-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
+  --api-version: string # Client API Version. (required)
   identity: record # Managed identity generic object. — shape: {principalId?: string, tenantId?: string, type: "None"|"SystemAssigned"|"UserAssigned", userAssignedIdentities?: record}
   properties: record # Detailed properties for a blueprint assignment. — shape: {blueprintId?: string, locks?: record, parameters: record, resourceGroups: record, status?: record, description?: string, displayName?: string}
   location: string # The location of this blueprint assignment.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<blueprintId: string, locks: record<excludedPrincipals: list, mode: string>, parameters: record, provisioningState: string, resourceGroups: record, status: record<managedResources: list>>> {
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<blueprintId: string, locks: record<excludedPrincipals: list, mode: string>, parameters: record, provisioningState: string, resourceGroups: record, status: record<managedResources: list, lastModified: string, timeCreated: string>, description: string, displayName: string>, location: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'assignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), assignment_name: (encode-path-segment $assignment_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprintAssignments/{assignment_name}") $qp $auth.query)
   let req_body = {"identity": $identity, "properties": $properties, "location": $location} | compact
@@ -318,12 +322,13 @@ export def "assignments-who-is-blueprint" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
+  --api-version: string # Client API Version. (required)
 ]: nothing -> record<objectId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'assignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), assignment_name: (encode-path-segment $assignment_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprintAssignments/{assignment_name}/WhoIsBlueprint") $qp $auth.query)
   let accept_val = "application/json"

@@ -138,13 +138,16 @@ export def "get-v1-verification-result" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tran-id: string # The unique ID that was returned by the Send Verification SMS API that triggered the OTP sms.
-  --key: string # FraudLabs Pro API key.
+  --tran-id: string # The unique ID that was returned by the Send Verification SMS API that triggered the OTP sms. (required)
+  --key: string # FraudLabs Pro API key. (required)
   --format: string@format-completer # Returns the API response in json (default) or xml format.
-  --otp: string # The OTP that was sent to the recipient’s phone.
+  --otp: string # The OTP that was sent to the recipient’s phone. (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($tran_id == null) { error make --unspanned { msg: "required query parameter 'tran_id' missing: pass --tran-id" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
+  if ($otp == null) { error make --unspanned { msg: "required query parameter 'otp' missing: pass --otp" } }
   let qp = [(serialize-qp "tran_id" $tran_id "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "otp" $otp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/verification/result" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
@@ -178,12 +181,14 @@ export def "post-v1-verification-send" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --country-code: string # ISO 3166 country code for the recipient mobile phone number. If parameter is supplied, then some basic telephone number validation is done.
   --format: string@format-completer # Returns the API response in json (default) or xml format.
-  --tel: string # The recipient mobile phone number in E164 format which is a plus followed by just numbers with no spaces or parentheses.
-  --key: string # FraudLabs Pro API key.
+  --tel: string # The recipient mobile phone number in E164 format which is a plus followed by just numbers with no spaces or parentheses. (required)
+  --key: string # FraudLabs Pro API key. (required)
   --mesg: string # The message template for the SMS. Add as placeholder for the actual OTP to be generated. Max length is 140 characters. (allows empty value)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($tel == null) { error make --unspanned { msg: "required query parameter 'tel' missing: pass --tel" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "country_code" $country_code "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "tel" $tel "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "mesg" $mesg "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/verification/send" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"

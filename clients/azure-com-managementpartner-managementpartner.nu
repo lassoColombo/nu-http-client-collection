@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -150,10 +150,11 @@ export def "operation-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version.
+  --api-version: string # Supported version. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ManagementPartner/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -186,10 +187,11 @@ export def "partners-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version.
+  --api-version: string # Supported version. (required)
 ]: nothing -> record<etag: int, id: string, name: string, properties: record<createdTime: string, objectId: string, partnerId: string, partnerName: string, state: string, tenantId: string, updatedTime: string, version: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ManagementPartner/partners" $qp $auth.query)
   let accept_val = "application/json"
@@ -223,11 +225,12 @@ export def "partner-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version.
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string # Supported version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/providers/Microsoft.ManagementPartner/partners/{partner_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -261,11 +264,12 @@ export def "partner-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version.
+  --api-version: string # Supported version. (required)
 ]: nothing -> record<etag: int, id: string, name: string, properties: record<createdTime: string, objectId: string, partnerId: string, partnerName: string, state: string, tenantId: string, updatedTime: string, version: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/providers/Microsoft.ManagementPartner/partners/{partner_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -299,11 +303,12 @@ export def "partner-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version.
+  --api-version: string # Supported version. (required)
 ]: nothing -> record<etag: int, id: string, name: string, properties: record<createdTime: string, objectId: string, partnerId: string, partnerName: string, state: string, tenantId: string, updatedTime: string, version: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/providers/Microsoft.ManagementPartner/partners/{partner_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -337,11 +342,12 @@ export def "partner-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version.
+  --api-version: string # Supported version. (required)
 ]: nothing -> record<etag: int, id: string, name: string, properties: record<createdTime: string, objectId: string, partnerId: string, partnerName: string, state: string, tenantId: string, updatedTime: string, version: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/providers/Microsoft.ManagementPartner/partners/{partner_id}") $qp $auth.query)
   let accept_val = "application/json"

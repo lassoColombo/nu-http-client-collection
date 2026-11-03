@@ -1,4 +1,4 @@
-# Auto-generated client for Buy Marketing API vv1_beta.2.0
+# Auto-generated client for Buy Marketing API v1_beta.2.0
 # Source: https://api.apis.guru/v2/specs/ebay.com/buy-marketing/v1_beta.2.0/openapi.json
 # Auth: --token flag or $env.BUY_MARKETING_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -133,12 +133,14 @@ export def "get-merchandised-products" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --aspect-filter: string # The aspect name/value pairs used to further refine product results. For example: /buy/marketing/v1_beta/merchandised_product?category_id=31388&metric_name=BEST_SELLING&aspect_filter=Brand:Canon You can use the Browse API search method with the fieldgroups=ASPECT_REFINEMENTS field to return the aspects of a product. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/buy/marketing/types/gct:MarketingAspectFilter
-  --category-id: string # This query parameter limits the products returned to a specific eBay category. The list of eBay category IDs is not published and category IDs are not all the same across all the eBay maketplace. You can use the following techniques to find a category by site: Use the Category Changes page (https://pages.ebay.com/sellerinformation/news/categorychanges.html). Use the Taxonomy API. For details see Get Categories for Buy APIs (/api-docs/buy/buy-categories.html). Use the Browse API and submit the following method to get the dominantCategoryId for an item. /buy/browse/v1/item_summary/search?q=keyword&fieldgroups=ASPECT_REFINEMENTS Maximum: 1 Required: 1
+  --category-id: string # This query parameter limits the products returned to a specific eBay category. The list of eBay category IDs is not published and category IDs are not all the same across all the eBay maketplace. You can use the following techniques to find a category by site: Use the Category Changes page (https://pages.ebay.com/sellerinformation/news/categorychanges.html). Use the Taxonomy API. For details see Get Categories for Buy APIs (/api-docs/buy/buy-categories.html). Use the Browse API and submit the following method to get the dominantCategoryId for an item. /buy/browse/v1/item_summary/search?q=keyword&fieldgroups=ASPECT_REFINEMENTS Maximum: 1 Required: 1 (required)
   --limit: string # This value specifies the maximum number of products to return in a result set. Note: Maximum value means the method will return up to that many products per set, but it can be less than this value. If the number of products found is less than this value, the method will return all of the products matching the criteria. Default: 8 Maximum: 100
-  --metric-name: string # This value filters the result set by the specified metric. Only products in this metric are returned. Currently, the only metric supported is BEST_SELLING. Default: BEST_SELLING Maximum: 1 Required: 1
+  --metric-name: string # This value filters the result set by the specified metric. Only products in this metric are returned. Currently, the only metric supported is BEST_SELLING. Default: BEST_SELLING Maximum: 1 Required: 1 (required)
 ]: nothing -> record<merchandisedProducts: table<averageRating: string, epid: string, image: record, marketPriceDetails: list, ratingAspects: list, ratingCount: int, reviewCount: int, title: string>, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($category_id == null) { error make --unspanned { msg: "required query parameter 'category_id' missing: pass --category-id" } }
+  if ($metric_name == null) { error make --unspanned { msg: "required query parameter 'metric_name' missing: pass --metric-name" } }
   let qp = [(serialize-qp "aspect_filter" $aspect_filter "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "metric_name" $metric_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/merchandised_product" $qp $auth.query)
   let accept_val = "*/*"

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -167,13 +167,14 @@ export def "create-access-point" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID for the account that owns the specified access point.
+  --x-amz-account-id: string # The Amazon Web Services account ID for the account that owns the specified access point. (required)
   --body: any
-]: any -> record<AccessPointArn: record, Alias: record> {
+]: any -> record<AccessPointArn: string, Alias: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/accesspoint/{name}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -217,11 +218,12 @@ export def "delete-access-point" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID for the account that owns the specified access point.
+  --x-amz-account-id: string # The Amazon Web Services account ID for the account that owns the specified access point. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/accesspoint/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -263,11 +265,12 @@ export def "get-access-point" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID for the account that owns the specified access point.
-]: nothing -> record<Name: record, Bucket: record, NetworkOrigin: record, VpcConfiguration: record<VpcId: record>, PublicAccessBlockConfiguration: record<BlockPublicAcls: record, IgnorePublicAcls: record, BlockPublicPolicy: record, RestrictPublicBuckets: record>, CreationDate: record, Alias: record, AccessPointArn: record, Endpoints: record, BucketAccountId: record> {
+  --x-amz-account-id: string # The Amazon Web Services account ID for the account that owns the specified access point. (required)
+]: nothing -> record<Name: string, Bucket: string, NetworkOrigin: string, VpcConfiguration: record<VpcId: string>, PublicAccessBlockConfiguration: record<BlockPublicAcls: bool, IgnorePublicAcls: bool, BlockPublicPolicy: bool, RestrictPublicBuckets: bool>, CreationDate: string, Alias: string, AccessPointArn: string, Endpoints: record, BucketAccountId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/accesspoint/{name}") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -309,13 +312,14 @@ export def "create-access-point-for-object-lambda" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID for owner of the specified Object Lambda Access Point.
+  --x-amz-account-id: string # The Amazon Web Services account ID for owner of the specified Object Lambda Access Point. (required)
   --body: any
-]: any -> record<ObjectLambdaAccessPointArn: record, Alias: record<Value: record, Status: record>> {
+]: any -> record<ObjectLambdaAccessPointArn: string, Alias: record<Value: string, Status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/accesspointforobjectlambda/{name}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -359,11 +363,12 @@ export def "delete-access-point-for-object-lambda" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point.
+  --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/accesspointforobjectlambda/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -405,11 +410,12 @@ export def "get-access-point-for-object-lambda" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point.
-]: nothing -> record<Name: record, PublicAccessBlockConfiguration: record<BlockPublicAcls: record, IgnorePublicAcls: record, BlockPublicPolicy: record, RestrictPublicBuckets: record>, CreationDate: record, Alias: record<Value: record, Status: record>> {
+  --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point. (required)
+]: nothing -> record<Name: string, PublicAccessBlockConfiguration: record<BlockPublicAcls: bool, IgnorePublicAcls: bool, BlockPublicPolicy: bool, RestrictPublicBuckets: bool>, CreationDate: string, Alias: record<Value: string, Status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/accesspointforobjectlambda/{name}") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -460,7 +466,7 @@ export def "create-bucket" [
   --x-amz-bucket-object-lock-enabled: oneof<nothing, bool> # Specifies whether you want S3 Object Lock to be enabled for the new bucket. This is not supported by Amazon S3 on Outposts buckets.
   --x-amz-outpost-id: string # The ID of the Outposts where the bucket is being created. This ID is required by Amazon S3 on Outposts buckets.
   --body: any
-]: any -> record<BucketArn: record> {
+]: any -> record<BucketArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -507,12 +513,13 @@ export def "create-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID that creates the job.
+  --x-amz-account-id: string # The Amazon Web Services account ID that creates the job. (required)
   --body: any
-]: any -> record<JobId: record> {
+]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base "/v20180820/jobs" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -560,10 +567,11 @@ export def "list-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job.
-]: nothing -> record<NextToken: record, Jobs: record> {
+  --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job. (required)
+]: nothing -> record<NextToken: string, Jobs: table<JobId: string, Description: string, Operation: string, Priority: int, Status: string, CreationTime: string, TerminationDate: string, ProgressSummary: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let qp = [(serialize-qp "jobStatuses" $job_statuses "multi") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v20180820/jobs" $qp $auth.query)
   let accept_val = "text/xml"
@@ -605,12 +613,13 @@ export def "create-multi-region-access-point" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point. The owner of the Multi-Region Access Point also must own the underlying buckets.
+  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point. The owner of the Multi-Region Access Point also must own the underlying buckets. (required)
   --body: any
-]: any -> record<RequestTokenARN: record> {
+]: any -> record<RequestTokenARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base "/v20180820/async-requests/mrap/create" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -654,11 +663,12 @@ export def "delete-access-point-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID for the account that owns the specified access point.
+  --x-amz-account-id: string # The account ID for the account that owns the specified access point. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/accesspoint/{name}/policy") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -700,11 +710,12 @@ export def "get-access-point-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID for the account that owns the specified access point.
-]: nothing -> record<Policy: record> {
+  --x-amz-account-id: string # The account ID for the account that owns the specified access point. (required)
+]: nothing -> record<Policy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/accesspoint/{name}/policy") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -746,13 +757,14 @@ export def "put-access-point-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID for owner of the bucket associated with the specified access point.
+  --x-amz-account-id: string # The Amazon Web Services account ID for owner of the bucket associated with the specified access point. (required)
   --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/accesspoint/{name}/policy") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -796,11 +808,12 @@ export def "delete-access-point-policy-for-object-lambda" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point.
+  --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/accesspointforobjectlambda/{name}/policy") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -842,11 +855,12 @@ export def "get-access-point-policy-for-object-lambda" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point.
-]: nothing -> record<Policy: record> {
+  --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point. (required)
+]: nothing -> record<Policy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/accesspointforobjectlambda/{name}/policy") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -888,13 +902,14 @@ export def "put-access-point-policy-for-object-lambda" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point.
+  --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point. (required)
   --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/accesspointforobjectlambda/{name}/policy") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -938,11 +953,12 @@ export def "delete-bucket" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID that owns the Outposts bucket.
+  --x-amz-account-id: string # The account ID that owns the Outposts bucket. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/bucket/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -984,11 +1000,12 @@ export def "get-bucket" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket.
-]: nothing -> record<Bucket: record, PublicAccessBlockEnabled: record, CreationDate: record> {
+  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket. (required)
+]: nothing -> record<Bucket: string, PublicAccessBlockEnabled: bool, CreationDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/bucket/{name}") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1030,11 +1047,12 @@ export def "delete-bucket-lifecycle-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID of the lifecycle configuration to delete.
+  --x-amz-account-id: string # The account ID of the lifecycle configuration to delete. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/bucket/{name}/lifecycleconfiguration") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1076,11 +1094,12 @@ export def "get-bucket-lifecycle-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket.
-]: nothing -> record<Rules: record> {
+  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket. (required)
+]: nothing -> record<Rules: table<Expiration: record, ID: string, Filter: record, Status: string, Transitions: list, NoncurrentVersionTransitions: list, NoncurrentVersionExpiration: record, AbortIncompleteMultipartUpload: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/bucket/{name}/lifecycleconfiguration") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1122,13 +1141,14 @@ export def "put-bucket-lifecycle-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket.
+  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket. (required)
   --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/bucket/{name}/lifecycleconfiguration") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1172,11 +1192,12 @@ export def "delete-bucket-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID of the Outposts bucket.
+  --x-amz-account-id: string # The account ID of the Outposts bucket. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/bucket/{name}/policy") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1218,11 +1239,12 @@ export def "get-bucket-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket.
-]: nothing -> record<Policy: record> {
+  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket. (required)
+]: nothing -> record<Policy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/bucket/{name}/policy") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1264,7 +1286,7 @@ export def "put-bucket-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket.
+  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket. (required)
   --x-amz-confirm-remove-self-bucket-access: oneof<nothing, bool> # Set this parameter to true to confirm that you want to remove your permissions to change this bucket policy in the future. This is not supported by Amazon S3 on Outposts buckets.
   --body: any
 ]: any -> any {
@@ -1272,6 +1294,7 @@ export def "put-bucket-policy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/bucket/{name}/policy") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1315,11 +1338,12 @@ export def "delete-bucket-replication" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket to delete the replication configuration for.
+  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket to delete the replication configuration for. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/bucket/{name}/replication") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1361,11 +1385,12 @@ export def "get-bucket-replication" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket.
-]: nothing -> record<ReplicationConfiguration: record<Role: record, Rules: record>> {
+  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket. (required)
+]: nothing -> record<ReplicationConfiguration: record<Role: string, Rules: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/bucket/{name}/replication") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1407,13 +1432,14 @@ export def "put-bucket-replication" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket.
+  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket. (required)
   --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/bucket/{name}/replication") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1457,11 +1483,12 @@ export def "delete-bucket-tagging" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket tag set to be removed.
+  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket tag set to be removed. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/bucket/{name}/tagging") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1503,11 +1530,12 @@ export def "get-bucket-tagging" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket.
-]: nothing -> record<TagSet: record> {
+  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket. (required)
+]: nothing -> record<TagSet: table<Key: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/bucket/{name}/tagging") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1549,13 +1577,14 @@ export def "put-bucket-tagging" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket.
+  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket. (required)
   --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/bucket/{name}/tagging") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1599,11 +1628,12 @@ export def "delete-job-tagging" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job.
+  --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v20180820/jobs/{id}/tagging") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1645,11 +1675,12 @@ export def "get-job-tagging" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job.
-]: nothing -> record<Tags: record> {
+  --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job. (required)
+]: nothing -> record<Tags: table<Key: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v20180820/jobs/{id}/tagging") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1691,13 +1722,14 @@ export def "put-job-tagging" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job.
+  --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job. (required)
   --body: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v20180820/jobs/{id}/tagging") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1740,12 +1772,13 @@ export def "delete-multi-region-access-point" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point.
+  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point. (required)
   --body: any
-]: any -> record<RequestTokenARN: record> {
+]: any -> record<RequestTokenARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base "/v20180820/async-requests/mrap/delete" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1788,10 +1821,11 @@ export def "delete-public-access-block" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID for the Amazon Web Services account whose PublicAccessBlock configuration you want to remove.
+  --x-amz-account-id: string # The account ID for the Amazon Web Services account whose PublicAccessBlock configuration you want to remove. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base "/v20180820/configuration/publicAccessBlock" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1832,10 +1866,11 @@ export def "get-public-access-block" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID for the Amazon Web Services account whose PublicAccessBlock configuration you want to retrieve.
-]: nothing -> record<PublicAccessBlockConfiguration: record<BlockPublicAcls: record, IgnorePublicAcls: record, BlockPublicPolicy: record, RestrictPublicBuckets: record>> {
+  --x-amz-account-id: string # The account ID for the Amazon Web Services account whose PublicAccessBlock configuration you want to retrieve. (required)
+]: nothing -> record<PublicAccessBlockConfiguration: record<BlockPublicAcls: bool, IgnorePublicAcls: bool, BlockPublicPolicy: bool, RestrictPublicBuckets: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base "/v20180820/configuration/publicAccessBlock" $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1876,12 +1911,13 @@ export def "put-public-access-block" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID for the Amazon Web Services account whose PublicAccessBlock configuration you want to set.
+  --x-amz-account-id: string # The account ID for the Amazon Web Services account whose PublicAccessBlock configuration you want to set. (required)
   --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base "/v20180820/configuration/publicAccessBlock" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1925,11 +1961,12 @@ export def "delete-storage-lens-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID of the requester.
+  --x-amz-account-id: string # The account ID of the requester. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storagelensid | is-empty) { error make --unspanned { msg: "path parameter 'storagelensid' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({storagelensid: (encode-path-segment $storagelensid)} | format pattern "/v20180820/storagelens/{storagelensid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1971,11 +2008,12 @@ export def "get-storage-lens-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID of the requester.
-]: nothing -> record<StorageLensConfiguration: record<Id: record, AccountLevel: record<ActivityMetrics: record, BucketLevel: record, AdvancedCostOptimizationMetrics: record, AdvancedDataProtectionMetrics: record, DetailedStatusCodesMetrics: record>, Include: record<Buckets: record, Regions: record>, Exclude: record<Buckets: record, Regions: record>, DataExport: record<S3BucketDestination: record, CloudWatchMetrics: record>, IsEnabled: record, AwsOrg: record<Arn: record>, StorageLensArn: record>> {
+  --x-amz-account-id: string # The account ID of the requester. (required)
+]: nothing -> record<StorageLensConfiguration: record<Id: string, AccountLevel: record<ActivityMetrics: record, BucketLevel: record, AdvancedCostOptimizationMetrics: record, AdvancedDataProtectionMetrics: record, DetailedStatusCodesMetrics: record>, Include: record<Buckets: list, Regions: list>, Exclude: record<Buckets: list, Regions: list>, DataExport: record<S3BucketDestination: record, CloudWatchMetrics: record>, IsEnabled: bool, AwsOrg: record<Arn: string>, StorageLensArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storagelensid | is-empty) { error make --unspanned { msg: "path parameter 'storagelensid' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({storagelensid: (encode-path-segment $storagelensid)} | format pattern "/v20180820/storagelens/{storagelensid}") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2017,13 +2055,14 @@ export def "put-storage-lens-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID of the requester.
+  --x-amz-account-id: string # The account ID of the requester. (required)
   --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storagelensid | is-empty) { error make --unspanned { msg: "path parameter 'storagelensid' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({storagelensid: (encode-path-segment $storagelensid)} | format pattern "/v20180820/storagelens/{storagelensid}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -2067,11 +2106,12 @@ export def "delete-storage-lens-configuration-tagging" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID of the requester.
+  --x-amz-account-id: string # The account ID of the requester. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storagelensid | is-empty) { error make --unspanned { msg: "path parameter 'storagelensid' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({storagelensid: (encode-path-segment $storagelensid)} | format pattern "/v20180820/storagelens/{storagelensid}/tagging") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2113,11 +2153,12 @@ export def "get-storage-lens-configuration-tagging" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID of the requester.
-]: nothing -> record<Tags: record> {
+  --x-amz-account-id: string # The account ID of the requester. (required)
+]: nothing -> record<Tags: table<Key: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storagelensid | is-empty) { error make --unspanned { msg: "path parameter 'storagelensid' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({storagelensid: (encode-path-segment $storagelensid)} | format pattern "/v20180820/storagelens/{storagelensid}/tagging") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2159,13 +2200,14 @@ export def "put-storage-lens-configuration-tagging" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID of the requester.
+  --x-amz-account-id: string # The account ID of the requester. (required)
   --body: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storagelensid | is-empty) { error make --unspanned { msg: "path parameter 'storagelensid' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({storagelensid: (encode-path-segment $storagelensid)} | format pattern "/v20180820/storagelens/{storagelensid}/tagging") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -2209,11 +2251,12 @@ export def "describe-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job.
-]: nothing -> record<Job: record<JobId: record, ConfirmationRequired: record, Description: record, JobArn: record, Status: record, Manifest: record<Spec: record, Location: record>, Operation: record<LambdaInvoke: record, S3PutObjectCopy: record, S3PutObjectAcl: record, S3PutObjectTagging: record, S3DeleteObjectTagging: record, S3InitiateRestoreObject: record, S3PutObjectLegalHold: record, S3PutObjectRetention: record, S3ReplicateObject: record>, Priority: record, ProgressSummary: record<TotalNumberOfTasks: record, NumberOfTasksSucceeded: record, NumberOfTasksFailed: record, Timers: record>, StatusUpdateReason: record, FailureReasons: record, Report: record<Bucket: record, Format: record, Enabled: record, Prefix: record, ReportScope: record>, CreationTime: record, TerminationDate: record, RoleArn: record, SuspendedDate: record, SuspendedCause: record, ManifestGenerator: record<S3JobManifestGenerator: record>, GeneratedManifestDescriptor: record<Format: record, Location: record>>> {
+  --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job. (required)
+]: nothing -> record<Job: record<JobId: string, ConfirmationRequired: bool, Description: string, JobArn: string, Status: string, Manifest: record<Spec: record, Location: record>, Operation: record<LambdaInvoke: record, S3PutObjectCopy: record, S3PutObjectAcl: record, S3PutObjectTagging: record, S3DeleteObjectTagging: record, S3InitiateRestoreObject: record, S3PutObjectLegalHold: record, S3PutObjectRetention: record, S3ReplicateObject: record>, Priority: int, ProgressSummary: record<TotalNumberOfTasks: int, NumberOfTasksSucceeded: int, NumberOfTasksFailed: int, Timers: record>, StatusUpdateReason: string, FailureReasons: list<record>, Report: record<Bucket: string, Format: string, Enabled: bool, Prefix: string, ReportScope: string>, CreationTime: string, TerminationDate: string, RoleArn: string, SuspendedDate: string, SuspendedCause: string, ManifestGenerator: record<S3JobManifestGenerator: record>, GeneratedManifestDescriptor: record<Format: string, Location: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v20180820/jobs/{id}") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2255,11 +2298,12 @@ export def "describe-multi-region-access-point-operation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point.
-]: nothing -> record<AsyncOperation: record<CreationTime: record, Operation: record, RequestTokenARN: record, RequestParameters: record<CreateMultiRegionAccessPointRequest: record, DeleteMultiRegionAccessPointRequest: record, PutMultiRegionAccessPointPolicyRequest: record>, RequestStatus: record, ResponseDetails: record<MultiRegionAccessPointDetails: record, ErrorDetails: record>>> {
+  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point. (required)
+]: nothing -> record<AsyncOperation: record<CreationTime: string, Operation: string, RequestTokenARN: string, RequestParameters: record<CreateMultiRegionAccessPointRequest: record, DeleteMultiRegionAccessPointRequest: record, PutMultiRegionAccessPointPolicyRequest: record>, RequestStatus: string, ResponseDetails: record<MultiRegionAccessPointDetails: record, ErrorDetails: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($request_token | is-empty) { error make --unspanned { msg: "path parameter 'request_token' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({request_token: (encode-path-segment $request_token)} | format pattern "/v20180820/async-requests/mrap/{request_token}") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2301,11 +2345,12 @@ export def "get-access-point-configuration-for-object-lambda" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point.
-]: nothing -> record<Configuration: record<SupportingAccessPoint: record, CloudWatchMetricsEnabled: record, AllowedFeatures: record, TransformationConfigurations: record>> {
+  --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point. (required)
+]: nothing -> record<Configuration: record<SupportingAccessPoint: string, CloudWatchMetricsEnabled: bool, AllowedFeatures: list<string>, TransformationConfigurations: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/accesspointforobjectlambda/{name}/configuration") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2347,13 +2392,14 @@ export def "put-access-point-configuration-for-object-lambda" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point.
+  --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point. (required)
   --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/accesspointforobjectlambda/{name}/configuration") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -2397,11 +2443,12 @@ export def "get-access-point-policy-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID for the account that owns the specified access point.
-]: nothing -> record<PolicyStatus: record<IsPublic: record>> {
+  --x-amz-account-id: string # The account ID for the account that owns the specified access point. (required)
+]: nothing -> record<PolicyStatus: record<IsPublic: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/accesspoint/{name}/policyStatus") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2443,11 +2490,12 @@ export def "get-access-point-policy-status-for-object-lambda" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point.
-]: nothing -> record<PolicyStatus: record<IsPublic: record>> {
+  --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point. (required)
+]: nothing -> record<PolicyStatus: record<IsPublic: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/accesspointforobjectlambda/{name}/policyStatus") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2489,11 +2537,12 @@ export def "get-bucket-versioning" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID of the S3 on Outposts bucket.
-]: nothing -> record<Status: record, MFADelete: record> {
+  --x-amz-account-id: string # The Amazon Web Services account ID of the S3 on Outposts bucket. (required)
+]: nothing -> record<Status: string, MFADelete: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/bucket/{name}/versioning") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2535,7 +2584,7 @@ export def "put-bucket-versioning" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID of the S3 on Outposts bucket.
+  --x-amz-account-id: string # The Amazon Web Services account ID of the S3 on Outposts bucket. (required)
   --x-amz-mfa: string # The concatenation of the authentication device's serial number, a space, and the value that is displayed on your authentication device.
   --body: any
 ]: any -> any {
@@ -2543,6 +2592,7 @@ export def "put-bucket-versioning" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/bucket/{name}/versioning") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -2586,11 +2636,12 @@ export def "get-multi-region-access-point" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point.
-]: nothing -> record<AccessPoint: record<Name: record, Alias: record, CreatedAt: record, PublicAccessBlock: record<BlockPublicAcls: record, IgnorePublicAcls: record, BlockPublicPolicy: record, RestrictPublicBuckets: record>, Status: record, Regions: record>> {
+  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point. (required)
+]: nothing -> record<AccessPoint: record<Name: string, Alias: string, CreatedAt: string, PublicAccessBlock: record<BlockPublicAcls: bool, IgnorePublicAcls: bool, BlockPublicPolicy: bool, RestrictPublicBuckets: bool>, Status: string, Regions: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/mrap/instances/{name}") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2632,11 +2683,12 @@ export def "get-multi-region-access-point-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point.
-]: nothing -> record<Policy: record<Established: record<Policy: record>, Proposed: record<Policy: record>>> {
+  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point. (required)
+]: nothing -> record<Policy: record<Established: record<Policy: string>, Proposed: record<Policy: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/mrap/instances/{name}/policy") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2678,11 +2730,12 @@ export def "get-multi-region-access-point-policy-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point.
-]: nothing -> record<Established: record<IsPublic: record>> {
+  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point. (required)
+]: nothing -> record<Established: record<IsPublic: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v20180820/mrap/instances/{name}/policystatus") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2724,11 +2777,12 @@ export def "get-multi-region-access-point-routes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point.
-]: nothing -> record<Mrap: record, Routes: record> {
+  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point. (required)
+]: nothing -> record<Mrap: string, Routes: table<Bucket: string, Region: string, TrafficDialPercentage: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mrap | is-empty) { error make --unspanned { msg: "path parameter 'mrap' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({mrap: (encode-path-segment $mrap)} | format pattern "/v20180820/mrap/instances/{mrap}/routes") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2770,13 +2824,14 @@ export def "submit-multi-region-access-point-routes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point.
+  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point. (required)
   --body: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mrap | is-empty) { error make --unspanned { msg: "path parameter 'mrap' must be non-empty" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base ({mrap: (encode-path-segment $mrap)} | format pattern "/v20180820/mrap/instances/{mrap}/routes") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -2824,10 +2879,11 @@ export def "list-access-points" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID for the account that owns the specified access points.
-]: nothing -> record<AccessPointList: record, NextToken: record> {
+  --x-amz-account-id: string # The Amazon Web Services account ID for the account that owns the specified access points. (required)
+]: nothing -> record<AccessPointList: table<Name: string, NetworkOrigin: string, VpcConfiguration: record, Bucket: string, AccessPointArn: string, Alias: string, BucketAccountId: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let qp = [(serialize-qp "bucket" $bucket "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v20180820/accesspoint" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2873,10 +2929,11 @@ export def "list-access-points-for-object-lambda" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point.
-]: nothing -> record<ObjectLambdaAccessPointList: record, NextToken: record> {
+  --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point. (required)
+]: nothing -> record<ObjectLambdaAccessPointList: table<Name: string, ObjectLambdaAccessPointArn: string, Alias: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v20180820/accesspointforobjectlambda" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2922,10 +2979,11 @@ export def "list-multi-region-access-points" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point.
-]: nothing -> record<AccessPoints: record, NextToken: record> {
+  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point. (required)
+]: nothing -> record<AccessPoints: table<Name: string, Alias: string, CreatedAt: string, PublicAccessBlock: record, Status: string, Regions: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v20180820/mrap/instances" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2971,11 +3029,12 @@ export def "list-regional-buckets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket.
+  --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket. (required)
   --x-amz-outpost-id: string # The ID of the Outposts resource. This ID is required by Amazon S3 on Outposts buckets.
-]: nothing -> record<RegionalBucketList: record, NextToken: record> {
+]: nothing -> record<RegionalBucketList: table<Bucket: string, BucketArn: string, PublicAccessBlockEnabled: bool, CreationDate: string, OutpostId: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v20180820/bucket" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3019,10 +3078,11 @@ export def "list-storage-lens-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The account ID of the requester.
-]: nothing -> record<NextToken: record, StorageLensConfigurationList: record> {
+  --x-amz-account-id: string # The account ID of the requester. (required)
+]: nothing -> record<NextToken: string, StorageLensConfigurationList: table<Id: string, StorageLensArn: string, HomeRegion: string, IsEnabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v20180820/storagelens" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3064,12 +3124,13 @@ export def "put-multi-region-access-point-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point.
+  --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point. (required)
   --body: any
-]: any -> record<RequestTokenARN: record> {
+]: any -> record<RequestTokenARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let full_url = (build-url $base "/v20180820/async-requests/mrap/put-policy" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -3106,7 +3167,7 @@ export def "update-job-priority" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --priority: int # The priority you want to assign to this job.
+  --priority: int # The priority you want to assign to this job. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3114,11 +3175,13 @@ export def "update-job-priority" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job.
-]: nothing -> record<JobId: record, Priority: record> {
+  --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job. (required)
+]: nothing -> record<JobId: string, Priority: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($priority == null) { error make --unspanned { msg: "required query parameter 'priority' missing: pass --priority" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let qp = [(serialize-qp "priority" $priority "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v20180820/jobs/{id}/priority") $qp $auth.query)
   let accept_val = "text/xml"
@@ -3154,7 +3217,7 @@ export def "update-job-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --requested-job-status: string@requested-job-status-completer # The status that you want to move the specified job to.
+  --requested-job-status: string@requested-job-status-completer # The status that you want to move the specified job to. (required)
   --status-update-reason: string # A description of the reason why you want to change the specified job's status. This field can be any string up to the maximum length.
   --x-amz-content-sha256: string
   --x-amz-date: string
@@ -3163,11 +3226,13 @@ export def "update-job-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job.
-]: nothing -> record<JobId: record, Status: record, StatusUpdateReason: record> {
+  --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job. (required)
+]: nothing -> record<JobId: string, Status: string, StatusUpdateReason: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($requested_job_status == null) { error make --unspanned { msg: "required query parameter 'requestedJobStatus' missing: pass --requested-job-status" } }
+  if ($x_amz_account_id == null) { error make --unspanned { msg: "required header parameter 'x-amz-account-id' missing: pass --x-amz-account-id" } }
   let qp = [(serialize-qp "requestedJobStatus" $requested_job_status "scalar") (serialize-qp "statusUpdateReason" $status_update_reason "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v20180820/jobs/{id}/status") $qp $auth.query)
   let accept_val = "text/xml"

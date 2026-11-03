@@ -131,12 +131,15 @@ export def "getfullnameparsedmatch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register
-  --firstname: string # First name from which to generate similarity key
-  --lastname: string # Last name from which to generate similarity key
+  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register (required)
+  --firstname: string # First name from which to generate similarity key (required)
+  --lastname: string # Last name from which to generate similarity key (required)
 ]: nothing -> record<Code: string, Credits: string, Simkey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($license == null) { error make --unspanned { msg: "required query parameter 'license' missing: pass --license" } }
+  if ($firstname == null) { error make --unspanned { msg: "required query parameter 'firstname' missing: pass --firstname" } }
+  if ($lastname == null) { error make --unspanned { msg: "required query parameter 'lastname' missing: pass --lastname" } }
   let qp = [(serialize-qp "license" $license "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "lastname" $lastname "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getfullnameparsedmatch" $qp $auth.query)
   let accept_val = "application/json"

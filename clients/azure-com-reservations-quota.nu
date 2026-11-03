@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -147,11 +147,12 @@ export def "auto-quota-increase-get-properties" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version.
+  --api-version: string # Api version. (required)
 ]: nothing -> record<id: string, name: string, properties: record<onFailure: record<emailActions: record, phoneActions: record>, onSuccess: record<emailActions: record, phoneActions: record>, settings: record<autoQuotaIncreaseState: any>, supportTicketAction: record<alternateEmailAddresses: list, autoQuotaIncreaseState: any, country: string, firstName: string, lastName: string, phoneNumber: string, preferredContactMethod: any, primaryEmailAddress: string, severity: any, supportLanguage: string>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/autoQuotaIncrease") $qp $auth.query)
   let accept_val = "application/json"
@@ -186,13 +187,14 @@ export def "auto-quota-increase-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version.
+  --api-version: string # Api version. (required)
   --properties: record # Actions for auto quota increase. — shape: {onFailure?: record, onSuccess?: record, settings?: record, supportTicketAction?: record}
 ]: any -> record<id: string, name: string, properties: record<onFailure: record<emailActions: record, phoneActions: record>, onSuccess: record<emailActions: record, phoneActions: record>, settings: record<autoQuotaIncreaseState: any>, supportTicketAction: record<alternateEmailAddresses: list, autoQuotaIncreaseState: any, country: string, firstName: string, lastName: string, phoneNumber: string, preferredContactMethod: any, primaryEmailAddress: string, severity: any, supportLanguage: string>>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/autoQuotaIncrease") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -230,13 +232,14 @@ export def "quotas-list-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version.
+  --api-version: string # Api version. (required)
 ]: nothing -> record<nextLink: string, value: table<currentValue: int, limit: int, name: record, properties: record, quotaPeriod: string, resourceType: any, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_id: (encode-path-segment $provider_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/resourceProviders/{provider_id}/locations/{location}/serviceLimits") $qp $auth.query)
   let accept_val = "application/json"
@@ -273,7 +276,7 @@ export def "quota-list-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version.
+  --api-version: string # Api version. (required)
 ]: nothing -> record<currentValue: int, limit: int, name: record<localizedValue: string, value: string>, properties: record, quotaPeriod: string, resourceType: any, unit: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -281,6 +284,7 @@ export def "quota-list-status" [
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_id: (encode-path-segment $provider_id), location: (encode-path-segment $location), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/resourceProviders/{provider_id}/locations/{location}/serviceLimits/{resource_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -318,8 +322,8 @@ export def "quota-request-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version.
-  --if-match: string # ETag of the Entity. ETag should match the current entity state from the header response of the GET request or it should be * for unconditional update.
+  --api-version: string # Api version. (required)
+  --if-match: string # ETag of the Entity. ETag should match the current entity state from the header response of the GET request or it should be * for unconditional update. (required)
   --limit: int # The quota limit.
   --name: any # Name of the resource provide by the resource Provider. Please use this name property for quotaRequests. — shape: {value?: string}
   --properties: record # Additional properties for the specific resource provider.
@@ -333,6 +337,8 @@ export def "quota-request-update" [
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($if_match == null) { error make --unspanned { msg: "required header parameter 'If-Match' missing: pass --if-match" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_id: (encode-path-segment $provider_id), location: (encode-path-segment $location), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/resourceProviders/{provider_id}/locations/{location}/serviceLimits/{resource_name}") $qp $auth.query)
   let req_body = {"limit": $limit, "name": $name, "properties": $properties, "resourceType": $resource_type, "unit": $unit} | compact
@@ -374,8 +380,8 @@ export def "quota-request-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version.
-  --if-match: string # ETag of the Entity. ETag should match the current entity state from the header response of the GET request or it should be * for unconditional update.
+  --api-version: string # Api version. (required)
+  --if-match: string # ETag of the Entity. ETag should match the current entity state from the header response of the GET request or it should be * for unconditional update. (required)
   --limit: int # The quota limit.
   --name: any # Name of the resource provide by the resource Provider. Please use this name property for quotaRequests. — shape: {value?: string}
   --properties: record # Additional properties for the specific resource provider.
@@ -389,6 +395,8 @@ export def "quota-request-create" [
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($if_match == null) { error make --unspanned { msg: "required header parameter 'If-Match' missing: pass --if-match" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_id: (encode-path-segment $provider_id), location: (encode-path-segment $location), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/resourceProviders/{provider_id}/locations/{location}/serviceLimits/{resource_name}") $qp $auth.query)
   let req_body = {"limit": $limit, "name": $name, "properties": $properties, "resourceType": $resource_type, "unit": $unit} | compact
@@ -428,7 +436,7 @@ export def "quota-requests-list-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version.
+  --api-version: string # Api version. (required)
   --filter: string # | Field | Supported operators |---------------------|------------------------ |requestSubmitTime | ge, le, eq, gt, lt
   --top: int # Number of records to return. (format: int32)
   --skiptoken: string # Skiptoken is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a skiptoken parameter that specifies a starting point to use for subsequent calls
@@ -438,6 +446,7 @@ export def "quota-requests-list-status" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_id: (encode-path-segment $provider_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/resourceProviders/{provider_id}/locations/{location}/serviceLimitsRequests") $qp $auth.query)
   let accept_val = "application/json"
@@ -474,7 +483,7 @@ export def "quota-requests-get-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version.
+  --api-version: string # Api version. (required)
 ]: nothing -> record<id: string, name: string, properties: record<message: string, provisioningState: any, requestSubmitTime: string, value: list<record>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -482,6 +491,7 @@ export def "quota-requests-get-status" [
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_id: (encode-path-segment $provider_id), location: (encode-path-segment $location), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/resourceProviders/{provider_id}/locations/{location}/serviceLimitsRequests/{id}") $qp $auth.query)
   let accept_val = "application/json"

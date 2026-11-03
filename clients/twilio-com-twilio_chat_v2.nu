@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -1067,7 +1067,7 @@ export def "create-message" [
   --body: string # The message to send to the channel. Can be an empty string or `null`, which sets the value as an empty string. You can send structured data in the body by serializing it as a string.
   --date-created: string # The date, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format, to assign to the resource as the date it was created. The default value is the current time set by the Chat service. This parameter should only be used when a Chat's history is being recreated from a backup/separate source. (format: date-time)
   --date-updated: string # The date, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format, to assign to the resource as the date it was last updated. (format: date-time)
-  --body-from: string # The [Identity](https://www.twilio.com/docs/chat/identity) of the new message's author. The default value is `system`.
+  --from: string # The [Identity](https://www.twilio.com/docs/chat/identity) of the new message's author. The default value is `system`.
   --last-updated-by: string # The [Identity](https://www.twilio.com/docs/chat/identity) of the User who last updated the Message, if applicable.
   --media-sid: string # The SID of the [Media](https://www.twilio.com/docs/chat/rest/media) to attach to the new Message.
 ]: any -> record<account_sid: string, attributes: string, body: string, channel_sid: string, date_created: string, date_updated: string, from: string, index: int, last_updated_by: string, media: any, service_sid: string, sid: string, to: string, type: string, url: string, was_edited: bool> {
@@ -1077,7 +1077,7 @@ export def "create-message" [
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($channel_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChannelSid' must be non-empty" } }
   let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), channel_sid: (encode-path-segment $channel_sid)} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Messages") $auth.query)
-  let req_body = {"Attributes": $attributes, "Body": $body, "DateCreated": $date_created, "DateUpdated": $date_updated, "From": $body_from, "LastUpdatedBy": $last_updated_by, "MediaSid": $media_sid} | compact
+  let req_body = {"Attributes": $attributes, "Body": $body, "DateCreated": $date_created, "DateUpdated": $date_updated, "From": $from, "LastUpdatedBy": $last_updated_by, "MediaSid": $media_sid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1200,7 +1200,7 @@ export def "update-message" [
   --body: string # The message to send to the channel. Can be an empty string or `null`, which sets the value as an empty string. You can send structured data in the body by serializing it as a string.
   --date-created: string # The date, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format, to assign to the resource as the date it was created. The default value is the current time set by the Chat service. This parameter should only be used when a Chat's history is being recreated from a backup/separate source. (format: date-time)
   --date-updated: string # The date, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format, to assign to the resource as the date it was last updated. (format: date-time)
-  --body-from: string # The [Identity](https://www.twilio.com/docs/chat/identity) of the message's author.
+  --from: string # The [Identity](https://www.twilio.com/docs/chat/identity) of the message's author.
   --last-updated-by: string # The [Identity](https://www.twilio.com/docs/chat/identity) of the User who last updated the Message, if applicable.
 ]: any -> record<account_sid: string, attributes: string, body: string, channel_sid: string, date_created: string, date_updated: string, from: string, index: int, last_updated_by: string, media: any, service_sid: string, sid: string, to: string, type: string, url: string, was_edited: bool> {
   let input = $in
@@ -1210,7 +1210,7 @@ export def "update-message" [
   if ($channel_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChannelSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), channel_sid: (encode-path-segment $channel_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Messages/{sid}") $auth.query)
-  let req_body = {"Attributes": $attributes, "Body": $body, "DateCreated": $date_created, "DateUpdated": $date_updated, "From": $body_from, "LastUpdatedBy": $last_updated_by} | compact
+  let req_body = {"Attributes": $attributes, "Body": $body, "DateCreated": $date_created, "DateUpdated": $date_updated, "From": $from, "LastUpdatedBy": $last_updated_by} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

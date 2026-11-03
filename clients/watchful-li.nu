@@ -617,8 +617,8 @@ export def "get-logs" [
   --accept: string@accept-completer # Response content type
   --log-type: string@log-type-completer # Type of the log
   --log-entry: string # Do a 'LIKE' search, you can also use '%'
-  --qp-from: string # Logs after this date, format YYYY-MM-DD HH:MM:SS
-  --qp-to: string # Logs before this date, format YYYY-MM-DD HH:MM:SS
+  --from: string # Logs after this date, format YYYY-MM-DD HH:MM:SS
+  --to: string # Logs before this date, format YYYY-MM-DD HH:MM:SS
   --fields: string # Fields to return separate by comas: name,id
   --limit: int # Number of object to return (max 100, default 25) (format: int64)
   --limitstart: int # Start of the return (default 0) (format: int64)
@@ -626,14 +626,14 @@ export def "get-logs" [
 ]: nothing -> record<Site_name: string, id_log: int, idx_site: int, log_date: string, log_entry: string, log_level: int, log_type: string, userid: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "log_type" $log_type "scalar") (serialize-qp "log_entry" $log_entry "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "log_type" $log_type "scalar") (serialize-qp "log_entry" $log_entry "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/logs" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"log_type": $log_type, "log_entry": $log_entry, "from": $qp_from, "to": $qp_to, "fields": $fields, "limit": $limit, "limitstart": $limitstart, "order": $order} | compact)
+    query: ({"log_type": $log_type, "log_entry": $log_entry, "from": $from, "to": $to, "fields": $fields, "limit": $limit, "limitstart": $limitstart, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -659,7 +659,7 @@ export def "get-export-logs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --format: string@format-completer # Format of exported file (PDF or CSV)
+  --format: string@format-completer # Format of exported file (PDF or CSV) (required)
   --site: int # Site id of the log (format: int64)
   --filter-type: string@filter-type-completer # Type of the log
   --search: string # Do a 'LIKE' search, you can also use '%'
@@ -670,6 +670,7 @@ export def "get-export-logs" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($format == null) { error make --unspanned { msg: "required query parameter 'format' missing: pass --format" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "filter_type" $filter_type "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "startdate" $startdate "scalar") (serialize-qp "enddate" $enddate "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "startid" $startid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/logs/export" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -840,8 +841,8 @@ export def "get-reports-sites-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # Start of the report, format YYYY-MM-DD, default today-30day
-  --qp-to: string # End of the report, format YYYY-MM-DD, default today
+  --from: string # Start of the report, format YYYY-MM-DD, default today-30day
+  --to: string # End of the report, format YYYY-MM-DD, default today
   --reports: string # Type of reports separate by comas: Ga,Logs,Uptime
   --log-type: string@log-type-completer-1 # Type of the log to show in the report
   --compare: int@compare-completer # Define if you want show previous values in Google Analytics graph
@@ -849,14 +850,14 @@ export def "get-reports-sites-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "reports" $reports "scalar") (serialize-qp "log_type" $log_type "scalar") (serialize-qp "compare" $compare "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "reports" $reports "scalar") (serialize-qp "log_type" $log_type "scalar") (serialize-qp "compare" $compare "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/reports/sites/{id}") $qp $auth.query)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "reports": $reports, "log_type": $log_type, "compare": $compare} | compact)
+    query: ({"from": $from, "to": $to, "reports": $reports, "log_type": $log_type, "compare": $compare} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -881,8 +882,8 @@ export def "get-reports-tags-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # Start of the report, format YYYY-MM-DD, default today-30day
-  --qp-to: string # End of the report, format YYYY-MM-DD, default today
+  --from: string # Start of the report, format YYYY-MM-DD, default today-30day
+  --to: string # End of the report, format YYYY-MM-DD, default today
   --reports: string # Type of reports separate by comas: Ga,Logs,Uptime
   --log-type: string@log-type-completer-1 # Type of the log to show in the report
   --compare: int@compare-completer # Define if you want show previous values in Google Analytics graph
@@ -890,14 +891,14 @@ export def "get-reports-tags-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "reports" $reports "scalar") (serialize-qp "log_type" $log_type "scalar") (serialize-qp "compare" $compare "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "reports" $reports "scalar") (serialize-qp "log_type" $log_type "scalar") (serialize-qp "compare" $compare "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/reports/tags/{id}") $qp $auth.query)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "reports": $reports, "log_type": $log_type, "compare": $compare} | compact)
+    query: ({"from": $from, "to": $to, "reports": $reports, "log_type": $log_type, "compare": $compare} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -931,7 +932,7 @@ export def "get-sites" [
   --j-update: int@j-update-completer # Joomla core update status (1: update required, 0: update not required)
   --can-update: int@can-update-completer # canUpdate
   --published: int@published-completer # Is published
-  --qp-error: string # Has errors
+  --error: string # Has errors
   --nb-updates: string
   --up: int@up-completer # Is online
   --fields: string # Fields to return separated by commas (e.g. name,id)
@@ -941,14 +942,14 @@ export def "get-sites" [
 ]: nothing -> record<access_url: string, admin_url: string, akeebaProfile: string, backupSchedule: string, canBackup: bool, canUpdate: bool, dateBackup: string, date_last_check: string, error: bool, ip: string, jUpdate: bool, j_version: string, monitorid: bool, name: string, nbUpdates: string, new_j_version: string, notes: string, published: bool, secret_word: string, siteid: int, tags: list<any>, up: bool, word_akeeba: string, word_check: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "siteids" $siteids "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "access_url" $access_url "scalar") (serialize-qp "j_version" $j_version "scalar") (serialize-qp "ip" $ip "scalar") (serialize-qp "jUpdate" $j_update "scalar") (serialize-qp "canUpdate" $can_update "scalar") (serialize-qp "published" $published "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "nbUpdates" $nb_updates "scalar") (serialize-qp "up" $up "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "siteids" $siteids "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "access_url" $access_url "scalar") (serialize-qp "j_version" $j_version "scalar") (serialize-qp "ip" $ip "scalar") (serialize-qp "jUpdate" $j_update "scalar") (serialize-qp "canUpdate" $can_update "scalar") (serialize-qp "published" $published "scalar") (serialize-qp "error" $error "scalar") (serialize-qp "nbUpdates" $nb_updates "scalar") (serialize-qp "up" $up "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sites" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"siteids": $siteids, "name": $name, "access_url": $access_url, "j_version": $j_version, "ip": $ip, "jUpdate": $j_update, "canUpdate": $can_update, "published": $published, "error": $qp_error, "nbUpdates": $nb_updates, "up": $up, "fields": $fields, "limit": $limit, "limitstart": $limitstart, "order": $order} | compact)
+    query: ({"siteids": $siteids, "name": $name, "access_url": $access_url, "j_version": $j_version, "ip": $ip, "jUpdate": $j_update, "canUpdate": $can_update, "published": $published, "error": $error, "nbUpdates": $nb_updates, "up": $up, "fields": $fields, "limit": $limit, "limitstart": $limitstart, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1490,11 +1491,12 @@ export def "install-extension" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --url: string # URL to install the extension from (format: url)
+  --url: string # URL to install the extension from (required, format: url)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sites/{id}/extensions") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1530,8 +1532,8 @@ export def "get-sites-id-logs" [
   --accept: string@accept-completer # Response content type
   --log-entry: string # Do a 'LIKE' search, you can also use '%'
   --log-type: string@log-type-completer-1 # Type of the log
-  --qp-from: string # Logs after this date, format YYYY-MM-DD HH:MM:SS
-  --qp-to: string # Logs before this date, format YYYY-MM-DD HH:MM:SS
+  --from: string # Logs after this date, format YYYY-MM-DD HH:MM:SS
+  --to: string # Logs before this date, format YYYY-MM-DD HH:MM:SS
   --fields: string # Fields to return separate by comas: name,id
   --limit: int # Number of object to return (max 100, default 25) (format: int64)
   --limitstart: int # Start of the return (default 0) (format: int64)
@@ -1540,14 +1542,14 @@ export def "get-sites-id-logs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "log_entry" $log_entry "scalar") (serialize-qp "log_type" $log_type "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "log_entry" $log_entry "scalar") (serialize-qp "log_type" $log_type "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sites/{id}/logs") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"log_entry": $log_entry, "log_type": $log_type, "from": $qp_from, "to": $qp_to, "fields": $fields, "limit": $limit, "limitstart": $limitstart, "order": $order} | compact)
+    query: ({"log_entry": $log_entry, "log_type": $log_type, "from": $from, "to": $to, "fields": $fields, "limit": $limit, "limitstart": $limitstart, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1820,6 +1822,7 @@ export def "post-tags" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sites/{id}/tags") $auth.query)
   let req_body = {"id": $body_id, "name": $name, "nbSites": $nb_sites, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "id") == null) { error make --unspanned { msg: "required body field 'id' missing: pass --body-id or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2175,6 +2178,7 @@ export def "update-sso-users" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ssousers/{id}") $auth.query)
   let req_body = {"email": $email, "groupid": $groupid, "id": $body_id, "lastLoginDate": $last_login_date, "lastLoginSite": $last_login_site, "name": $name, "password": $password, "userid": $userid, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "id") == null) { error make --unspanned { msg: "required body field 'id' missing: pass --body-id or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2411,6 +2415,7 @@ export def "update-tag" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tags/{id}") $auth.query)
   let req_body = {"id": $body_id, "name": $name, "nbSites": $nb_sites, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "id") == null) { error make --unspanned { msg: "required body field 'id' missing: pass --body-id or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2449,7 +2454,7 @@ export def "get-sites-by-tags" [
   --ip: string # Do a 'LIKE' search, you can also use '%'
   --j-update: int@j-update-completer # Joomla core update
   --published: int@published-completer # is published
-  --qp-error: string # have errors
+  --error: string # have errors
   --nb-updates: string
   --up: int@up-completer # is the website online
   --fields: string # Fields to return separate by comas: name,id
@@ -2460,14 +2465,14 @@ export def "get-sites-by-tags" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "access_url" $access_url "scalar") (serialize-qp "j_version" $j_version "scalar") (serialize-qp "ip" $ip "scalar") (serialize-qp "jUpdate" $j_update "scalar") (serialize-qp "published" $published "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "nbUpdates" $nb_updates "scalar") (serialize-qp "up" $up "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "access_url" $access_url "scalar") (serialize-qp "j_version" $j_version "scalar") (serialize-qp "ip" $ip "scalar") (serialize-qp "jUpdate" $j_update "scalar") (serialize-qp "published" $published "scalar") (serialize-qp "error" $error "scalar") (serialize-qp "nbUpdates" $nb_updates "scalar") (serialize-qp "up" $up "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "limitstart" $limitstart "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tags/{id}/sites") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"name": $name, "access_url": $access_url, "j_version": $j_version, "ip": $ip, "jUpdate": $j_update, "published": $published, "error": $qp_error, "nbUpdates": $nb_updates, "up": $up, "fields": $fields, "limit": $limit, "limitstart": $limitstart, "order": $order} | compact)
+    query: ({"name": $name, "access_url": $access_url, "j_version": $j_version, "ip": $ip, "jUpdate": $j_update, "published": $published, "error": $error, "nbUpdates": $nb_updates, "up": $up, "fields": $fields, "limit": $limit, "limitstart": $limitstart, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null

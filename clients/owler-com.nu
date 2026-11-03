@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "user_key" => { {scheme: $scheme, headers: {user_key: $token_val}, query: "", location: "header"} }
+    "user_key" => { {scheme: $scheme, headers: {"user_key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -136,13 +136,14 @@ export def "basic-company-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --q: string # Search term
+  --q: string # Search term (required)
   --fields: list<string> # Fields to be searched - name, website, ticker, permid. If not specfied, will be searched against all fields
   --limit: string # Number of results to be displayed - 10 (by default, if not specified) to 30
   --format: string@format-completer # Format of the response content - json (by default if not specified), xml (default: json)
 ]: nothing -> record<company: table<company_id: int, hq_address: record, name: string, perm_id: string, profile_url: string, short_name: string, website: string>> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/company/basicsearch" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -330,13 +331,15 @@ export def "fuzzy-company-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --q: string # Search term
-  --fields: list<string> # Fields to be searched - name, website, ticker, permid, address, phone. Each field and its corresponding value has to be specified
+  --q: string # Search term (required)
+  --fields: list<string> # Fields to be searched - name, website, ticker, permid, address, phone. Each field and its corresponding value has to be specified (required)
   --limit: string # Number of results to be displayed - 10 (by default, if not specified) to 30
   --format: string@format-completer # Format of the response content - json (by default if not specified), xml (default: json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
+  if ($fields == null) { error make --unspanned { msg: "required query parameter 'fields' missing: pass --fields" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/company/fuzzysearch" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -408,13 +411,14 @@ export def "search-company" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --q: string # Search term
+  --q: string # Search term (required)
   --fields: list<string> # Fields to be searched - name, website, ticker. If not specified, will be searched against all fields
   --limit: string # Number of results to be displayed - 10 (by default, if not specified) to 30
   --format: string@format-completer # Format of the response content - json (by default if not specified), xml (default: json)
 ]: nothing -> record<feeds: table<category: string, company: record, enclosure_image: string, feed_date: string, id: string, owler_feed_url: string, publisher_logo: string, publisher_name: string, source_url: string, title: string>, pagination_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/company/search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -562,13 +566,14 @@ export def "get-v1-feed" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of the response content - json (by default if not specified), xml (default: json)
-  --company-id: list<string> # Company Ids separated by comma (Maximum of 150 Company Ids)
+  --company-id: list<string> # Company Ids separated by comma (Maximum of 150 Company Ids) (required)
   --limit: string # Number of results to be displayed - 10 (by default, if not specified) to 100 (default: 10)
   --pagination-id: string # Pass pagination_id as blank in the first API request. The API response will return the latest feeds along with the next pagination_id which can be passed in the subsequent API request to get the next set of feeds. Repeat this process until needed or till the pagination_id returned is blank (default: *)
   --category: list<string> # Categories separated by comma. If not specified, will search against all categories
 ]: nothing -> record<feeds: table<category: string, company: record, enclosure_image: string, feed_date: string, id: string, owler_feed_url: string, publisher_logo: string, publisher_name: string, source_url: string, title: string>, pagination_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id == null) { error make --unspanned { msg: "required query parameter 'company_id' missing: pass --company-id" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "company_id" $company_id "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "pagination_id" $pagination_id "scalar") (serialize-qp "category" $category "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/feed" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -602,13 +607,14 @@ export def "get-v1-feed-url" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of the response content - json (by default if not specified), xml (default: json)
-  --domain: list<string> # Company Websites separated by comma (Maximum of 10 Company Websites)
+  --domain: list<string> # Company Websites separated by comma (Maximum of 10 Company Websites) (required)
   --limit: string # Number of results to be displayed - 10 (by default, if not specified) to 100 (default: 10)
   --pagination-id: string # Pass pagination_id as blank in the first API request. The API response will return the latest feeds along with the next pagination_id which can be passed in the subsequent API request to get the next set of feeds. Repeat this process until needed or till the pagination_id returned is blank (default: *)
   --category: list<string> # Categories separated by comma. If not specified, will search against all categories
 ]: nothing -> record<feeds: table<category: string, company: record, enclosure_image: string, feed_date: string, id: string, owler_feed_url: string, publisher_logo: string, publisher_name: string, source_url: string, title: string>, pagination_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "domain" $domain "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "pagination_id" $pagination_id "scalar") (serialize-qp "category" $category "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/feed/url" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

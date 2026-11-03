@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -161,13 +161,14 @@ export def "check-name-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   name: string # The resource name to validate.
   type: string@type-completer # Type of CDN resource used in CheckNameAvailability.
 ]: any -> record<message: string, nameAvailable: bool, reason: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Cdn/checkNameAvailability" $qp $auth.query)
   let req_body = {"name": $name, "type": $type} | compact
@@ -202,10 +203,11 @@ export def "edge-nodes-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Cdn/edgenodes" $qp $auth.query)
   let accept_val = "application/json"
@@ -238,10 +240,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Cdn/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -275,7 +278,7 @@ export def "check-name-availability-with-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   name: string # The resource name to validate.
   type: string@type-completer # Type of CDN resource used in CheckNameAvailability.
 ]: any -> record<message: string, nameAvailable: bool, reason: string> {
@@ -283,6 +286,7 @@ export def "check-name-availability-with-subscription" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Cdn/checkNameAvailability") $qp $auth.query)
   let req_body = {"name": $name, "type": $type} | compact
@@ -318,11 +322,12 @@ export def "resource-usage-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
 ]: nothing -> record<nextLink: string, value: table<currentValue: int, limit: int, resourceType: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Cdn/checkResourceUsage") $qp $auth.query)
   let accept_val = "application/json"
@@ -356,11 +361,12 @@ export def "profiles-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-]: nothing -> record<nextLink: string, value: table<properties: record, sku: record>> {
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Cdn/profiles") $qp $auth.query)
   let accept_val = "application/json"
@@ -394,13 +400,14 @@ export def "validate-probe" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   probe_url: string # The probe URL to validate.
 ]: any -> record<errorCode: string, isValid: bool, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Cdn/validateProbe") $qp $auth.query)
   let req_body = {"probeURL": $probe_url} | compact
@@ -437,12 +444,13 @@ export def "profiles-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-]: nothing -> record<nextLink: string, value: table<properties: record, sku: record>> {
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles") $qp $auth.query)
   let accept_val = "application/json"
@@ -478,13 +486,14 @@ export def "profiles-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -520,13 +529,14 @@ export def "profiles-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-]: nothing -> record<properties: record<provisioningState: string, resourceState: string>, sku: record<name: string>> {
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
+]: nothing -> record<properties: record<provisioningState: string, resourceState: string>, sku: record<name: string>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -562,15 +572,16 @@ export def "profiles-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   --tags: record # Profile tags
-]: any -> record<properties: record<provisioningState: string, resourceState: string>, sku: record<name: string>> {
+]: any -> record<properties: record<provisioningState: string, resourceState: string>, sku: record<name: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -609,18 +620,19 @@ export def "profiles-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   --properties: any # The JSON object that contains the properties required to create a profile.
   sku: record # The pricing tier (defines a CDN provider, feature list and rate) of the CDN profile. — shape: {name?: "Standard_Verizon"|"Premium_Verizon"|"Custom_Verizon"|"Standard_Akamai"|"Standard_ChinaCdn"|"Standard_Microsoft"|"Premium_ChinaCdn"}
   location: string # Resource location.
   --tags: record # Resource tags.
-]: any -> record<properties: record<provisioningState: string, resourceState: string>, sku: record<name: string>> {
+]: any -> record<properties: record<provisioningState: string, resourceState: string>, sku: record<name: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
@@ -658,13 +670,14 @@ export def "profiles-list-resource-usage" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
 ]: nothing -> record<nextLink: string, value: table<currentValue: int, limit: int, resourceType: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/checkResourceUsage") $qp $auth.query)
   let accept_val = "application/json"
@@ -700,13 +713,14 @@ export def "endpoints-list-by-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints") $qp $auth.query)
   let accept_val = "application/json"
@@ -743,14 +757,15 @@ export def "endpoints-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -787,14 +802,15 @@ export def "endpoints-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-]: nothing -> record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>> {
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
+]: nothing -> record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -832,10 +848,10 @@ export def "endpoints-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   --properties: any # The JSON object containing endpoint update parameters. — shape: {contentTypesToCompress?: list<string>, deliveryPolicy?: record, geoFilters?: list, isCompressionEnabled?: bool, isHttpAllowed?: bool, isHttpsAllowed?: bool, optimizationType?: "GeneralWebDelivery"|"GeneralMediaStreaming"|"VideoOnDemandMediaStreaming"|"LargeFileDownload"|"DynamicSiteAcceleration", originHostHeader?: string, originPath?: string, probePath?: string, queryStringCachingBehavior?: "IgnoreQueryString"|"BypassCaching"|"UseQueryString"|"NotSet", webApplicationFirewallPolicyLink?: record}
   --tags: record # Endpoint tags.
-]: any -> record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>> {
+]: any -> record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -843,6 +859,7 @@ export def "endpoints-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -882,11 +899,11 @@ export def "endpoints-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   --properties: any # The JSON object that contains the properties required to create an endpoint. — shape: {origins: list, contentTypesToCompress?: list<string>, deliveryPolicy?: record, geoFilters?: list, isCompressionEnabled?: bool, isHttpAllowed?: bool, isHttpsAllowed?: bool, optimizationType?: "GeneralWebDelivery"|"GeneralMediaStreaming"|"VideoOnDemandMediaStreaming"|"LargeFileDownload"|"DynamicSiteAcceleration", originHostHeader?: string, originPath?: string, probePath?: string, queryStringCachingBehavior?: "IgnoreQueryString"|"BypassCaching"|"UseQueryString"|"NotSet", ... (1 more fields)}
   location: string # Resource location.
   --tags: record # Resource tags.
-]: any -> record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>> {
+]: any -> record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -894,6 +911,7 @@ export def "endpoints-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -932,7 +950,7 @@ export def "endpoints-list-resource-usage" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
 ]: nothing -> record<nextLink: string, value: table<currentValue: int, limit: int, resourceType: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -940,6 +958,7 @@ export def "endpoints-list-resource-usage" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/checkResourceUsage") $qp $auth.query)
   let accept_val = "application/json"
@@ -976,14 +995,15 @@ export def "custom-domains-list-by-endpoint" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/customDomains") $qp $auth.query)
   let accept_val = "application/json"
@@ -1021,8 +1041,8 @@ export def "custom-domains-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-]: nothing -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>> {
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
+]: nothing -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1030,6 +1050,7 @@ export def "custom-domains-delete" [
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
   if ($custom_domain_name | is-empty) { error make --unspanned { msg: "path parameter 'customDomainName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name), custom_domain_name: (encode-path-segment $custom_domain_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/customDomains/{custom_domain_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1067,8 +1088,8 @@ export def "custom-domains-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-]: nothing -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>> {
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
+]: nothing -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1076,6 +1097,7 @@ export def "custom-domains-get" [
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
   if ($custom_domain_name | is-empty) { error make --unspanned { msg: "path parameter 'customDomainName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name), custom_domain_name: (encode-path-segment $custom_domain_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/customDomains/{custom_domain_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1114,9 +1136,9 @@ export def "custom-domains-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   --properties: any # The JSON object that contains the properties of the custom domain to create. — shape: {hostName: string}
-]: any -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>> {
+]: any -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1125,6 +1147,7 @@ export def "custom-domains-create" [
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
   if ($custom_domain_name | is-empty) { error make --unspanned { msg: "path parameter 'customDomainName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name), custom_domain_name: (encode-path-segment $custom_domain_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/customDomains/{custom_domain_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1164,8 +1187,8 @@ export def "custom-domains-disable-custom-https" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-]: nothing -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>> {
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
+]: nothing -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1173,6 +1196,7 @@ export def "custom-domains-disable-custom-https" [
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
   if ($custom_domain_name | is-empty) { error make --unspanned { msg: "path parameter 'customDomainName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name), custom_domain_name: (encode-path-segment $custom_domain_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/customDomains/{custom_domain_name}/disableCustomHttps") $qp $auth.query)
   let accept_val = "application/json"
@@ -1211,11 +1235,11 @@ export def "custom-domains-enable-custom-https" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   certificate_source: string@certificate-source-completer # Defines the source of the SSL certificate.
   --minimum-tls-version: string@minimum-tls-version-completer # TLS protocol version that will be used for Https
   protocol_type: string@protocol-type-completer # Defines the TLS extension protocol that is used for secure delivery.
-]: any -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>> {
+]: any -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1224,6 +1248,7 @@ export def "custom-domains-enable-custom-https" [
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
   if ($custom_domain_name | is-empty) { error make --unspanned { msg: "path parameter 'customDomainName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name), custom_domain_name: (encode-path-segment $custom_domain_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/customDomains/{custom_domain_name}/enableCustomHttps") $qp $auth.query)
   let req_body = {"certificateSource": $certificate_source, "minimumTlsVersion": $minimum_tls_version, "protocolType": $protocol_type} | compact
@@ -1262,9 +1287,9 @@ export def "endpoints-load-content" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   content_paths: list<string> # The path to the content to be loaded. Path should be a relative file URL of the origin.
-]: any -> record<code: string, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1272,6 +1297,7 @@ export def "endpoints-load-content" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/load") $qp $auth.query)
   let req_body = {"contentPaths": $content_paths} | compact
@@ -1310,14 +1336,15 @@ export def "origins-list-by-endpoint" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/origins") $qp $auth.query)
   let accept_val = "application/json"
@@ -1355,8 +1382,8 @@ export def "origins-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-]: nothing -> record<properties: record<hostName: string, httpPort: int, httpsPort: int, provisioningState: string, resourceState: string>> {
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
+]: nothing -> record<properties: record<hostName: string, httpPort: int, httpsPort: int, provisioningState: string, resourceState: string>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1364,6 +1391,7 @@ export def "origins-get" [
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
   if ($origin_name | is-empty) { error make --unspanned { msg: "path parameter 'originName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name), origin_name: (encode-path-segment $origin_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/origins/{origin_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1402,9 +1430,9 @@ export def "origins-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   --properties: any # The JSON object that contains the properties of the origin. — shape: {hostName?: string, httpPort?: int, httpsPort?: int}
-]: any -> record<properties: record<hostName: string, httpPort: int, httpsPort: int, provisioningState: string, resourceState: string>> {
+]: any -> record<properties: record<hostName: string, httpPort: int, httpsPort: int, provisioningState: string, resourceState: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1413,6 +1441,7 @@ export def "origins-update" [
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
   if ($origin_name | is-empty) { error make --unspanned { msg: "path parameter 'originName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name), origin_name: (encode-path-segment $origin_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/origins/{origin_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1451,9 +1480,9 @@ export def "endpoints-purge-content" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   content_paths: list<string> # The path to the content to be purged. Can describe a file path or a wild card directory.
-]: any -> record<code: string, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1461,6 +1490,7 @@ export def "endpoints-purge-content" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/purge") $qp $auth.query)
   let req_body = {"contentPaths": $content_paths} | compact
@@ -1499,14 +1529,15 @@ export def "endpoints-start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-]: nothing -> record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>> {
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
+]: nothing -> record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/start") $qp $auth.query)
   let accept_val = "application/json"
@@ -1543,14 +1574,15 @@ export def "endpoints-stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-]: nothing -> record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>> {
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
+]: nothing -> record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/stop") $qp $auth.query)
   let accept_val = "application/json"
@@ -1587,7 +1619,7 @@ export def "endpoints-validate-custom-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   host_name: string # The host name of the custom domain. Must be a domain name.
 ]: any -> record<customDomainValidated: bool, message: string, reason: string> {
   let input = $in
@@ -1597,6 +1629,7 @@ export def "endpoints-validate-custom-domain" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/validateCustomDomain") $qp $auth.query)
   let req_body = {"hostName": $host_name} | compact
@@ -1634,13 +1667,14 @@ export def "profiles-generate-sso-uri" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
 ]: nothing -> record<ssoUriValue: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/generateSsoUri") $qp $auth.query)
   let accept_val = "application/json"
@@ -1676,13 +1710,14 @@ export def "profiles-list-supported-optimization-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
 ]: nothing -> record<supportedOptimizationTypes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/getSupportedOptimizationTypes") $qp $auth.query)
   let accept_val = "application/json"

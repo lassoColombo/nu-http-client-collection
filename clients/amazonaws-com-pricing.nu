@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -148,15 +148,16 @@ export def "describe-services" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  --service-code: any
-  --format-version: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Services: record, FormatVersion: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  --service-code: string # The code for the service whose information you want to retrieve, such as AmazonEC2. You can use the ServiceCode to filter the results in a GetProducts call. To retrieve a list of all services, leave this blank.
+  --format-version: string # The format version that you want the response to be in. Valid values are: aws_v1
+  --next-token-body: string # The pagination token that indicates the next set of results that you want to retrieve. (body field)
+  --max-results-body: int # The maximum number of results that you want returned in the response. (body field)
+]: any -> record<Services: table<ServiceCode: string, AttributeNames: list>, FormatVersion: string, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPriceListService.DescribeServices")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ServiceCode": $service_code, "FormatVersion": $format_version, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -202,15 +203,16 @@ export def "get-attribute-values" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  service_code: any
-  attribute_name: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<AttributeValues: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  service_code: string # The service code for the service whose attributes you want to retrieve. For example, if you want the retrieve an EC2 attribute, use AmazonEC2.
+  attribute_name: string # The name of the attribute that you want to retrieve the values for, such as volumeType.
+  --next-token-body: string # The pagination token that indicates the next set of results that you want to retrieve. (body field)
+  --max-results-body: int # The maximum number of results to return in response. (body field)
+]: any -> record<AttributeValues: table<Value: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPriceListService.GetAttributeValues")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ServiceCode": $service_code, "AttributeName": $attribute_name, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -254,13 +256,14 @@ export def "get-price-list-file-url" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  price_list_arn: any
-  file_format: any
-]: any -> record<Url: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  price_list_arn: string # The unique identifier that maps to where your Price List files are located. PriceListArn can be obtained from the ListPriceLists (https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_pricing_ListPriceLists.html) response.
+  file_format: string # The format that you want to retrieve your Price List files in. The FileFormat can be obtained from the ListPriceLists (https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_pricing_ListPriceLists.html) response.
+]: any -> record<Url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPriceListService.GetPriceListFileUrl")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"PriceListArn": $price_list_arn, "FileFormat": $file_format} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -286,6 +289,7 @@ export def "get-price-list-file-url" [
 #
 # POST /
 # operationId: GetProducts
+# --Filters item shape: {Type: "TERM_MATCH", Field: string, Value: string}
 export def "get-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -305,16 +309,17 @@ export def "get-products" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  service_code: any
-  --filters: any
-  --format-version: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<FormatVersion: record, PriceList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  service_code: string # The code for the service whose products you want to retrieve.
+  --filters: list # The list of filters that limit the returned products. only products that match all filters are returned. — item shape: {Type: "TERM_MATCH", Field: string, Value: string}
+  --format-version: string # The format version that you want the response to be in. Valid values are: aws_v1
+  --next-token-body: string # The pagination token that indicates the next set of results that you want to retrieve. (body field)
+  --max-results-body: int # The maximum number of results to return in the response. (body field)
+]: any -> record<FormatVersion: string, PriceList: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPriceListService.GetProducts")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ServiceCode": $service_code, "Filters": $filters, "FormatVersion": $format_version, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -360,17 +365,18 @@ export def "list-price-lists" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  service_code: any
-  effective_date: any
-  --region-code: any
-  currency_code: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<PriceLists: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  service_code: string # The service code or the Savings Plan service code for the attributes that you want to retrieve. For example, to get the list of applicable Amazon EC2 price lists, use AmazonEC2. For a full list of service codes containing On-Demand and Reserved Instance (RI) pricing, use the DescribeServices (https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_pricing_DescribeServices.html#awscostmanagement-pricing_DescribeServices-request-FormatVersion) API. To retrieve the Compute Savings Plan price lists, use ComputeSavingsPlans. To retrieve Machine Learning Savings Plans price lists, use MachineLearningSavingsPlans.
+  effective_date: string # The date that the Price List file prices are effective from. (format: date-time)
+  --region-code: string # This is used to filter the Price List by Amazon Web Services Region. For example, to get the price list only for the US East (N. Virginia) Region, use us-east-1. If nothing is specified, you retrieve price lists for all applicable Regions. The available RegionCode list can be retrieved from GetAttributeValues (https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_pricing_GetAttributeValues.html) API.
+  currency_code: string # The three alphabetical character ISO-4217 currency code that the Price List files are denominated in.
+  --next-token-body: string # The pagination token that indicates the next set of results that you want to retrieve. (body field)
+  --max-results-body: int # The maximum number of results to return in the response. (body field)
+]: any -> record<PriceLists: table<PriceListArn: string, RegionCode: string, CurrencyCode: string, FileFormats: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPriceListService.ListPriceLists")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ServiceCode": $service_code, "EffectiveDate": $effective_date, "RegionCode": $region_code, "CurrencyCode": $currency_code, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact

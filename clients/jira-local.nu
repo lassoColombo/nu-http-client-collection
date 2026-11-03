@@ -317,7 +317,7 @@ export def "put-bulk" [
 #
 # GET /api/2/applicationrole/{key}
 # operationId: get
-export def "get" [
+export def "get-api-2-applicationrole-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -583,21 +583,21 @@ export def "get-records" [
   --offset: int # - the number of record from which search starts (format: int32)
   --limit: int # - maximum number of returned results (if is limit is <= 0 or > 1000, it will be set do default value: 1000) (format: int32)
   --filter: string # - text query; each record that will be returned must contain the provided text in one of its fields
-  --qp-from: string # - timestamp in past; 'from' must be less or equal 'to', otherwise the result set will be empty only records that where created in the same moment or after the 'from' timestamp will be provided in response
-  --qp-to: string # - timestamp in past; 'from' must be less or equal 'to', otherwise the result set will be empty only records that where created in the same moment or earlier than the 'to' timestamp will be provided in response
+  --from: string # - timestamp in past; 'from' must be less or equal 'to', otherwise the result set will be empty only records that where created in the same moment or after the 'from' timestamp will be provided in response
+  --to: string # - timestamp in past; 'from' must be less or equal 'to', otherwise the result set will be empty only records that where created in the same moment or earlier than the 'to' timestamp will be provided in response
   --project-ids: string # - list of project ids to look for
   --user-ids: string # - list of user ids to look for
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "projectIds" $project_ids "scalar") (serialize-qp "userIds" $user_ids "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "projectIds" $project_ids "scalar") (serialize-qp "userIds" $user_ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/auditing/record" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"offset": $offset, "limit": $limit, "filter": $filter, "from": $qp_from, "to": $qp_to, "projectIds": $project_ids, "userIds": $user_ids} | compact)
+    query: ({"offset": $offset, "limit": $limit, "filter": $filter, "from": $from, "to": $to, "projectIds": $project_ids, "userIds": $user_ids} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4977,7 +4977,7 @@ export def "get-available-metrics" [
 # GET /api/2/monitoring/jmx/startExposing
 #
 # operationId: start
-export def "start" [
+export def "get-api-2-monitoring-jmx-start-exposing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10147,7 +10147,7 @@ export def "update-version" [
 #
 # PUT /api/2/version/{id}/mergeto/{moveIssuesTo}
 # operationId: merge
-export def "merge" [
+export def "put-api-2-version-id-mergeto-move-issues-to" [
   id: string
   move_issues_to: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10852,7 +10852,7 @@ export def "get-by-id" [
 #
 # PUT /api/2/workflowscheme/{id}
 # operationId: update
-export def "update" [
+export def "put-api-2-workflowscheme-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

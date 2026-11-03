@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -99,9 +99,16 @@ def auth-scheme-completer [] { ["bearer"] }
 def x-amz-target-completer [] { ["TrentService.CancelKeyDeletion"] }
 def x-amz-target-completer-1 [] { ["TrentService.ConnectCustomKeyStore"] }
 def x-amz-target-completer-2 [] { ["TrentService.CreateAlias"] }
+def custom-key-store-type-completer [] { ["AWS_CLOUDHSM" "EXTERNAL_KEY_STORE"] }
+def xks-proxy-connectivity-completer [] { ["PUBLIC_ENDPOINT" "VPC_ENDPOINT_SERVICE"] }
 def x-amz-target-completer-3 [] { ["TrentService.CreateCustomKeyStore"] }
 def x-amz-target-completer-4 [] { ["TrentService.CreateGrant"] }
+def key-usage-completer [] { ["ENCRYPT_DECRYPT" "GENERATE_VERIFY_MAC" "SIGN_VERIFY"] }
+def customer-master-key-spec-completer [] { ["ECC_NIST_P256" "ECC_NIST_P384" "ECC_NIST_P521" "ECC_SECG_P256K1" "HMAC_224" "HMAC_256" "HMAC_384" "HMAC_512" "RSA_2048" "RSA_3072" "RSA_4096" "SM2" "SYMMETRIC_DEFAULT"] }
+def key-spec-completer [] { ["ECC_NIST_P256" "ECC_NIST_P384" "ECC_NIST_P521" "ECC_SECG_P256K1" "HMAC_224" "HMAC_256" "HMAC_384" "HMAC_512" "RSA_2048" "RSA_3072" "RSA_4096" "SM2" "SYMMETRIC_DEFAULT"] }
+def origin-completer [] { ["AWS_CLOUDHSM" "AWS_KMS" "EXTERNAL" "EXTERNAL_KEY_STORE"] }
 def x-amz-target-completer-5 [] { ["TrentService.CreateKey"] }
+def encryption-algorithm-completer [] { ["RSAES_OAEP_SHA_1" "RSAES_OAEP_SHA_256" "SM2PKE" "SYMMETRIC_DEFAULT"] }
 def x-amz-target-completer-6 [] { ["TrentService.Decrypt"] }
 def x-amz-target-completer-7 [] { ["TrentService.DeleteAlias"] }
 def x-amz-target-completer-8 [] { ["TrentService.DeleteCustomKeyStore"] }
@@ -114,16 +121,22 @@ def x-amz-target-completer-14 [] { ["TrentService.DisconnectCustomKeyStore"] }
 def x-amz-target-completer-15 [] { ["TrentService.EnableKey"] }
 def x-amz-target-completer-16 [] { ["TrentService.EnableKeyRotation"] }
 def x-amz-target-completer-17 [] { ["TrentService.Encrypt"] }
+def key-spec-completer-1 [] { ["AES_128" "AES_256"] }
 def x-amz-target-completer-18 [] { ["TrentService.GenerateDataKey"] }
+def key-pair-spec-completer [] { ["ECC_NIST_P256" "ECC_NIST_P384" "ECC_NIST_P521" "ECC_SECG_P256K1" "RSA_2048" "RSA_3072" "RSA_4096" "SM2"] }
 def x-amz-target-completer-19 [] { ["TrentService.GenerateDataKeyPair"] }
 def x-amz-target-completer-20 [] { ["TrentService.GenerateDataKeyPairWithoutPlaintext"] }
 def x-amz-target-completer-21 [] { ["TrentService.GenerateDataKeyWithoutPlaintext"] }
+def mac-algorithm-completer [] { ["HMAC_SHA_224" "HMAC_SHA_256" "HMAC_SHA_384" "HMAC_SHA_512"] }
 def x-amz-target-completer-22 [] { ["TrentService.GenerateMac"] }
 def x-amz-target-completer-23 [] { ["TrentService.GenerateRandom"] }
 def x-amz-target-completer-24 [] { ["TrentService.GetKeyPolicy"] }
 def x-amz-target-completer-25 [] { ["TrentService.GetKeyRotationStatus"] }
+def wrapping-algorithm-completer [] { ["RSAES_OAEP_SHA_1" "RSAES_OAEP_SHA_256" "RSAES_PKCS1_V1_5"] }
+def wrapping-key-spec-completer [] { ["RSA_2048"] }
 def x-amz-target-completer-26 [] { ["TrentService.GetParametersForImport"] }
 def x-amz-target-completer-27 [] { ["TrentService.GetPublicKey"] }
+def expiration-model-completer [] { ["KEY_MATERIAL_DOES_NOT_EXPIRE" "KEY_MATERIAL_EXPIRES"] }
 def x-amz-target-completer-28 [] { ["TrentService.ImportKeyMaterial"] }
 def x-amz-target-completer-29 [] { ["TrentService.ListAliases"] }
 def x-amz-target-completer-30 [] { ["TrentService.ListGrants"] }
@@ -132,11 +145,15 @@ def x-amz-target-completer-32 [] { ["TrentService.ListKeys"] }
 def x-amz-target-completer-33 [] { ["TrentService.ListResourceTags"] }
 def x-amz-target-completer-34 [] { ["TrentService.ListRetirableGrants"] }
 def x-amz-target-completer-35 [] { ["TrentService.PutKeyPolicy"] }
+def source-encryption-algorithm-completer [] { ["RSAES_OAEP_SHA_1" "RSAES_OAEP_SHA_256" "SM2PKE" "SYMMETRIC_DEFAULT"] }
+def destination-encryption-algorithm-completer [] { ["RSAES_OAEP_SHA_1" "RSAES_OAEP_SHA_256" "SM2PKE" "SYMMETRIC_DEFAULT"] }
 def x-amz-target-completer-36 [] { ["TrentService.ReEncrypt"] }
 def x-amz-target-completer-37 [] { ["TrentService.ReplicateKey"] }
 def x-amz-target-completer-38 [] { ["TrentService.RetireGrant"] }
 def x-amz-target-completer-39 [] { ["TrentService.RevokeGrant"] }
 def x-amz-target-completer-40 [] { ["TrentService.ScheduleKeyDeletion"] }
+def message-type-completer [] { ["DIGEST" "RAW"] }
+def signing-algorithm-completer [] { ["ECDSA_SHA_256" "ECDSA_SHA_384" "ECDSA_SHA_512" "RSASSA_PKCS1_V1_5_SHA_256" "RSASSA_PKCS1_V1_5_SHA_384" "RSASSA_PKCS1_V1_5_SHA_512" "RSASSA_PSS_SHA_256" "RSASSA_PSS_SHA_384" "RSASSA_PSS_SHA_512" "SM2DSA"] }
 def x-amz-target-completer-41 [] { ["TrentService.Sign"] }
 def x-amz-target-completer-42 [] { ["TrentService.TagResource"] }
 def x-amz-target-completer-43 [] { ["TrentService.UntagResource"] }
@@ -191,12 +208,13 @@ export def "cancel-key-deletion" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  key_id: any
-]: any -> record<KeyId: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  key_id: string # Identifies the KMS key whose deletion is being canceled. Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
+]: any -> record<KeyId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.CancelKeyDeletion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -239,12 +257,13 @@ export def "connect-custom-key-store" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  custom_key_store_id: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  custom_key_store_id: string # Enter the key store ID of the custom key store that you want to connect. To find the ID of a custom key store, use the DescribeCustomKeyStores operation.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.ConnectCustomKeyStore")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CustomKeyStoreId": $custom_key_store_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -287,13 +306,14 @@ export def "create-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  alias_name: any
-  target_key_id: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  alias_name: string # Specifies the alias name. This value must begin with alias/ followed by a name, such as alias/ExampleAlias. The AliasName value must be string of 1-256 characters. It can contain only alphanumeric characters, forward slashes (/), underscores (_), and dashes (-). The alias name cannot begin with alias/aws/. The alias/aws/ prefix is reserved for Amazon Web Services managed keys (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#aws-managed-cmk).
+  target_key_id: string # Associates the alias with the specified customer managed key (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk). The KMS key must be in the same Amazon Web Services Region. A valid key ID is required. If you supply a null or empty string value, this operation returns an error. For help finding the key ID and ARN, see Finding the Key ID and ARN (https://docs.aws.amazon.com/kms/latest/developerguide/viewing-keys.html#find-cmk-id-arn) in the Key Management Service Developer Guide . Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.CreateAlias")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AliasName": $alias_name, "TargetKeyId": $target_key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -319,6 +339,7 @@ export def "create-alias" [
 #
 # POST /
 # operationId: CreateCustomKeyStore
+# --XksProxyAuthenticationCredential shape: {AccessKeyId: string, RawSecretAccessKey: string}
 export def "create-custom-key-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -336,21 +357,22 @@ export def "create-custom-key-store" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  custom_key_store_name: any
-  --cloud-hsm-cluster-id: any
-  --trust-anchor-certificate: any
-  --key-store-password: any
-  --custom-key-store-type: any
-  --xks-proxy-uri-endpoint: any
-  --xks-proxy-uri-path: any
-  --xks-proxy-vpc-endpoint-service-name: any
-  --xks-proxy-authentication-credential: any
-  --xks-proxy-connectivity: any
-]: any -> record<CustomKeyStoreId: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  custom_key_store_name: string # Specifies a friendly name for the custom key store. The name must be unique in your Amazon Web Services account and Region. This parameter is required for all custom key stores.
+  --cloud-hsm-cluster-id: string # Identifies the CloudHSM cluster for an CloudHSM key store. This parameter is required for custom key stores with CustomKeyStoreType of AWS_CLOUDHSM. Enter the cluster ID of any active CloudHSM cluster that is not already associated with a custom key store. To find the cluster ID, use the DescribeClusters (https://docs.aws.amazon.com/cloudhsm/latest/APIReference/API_DescribeClusters.html) operation.
+  --trust-anchor-certificate: string # Specifies the certificate for an CloudHSM key store. This parameter is required for custom key stores with a CustomKeyStoreType of AWS_CLOUDHSM. Enter the content of the trust anchor certificate for the CloudHSM cluster. This is the content of the customerCA.crt file that you created when you initialized the cluster (https://docs.aws.amazon.com/cloudhsm/latest/userguide/initialize-cluster.html).
+  --key-store-password: string # Specifies the kmsuser password for an CloudHSM key store. This parameter is required for custom key stores with a CustomKeyStoreType of AWS_CLOUDHSM. Enter the password of the kmsuser crypto user (CU) account (https://docs.aws.amazon.com/kms/latest/developerguide/key-store-concepts.html#concept-kmsuser) in the specified CloudHSM cluster. KMS logs into the cluster as this user to manage key material on your behalf. The password must be a string of 7 to 32 characters. Its value is case sensitive. This parameter tells KMS the kmsuser account password; it does not change the password in the CloudHSM cluster. (format: password)
+  --custom-key-store-type: string@custom-key-store-type-completer # Specifies the type of custom key store. The default value is AWS_CLOUDHSM. For a custom key store backed by an CloudHSM cluster, omit the parameter or enter AWS_CLOUDHSM. For a custom key store backed by an external key manager outside of Amazon Web Services, enter EXTERNAL_KEY_STORE. You cannot change this property after the key store is created.
+  --xks-proxy-uri-endpoint: string # Specifies the endpoint that KMS uses to send requests to the external key store proxy (XKS proxy). This parameter is required for custom key stores with a CustomKeyStoreType of EXTERNAL_KEY_STORE. The protocol must be HTTPS. KMS communicates on port 443. Do not specify the port in the XksProxyUriEndpoint value. For external key stores with XksProxyConnectivity value of VPC_ENDPOINT_SERVICE, specify https:// followed by the private DNS name of the VPC endpoint service. For external key stores with PUBLIC_ENDPOINT connectivity, this endpoint must be reachable before you create the custom key store. KMS connects to the external key store proxy while creating the custom key store. For external key stores with VPC_ENDPOINT_SERVICE connectivity, KMS connects when you call the ConnectCustomKeyStore operation. The value of this parameter must begin with https://. The remainder can contain upper and lower case letters (A-Z and a-z), numbers (0-9), dots (.), and hyphens (-). Additional slashes (/ and \) are not permitted. Uniqueness requirements: The combined XksProxyUriEndpoint and XksProxyUriPath values must be unique in the Amazon Web Services account and Region. An external key store with PUBLIC_ENDPOINT connectivity cannot use the same XksProxyUriEndpoint value as an external key store with VPC_ENDPOINT_SERVICE connectivity in the same Amazon Web Services Region. Each external key store with VPC_ENDPOINT_SERVICE connectivity must have its own private DNS name. The XksProxyUriEndpoint value for external key stores with VPC_ENDPOINT_SERVICE connectivity (private DNS name) must be unique in the Amazon Web Services account and Region.
+  --xks-proxy-uri-path: string # Specifies the base path to the proxy APIs for this external key store. To find this value, see the documentation for your external key store proxy. This parameter is required for all custom key stores with a CustomKeyStoreType of EXTERNAL_KEY_STORE. The value must start with / and must end with /kms/xks/v1 where v1 represents the version of the KMS external key store proxy API. This path can include an optional prefix between the required elements such as /prefix/kms/xks/v1. Uniqueness requirements: The combined XksProxyUriEndpoint and XksProxyUriPath values must be unique in the Amazon Web Services account and Region.
+  --xks-proxy-vpc-endpoint-service-name: string # Specifies the name of the Amazon VPC endpoint service for interface endpoints that is used to communicate with your external key store proxy (XKS proxy). This parameter is required when the value of CustomKeyStoreType is EXTERNAL_KEY_STORE and the value of XksProxyConnectivity is VPC_ENDPOINT_SERVICE. The Amazon VPC endpoint service must fulfill all requirements (https://docs.aws.amazon.com/kms/latest/developerguide/create-xks-keystore.html#xks-requirements) for use with an external key store. Uniqueness requirements: External key stores with VPC_ENDPOINT_SERVICE connectivity can share an Amazon VPC, but each external key store must have its own VPC endpoint service and private DNS name.
+  --xks-proxy-authentication-credential: record # KMS uses the authentication credential to sign requests that it sends to the external key store proxy (XKS proxy) on your behalf. You establish these credentials on your external key store proxy and report them to KMS. The XksProxyAuthenticationCredential includes two required elements. — shape: {AccessKeyId: string, RawSecretAccessKey: string}
+  --xks-proxy-connectivity: string@xks-proxy-connectivity-completer # Indicates how KMS communicates with the external key store proxy. This parameter is required for custom key stores with a CustomKeyStoreType of EXTERNAL_KEY_STORE. If the external key store proxy uses a public endpoint, specify PUBLIC_ENDPOINT. If the external key store proxy uses a Amazon VPC endpoint service for communication with KMS, specify VPC_ENDPOINT_SERVICE. For help making this choice, see Choosing a connectivity option (https://docs.aws.amazon.com/kms/latest/developerguide/plan-xks-keystore.html#choose-xks-connectivity) in the Key Management Service Developer Guide. An Amazon VPC endpoint service keeps your communication with KMS in a private address space entirely within Amazon Web Services, but it requires more configuration, including establishing a Amazon VPC with multiple subnets, a VPC endpoint service, a network load balancer, and a verified private DNS name. A public endpoint is simpler to set up, but it might be slower and might not fulfill your security requirements. You might consider testing with a public endpoint, and then establishing a VPC endpoint service for production tasks. Note that this choice does not determine the location of the external key store proxy. Even if you choose a VPC endpoint service, the proxy can be hosted within the VPC or outside of Amazon Web Services such as in your corporate data center.
+]: any -> record<CustomKeyStoreId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.CreateCustomKeyStore")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CustomKeyStoreName": $custom_key_store_name, "CloudHsmClusterId": $cloud_hsm_cluster_id, "TrustAnchorCertificate": $trust_anchor_certificate, "KeyStorePassword": $key_store_password, "CustomKeyStoreType": $custom_key_store_type, "XksProxyUriEndpoint": $xks_proxy_uri_endpoint, "XksProxyUriPath": $xks_proxy_uri_path, "XksProxyVpcEndpointServiceName": $xks_proxy_vpc_endpoint_service_name, "XksProxyAuthenticationCredential": $xks_proxy_authentication_credential, "XksProxyConnectivity": $xks_proxy_connectivity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -376,6 +398,7 @@ export def "create-custom-key-store" [
 #
 # POST /
 # operationId: CreateGrant
+# --Constraints shape: {EncryptionContextSubset?: record, EncryptionContextEquals?: record}
 export def "create-grant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -393,18 +416,19 @@ export def "create-grant" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  key_id: any
-  grantee_principal: any
-  --retiring-principal: any
-  operations: any
-  --constraints: any
-  --grant-tokens: any
-  --name: any
-]: any -> record<GrantToken: record, GrantId: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  key_id: string # Identifies the KMS key for the grant. The grant gives principals permission to use this KMS key. Specify the key ID or key ARN of the KMS key. To specify a KMS key in a different Amazon Web Services account, you must use the key ARN. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
+  grantee_principal: string # The identity that gets the permissions specified in the grant. To specify the grantee principal, use the Amazon Resource Name (ARN) of an Amazon Web Services principal. Valid principals include Amazon Web Services accounts, IAM users, IAM roles, federated users, and assumed role users. For help with the ARN syntax for a principal, see IAM ARNs (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html#identifiers-arns) in the Identity and Access Management User Guide .
+  --retiring-principal: string # The principal that has permission to use the RetireGrant operation to retire the grant. To specify the principal, use the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of an Amazon Web Services principal. Valid principals include Amazon Web Services accounts, IAM users, IAM roles, federated users, and assumed role users. For help with the ARN syntax for a principal, see IAM ARNs (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html#identifiers-arns) in the Identity and Access Management User Guide . The grant determines the retiring principal. Other principals might have permission to retire the grant or revoke the grant. For details, see RevokeGrant and Retiring and revoking grants (https://docs.aws.amazon.com/kms/latest/developerguide/grant-manage.html#grant-delete) in the Key Management Service Developer Guide.
+  operations: list<string> # A list of operations that the grant permits. This list must include only operations that are permitted in a grant. Also, the operation must be supported on the KMS key. For example, you cannot create a grant for a symmetric encryption KMS key that allows the Sign operation, or a grant for an asymmetric KMS key that allows the GenerateDataKey operation. If you try, KMS returns a ValidationError exception. For details, see Grant operations (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html#terms-grant-operations) in the Key Management Service Developer Guide.
+  --constraints: record # Use this structure to allow cryptographic operations (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#cryptographic-operations) in the grant only when the operation request includes the specified encryption context (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#encrypt_context). KMS applies the grant constraints only to cryptographic operations that support an encryption context, that is, all cryptographic operations with a symmetric KMS key (https://docs.aws.amazon.com/kms/latest/developerguide/symm-asymm-concepts.html#symmetric-cmks). Grant constraints are not applied to operations that do not support an encryption context, such as cryptographic operations with asymmetric KMS keys and management operations, such as DescribeKey or RetireGrant. In a cryptographic operation, the encryption context in the decryption operation must be an exact, case-sensitive match for the keys and values in the encryption context of the encryption operation. Only the order of the pairs can vary. However, in a grant constraint, the key in each key-value pair is not case sensitive, but the value is case sensitive. To avoid confusion, do not use multiple encryption context pairs that differ only by case. To require a fully case-sensitive encryption context, use the kms:EncryptionContext: and kms:EncryptionContextKeys conditions in an IAM or key policy. For details, see kms:EncryptionContext: (https://docs.aws.amazon.com/kms/latest/developerguide/policy-conditions.html#conditions-kms-encryption-context) in the Key Management Service Developer Guide . — shape: {EncryptionContextSubset?: record, EncryptionContextEquals?: record}
+  --grant-tokens: list<string> # A list of grant tokens. Use a grant token when your permission to call this operation comes from a new grant that has not yet achieved eventual consistency. For more information, see Grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html#grant_token) and Using a grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grant-manage.html#using-grant-token) in the Key Management Service Developer Guide.
+  --name: string # A friendly name for the grant. Use this value to prevent the unintended creation of duplicate grants when retrying this request. When this value is absent, all CreateGrant requests result in a new grant with a unique GrantId even if all the supplied parameters are identical. This can result in unintended duplicates when you retry the CreateGrant request. When this value is present, you can retry a CreateGrant request with identical parameters; if the grant already exists, the original GrantId is returned without creating a new grant. Note that the returned grant token is unique with every CreateGrant request, even when a duplicate GrantId is returned. All grant tokens for the same grant ID can be used interchangeably.
+]: any -> record<GrantToken: string, GrantId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.CreateGrant")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "GranteePrincipal": $grantee_principal, "RetiringPrincipal": $retiring_principal, "Operations": $operations, "Constraints": $constraints, "GrantTokens": $grant_tokens, "Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -430,6 +454,7 @@ export def "create-grant" [
 #
 # POST /
 # operationId: CreateKey
+# --Tags item shape: {TagKey: string, TagValue: string}
 export def "create-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -447,22 +472,23 @@ export def "create-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  --policy: any
-  --description: any
-  --key-usage: any
-  --customer-master-key-spec: any
-  --key-spec: any
-  --origin: any
-  --custom-key-store-id: any
-  --bypass-policy-lockout-safety-check: any
-  --tags: any
-  --multi-region: any
-  --xks-key-id: any
-]: any -> record<KeyMetadata: record<AWSAccountId: record, KeyId: record, Arn: record, CreationDate: record, Enabled: record, Description: record, KeyUsage: record, KeyState: record, DeletionDate: record, ValidTo: record, Origin: record, CustomKeyStoreId: record, CloudHsmClusterId: record, ExpirationModel: record, KeyManager: record, CustomerMasterKeySpec: record, KeySpec: record, EncryptionAlgorithms: record, SigningAlgorithms: record, MultiRegion: record, MultiRegionConfiguration: record<MultiRegionKeyType: record, PrimaryKey: record, ReplicaKeys: record>, PendingDeletionWindowInDays: record, MacAlgorithms: record, XksKeyConfiguration: record<Id: record>>> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  --policy: string # The key policy to attach to the KMS key. If you provide a key policy, it must meet the following criteria: The key policy must allow the calling principal to make a subsequent PutKeyPolicy request on the KMS key. This reduces the risk that the KMS key becomes unmanageable. For more information, see Default key policy (https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-default.html#prevent-unmanageable-key) in the Key Management Service Developer Guide. (To omit this condition, set BypassPolicyLockoutSafetyCheck to true.) Each statement in the key policy must contain one or more principals. The principals in the key policy must exist and be visible to KMS. When you create a new Amazon Web Services principal, you might need to enforce a delay before including the new principal in a key policy because the new principal might not be immediately visible to KMS. For more information, see Changes that I make are not always immediately visible (https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_general.html#troubleshoot_general_eventual-consistency) in the Amazon Web Services Identity and Access Management User Guide. If you do not provide a key policy, KMS attaches a default key policy to the KMS key. For more information, see Default key policy (https://docs.aws.amazon.com/kms/latest/developerguide/key-policies.html#key-policy-default) in the Key Management Service Developer Guide. The key policy size quota is 32 kilobytes (32768 bytes). For help writing and formatting a JSON policy document, see the IAM JSON Policy Reference (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies.html) in the Identity and Access Management User Guide .
+  --description: string # A description of the KMS key. Use a description that helps you decide whether the KMS key is appropriate for a task. The default value is an empty string (no description). To set or change the description after the key is created, use UpdateKeyDescription.
+  --key-usage: string@key-usage-completer # Determines the cryptographic operations (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#cryptographic-operations) for which you can use the KMS key. The default value is ENCRYPT_DECRYPT. This parameter is optional when you are creating a symmetric encryption KMS key; otherwise, it is required. You can't change the KeyUsage value after the KMS key is created. Select only one valid value. For symmetric encryption KMS keys, omit the parameter or specify ENCRYPT_DECRYPT. For HMAC KMS keys (symmetric), specify GENERATE_VERIFY_MAC. For asymmetric KMS keys with RSA key material, specify ENCRYPT_DECRYPT or SIGN_VERIFY. For asymmetric KMS keys with ECC key material, specify SIGN_VERIFY. For asymmetric KMS keys with SM2 key material (China Regions only), specify ENCRYPT_DECRYPT or SIGN_VERIFY.
+  --customer-master-key-spec: string@customer-master-key-spec-completer # This enum has been deprecated. Instead, use the KeySpec enum.
+  --key-spec: string@key-spec-completer # Specifies the type of KMS key to create. The default value, SYMMETRIC_DEFAULT, creates a KMS key with a 256-bit AES-GCM key that is used for encryption and decryption, except in China Regions, where it creates a 128-bit symmetric key that uses SM4 encryption. For help choosing a key spec for your KMS key, see Choosing a KMS key type (https://docs.aws.amazon.com/kms/latest/developerguide/key-types.html#symm-asymm-choose) in the Key Management Service Developer Guide . The KeySpec determines whether the KMS key contains a symmetric key or an asymmetric key pair. It also determines the algorithms that the KMS key supports. You can't change the KeySpec after the KMS key is created. To further restrict the algorithms that can be used with the KMS key, use a condition key in its key policy or IAM policy. For more information, see kms:EncryptionAlgorithm (https://docs.aws.amazon.com/kms/latest/developerguide/policy-conditions.html#conditions-kms-encryption-algorithm), kms:MacAlgorithm (https://docs.aws.amazon.com/kms/latest/developerguide/policy-conditions.html#conditions-kms-mac-algorithm) or kms:Signing Algorithm (https://docs.aws.amazon.com/kms/latest/developerguide/policy-conditions.html#conditions-kms-signing-algorithm) in the Key Management Service Developer Guide . Amazon Web Services services that are integrated with KMS (http://aws.amazon.com/kms/features/#AWS_Service_Integration) use symmetric encryption KMS keys to protect your data. These services do not support asymmetric KMS keys or HMAC KMS keys. KMS supports the following key specs for KMS keys: Symmetric encryption key (default) SYMMETRIC_DEFAULT HMAC keys (symmetric) HMAC_224 HMAC_256 HMAC_384 HMAC_512 Asymmetric RSA key pairs RSA_2048 RSA_3072 RSA_4096 Asymmetric NIST-recommended elliptic curve key pairs ECC_NIST_P256 (secp256r1) ECC_NIST_P384 (secp384r1) ECC_NIST_P521 (secp521r1) Other asymmetric elliptic curve key pairs ECC_SECG_P256K1 (secp256k1), commonly used for cryptocurrencies. SM2 key pairs (China Regions only) SM2
+  --origin: string@origin-completer # The source of the key material for the KMS key. You cannot change the origin after you create the KMS key. The default is AWS_KMS, which means that KMS creates the key material. To create a KMS key with no key material (https://docs.aws.amazon.com/kms/latest/developerguide/importing-keys-create-cmk.html) (for imported key material), set this value to EXTERNAL. For more information about importing key material into KMS, see Importing Key Material (https://docs.aws.amazon.com/kms/latest/developerguide/importing-keys.html) in the Key Management Service Developer Guide. The EXTERNAL origin value is valid only for symmetric KMS keys. To create a KMS key in an CloudHSM key store (https://docs.aws.amazon.com/kms/latest/developerguide/create-cmk-keystore.html) and create its key material in the associated CloudHSM cluster, set this value to AWS_CLOUDHSM. You must also use the CustomKeyStoreId parameter to identify the CloudHSM key store. The KeySpec value must be SYMMETRIC_DEFAULT. To create a KMS key in an external key store (https://docs.aws.amazon.com/kms/latest/developerguide/create-xks-keys.html), set this value to EXTERNAL_KEY_STORE. You must also use the CustomKeyStoreId parameter to identify the external key store and the XksKeyId parameter to identify the associated external key. The KeySpec value must be SYMMETRIC_DEFAULT.
+  --custom-key-store-id: string # Creates the KMS key in the specified custom key store (https://docs.aws.amazon.com/kms/latest/developerguide/custom-key-store-overview.html). The ConnectionState of the custom key store must be CONNECTED. To find the CustomKeyStoreID and ConnectionState use the DescribeCustomKeyStores operation. This parameter is valid only for symmetric encryption KMS keys in a single Region. You cannot create any other type of KMS key in a custom key store. When you create a KMS key in an CloudHSM key store, KMS generates a non-exportable 256-bit symmetric key in its associated CloudHSM cluster and associates it with the KMS key. When you create a KMS key in an external key store, you must use the XksKeyId parameter to specify an external key that serves as key material for the KMS key.
+  --bypass-policy-lockout-safety-check: oneof<nothing, bool> # Skips ("bypasses") the key policy lockout safety check. The default value is false. Setting this value to true increases the risk that the KMS key becomes unmanageable. Do not set this value to true indiscriminately. For more information, see Default key policy (https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-default.html#prevent-unmanageable-key) in the Key Management Service Developer Guide. Use this parameter only when you intend to prevent the principal that is making the request from making a subsequent PutKeyPolicy request on the KMS key.
+  --tags: list # Assigns one or more tags to the KMS key. Use this parameter to tag the KMS key when it is created. To tag an existing KMS key, use the TagResource operation. Tagging or untagging a KMS key can allow or deny permission to the KMS key. For details, see ABAC for KMS (https://docs.aws.amazon.com/kms/latest/developerguide/abac.html) in the Key Management Service Developer Guide. To use this parameter, you must have kms:TagResource (https://docs.aws.amazon.com/kms/latest/developerguide/kms-api-permissions-reference.html) permission in an IAM policy. Each tag consists of a tag key and a tag value. Both the tag key and the tag value are required, but the tag value can be an empty (null) string. You cannot have more than one tag on a KMS key with the same tag key. If you specify an existing tag key with a different tag value, KMS replaces the current tag value with the specified one. When you add tags to an Amazon Web Services resource, Amazon Web Services generates a cost allocation report with usage and costs aggregated by tags. Tags can also be used to control access to a KMS key. For details, see Tagging Keys (https://docs.aws.amazon.com/kms/latest/developerguide/tagging-keys.html). — item shape: {TagKey: string, TagValue: string}
+  --multi-region: oneof<nothing, bool> # Creates a multi-Region primary key that you can replicate into other Amazon Web Services Regions. You cannot change this value after you create the KMS key. For a multi-Region key, set this parameter to True. For a single-Region KMS key, omit this parameter or set it to False. The default value is False. This operation supports multi-Region keys, an KMS feature that lets you create multiple interoperable KMS keys in different Amazon Web Services Regions. Because these KMS keys have the same key ID, key material, and other metadata, you can use them interchangeably to encrypt data in one Amazon Web Services Region and decrypt it in a different Amazon Web Services Region without re-encrypting the data or making a cross-Region call. For more information about multi-Region keys, see Multi-Region keys in KMS (https://docs.aws.amazon.com/kms/latest/developerguide/multi-region-keys-overview.html) in the Key Management Service Developer Guide. This value creates a primary key, not a replica. To create a replica key, use the ReplicateKey operation. You can create a symmetric or asymmetric multi-Region key, and you can create a multi-Region key with imported key material. However, you cannot create a multi-Region key in a custom key store.
+  --xks-key-id: string # Identifies the external key (https://docs.aws.amazon.com/kms/latest/developerguide/keystore-external.html#concept-external-key) that serves as key material for the KMS key in an external key store (https://docs.aws.amazon.com/kms/latest/developerguide/keystore-external.html). Specify the ID that the external key store proxy (https://docs.aws.amazon.com/kms/latest/developerguide/keystore-external.html#concept-xks-proxy) uses to refer to the external key. For help, see the documentation for your external key store proxy. This parameter is required for a KMS key with an Origin value of EXTERNAL_KEY_STORE. It is not valid for KMS keys with any other Origin value. The external key must be an existing 256-bit AES symmetric encryption key hosted outside of Amazon Web Services in an external key manager associated with the external key store specified by the CustomKeyStoreId parameter. This key must be enabled and configured to perform encryption and decryption. Each KMS key in an external key store must use a different external key. For details, see Requirements for a KMS key in an external key store (https://docs.aws.amazon.com/create-xks-keys.html#xks-key-requirements) in the Key Management Service Developer Guide. Each KMS key in an external key store is associated two backing keys. One is key material that KMS generates. The other is the external key specified by this parameter. When you use the KMS key in an external key store to encrypt data, the encryption operation is performed first by KMS using the KMS key material, and then by the external key manager using the specified external key, a process known as double encryption. For details, see Double encryption (https://docs.aws.amazon.com/kms/latest/developerguide/keystore-external.html#concept-double-encryption) in the Key Management Service Developer Guide.
+]: any -> record<KeyMetadata: record<AWSAccountId: string, KeyId: string, Arn: string, CreationDate: string, Enabled: bool, Description: string, KeyUsage: string, KeyState: string, DeletionDate: string, ValidTo: string, Origin: string, CustomKeyStoreId: string, CloudHsmClusterId: string, ExpirationModel: string, KeyManager: string, CustomerMasterKeySpec: string, KeySpec: string, EncryptionAlgorithms: list<string>, SigningAlgorithms: list<string>, MultiRegion: bool, MultiRegionConfiguration: record<MultiRegionKeyType: string, PrimaryKey: record, ReplicaKeys: list>, PendingDeletionWindowInDays: int, MacAlgorithms: list<string>, XksKeyConfiguration: record<Id: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.CreateKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Policy": $policy, "Description": $description, "KeyUsage": $key_usage, "CustomerMasterKeySpec": $customer_master_key_spec, "KeySpec": $key_spec, "Origin": $origin, "CustomKeyStoreId": $custom_key_store_id, "BypassPolicyLockoutSafetyCheck": $bypass_policy_lockout_safety_check, "Tags": $tags, "MultiRegion": $multi_region, "XksKeyId": $xks_key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -505,16 +531,17 @@ export def "decrypt" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  ciphertext_blob: any
-  --encryption-context: any
-  --grant-tokens: any
-  --key-id: any
-  --encryption-algorithm: any
-]: any -> record<KeyId: record, Plaintext: record, EncryptionAlgorithm: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  ciphertext_blob: string # Ciphertext to be decrypted. The blob includes metadata.
+  --encryption-context: record # Specifies the encryption context to use when decrypting the data. An encryption context is valid only for cryptographic operations (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#cryptographic-operations) with a symmetric encryption KMS key. The standard asymmetric encryption algorithms and HMAC algorithms that KMS uses do not support an encryption context. An encryption context is a collection of non-secret key-value pairs that represent additional authenticated data. When you use an encryption context to encrypt data, you must specify the same (an exact case-sensitive match) encryption context to decrypt the data. An encryption context is supported only on operations with symmetric encryption KMS keys. On operations with symmetric encryption KMS keys, an encryption context is optional, but it is strongly recommended. For more information, see Encryption context (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#encrypt_context) in the Key Management Service Developer Guide.
+  --grant-tokens: list<string> # A list of grant tokens. Use a grant token when your permission to call this operation comes from a new grant that has not yet achieved eventual consistency. For more information, see Grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html#grant_token) and Using a grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grant-manage.html#using-grant-token) in the Key Management Service Developer Guide.
+  --key-id: string # Specifies the KMS key that KMS uses to decrypt the ciphertext. Enter a key ID of the KMS key that was used to encrypt the ciphertext. If you identify a different KMS key, the Decrypt operation throws an IncorrectKeyException. This parameter is required only when the ciphertext was encrypted under an asymmetric KMS key. If you used a symmetric encryption KMS key, KMS can get the KMS key from metadata that it adds to the symmetric ciphertext blob. However, it is always recommended as a best practice. This practice ensures that you use the KMS key that you intend. To specify a KMS key, use its key ID, key ARN, alias name, or alias ARN. When using an alias name, prefix it with "alias/". To specify a KMS key in a different Amazon Web Services account, you must use the key ARN or alias ARN. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab Alias name: alias/ExampleAlias Alias ARN: arn:aws:kms:us-east-2:111122223333:alias/ExampleAlias To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey. To get the alias name and alias ARN, use ListAliases.
+  --encryption-algorithm: string@encryption-algorithm-completer # Specifies the encryption algorithm that will be used to decrypt the ciphertext. Specify the same algorithm that was used to encrypt the data. If you specify a different algorithm, the Decrypt operation fails. This parameter is required only when the ciphertext was encrypted under an asymmetric KMS key. The default value, SYMMETRIC_DEFAULT, represents the only supported algorithm that is valid for symmetric encryption KMS keys.
+]: any -> record<KeyId: string, Plaintext: string, EncryptionAlgorithm: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.Decrypt")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CiphertextBlob": $ciphertext_blob, "EncryptionContext": $encryption_context, "GrantTokens": $grant_tokens, "KeyId": $key_id, "EncryptionAlgorithm": $encryption_algorithm} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -557,12 +584,13 @@ export def "delete-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  alias_name: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  alias_name: string # The alias to be deleted. The alias name must begin with alias/ followed by the alias name, such as alias/ExampleAlias.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.DeleteAlias")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AliasName": $alias_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -605,12 +633,13 @@ export def "delete-custom-key-store" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  custom_key_store_id: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  custom_key_store_id: string # Enter the ID of the custom key store you want to delete. To find the ID of a custom key store, use the DescribeCustomKeyStores operation.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.DeleteCustomKeyStore")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CustomKeyStoreId": $custom_key_store_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -653,12 +682,13 @@ export def "delete-imported-key-material" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  key_id: any
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  key_id: string # Identifies the KMS key from which you are deleting imported key material. The Origin of the KMS key must be EXTERNAL. Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.DeleteImportedKeyMaterial")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -703,15 +733,16 @@ export def "describe-custom-key-stores" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  --custom-key-store-id: any
-  --custom-key-store-name: any
-  --limit-body: any #  (body field)
-  --marker-body: any #  (body field)
-]: any -> record<CustomKeyStores: record, NextMarker: record, Truncated: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  --custom-key-store-id: string # Gets only information about the specified custom key store. Enter the key store ID. By default, this operation gets information about all custom key stores in the account and Region. To limit the output to a particular custom key store, provide either the CustomKeyStoreId or CustomKeyStoreName parameter, but not both.
+  --custom-key-store-name: string # Gets only information about the specified custom key store. Enter the friendly name of the custom key store. By default, this operation gets information about all custom key stores in the account and Region. To limit the output to a particular custom key store, provide either the CustomKeyStoreId or CustomKeyStoreName parameter, but not both.
+  --limit-body: int # Use this parameter to specify the maximum number of items to return. When this value is present, KMS does not return more than the specified number of items, but it might return fewer. (body field)
+  --marker-body: string # Use this parameter in a subsequent request after you receive a response with truncated results. Set it to the value of NextMarker from the truncated response you just received. (body field)
+]: any -> record<CustomKeyStores: table<CustomKeyStoreId: string, CustomKeyStoreName: string, CloudHsmClusterId: string, TrustAnchorCertificate: string, ConnectionState: string, ConnectionErrorCode: string, CreationDate: string, CustomKeyStoreType: string, XksProxyConfiguration: record>, NextMarker: string, Truncated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.DescribeCustomKeyStores")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"CustomKeyStoreId": $custom_key_store_id, "CustomKeyStoreName": $custom_key_store_name, "Limit": $limit_body, "Marker": $marker_body} | compact
@@ -755,13 +786,14 @@ export def "describe-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  key_id: any
-  --grant-tokens: any
-]: any -> record<KeyMetadata: record<AWSAccountId: record, KeyId: record, Arn: record, CreationDate: record, Enabled: record, Description: record, KeyUsage: record, KeyState: record, DeletionDate: record, ValidTo: record, Origin: record, CustomKeyStoreId: record, CloudHsmClusterId: record, ExpirationModel: record, KeyManager: record, CustomerMasterKeySpec: record, KeySpec: record, EncryptionAlgorithms: record, SigningAlgorithms: record, MultiRegion: record, MultiRegionConfiguration: record<MultiRegionKeyType: record, PrimaryKey: record, ReplicaKeys: record>, PendingDeletionWindowInDays: record, MacAlgorithms: record, XksKeyConfiguration: record<Id: record>>> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  key_id: string # Describes the specified KMS key. If you specify a predefined Amazon Web Services alias (an Amazon Web Services alias with no key ID), KMS associates the alias with an Amazon Web Services managed key (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html##aws-managed-cmk) and returns its KeyId and Arn in the response. To specify a KMS key, use its key ID, key ARN, alias name, or alias ARN. When using an alias name, prefix it with "alias/". To specify a KMS key in a different Amazon Web Services account, you must use the key ARN or alias ARN. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab Alias name: alias/ExampleAlias Alias ARN: arn:aws:kms:us-east-2:111122223333:alias/ExampleAlias To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey. To get the alias name and alias ARN, use ListAliases.
+  --grant-tokens: list<string> # A list of grant tokens. Use a grant token when your permission to call this operation comes from a new grant that has not yet achieved eventual consistency. For more information, see Grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html#grant_token) and Using a grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grant-manage.html#using-grant-token) in the Key Management Service Developer Guide.
+]: any -> record<KeyMetadata: record<AWSAccountId: string, KeyId: string, Arn: string, CreationDate: string, Enabled: bool, Description: string, KeyUsage: string, KeyState: string, DeletionDate: string, ValidTo: string, Origin: string, CustomKeyStoreId: string, CloudHsmClusterId: string, ExpirationModel: string, KeyManager: string, CustomerMasterKeySpec: string, KeySpec: string, EncryptionAlgorithms: list<string>, SigningAlgorithms: list<string>, MultiRegion: bool, MultiRegionConfiguration: record<MultiRegionKeyType: string, PrimaryKey: record, ReplicaKeys: list>, PendingDeletionWindowInDays: int, MacAlgorithms: list<string>, XksKeyConfiguration: record<Id: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.DescribeKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "GrantTokens": $grant_tokens} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -804,12 +836,13 @@ export def "disable-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  key_id: any
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  key_id: string # Identifies the KMS key to disable. Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.DisableKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -852,12 +885,13 @@ export def "disable-key-rotation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  key_id: any
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  key_id: string # Identifies a symmetric encryption KMS key. You cannot enable or disable automatic rotation of asymmetric KMS keys (https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html#asymmetric-cmks), HMAC KMS keys (https://docs.aws.amazon.com/kms/latest/developerguide/hmac.html), KMS keys with imported key material (https://docs.aws.amazon.com/kms/latest/developerguide/importing-keys.html), or KMS keys in a custom key store (https://docs.aws.amazon.com/kms/latest/developerguide/custom-key-store-overview.html). Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.DisableKeyRotation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -900,12 +934,13 @@ export def "disconnect-custom-key-store" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  custom_key_store_id: any
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  custom_key_store_id: string # Enter the ID of the custom key store you want to disconnect. To find the ID of a custom key store, use the DescribeCustomKeyStores operation.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.DisconnectCustomKeyStore")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CustomKeyStoreId": $custom_key_store_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -948,12 +983,13 @@ export def "enable-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  key_id: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  key_id: string # Identifies the KMS key to enable. Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.EnableKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -996,12 +1032,13 @@ export def "enable-key-rotation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  key_id: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  key_id: string # Identifies a symmetric encryption KMS key. You cannot enable automatic rotation of asymmetric KMS keys (https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html), HMAC KMS keys (https://docs.aws.amazon.com/kms/latest/developerguide/hmac.html), KMS keys with imported key material (https://docs.aws.amazon.com/kms/latest/developerguide/importing-keys.html), or KMS keys in a custom key store (https://docs.aws.amazon.com/kms/latest/developerguide/custom-key-store-overview.html). To enable or disable automatic rotation of a set of related multi-Region keys (https://docs.aws.amazon.com/kms/latest/developerguide/multi-region-keys-manage.html#multi-region-rotate), set the property on the primary key. Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.EnableKeyRotation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1044,16 +1081,17 @@ export def "encrypt" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  key_id: any
-  plaintext: any
-  --encryption-context: any
-  --grant-tokens: any
-  --encryption-algorithm: any
-]: any -> record<CiphertextBlob: record, KeyId: record, EncryptionAlgorithm: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  key_id: string # Identifies the KMS key to use in the encryption operation. The KMS key must have a KeyUsage of ENCRYPT_DECRYPT. To find the KeyUsage of a KMS key, use the DescribeKey operation. To specify a KMS key, use its key ID, key ARN, alias name, or alias ARN. When using an alias name, prefix it with "alias/". To specify a KMS key in a different Amazon Web Services account, you must use the key ARN or alias ARN. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab Alias name: alias/ExampleAlias Alias ARN: arn:aws:kms:us-east-2:111122223333:alias/ExampleAlias To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey. To get the alias name and alias ARN, use ListAliases.
+  plaintext: string # Data to be encrypted. (format: password)
+  --encryption-context: record # Specifies the encryption context that will be used to encrypt the data. An encryption context is valid only for cryptographic operations (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#cryptographic-operations) with a symmetric encryption KMS key. The standard asymmetric encryption algorithms and HMAC algorithms that KMS uses do not support an encryption context. An encryption context is a collection of non-secret key-value pairs that represent additional authenticated data. When you use an encryption context to encrypt data, you must specify the same (an exact case-sensitive match) encryption context to decrypt the data. An encryption context is supported only on operations with symmetric encryption KMS keys. On operations with symmetric encryption KMS keys, an encryption context is optional, but it is strongly recommended. For more information, see Encryption context (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#encrypt_context) in the Key Management Service Developer Guide.
+  --grant-tokens: list<string> # A list of grant tokens. Use a grant token when your permission to call this operation comes from a new grant that has not yet achieved eventual consistency. For more information, see Grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html#grant_token) and Using a grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grant-manage.html#using-grant-token) in the Key Management Service Developer Guide.
+  --encryption-algorithm: string@encryption-algorithm-completer # Specifies the encryption algorithm that KMS will use to encrypt the plaintext message. The algorithm must be compatible with the KMS key that you specify. This parameter is required only for asymmetric KMS keys. The default value, SYMMETRIC_DEFAULT, is the algorithm used for symmetric encryption KMS keys. If you are using an asymmetric KMS key, we recommend RSAES_OAEP_SHA_256. The SM2PKE algorithm is only available in China Regions.
+]: any -> record<CiphertextBlob: string, KeyId: string, EncryptionAlgorithm: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.Encrypt")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "Plaintext": $plaintext, "EncryptionContext": $encryption_context, "GrantTokens": $grant_tokens, "EncryptionAlgorithm": $encryption_algorithm} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1096,16 +1134,17 @@ export def "generate-data-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  key_id: any
-  --encryption-context: any
-  --number-of-bytes: any
-  --key-spec: any
-  --grant-tokens: any
-]: any -> record<CiphertextBlob: record, Plaintext: record, KeyId: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  key_id: string # Specifies the symmetric encryption KMS key that encrypts the data key. You cannot specify an asymmetric KMS key or a KMS key in a custom key store. To get the type and origin of your KMS key, use the DescribeKey operation. To specify a KMS key, use its key ID, key ARN, alias name, or alias ARN. When using an alias name, prefix it with "alias/". To specify a KMS key in a different Amazon Web Services account, you must use the key ARN or alias ARN. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab Alias name: alias/ExampleAlias Alias ARN: arn:aws:kms:us-east-2:111122223333:alias/ExampleAlias To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey. To get the alias name and alias ARN, use ListAliases.
+  --encryption-context: record # Specifies the encryption context that will be used when encrypting the data key. An encryption context is a collection of non-secret key-value pairs that represent additional authenticated data. When you use an encryption context to encrypt data, you must specify the same (an exact case-sensitive match) encryption context to decrypt the data. An encryption context is supported only on operations with symmetric encryption KMS keys. On operations with symmetric encryption KMS keys, an encryption context is optional, but it is strongly recommended. For more information, see Encryption context (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#encrypt_context) in the Key Management Service Developer Guide.
+  --number-of-bytes: int # Specifies the length of the data key in bytes. For example, use the value 64 to generate a 512-bit data key (64 bytes is 512 bits). For 128-bit (16-byte) and 256-bit (32-byte) data keys, use the KeySpec parameter. You must specify either the KeySpec or the NumberOfBytes parameter (but not both) in every GenerateDataKey request.
+  --key-spec: string@key-spec-completer-1 # Specifies the length of the data key. Use AES_128 to generate a 128-bit symmetric key, or AES_256 to generate a 256-bit symmetric key. You must specify either the KeySpec or the NumberOfBytes parameter (but not both) in every GenerateDataKey request.
+  --grant-tokens: list<string> # A list of grant tokens. Use a grant token when your permission to call this operation comes from a new grant that has not yet achieved eventual consistency. For more information, see Grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html#grant_token) and Using a grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grant-manage.html#using-grant-token) in the Key Management Service Developer Guide.
+]: any -> record<CiphertextBlob: string, Plaintext: string, KeyId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.GenerateDataKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "EncryptionContext": $encryption_context, "NumberOfBytes": $number_of_bytes, "KeySpec": $key_spec, "GrantTokens": $grant_tokens} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1148,15 +1187,16 @@ export def "generate-data-key-pair" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  --encryption-context: any
-  key_id: any
-  key_pair_spec: any
-  --grant-tokens: any
-]: any -> record<PrivateKeyCiphertextBlob: record, PrivateKeyPlaintext: record, PublicKey: record, KeyId: record, KeyPairSpec: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  --encryption-context: record # Specifies the encryption context that will be used when encrypting the private key in the data key pair. An encryption context is a collection of non-secret key-value pairs that represent additional authenticated data. When you use an encryption context to encrypt data, you must specify the same (an exact case-sensitive match) encryption context to decrypt the data. An encryption context is supported only on operations with symmetric encryption KMS keys. On operations with symmetric encryption KMS keys, an encryption context is optional, but it is strongly recommended. For more information, see Encryption context (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#encrypt_context) in the Key Management Service Developer Guide.
+  key_id: string # Specifies the symmetric encryption KMS key that encrypts the private key in the data key pair. You cannot specify an asymmetric KMS key or a KMS key in a custom key store. To get the type and origin of your KMS key, use the DescribeKey operation. To specify a KMS key, use its key ID, key ARN, alias name, or alias ARN. When using an alias name, prefix it with "alias/". To specify a KMS key in a different Amazon Web Services account, you must use the key ARN or alias ARN. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab Alias name: alias/ExampleAlias Alias ARN: arn:aws:kms:us-east-2:111122223333:alias/ExampleAlias To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey. To get the alias name and alias ARN, use ListAliases.
+  key_pair_spec: string@key-pair-spec-completer # Determines the type of data key pair that is generated. The KMS rule that restricts the use of asymmetric RSA and SM2 KMS keys to encrypt and decrypt or to sign and verify (but not both), and the rule that permits you to use ECC KMS keys only to sign and verify, are not effective on data key pairs, which are used outside of KMS. The SM2 key spec is only available in China Regions.
+  --grant-tokens: list<string> # A list of grant tokens. Use a grant token when your permission to call this operation comes from a new grant that has not yet achieved eventual consistency. For more information, see Grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html#grant_token) and Using a grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grant-manage.html#using-grant-token) in the Key Management Service Developer Guide.
+]: any -> record<PrivateKeyCiphertextBlob: string, PrivateKeyPlaintext: string, PublicKey: string, KeyId: string, KeyPairSpec: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.GenerateDataKeyPair")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EncryptionContext": $encryption_context, "KeyId": $key_id, "KeyPairSpec": $key_pair_spec, "GrantTokens": $grant_tokens} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1199,15 +1239,16 @@ export def "generate-data-key-pair-without-plaintext" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  --encryption-context: any
-  key_id: any
-  key_pair_spec: any
-  --grant-tokens: any
-]: any -> record<PrivateKeyCiphertextBlob: record, PublicKey: record, KeyId: record, KeyPairSpec: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  --encryption-context: record # Specifies the encryption context that will be used when encrypting the private key in the data key pair. An encryption context is a collection of non-secret key-value pairs that represent additional authenticated data. When you use an encryption context to encrypt data, you must specify the same (an exact case-sensitive match) encryption context to decrypt the data. An encryption context is supported only on operations with symmetric encryption KMS keys. On operations with symmetric encryption KMS keys, an encryption context is optional, but it is strongly recommended. For more information, see Encryption context (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#encrypt_context) in the Key Management Service Developer Guide.
+  key_id: string # Specifies the symmetric encryption KMS key that encrypts the private key in the data key pair. You cannot specify an asymmetric KMS key or a KMS key in a custom key store. To get the type and origin of your KMS key, use the DescribeKey operation. To specify a KMS key, use its key ID, key ARN, alias name, or alias ARN. When using an alias name, prefix it with "alias/". To specify a KMS key in a different Amazon Web Services account, you must use the key ARN or alias ARN. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab Alias name: alias/ExampleAlias Alias ARN: arn:aws:kms:us-east-2:111122223333:alias/ExampleAlias To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey. To get the alias name and alias ARN, use ListAliases.
+  key_pair_spec: string@key-pair-spec-completer # Determines the type of data key pair that is generated. The KMS rule that restricts the use of asymmetric RSA and SM2 KMS keys to encrypt and decrypt or to sign and verify (but not both), and the rule that permits you to use ECC KMS keys only to sign and verify, are not effective on data key pairs, which are used outside of KMS. The SM2 key spec is only available in China Regions.
+  --grant-tokens: list<string> # A list of grant tokens. Use a grant token when your permission to call this operation comes from a new grant that has not yet achieved eventual consistency. For more information, see Grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html#grant_token) and Using a grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grant-manage.html#using-grant-token) in the Key Management Service Developer Guide.
+]: any -> record<PrivateKeyCiphertextBlob: string, PublicKey: string, KeyId: string, KeyPairSpec: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.GenerateDataKeyPairWithoutPlaintext")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EncryptionContext": $encryption_context, "KeyId": $key_id, "KeyPairSpec": $key_pair_spec, "GrantTokens": $grant_tokens} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1250,16 +1291,17 @@ export def "generate-data-key-without-plaintext" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  key_id: any
-  --encryption-context: any
-  --key-spec: any
-  --number-of-bytes: any
-  --grant-tokens: any
-]: any -> record<CiphertextBlob: record, KeyId: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  key_id: string # Specifies the symmetric encryption KMS key that encrypts the data key. You cannot specify an asymmetric KMS key or a KMS key in a custom key store. To get the type and origin of your KMS key, use the DescribeKey operation. To specify a KMS key, use its key ID, key ARN, alias name, or alias ARN. When using an alias name, prefix it with "alias/". To specify a KMS key in a different Amazon Web Services account, you must use the key ARN or alias ARN. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab Alias name: alias/ExampleAlias Alias ARN: arn:aws:kms:us-east-2:111122223333:alias/ExampleAlias To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey. To get the alias name and alias ARN, use ListAliases.
+  --encryption-context: record # Specifies the encryption context that will be used when encrypting the data key. An encryption context is a collection of non-secret key-value pairs that represent additional authenticated data. When you use an encryption context to encrypt data, you must specify the same (an exact case-sensitive match) encryption context to decrypt the data. An encryption context is supported only on operations with symmetric encryption KMS keys. On operations with symmetric encryption KMS keys, an encryption context is optional, but it is strongly recommended. For more information, see Encryption context (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#encrypt_context) in the Key Management Service Developer Guide.
+  --key-spec: string@key-spec-completer-1 # The length of the data key. Use AES_128 to generate a 128-bit symmetric key, or AES_256 to generate a 256-bit symmetric key.
+  --number-of-bytes: int # The length of the data key in bytes. For example, use the value 64 to generate a 512-bit data key (64 bytes is 512 bits). For common key lengths (128-bit and 256-bit symmetric keys), we recommend that you use the KeySpec field instead of this one.
+  --grant-tokens: list<string> # A list of grant tokens. Use a grant token when your permission to call this operation comes from a new grant that has not yet achieved eventual consistency. For more information, see Grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html#grant_token) and Using a grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grant-manage.html#using-grant-token) in the Key Management Service Developer Guide.
+]: any -> record<CiphertextBlob: string, KeyId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.GenerateDataKeyWithoutPlaintext")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "EncryptionContext": $encryption_context, "KeySpec": $key_spec, "NumberOfBytes": $number_of_bytes, "GrantTokens": $grant_tokens} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1302,15 +1344,16 @@ export def "generate-mac" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  message: any
-  key_id: any
-  mac_algorithm: any
-  --grant-tokens: any
-]: any -> record<Mac: record, MacAlgorithm: record, KeyId: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  message: string # The message to be hashed. Specify a message of up to 4,096 bytes. GenerateMac and VerifyMac do not provide special handling for message digests. If you generate an HMAC for a hash digest of a message, you must verify the HMAC of the same hash digest. (format: password)
+  key_id: string # The HMAC KMS key to use in the operation. The MAC algorithm computes the HMAC for the message and the key as described in RFC 2104 (https://datatracker.ietf.org/doc/html/rfc2104). To identify an HMAC KMS key, use the DescribeKey operation and see the KeySpec field in the response.
+  mac_algorithm: string@mac-algorithm-completer # The MAC algorithm used in the operation. The algorithm must be compatible with the HMAC KMS key that you specify. To find the MAC algorithms that your HMAC KMS key supports, use the DescribeKey operation and see the MacAlgorithms field in the DescribeKey response.
+  --grant-tokens: list<string> # A list of grant tokens. Use a grant token when your permission to call this operation comes from a new grant that has not yet achieved eventual consistency. For more information, see Grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html#grant_token) and Using a grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grant-manage.html#using-grant-token) in the Key Management Service Developer Guide.
+]: any -> record<Mac: string, MacAlgorithm: string, KeyId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.GenerateMac")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Message": $message, "KeyId": $key_id, "MacAlgorithm": $mac_algorithm, "GrantTokens": $grant_tokens} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1353,13 +1396,14 @@ export def "generate-random" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  --number-of-bytes: any
-  --custom-key-store-id: any
-]: any -> record<Plaintext: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  --number-of-bytes: int # The length of the random byte string. This parameter is required.
+  --custom-key-store-id: string # Generates the random byte string in the CloudHSM cluster that is associated with the specified CloudHSM key store. To find the ID of a custom key store, use the DescribeCustomKeyStores operation. External key store IDs are not valid for this parameter. If you specify the ID of an external key store, GenerateRandom throws an UnsupportedOperationException.
+]: any -> record<Plaintext: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.GenerateRandom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NumberOfBytes": $number_of_bytes, "CustomKeyStoreId": $custom_key_store_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1402,13 +1446,14 @@ export def "get-key-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  key_id: any
-  policy_name: any
-]: any -> record<Policy: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  key_id: string # Gets the key policy for the specified KMS key. Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
+  policy_name: string # Specifies the name of the key policy. The only valid name is default. To get the names of key policies, use ListKeyPolicies.
+]: any -> record<Policy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.GetKeyPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "PolicyName": $policy_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1451,12 +1496,13 @@ export def "get-key-rotation-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  key_id: any
-]: any -> record<KeyRotationEnabled: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  key_id: string # Gets the rotation status for the specified KMS key. Specify the key ID or key ARN of the KMS key. To specify a KMS key in a different Amazon Web Services account, you must use the key ARN. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
+]: any -> record<KeyRotationEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.GetKeyRotationStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1499,14 +1545,15 @@ export def "get-parameters-for-import" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  key_id: any
-  wrapping_algorithm: any
-  wrapping_key_spec: any
-]: any -> record<KeyId: record, ImportToken: record, PublicKey: record, ParametersValidTo: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  key_id: string # The identifier of the symmetric encryption KMS key into which you will import key material. The Origin of the KMS key must be EXTERNAL. Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
+  wrapping_algorithm: string@wrapping-algorithm-completer # The algorithm you will use to encrypt the key material before using the ImportKeyMaterial operation to import it. For more information, see Encrypt the key material (https://docs.aws.amazon.com/kms/latest/developerguide/importing-keys-encrypt-key-material.html) in the Key Management Service Developer Guide. The RSAES_PKCS1_V1_5 wrapping algorithm is deprecated. We recommend that you begin using a different wrapping algorithm immediately. KMS will end support for RSAES_PKCS1_V1_5 by October 1, 2023 pursuant to cryptographic key management guidance (https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-131Ar2.pdf) from the National Institute of Standards and Technology (NIST).
+  wrapping_key_spec: string@wrapping-key-spec-completer # The type of wrapping key (public key) to return in the response. Only 2048-bit RSA public keys are supported.
+]: any -> record<KeyId: string, ImportToken: string, PublicKey: string, ParametersValidTo: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.GetParametersForImport")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "WrappingAlgorithm": $wrapping_algorithm, "WrappingKeySpec": $wrapping_key_spec} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1549,13 +1596,14 @@ export def "get-public-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  key_id: any
-  --grant-tokens: any
-]: any -> record<KeyId: record, PublicKey: record, CustomerMasterKeySpec: record, KeySpec: record, KeyUsage: record, EncryptionAlgorithms: record, SigningAlgorithms: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  key_id: string # Identifies the asymmetric KMS key that includes the public key. To specify a KMS key, use its key ID, key ARN, alias name, or alias ARN. When using an alias name, prefix it with "alias/". To specify a KMS key in a different Amazon Web Services account, you must use the key ARN or alias ARN. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab Alias name: alias/ExampleAlias Alias ARN: arn:aws:kms:us-east-2:111122223333:alias/ExampleAlias To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey. To get the alias name and alias ARN, use ListAliases.
+  --grant-tokens: list<string> # A list of grant tokens. Use a grant token when your permission to call this operation comes from a new grant that has not yet achieved eventual consistency. For more information, see Grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html#grant_token) and Using a grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grant-manage.html#using-grant-token) in the Key Management Service Developer Guide.
+]: any -> record<KeyId: string, PublicKey: string, CustomerMasterKeySpec: string, KeySpec: string, KeyUsage: string, EncryptionAlgorithms: list<string>, SigningAlgorithms: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.GetPublicKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "GrantTokens": $grant_tokens} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1598,16 +1646,17 @@ export def "import-key-material" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  key_id: any
-  import_token: any
-  encrypted_key_material: any
-  --valid-to: any
-  --expiration-model: any
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  key_id: string # The identifier of the symmetric encryption KMS key that receives the imported key material. This must be the same KMS key specified in the KeyID parameter of the corresponding GetParametersForImport request. The Origin of the KMS key must be EXTERNAL. You cannot perform this operation on an asymmetric KMS key, an HMAC KMS key, a KMS key in a custom key store, or on a KMS key in a different Amazon Web Services account Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
+  import_token: string # The import token that you received in the response to a previous GetParametersForImport request. It must be from the same response that contained the public key that you used to encrypt the key material.
+  encrypted_key_material: string # The encrypted key material to import. The key material must be encrypted with the public wrapping key that GetParametersForImport returned, using the wrapping algorithm that you specified in the same GetParametersForImport request.
+  --valid-to: string # The date and time when the imported key material expires. This parameter is required when the value of the ExpirationModel parameter is KEY_MATERIAL_EXPIRES. Otherwise it is not valid. The value of this parameter must be a future date and time. The maximum value is 365 days from the request date. When the key material expires, KMS deletes the key material from the KMS key. Without its key material, the KMS key is unusable. To use the KMS key in cryptographic operations, you must reimport the same key material. You cannot change the ExpirationModel or ValidTo values for the current import after the request completes. To change either value, you must delete (DeleteImportedKeyMaterial) and reimport the key material. (format: date-time)
+  --expiration-model: string@expiration-model-completer # Specifies whether the key material expires. The default is KEY_MATERIAL_EXPIRES. When the value of ExpirationModel is KEY_MATERIAL_EXPIRES, you must specify a value for the ValidTo parameter. When value is KEY_MATERIAL_DOES_NOT_EXPIRE, you must omit the ValidTo parameter. You cannot change the ExpirationModel or ValidTo values for the current import after the request completes. To change either value, you must delete (DeleteImportedKeyMaterial) and reimport the key material.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.ImportKeyMaterial")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "ImportToken": $import_token, "EncryptedKeyMaterial": $encrypted_key_material, "ValidTo": $valid_to, "ExpirationModel": $expiration_model} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1652,14 +1701,15 @@ export def "list-aliases" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  --key-id: any
-  --limit-body: any #  (body field)
-  --marker-body: any #  (body field)
-]: any -> record<Aliases: record, NextMarker: record, Truncated: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  --key-id: string # Lists only aliases that are associated with the specified KMS key. Enter a KMS key in your Amazon Web Services account. This parameter is optional. If you omit it, ListAliases returns all aliases in the account and Region. Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
+  --limit-body: int # Use this parameter to specify the maximum number of items to return. When this value is present, KMS does not return more than the specified number of items, but it might return fewer. This value is optional. If you include a value, it must be between 1 and 100, inclusive. If you do not include a value, it defaults to 50. (body field)
+  --marker-body: string # Use this parameter in a subsequent request after you receive a response with truncated results. Set it to the value of NextMarker from the truncated response you just received. (body field)
+]: any -> record<Aliases: table<AliasName: string, AliasArn: string, TargetKeyId: string, CreationDate: string, LastUpdatedDate: string>, NextMarker: string, Truncated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.ListAliases")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"KeyId": $key_id, "Limit": $limit_body, "Marker": $marker_body} | compact
@@ -1705,16 +1755,17 @@ export def "list-grants" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  --limit-body: any #  (body field)
-  --marker-body: any #  (body field)
-  key_id: any
-  --grant-id: any
-  --grantee-principal: any
-]: any -> record<Grants: record, NextMarker: record, Truncated: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  --limit-body: int # Use this parameter to specify the maximum number of items to return. When this value is present, KMS does not return more than the specified number of items, but it might return fewer. This value is optional. If you include a value, it must be between 1 and 100, inclusive. If you do not include a value, it defaults to 50. (body field)
+  --marker-body: string # Use this parameter in a subsequent request after you receive a response with truncated results. Set it to the value of NextMarker from the truncated response you just received. (body field)
+  key_id: string # Returns only grants for the specified KMS key. This parameter is required. Specify the key ID or key ARN of the KMS key. To specify a KMS key in a different Amazon Web Services account, you must use the key ARN. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
+  --grant-id: string # Returns only the grant with the specified grant ID. The grant ID uniquely identifies the grant.
+  --grantee-principal: string # Returns only grants where the specified principal is the grantee principal for the grant.
+]: any -> record<Grants: table<KeyId: string, GrantId: string, Name: string, CreationDate: string, GranteePrincipal: string, RetiringPrincipal: string, IssuingAccount: string, Operations: list, Constraints: record>, NextMarker: string, Truncated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.ListGrants")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Limit": $limit_body, "Marker": $marker_body, "KeyId": $key_id, "GrantId": $grant_id, "GranteePrincipal": $grantee_principal} | compact
@@ -1760,14 +1811,15 @@ export def "list-key-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  key_id: any
-  --limit-body: any #  (body field)
-  --marker-body: any #  (body field)
-]: any -> record<PolicyNames: record, NextMarker: record, Truncated: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  key_id: string # Gets the names of key policies for the specified KMS key. Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
+  --limit-body: int # Use this parameter to specify the maximum number of items to return. When this value is present, KMS does not return more than the specified number of items, but it might return fewer. This value is optional. If you include a value, it must be between 1 and 1000, inclusive. If you do not include a value, it defaults to 100. Only one policy can be attached to a key. (body field)
+  --marker-body: string # Use this parameter in a subsequent request after you receive a response with truncated results. Set it to the value of NextMarker from the truncated response you just received. (body field)
+]: any -> record<PolicyNames: list<string>, NextMarker: string, Truncated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.ListKeyPolicies")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"KeyId": $key_id, "Limit": $limit_body, "Marker": $marker_body} | compact
@@ -1813,13 +1865,14 @@ export def "list-keys" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  --limit-body: any #  (body field)
-  --marker-body: any #  (body field)
-]: any -> record<Keys: record, NextMarker: record, Truncated: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  --limit-body: int # Use this parameter to specify the maximum number of items to return. When this value is present, KMS does not return more than the specified number of items, but it might return fewer. This value is optional. If you include a value, it must be between 1 and 1000, inclusive. If you do not include a value, it defaults to 100. (body field)
+  --marker-body: string # Use this parameter in a subsequent request after you receive a response with truncated results. Set it to the value of NextMarker from the truncated response you just received. (body field)
+]: any -> record<Keys: table<KeyId: string, KeyArn: string>, NextMarker: string, Truncated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.ListKeys")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Limit": $limit_body, "Marker": $marker_body} | compact
@@ -1865,14 +1918,15 @@ export def "list-resource-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  key_id: any
-  --limit-body: any #  (body field)
-  --marker-body: any #  (body field)
-]: any -> record<Tags: record, NextMarker: record, Truncated: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  key_id: string # Gets tags on the specified KMS key. Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
+  --limit-body: int # Use this parameter to specify the maximum number of items to return. When this value is present, KMS does not return more than the specified number of items, but it might return fewer. This value is optional. If you include a value, it must be between 1 and 50, inclusive. If you do not include a value, it defaults to 50. (body field)
+  --marker-body: string # Use this parameter in a subsequent request after you receive a response with truncated results. Set it to the value of NextMarker from the truncated response you just received. Do not attempt to construct this value. Use only the value of NextMarker from the truncated response you just received. (body field)
+]: any -> record<Tags: table<TagKey: string, TagValue: string>, NextMarker: string, Truncated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.ListResourceTags")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"KeyId": $key_id, "Limit": $limit_body, "Marker": $marker_body} | compact
@@ -1918,14 +1972,15 @@ export def "list-retirable-grants" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  --limit-body: any #  (body field)
-  --marker-body: any #  (body field)
-  retiring_principal: any
-]: any -> record<Grants: record, NextMarker: record, Truncated: record> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  --limit-body: int # Use this parameter to specify the maximum number of items to return. When this value is present, KMS does not return more than the specified number of items, but it might return fewer. This value is optional. If you include a value, it must be between 1 and 100, inclusive. If you do not include a value, it defaults to 50. (body field)
+  --marker-body: string # Use this parameter in a subsequent request after you receive a response with truncated results. Set it to the value of NextMarker from the truncated response you just received. (body field)
+  retiring_principal: string # The retiring principal for which to list grants. Enter a principal in your Amazon Web Services account. To specify the retiring principal, use the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of an Amazon Web Services principal. Valid principals include Amazon Web Services accounts, IAM users, IAM roles, federated users, and assumed role users. For help with the ARN syntax for a principal, see IAM ARNs (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html#identifiers-arns) in the Identity and Access Management User Guide .
+]: any -> record<Grants: table<KeyId: string, GrantId: string, Name: string, CreationDate: string, GranteePrincipal: string, RetiringPrincipal: string, IssuingAccount: string, Operations: list, Constraints: record>, NextMarker: string, Truncated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.ListRetirableGrants")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Limit": $limit_body, "Marker": $marker_body, "RetiringPrincipal": $retiring_principal} | compact
@@ -1969,15 +2024,16 @@ export def "put-key-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  key_id: any
-  policy_name: any
-  policy: any
-  --bypass-policy-lockout-safety-check: any
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  key_id: string # Sets the key policy on the specified KMS key. Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
+  policy_name: string # The name of the key policy. The only valid value is default.
+  policy: string # The key policy to attach to the KMS key. The key policy must meet the following criteria: The key policy must allow the calling principal to make a subsequent PutKeyPolicy request on the KMS key. This reduces the risk that the KMS key becomes unmanageable. For more information, see Default key policy (https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-default.html#prevent-unmanageable-key) in the Key Management Service Developer Guide. (To omit this condition, set BypassPolicyLockoutSafetyCheck to true.) Each statement in the key policy must contain one or more principals. The principals in the key policy must exist and be visible to KMS. When you create a new Amazon Web Services principal, you might need to enforce a delay before including the new principal in a key policy because the new principal might not be immediately visible to KMS. For more information, see Changes that I make are not always immediately visible (https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_general.html#troubleshoot_general_eventual-consistency) in the Amazon Web Services Identity and Access Management User Guide. A key policy document can include only the following characters: Printable ASCII characters from the space character (\u0020) through the end of the ASCII character range. Printable characters in the Basic Latin and Latin-1 Supplement character set (through \u00FF). The tab (\u0009), line feed (\u000A), and carriage return (\u000D) special characters For information about key policies, see Key policies in KMS (https://docs.aws.amazon.com/kms/latest/developerguide/key-policies.html) in the Key Management Service Developer Guide.For help writing and formatting a JSON policy document, see the IAM JSON Policy Reference (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies.html) in the Identity and Access Management User Guide .
+  --bypass-policy-lockout-safety-check: oneof<nothing, bool> # Skips ("bypasses") the key policy lockout safety check. The default value is false. Setting this value to true increases the risk that the KMS key becomes unmanageable. Do not set this value to true indiscriminately. For more information, see Default key policy (https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-default.html#prevent-unmanageable-key) in the Key Management Service Developer Guide. Use this parameter only when you intend to prevent the principal that is making the request from making a subsequent PutKeyPolicy request on the KMS key.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.PutKeyPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "PolicyName": $policy_name, "Policy": $policy, "BypassPolicyLockoutSafetyCheck": $bypass_policy_lockout_safety_check} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2020,19 +2076,20 @@ export def "re-encrypt" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  ciphertext_blob: any
-  --source-encryption-context: any
-  --source-key-id: any
-  destination_key_id: any
-  --destination-encryption-context: any
-  --source-encryption-algorithm: any
-  --destination-encryption-algorithm: any
-  --grant-tokens: any
-]: any -> record<CiphertextBlob: record, SourceKeyId: record, KeyId: record, SourceEncryptionAlgorithm: record, DestinationEncryptionAlgorithm: record> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  ciphertext_blob: string # Ciphertext of the data to reencrypt.
+  --source-encryption-context: record # Specifies the encryption context to use to decrypt the ciphertext. Enter the same encryption context that was used to encrypt the ciphertext. An encryption context is a collection of non-secret key-value pairs that represent additional authenticated data. When you use an encryption context to encrypt data, you must specify the same (an exact case-sensitive match) encryption context to decrypt the data. An encryption context is supported only on operations with symmetric encryption KMS keys. On operations with symmetric encryption KMS keys, an encryption context is optional, but it is strongly recommended. For more information, see Encryption context (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#encrypt_context) in the Key Management Service Developer Guide.
+  --source-key-id: string # Specifies the KMS key that KMS will use to decrypt the ciphertext before it is re-encrypted. Enter a key ID of the KMS key that was used to encrypt the ciphertext. If you identify a different KMS key, the ReEncrypt operation throws an IncorrectKeyException. This parameter is required only when the ciphertext was encrypted under an asymmetric KMS key. If you used a symmetric encryption KMS key, KMS can get the KMS key from metadata that it adds to the symmetric ciphertext blob. However, it is always recommended as a best practice. This practice ensures that you use the KMS key that you intend. To specify a KMS key, use its key ID, key ARN, alias name, or alias ARN. When using an alias name, prefix it with "alias/". To specify a KMS key in a different Amazon Web Services account, you must use the key ARN or alias ARN. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab Alias name: alias/ExampleAlias Alias ARN: arn:aws:kms:us-east-2:111122223333:alias/ExampleAlias To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey. To get the alias name and alias ARN, use ListAliases.
+  destination_key_id: string # A unique identifier for the KMS key that is used to reencrypt the data. Specify a symmetric encryption KMS key or an asymmetric KMS key with a KeyUsage value of ENCRYPT_DECRYPT. To find the KeyUsage value of a KMS key, use the DescribeKey operation. To specify a KMS key, use its key ID, key ARN, alias name, or alias ARN. When using an alias name, prefix it with "alias/". To specify a KMS key in a different Amazon Web Services account, you must use the key ARN or alias ARN. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab Alias name: alias/ExampleAlias Alias ARN: arn:aws:kms:us-east-2:111122223333:alias/ExampleAlias To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey. To get the alias name and alias ARN, use ListAliases.
+  --destination-encryption-context: record # Specifies that encryption context to use when the reencrypting the data. A destination encryption context is valid only when the destination KMS key is a symmetric encryption KMS key. The standard ciphertext format for asymmetric KMS keys does not include fields for metadata. An encryption context is a collection of non-secret key-value pairs that represent additional authenticated data. When you use an encryption context to encrypt data, you must specify the same (an exact case-sensitive match) encryption context to decrypt the data. An encryption context is supported only on operations with symmetric encryption KMS keys. On operations with symmetric encryption KMS keys, an encryption context is optional, but it is strongly recommended. For more information, see Encryption context (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#encrypt_context) in the Key Management Service Developer Guide.
+  --source-encryption-algorithm: string@source-encryption-algorithm-completer # Specifies the encryption algorithm that KMS will use to decrypt the ciphertext before it is reencrypted. The default value, SYMMETRIC_DEFAULT, represents the algorithm used for symmetric encryption KMS keys. Specify the same algorithm that was used to encrypt the ciphertext. If you specify a different algorithm, the decrypt attempt fails. This parameter is required only when the ciphertext was encrypted under an asymmetric KMS key.
+  --destination-encryption-algorithm: string@destination-encryption-algorithm-completer # Specifies the encryption algorithm that KMS will use to reecrypt the data after it has decrypted it. The default value, SYMMETRIC_DEFAULT, represents the encryption algorithm used for symmetric encryption KMS keys. This parameter is required only when the destination KMS key is an asymmetric KMS key.
+  --grant-tokens: list<string> # A list of grant tokens. Use a grant token when your permission to call this operation comes from a new grant that has not yet achieved eventual consistency. For more information, see Grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html#grant_token) and Using a grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grant-manage.html#using-grant-token) in the Key Management Service Developer Guide.
+]: any -> record<CiphertextBlob: string, SourceKeyId: string, KeyId: string, SourceEncryptionAlgorithm: string, DestinationEncryptionAlgorithm: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.ReEncrypt")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CiphertextBlob": $ciphertext_blob, "SourceEncryptionContext": $source_encryption_context, "SourceKeyId": $source_key_id, "DestinationKeyId": $destination_key_id, "DestinationEncryptionContext": $destination_encryption_context, "SourceEncryptionAlgorithm": $source_encryption_algorithm, "DestinationEncryptionAlgorithm": $destination_encryption_algorithm, "GrantTokens": $grant_tokens} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2058,6 +2115,7 @@ export def "re-encrypt" [
 #
 # POST /
 # operationId: ReplicateKey
+# --Tags item shape: {TagKey: string, TagValue: string}
 export def "replicate-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2075,17 +2133,18 @@ export def "replicate-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  key_id: any
-  replica_region: any
-  --policy: any
-  --bypass-policy-lockout-safety-check: any
-  --description: any
-  --tags: any
-]: any -> record<ReplicaKeyMetadata: record<AWSAccountId: record, KeyId: record, Arn: record, CreationDate: record, Enabled: record, Description: record, KeyUsage: record, KeyState: record, DeletionDate: record, ValidTo: record, Origin: record, CustomKeyStoreId: record, CloudHsmClusterId: record, ExpirationModel: record, KeyManager: record, CustomerMasterKeySpec: record, KeySpec: record, EncryptionAlgorithms: record, SigningAlgorithms: record, MultiRegion: record, MultiRegionConfiguration: record<MultiRegionKeyType: record, PrimaryKey: record, ReplicaKeys: record>, PendingDeletionWindowInDays: record, MacAlgorithms: record, XksKeyConfiguration: record<Id: record>>, ReplicaPolicy: record, ReplicaTags: record> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  key_id: string # Identifies the multi-Region primary key that is being replicated. To determine whether a KMS key is a multi-Region primary key, use the DescribeKey operation to check the value of the MultiRegionKeyType property. Specify the key ID or key ARN of a multi-Region primary key. For example: Key ID: mrk-1234abcd12ab34cd56ef1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/mrk-1234abcd12ab34cd56ef1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
+  replica_region: string # The Region ID of the Amazon Web Services Region for this replica key. Enter the Region ID, such as us-east-1 or ap-southeast-2. For a list of Amazon Web Services Regions in which KMS is supported, see KMS service endpoints (https://docs.aws.amazon.com/general/latest/gr/kms.html#kms_region) in the Amazon Web Services General Reference. HMAC KMS keys are not supported in all Amazon Web Services Regions. If you try to replicate an HMAC KMS key in an Amazon Web Services Region in which HMAC keys are not supported, the ReplicateKey operation returns an UnsupportedOperationException. For a list of Regions in which HMAC KMS keys are supported, see HMAC keys in KMS (https://docs.aws.amazon.com/kms/latest/developerguide/hmac.html) in the Key Management Service Developer Guide. The replica must be in a different Amazon Web Services Region than its primary key and other replicas of that primary key, but in the same Amazon Web Services partition. KMS must be available in the replica Region. If the Region is not enabled by default, the Amazon Web Services account must be enabled in the Region. For information about Amazon Web Services partitions, see Amazon Resource Names (ARNs) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) in the Amazon Web Services General Reference. For information about enabling and disabling Regions, see Enabling a Region (https://docs.aws.amazon.com/general/latest/gr/rande-manage.html#rande-manage-enable) and Disabling a Region (https://docs.aws.amazon.com/general/latest/gr/rande-manage.html#rande-manage-disable) in the Amazon Web Services General Reference.
+  --policy: string # The key policy to attach to the KMS key. This parameter is optional. If you do not provide a key policy, KMS attaches the default key policy (https://docs.aws.amazon.com/kms/latest/developerguide/key-policies.html#key-policy-default) to the KMS key. The key policy is not a shared property of multi-Region keys. You can specify the same key policy or a different key policy for each key in a set of related multi-Region keys. KMS does not synchronize this property. If you provide a key policy, it must meet the following criteria: The key policy must allow the calling principal to make a subsequent PutKeyPolicy request on the KMS key. This reduces the risk that the KMS key becomes unmanageable. For more information, see Default key policy (https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-default.html#prevent-unmanageable-key) in the Key Management Service Developer Guide. (To omit this condition, set BypassPolicyLockoutSafetyCheck to true.) Each statement in the key policy must contain one or more principals. The principals in the key policy must exist and be visible to KMS. When you create a new Amazon Web Services principal, you might need to enforce a delay before including the new principal in a key policy because the new principal might not be immediately visible to KMS. For more information, see Changes that I make are not always immediately visible (https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_general.html#troubleshoot_general_eventual-consistency) in the Amazon Web Services Identity and Access Management User Guide. A key policy document can include only the following characters: Printable ASCII characters from the space character (\u0020) through the end of the ASCII character range. Printable characters in the Basic Latin and Latin-1 Supplement character set (through \u00FF). The tab (\u0009), line feed (\u000A), and carriage return (\u000D) special characters For information about key policies, see Key policies in KMS (https://docs.aws.amazon.com/kms/latest/developerguide/key-policies.html) in the Key Management Service Developer Guide. For help writing and formatting a JSON policy document, see the IAM JSON Policy Reference (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies.html) in the Identity and Access Management User Guide .
+  --bypass-policy-lockout-safety-check: oneof<nothing, bool> # Skips ("bypasses") the key policy lockout safety check. The default value is false. Setting this value to true increases the risk that the KMS key becomes unmanageable. Do not set this value to true indiscriminately. For more information, see Default key policy (https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-default.html#prevent-unmanageable-key) in the Key Management Service Developer Guide. Use this parameter only when you intend to prevent the principal that is making the request from making a subsequent PutKeyPolicy request on the KMS key.
+  --description: string # A description of the KMS key. The default value is an empty string (no description). The description is not a shared property of multi-Region keys. You can specify the same description or a different description for each key in a set of related multi-Region keys. KMS does not synchronize this property.
+  --tags: list # Assigns one or more tags to the replica key. Use this parameter to tag the KMS key when it is created. To tag an existing KMS key, use the TagResource operation. Tagging or untagging a KMS key can allow or deny permission to the KMS key. For details, see ABAC for KMS (https://docs.aws.amazon.com/kms/latest/developerguide/abac.html) in the Key Management Service Developer Guide. To use this parameter, you must have kms:TagResource (https://docs.aws.amazon.com/kms/latest/developerguide/kms-api-permissions-reference.html) permission in an IAM policy. Tags are not a shared property of multi-Region keys. You can specify the same tags or different tags for each key in a set of related multi-Region keys. KMS does not synchronize this property. Each tag consists of a tag key and a tag value. Both the tag key and the tag value are required, but the tag value can be an empty (null) string. You cannot have more than one tag on a KMS key with the same tag key. If you specify an existing tag key with a different tag value, KMS replaces the current tag value with the specified one. When you add tags to an Amazon Web Services resource, Amazon Web Services generates a cost allocation report with usage and costs aggregated by tags. Tags can also be used to control access to a KMS key. For details, see Tagging Keys (https://docs.aws.amazon.com/kms/latest/developerguide/tagging-keys.html). — item shape: {TagKey: string, TagValue: string}
+]: any -> record<ReplicaKeyMetadata: record<AWSAccountId: string, KeyId: string, Arn: string, CreationDate: string, Enabled: bool, Description: string, KeyUsage: string, KeyState: string, DeletionDate: string, ValidTo: string, Origin: string, CustomKeyStoreId: string, CloudHsmClusterId: string, ExpirationModel: string, KeyManager: string, CustomerMasterKeySpec: string, KeySpec: string, EncryptionAlgorithms: list<string>, SigningAlgorithms: list<string>, MultiRegion: bool, MultiRegionConfiguration: record<MultiRegionKeyType: string, PrimaryKey: record, ReplicaKeys: list>, PendingDeletionWindowInDays: int, MacAlgorithms: list<string>, XksKeyConfiguration: record<Id: string>>, ReplicaPolicy: string, ReplicaTags: table<TagKey: string, TagValue: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.ReplicateKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "ReplicaRegion": $replica_region, "Policy": $policy, "BypassPolicyLockoutSafetyCheck": $bypass_policy_lockout_safety_check, "Description": $description, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2128,14 +2187,15 @@ export def "retire-grant" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  --grant-token: any
-  --key-id: any
-  --grant-id: any
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  --grant-token: string # Identifies the grant to be retired. You can use a grant token to identify a new grant even before it has achieved eventual consistency. Only the CreateGrant operation returns a grant token. For details, see Grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html#grant_token) and Eventual consistency (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html#terms-eventual-consistency) in the Key Management Service Developer Guide.
+  --key-id: string # The key ARN KMS key associated with the grant. To find the key ARN, use the ListKeys operation. For example: arn:aws:kms:us-east-2:444455556666:key/1234abcd-12ab-34cd-56ef-1234567890ab
+  --grant-id: string # Identifies the grant to retire. To get the grant ID, use CreateGrant, ListGrants, or ListRetirableGrants. Grant ID Example - 0123456789012345678901234567890123456789012345678901234567890123
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.RetireGrant")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GrantToken": $grant_token, "KeyId": $key_id, "GrantId": $grant_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2178,13 +2238,14 @@ export def "revoke-grant" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  key_id: any
-  grant_id: any
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  key_id: string # A unique identifier for the KMS key associated with the grant. To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey. Specify the key ID or key ARN of the KMS key. To specify a KMS key in a different Amazon Web Services account, you must use the key ARN. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
+  grant_id: string # Identifies the grant to revoke. To get the grant ID, use CreateGrant, ListGrants, or ListRetirableGrants.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.RevokeGrant")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "GrantId": $grant_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2227,13 +2288,14 @@ export def "schedule-key-deletion" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  key_id: any
-  --pending-window-in-days: any
-]: any -> record<KeyId: record, DeletionDate: record, KeyState: record, PendingWindowInDays: record> {
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  key_id: string # The unique identifier of the KMS key to delete. Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
+  --pending-window-in-days: int # The waiting period, specified in number of days. After the waiting period ends, KMS deletes the KMS key. If the KMS key is a multi-Region primary key with replica keys, the waiting period begins when the last of its replica keys is deleted. Otherwise, the waiting period begins immediately. This value is optional. If you include a value, it must be between 7 and 30, inclusive. If you do not include a value, it defaults to 30.
+]: any -> record<KeyId: string, DeletionDate: string, KeyState: string, PendingWindowInDays: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.ScheduleKeyDeletion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "PendingWindowInDays": $pending_window_in_days} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2276,16 +2338,17 @@ export def "sign" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  key_id: any
-  message: any
-  --message-type: any
-  --grant-tokens: any
-  signing_algorithm: any
-]: any -> record<KeyId: record, Signature: record, SigningAlgorithm: record> {
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  key_id: string # Identifies an asymmetric KMS key. KMS uses the private key in the asymmetric KMS key to sign the message. The KeyUsage type of the KMS key must be SIGN_VERIFY. To find the KeyUsage of a KMS key, use the DescribeKey operation. To specify a KMS key, use its key ID, key ARN, alias name, or alias ARN. When using an alias name, prefix it with "alias/". To specify a KMS key in a different Amazon Web Services account, you must use the key ARN or alias ARN. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab Alias name: alias/ExampleAlias Alias ARN: arn:aws:kms:us-east-2:111122223333:alias/ExampleAlias To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey. To get the alias name and alias ARN, use ListAliases.
+  message: string # Specifies the message or message digest to sign. Messages can be 0-4096 bytes. To sign a larger message, provide a message digest. If you provide a message digest, use the DIGEST value of MessageType to prevent the digest from being hashed again while signing. (format: password)
+  --message-type: string@message-type-completer # Tells KMS whether the value of the Message parameter should be hashed as part of the signing algorithm. Use RAW for unhashed messages; use DIGEST for message digests, which are already hashed. When the value of MessageType is RAW, KMS uses the standard signing algorithm, which begins with a hash function. When the value is DIGEST, KMS skips the hashing step in the signing algorithm. Use the DIGEST value only when the value of the Message parameter is a message digest. If you use the DIGEST value with an unhashed message, the security of the signing operation can be compromised. When the value of MessageTypeis DIGEST, the length of the Message value must match the length of hashed messages for the specified signing algorithm. You can submit a message digest and omit the MessageType or specify RAW so the digest is hashed again while signing. However, this can cause verification failures when verifying with a system that assumes a single hash. The hashing algorithm in that Sign uses is based on the SigningAlgorithm value. Signing algorithms that end in SHA_256 use the SHA_256 hashing algorithm. Signing algorithms that end in SHA_384 use the SHA_384 hashing algorithm. Signing algorithms that end in SHA_512 use the SHA_512 hashing algorithm. SM2DSA uses the SM3 hashing algorithm. For details, see Offline verification with SM2 key pairs (https://docs.aws.amazon.com/kms/latest/developerguide/asymmetric-key-specs.html#key-spec-sm-offline-verification).
+  --grant-tokens: list<string> # A list of grant tokens. Use a grant token when your permission to call this operation comes from a new grant that has not yet achieved eventual consistency. For more information, see Grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html#grant_token) and Using a grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grant-manage.html#using-grant-token) in the Key Management Service Developer Guide.
+  signing_algorithm: string@signing-algorithm-completer # Specifies the signing algorithm to use when signing the message. Choose an algorithm that is compatible with the type and size of the specified asymmetric KMS key. When signing with RSA key pairs, RSASSA-PSS algorithms are preferred. We include RSASSA-PKCS1-v1_5 algorithms for compatibility with existing applications.
+]: any -> record<KeyId: string, Signature: string, SigningAlgorithm: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.Sign")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "Message": $message, "MessageType": $message_type, "GrantTokens": $grant_tokens, "SigningAlgorithm": $signing_algorithm} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2311,6 +2374,7 @@ export def "sign" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {TagKey: string, TagValue: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2328,13 +2392,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  key_id: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  key_id: string # Identifies a customer managed key in the account and Region. Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
+  tags: list # One or more tags. Each tag consists of a tag key and a tag value. The tag value can be an empty (null) string. You cannot have more than one tag on a KMS key with the same tag key. If you specify an existing tag key with a different tag value, KMS replaces the current tag value with the specified one. — item shape: {TagKey: string, TagValue: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2377,13 +2442,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  key_id: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  key_id: string # Identifies the KMS key from which you are removing tags. Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
+  tag_keys: list<string> # One or more tag keys. Specify only the tag keys, not the tag values.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2426,13 +2492,14 @@ export def "update-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  alias_name: any
-  target_key_id: any
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  alias_name: string # Identifies the alias that is changing its KMS key. This value must begin with alias/ followed by the alias name, such as alias/ExampleAlias. You cannot use UpdateAlias to change the alias name.
+  target_key_id: string # Identifies the customer managed key (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk) to associate with the alias. You don't have permission to associate an alias with an Amazon Web Services managed key (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#aws-managed-cmk). The KMS key must be in the same Amazon Web Services account and Region as the alias. Also, the new target KMS key must be the same type as the current target KMS key (both symmetric or both asymmetric or both HMAC) and they must have the same key usage. Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey. To verify that the alias is mapped to the correct KMS key, use ListAliases.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.UpdateAlias")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AliasName": $alias_name, "TargetKeyId": $target_key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2458,6 +2525,7 @@ export def "update-alias" [
 #
 # POST /
 # operationId: UpdateCustomKeyStore
+# --XksProxyAuthenticationCredential shape: {AccessKeyId: string, RawSecretAccessKey: string}
 export def "update-custom-key-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2475,20 +2543,21 @@ export def "update-custom-key-store" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  custom_key_store_id: any
-  --new-custom-key-store-name: any
-  --key-store-password: any
-  --cloud-hsm-cluster-id: any
-  --xks-proxy-uri-endpoint: any
-  --xks-proxy-uri-path: any
-  --xks-proxy-vpc-endpoint-service-name: any
-  --xks-proxy-authentication-credential: any
-  --xks-proxy-connectivity: any
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  custom_key_store_id: string # Identifies the custom key store that you want to update. Enter the ID of the custom key store. To find the ID of a custom key store, use the DescribeCustomKeyStores operation.
+  --new-custom-key-store-name: string # Changes the friendly name of the custom key store to the value that you specify. The custom key store name must be unique in the Amazon Web Services account. To change this value, an CloudHSM key store must be disconnected. An external key store can be connected or disconnected.
+  --key-store-password: string # Enter the current password of the kmsuser crypto user (CU) in the CloudHSM cluster that is associated with the custom key store. This parameter is valid only for custom key stores with a CustomKeyStoreType of AWS_CLOUDHSM. This parameter tells KMS the current password of the kmsuser crypto user (CU). It does not set or change the password of any users in the CloudHSM cluster. To change this value, the CloudHSM key store must be disconnected. (format: password)
+  --cloud-hsm-cluster-id: string # Associates the custom key store with a related CloudHSM cluster. This parameter is valid only for custom key stores with a CustomKeyStoreType of AWS_CLOUDHSM. Enter the cluster ID of the cluster that you used to create the custom key store or a cluster that shares a backup history and has the same cluster certificate as the original cluster. You cannot use this parameter to associate a custom key store with an unrelated cluster. In addition, the replacement cluster must fulfill the requirements (https://docs.aws.amazon.com/kms/latest/developerguide/create-keystore.html#before-keystore) for a cluster associated with a custom key store. To view the cluster certificate of a cluster, use the DescribeClusters (https://docs.aws.amazon.com/cloudhsm/latest/APIReference/API_DescribeClusters.html) operation. To change this value, the CloudHSM key store must be disconnected.
+  --xks-proxy-uri-endpoint: string # Changes the URI endpoint that KMS uses to connect to your external key store proxy (XKS proxy). This parameter is valid only for custom key stores with a CustomKeyStoreType of EXTERNAL_KEY_STORE. For external key stores with an XksProxyConnectivity value of PUBLIC_ENDPOINT, the protocol must be HTTPS. For external key stores with an XksProxyConnectivity value of VPC_ENDPOINT_SERVICE, specify https:// followed by the private DNS name associated with the VPC endpoint service. Each external key store must use a different private DNS name. The combined XksProxyUriEndpoint and XksProxyUriPath values must be unique in the Amazon Web Services account and Region. To change this value, the external key store must be disconnected.
+  --xks-proxy-uri-path: string # Changes the base path to the proxy APIs for this external key store. To find this value, see the documentation for your external key manager and external key store proxy (XKS proxy). This parameter is valid only for custom key stores with a CustomKeyStoreType of EXTERNAL_KEY_STORE. The value must start with / and must end with /kms/xks/v1, where v1 represents the version of the KMS external key store proxy API. You can include an optional prefix between the required elements such as /example/kms/xks/v1. The combined XksProxyUriEndpoint and XksProxyUriPath values must be unique in the Amazon Web Services account and Region. You can change this value when the external key store is connected or disconnected.
+  --xks-proxy-vpc-endpoint-service-name: string # Changes the name that KMS uses to identify the Amazon VPC endpoint service for your external key store proxy (XKS proxy). This parameter is valid when the CustomKeyStoreType is EXTERNAL_KEY_STORE and the XksProxyConnectivity is VPC_ENDPOINT_SERVICE. To change this value, the external key store must be disconnected.
+  --xks-proxy-authentication-credential: record # KMS uses the authentication credential to sign requests that it sends to the external key store proxy (XKS proxy) on your behalf. You establish these credentials on your external key store proxy and report them to KMS. The XksProxyAuthenticationCredential includes two required elements. — shape: {AccessKeyId: string, RawSecretAccessKey: string}
+  --xks-proxy-connectivity: string@xks-proxy-connectivity-completer # Changes the connectivity setting for the external key store. To indicate that the external key store proxy uses a Amazon VPC endpoint service to communicate with KMS, specify VPC_ENDPOINT_SERVICE. Otherwise, specify PUBLIC_ENDPOINT. If you change the XksProxyConnectivity to VPC_ENDPOINT_SERVICE, you must also change the XksProxyUriEndpoint and add an XksProxyVpcEndpointServiceName value. If you change the XksProxyConnectivity to PUBLIC_ENDPOINT, you must also change the XksProxyUriEndpoint and specify a null or empty string for the XksProxyVpcEndpointServiceName value. To change this value, the external key store must be disconnected.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.UpdateCustomKeyStore")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CustomKeyStoreId": $custom_key_store_id, "NewCustomKeyStoreName": $new_custom_key_store_name, "KeyStorePassword": $key_store_password, "CloudHsmClusterId": $cloud_hsm_cluster_id, "XksProxyUriEndpoint": $xks_proxy_uri_endpoint, "XksProxyUriPath": $xks_proxy_uri_path, "XksProxyVpcEndpointServiceName": $xks_proxy_vpc_endpoint_service_name, "XksProxyAuthenticationCredential": $xks_proxy_authentication_credential, "XksProxyConnectivity": $xks_proxy_connectivity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2531,13 +2600,14 @@ export def "update-key-description" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  key_id: any
-  description: any
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  key_id: string # Updates the description of the specified KMS key. Specify the key ID or key ARN of the KMS key. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
+  description: string # New description for the KMS key.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.UpdateKeyDescription")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2580,13 +2650,14 @@ export def "update-primary-region" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  key_id: any
-  primary_region: any
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  key_id: string # Identifies the current primary key. When the operation completes, this KMS key will be a replica key. Specify the key ID or key ARN of a multi-Region primary key. For example: Key ID: mrk-1234abcd12ab34cd56ef1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/mrk-1234abcd12ab34cd56ef1234567890ab To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey.
+  primary_region: string # The Amazon Web Services Region of the new primary key. Enter the Region ID, such as us-east-1 or ap-southeast-2. There must be an existing replica key in this Region. When the operation completes, the multi-Region key in this Region will be the primary key.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.UpdatePrimaryRegion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "PrimaryRegion": $primary_region} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2629,17 +2700,18 @@ export def "verify" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-48
-  key_id: any
-  message: any
-  --message-type: any
-  signature: any
-  signing_algorithm: any
-  --grant-tokens: any
-]: any -> record<KeyId: record, SignatureValid: record, SigningAlgorithm: record> {
+  --x-amz-target: string@x-amz-target-completer-48 # required
+  key_id: string # Identifies the asymmetric KMS key that will be used to verify the signature. This must be the same KMS key that was used to generate the signature. If you specify a different KMS key, the signature verification fails. To specify a KMS key, use its key ID, key ARN, alias name, or alias ARN. When using an alias name, prefix it with "alias/". To specify a KMS key in a different Amazon Web Services account, you must use the key ARN or alias ARN. For example: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab Alias name: alias/ExampleAlias Alias ARN: arn:aws:kms:us-east-2:111122223333:alias/ExampleAlias To get the key ID and key ARN for a KMS key, use ListKeys or DescribeKey. To get the alias name and alias ARN, use ListAliases.
+  message: string # Specifies the message that was signed. You can submit a raw message of up to 4096 bytes, or a hash digest of the message. If you submit a digest, use the MessageType parameter with a value of DIGEST. If the message specified here is different from the message that was signed, the signature verification fails. A message and its hash digest are considered to be the same message. (format: password)
+  --message-type: string@message-type-completer # Tells KMS whether the value of the Message parameter should be hashed as part of the signing algorithm. Use RAW for unhashed messages; use DIGEST for message digests, which are already hashed. When the value of MessageType is RAW, KMS uses the standard signing algorithm, which begins with a hash function. When the value is DIGEST, KMS skips the hashing step in the signing algorithm. Use the DIGEST value only when the value of the Message parameter is a message digest. If you use the DIGEST value with an unhashed message, the security of the verification operation can be compromised. When the value of MessageTypeis DIGEST, the length of the Message value must match the length of hashed messages for the specified signing algorithm. You can submit a message digest and omit the MessageType or specify RAW so the digest is hashed again while signing. However, if the signed message is hashed once while signing, but twice while verifying, verification fails, even when the message hasn't changed. The hashing algorithm in that Verify uses is based on the SigningAlgorithm value. Signing algorithms that end in SHA_256 use the SHA_256 hashing algorithm. Signing algorithms that end in SHA_384 use the SHA_384 hashing algorithm. Signing algorithms that end in SHA_512 use the SHA_512 hashing algorithm. SM2DSA uses the SM3 hashing algorithm. For details, see Offline verification with SM2 key pairs (https://docs.aws.amazon.com/kms/latest/developerguide/asymmetric-key-specs.html#key-spec-sm-offline-verification).
+  signature: string # The signature that the Sign operation generated.
+  signing_algorithm: string@signing-algorithm-completer # The signing algorithm that was used to sign the message. If you submit a different algorithm, the signature verification fails.
+  --grant-tokens: list<string> # A list of grant tokens. Use a grant token when your permission to call this operation comes from a new grant that has not yet achieved eventual consistency. For more information, see Grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html#grant_token) and Using a grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grant-manage.html#using-grant-token) in the Key Management Service Developer Guide.
+]: any -> record<KeyId: string, SignatureValid: bool, SigningAlgorithm: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.Verify")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"KeyId": $key_id, "Message": $message, "MessageType": $message_type, "Signature": $signature, "SigningAlgorithm": $signing_algorithm, "GrantTokens": $grant_tokens} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2682,16 +2754,17 @@ export def "verify-mac" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-49
-  message: any
-  key_id: any
-  mac_algorithm: any
-  mac: any
-  --grant-tokens: any
-]: any -> record<KeyId: record, MacValid: record, MacAlgorithm: record> {
+  --x-amz-target: string@x-amz-target-completer-49 # required
+  message: string # The message that will be used in the verification. Enter the same message that was used to generate the HMAC. GenerateMac and VerifyMac do not provide special handling for message digests. If you generated an HMAC for a hash digest of a message, you must verify the HMAC for the same hash digest. (format: password)
+  key_id: string # The KMS key that will be used in the verification. Enter a key ID of the KMS key that was used to generate the HMAC. If you identify a different KMS key, the VerifyMac operation fails.
+  mac_algorithm: string@mac-algorithm-completer # The MAC algorithm that will be used in the verification. Enter the same MAC algorithm that was used to compute the HMAC. This algorithm must be supported by the HMAC KMS key identified by the KeyId parameter.
+  mac: string # The HMAC to verify. Enter the HMAC that was generated by the GenerateMac operation when you specified the same message, HMAC KMS key, and MAC algorithm as the values specified in this request.
+  --grant-tokens: list<string> # A list of grant tokens. Use a grant token when your permission to call this operation comes from a new grant that has not yet achieved eventual consistency. For more information, see Grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html#grant_token) and Using a grant token (https://docs.aws.amazon.com/kms/latest/developerguide/grant-manage.html#using-grant-token) in the Key Management Service Developer Guide.
+]: any -> record<KeyId: string, MacValid: bool, MacAlgorithm: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TrentService.VerifyMac")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Message": $message, "KeyId": $key_id, "MacAlgorithm": $mac_algorithm, "Mac": $mac, "GrantTokens": $grant_tokens} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

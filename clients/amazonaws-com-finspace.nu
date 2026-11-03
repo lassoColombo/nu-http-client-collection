@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -142,8 +142,8 @@ export def commands []: nothing -> table {
 #
 # POST /environment
 # operationId: CreateEnvironment
-# --federationParameters shape: {samlMetadataDocument?: any, samlMetadataURL?: any, applicationCallBackURL?: any, federationURN?: any, federationProviderName?: any, attributeMap?: any}
-# --superuserParameters shape: {emailAddress?: any, firstName?: any, lastName?: any}
+# --federationParameters shape: {samlMetadataDocument?: string, samlMetadataURL?: string, applicationCallBackURL?: string, federationURN?: string, federationProviderName?: string, attributeMap?: record}
+# --superuserParameters shape: {emailAddress?: string, firstName?: string, lastName?: string}
 export def "create-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -166,10 +166,10 @@ export def "create-environment" [
   --kms-key-id: string # The KMS key id to encrypt your data in the FinSpace environment.
   --tags: record # Add tags to your FinSpace environment.
   --federation-mode: string@federation-mode-completer # Authentication mode for the environment. FEDERATED - Users access FinSpace through Single Sign On (SSO) via your Identity provider. LOCAL - Users access FinSpace via email and password managed within the FinSpace environment.
-  --federation-parameters: record # Configuration information when authentication mode is FEDERATED. — shape: {samlMetadataDocument?: any, samlMetadataURL?: any, applicationCallBackURL?: any, federationURN?: any, federationProviderName?: any, attributeMap?: any}
-  --superuser-parameters: record # Configuration information for the superuser. — shape: {emailAddress?: any, firstName?: any, lastName?: any}
+  --federation-parameters: record # Configuration information when authentication mode is FEDERATED. — shape: {samlMetadataDocument?: string, samlMetadataURL?: string, applicationCallBackURL?: string, federationURN?: string, federationProviderName?: string, attributeMap?: record}
+  --superuser-parameters: record # Configuration information for the superuser. — shape: {emailAddress?: string, firstName?: string, lastName?: string}
   --data-bundles: list<string> # The list of Amazon Resource Names (ARN) of the data bundles to install. Currently supported data bundle ARNs: arn:aws:finspace:${Region}::data-bundle/capital-markets-sample - Contains sample Capital Markets datasets, categories and controlled vocabularies. arn:aws:finspace:${Region}::data-bundle/taq (default) - Contains trades and quotes data in addition to sample Capital Markets data.
-]: any -> record<environmentId: record, environmentArn: record, environmentUrl: record> {
+]: any -> record<environmentId: string, environmentArn: string, environmentUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -217,7 +217,7 @@ export def "list-environments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<environments: record, nextToken: record> {
+]: nothing -> record<environments: table<name: string, environmentId: string, awsAccountId: string, status: string, environmentUrl: string, description: string, environmentArn: string, sageMakerStudioDomainUrl: string, kmsKeyId: string, dedicatedServiceAccountId: string, federationMode: string, federationParameters: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -307,7 +307,7 @@ export def "get-environment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<environment: record<name: record, environmentId: record, awsAccountId: record, status: record, environmentUrl: record, description: record, environmentArn: record, sageMakerStudioDomainUrl: record, kmsKeyId: record, dedicatedServiceAccountId: record, federationMode: record, federationParameters: record<samlMetadataDocument: record, samlMetadataURL: record, applicationCallBackURL: record, federationURN: record, federationProviderName: record, attributeMap: record>>> {
+]: nothing -> record<environment: record<name: string, environmentId: string, awsAccountId: string, status: string, environmentUrl: string, description: string, environmentArn: string, sageMakerStudioDomainUrl: string, kmsKeyId: string, dedicatedServiceAccountId: string, federationMode: string, federationParameters: record<samlMetadataDocument: string, samlMetadataURL: string, applicationCallBackURL: string, federationURN: string, federationProviderName: string, attributeMap: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
@@ -334,7 +334,7 @@ export def "get-environment" [
 #
 # PUT /environment/{environmentId}
 # operationId: UpdateEnvironment
-# --federationParameters shape: {samlMetadataDocument?: any, samlMetadataURL?: any, applicationCallBackURL?: any, federationURN?: any, federationProviderName?: any, attributeMap?: any}
+# --federationParameters shape: {samlMetadataDocument?: string, samlMetadataURL?: string, applicationCallBackURL?: string, federationURN?: string, federationProviderName?: string, attributeMap?: record}
 export def "update-environment" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -356,8 +356,8 @@ export def "update-environment" [
   --name: string # The name of the environment.
   --description: string # The description of the environment.
   --federation-mode: string@federation-mode-completer # Authentication mode for the environment. FEDERATED - Users access FinSpace through Single Sign On (SSO) via your Identity provider. LOCAL - Users access FinSpace via email and password managed within the FinSpace environment.
-  --federation-parameters: record # Configuration information when authentication mode is FEDERATED. — shape: {samlMetadataDocument?: any, samlMetadataURL?: any, applicationCallBackURL?: any, federationURN?: any, federationProviderName?: any, attributeMap?: any}
-]: any -> record<environment: record<name: record, environmentId: record, awsAccountId: record, status: record, environmentUrl: record, description: record, environmentArn: record, sageMakerStudioDomainUrl: record, kmsKeyId: record, dedicatedServiceAccountId: record, federationMode: record, federationParameters: record<samlMetadataDocument: record, samlMetadataURL: record, applicationCallBackURL: record, federationURN: record, federationProviderName: record, attributeMap: record>>> {
+  --federation-parameters: record # Configuration information when authentication mode is FEDERATED. — shape: {samlMetadataDocument?: string, samlMetadataURL?: string, applicationCallBackURL?: string, federationURN?: string, federationProviderName?: string, attributeMap?: record}
+]: any -> record<environment: record<name: string, environmentId: string, awsAccountId: string, status: string, environmentUrl: string, description: string, environmentArn: string, sageMakerStudioDomainUrl: string, kmsKeyId: string, dedicatedServiceAccountId: string, federationMode: string, federationParameters: record<samlMetadataDocument: string, samlMetadataURL: string, applicationCallBackURL: string, federationURN: string, federationProviderName: string, attributeMap: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -492,7 +492,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The tag keys (names) of one or more tags to be removed.
+  --tag-keys: list # The tag keys (names) of one or more tags to be removed. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -504,6 +504,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

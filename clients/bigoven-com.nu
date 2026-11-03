@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-bigoven-api-key" => { {scheme: $scheme, headers: {X-BigOven-API-Key: $token_val}, query: "", location: "header"} }
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "x-bigoven-api-key" => { {scheme: $scheme, headers: {"X-BigOven-API-Key": $token_val}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -1150,11 +1150,12 @@ export def "recipe-auto-complete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --query: string
+  --query: string # required
   --limit: int # format: int32
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/autocomplete" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1188,11 +1189,13 @@ export def "recipe-auto-complete-all-recipes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --query: string # The query.
-  --limit: int # The limit. (format: int32)
+  --query: string # The query. (required)
+  --limit: int # The limit. (required, format: int32)
 ]: nothing -> table<ImageURL: string, QualityScore: int, RecipeID: int, Servings: float, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
+  if ($limit == null) { error make --unspanned { msg: "required query parameter 'limit' missing: pass --limit" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/autocomplete/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1226,11 +1229,13 @@ export def "recipe-auto-complete-my-recipes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --query: string # The query.
-  --limit: int # The limit. (format: int32)
+  --query: string # The query. (required)
+  --limit: int # The limit. (required, format: int32)
 ]: nothing -> table<ImageURL: string, QualityScore: int, RecipeID: int, Servings: float, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
+  if ($limit == null) { error make --unspanned { msg: "required query parameter 'limit' missing: pass --limit" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/autocomplete/mine" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1299,10 +1304,11 @@ export def "recipe-get-active-recipe" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-name: string
+  --user-name: string # required
 ]: nothing -> record<Data: record, Message: string, StatusCode: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'userName' missing: pass --user-name" } }
   let qp = [(serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/get/active/recipe" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1336,12 +1342,15 @@ export def "recipe-get-step" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-name: string
-  --recipe-id: int # format: int32
-  --step-id: int # format: int32
+  --user-name: string # required
+  --recipe-id: int # required, format: int32
+  --step-id: int # required, format: int32
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'userName' missing: pass --user-name" } }
+  if ($recipe_id == null) { error make --unspanned { msg: "required query parameter 'recipeId' missing: pass --recipe-id" } }
+  if ($step_id == null) { error make --unspanned { msg: "required query parameter 'stepId' missing: pass --step-id" } }
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "recipeId" $recipe_id "scalar") (serialize-qp "stepId" $step_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/get/saved/step" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1375,11 +1384,13 @@ export def "recipe-get-step-number" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-name: string
-  --recipe-id: int # format: int32
+  --user-name: string # required
+  --recipe-id: int # required, format: int32
 ]: nothing -> record<Data: record, Message: string, StatusCode: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'userName' missing: pass --user-name" } }
+  if ($recipe_id == null) { error make --unspanned { msg: "required query parameter 'recipeId' missing: pass --recipe-id" } }
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "recipeId" $recipe_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/get/step/number" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1448,12 +1459,15 @@ export def "recipe-get-steps" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-name: string
-  --recipe-id: int # format: int32
-  --step-id: int # format: int32
+  --user-name: string # required
+  --recipe-id: int # required, format: int32
+  --step-id: int # required, format: int32
 ]: nothing -> record<Data: record, Message: string, StatusCode: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-bigoven-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'userName' missing: pass --user-name" } }
+  if ($recipe_id == null) { error make --unspanned { msg: "required query parameter 'recipeId' missing: pass --recipe-id" } }
+  if ($step_id == null) { error make --unspanned { msg: "required query parameter 'stepId' missing: pass --step-id" } }
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "recipeId" $recipe_id "scalar") (serialize-qp "stepId" $step_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/post/step" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

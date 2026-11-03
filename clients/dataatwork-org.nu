@@ -203,11 +203,12 @@ export def "get-jobs-normalize" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --job-title: string # Find the canonical job title(s) for jobs matching the given text fragment
+  --job-title: string # Find the canonical job title(s) for jobs matching the given text fragment (required)
   --limit: int # Maximumn number of job title synonyms to return. Default is 1 and cannot exceed 10.
 ]: nothing -> table<parent_uuid: string, relevance_score: string, title: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_title == null) { error make --unspanned { msg: "required query parameter 'job_title' missing: pass --job-title" } }
   let qp = [(serialize-qp "job_title" $job_title "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/jobs/normalize" $qp $auth.query)
   let accept_val = "application/json"
@@ -452,10 +453,11 @@ export def "get-skills-normalize" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --skill-name: string # Find the canonical skill name(s) for skills matching the given text fragment
+  --skill-name: string # Find the canonical skill name(s) for skills matching the given text fragment (required)
 ]: nothing -> table<skill_name: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($skill_name == null) { error make --unspanned { msg: "required query parameter 'skill_name' missing: pass --skill-name" } }
   let qp = [(serialize-qp "skill_name" $skill_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/skills/normalize" $qp $auth.query)
   let accept_val = "application/json"

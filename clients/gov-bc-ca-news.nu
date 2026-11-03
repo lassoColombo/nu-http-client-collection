@@ -134,11 +134,12 @@ export def "facebook-posts-get-by-uri" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --uri: string # default: 
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> record<content: string, facebookObjectId: int, pictureUri: string, postComments: int, postLikes: int, postShares: int, poster: string, posterLikes: int, posterLogo: string, posterSubtitle: string, type: string> {
+  --uri: string # default: ""
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> record<content: string, facebookObjectId: int, pictureUri: string, postComments: int, postLikes: int, postShares: int, poster: string, posterLikes: int, posterLogo: string, posterSubtitle: string, type: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "uri" $uri "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/FacebookPosts/ByUri" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -172,10 +173,11 @@ export def "home-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> record<featurePostKey: string, liveWebcastFlashMediaManifestUrl: string, liveWebcastM3uPlaylist: string, name: string, topPostKey: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> record<featurePostKey: string, liveWebcastFlashMediaManifestUrl: string, liveWebcastM3uPlaylist: string, name: string, topPostKey: string, kind: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Home" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -209,10 +211,11 @@ export def "ministries-get-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> table<audioUri: string, childMinistryKey: string, contactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, displayAdditionalName: string, featurePostKey: string, flickrUri: string, isActive: bool, ministerName: string, ministryUrl: string, name: string, newsletterLinks: list<record>, parentMinistryKey: string, secondContactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, serviceLinks: list<record>, topPostKey: string, topicLinks: list<record>, twitterFeedUsername: string, weekendContactNumber: string, youtubeUri: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> table<audioUri: string, childMinistryKey: string, contactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, displayAdditionalName: string, featurePostKey: string, flickrUri: string, isActive: bool, ministerName: string, ministryUrl: string, name: string, newsletterLinks: list<record>, parentMinistryKey: string, secondContactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, serviceLinks: list<record>, topPostKey: string, topicLinks: list<record>, twitterFeedUsername: string, weekendContactNumber: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Ministries" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -247,11 +250,12 @@ export def "ministries-get-one" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> record<audioUri: string, childMinistryKey: string, contactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, displayAdditionalName: string, featurePostKey: string, flickrUri: string, isActive: bool, ministerName: string, ministryUrl: string, name: string, newsletterLinks: table<uri: string>, parentMinistryKey: string, secondContactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, serviceLinks: table<uri: string>, topPostKey: string, topicLinks: table<uri: string>, twitterFeedUsername: string, weekendContactNumber: string, youtubeUri: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> record<audioUri: string, childMinistryKey: string, contactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, displayAdditionalName: string, featurePostKey: string, flickrUri: string, isActive: bool, ministerName: string, ministryUrl: string, name: string, newsletterLinks: table<uri: string, key: string, timestamp: string>, parentMinistryKey: string, secondContactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, serviceLinks: table<uri: string, key: string, timestamp: string>, topPostKey: string, topicLinks: table<uri: string, key: string, timestamp: string>, twitterFeedUsername: string, weekendContactNumber: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/Ministries/{key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -286,11 +290,12 @@ export def "ministries-get-minister" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> record<details: string, emailHtml: string, headline: string, photo: string, post: string, summary: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> record<details: string, emailHtml: string, headline: string, photo: string, post: string, summary: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/Ministries/{key}/Minister") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -324,10 +329,11 @@ export def "newsletters-get-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> table<description: string, editions: list<record>, ministryName: string, name: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> table<description: string, editions: list<record>, ministryName: string, name: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Newsletters" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -362,11 +368,12 @@ export def "newsletters-get-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> record<fileName: string, imageBytes: string, imageType: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> record<fileName: string, imageBytes: string, imageType: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($guid | is-empty) { error make --unspanned { msg: "path parameter 'guid' must be non-empty" } }
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({guid: (encode-path-segment $guid)} | format pattern "/api/Newsletters/Images/{guid}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -401,11 +408,12 @@ export def "newsletters-get-one" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> record<description: string, editions: table<key: string, value: string>, ministryName: string, name: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> record<description: string, editions: table<key: string, value: string>, ministryName: string, name: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($newsletter_key | is-empty) { error make --unspanned { msg: "path parameter 'newsletterKey' must be non-empty" } }
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({newsletter_key: (encode-path-segment $newsletter_key)} | format pattern "/api/Newsletters/{newsletter_key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -441,12 +449,13 @@ export def "newsletters-get-edition" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> record<htmlBody: string, name: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> record<htmlBody: string, name: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($newsletter_key | is-empty) { error make --unspanned { msg: "path parameter 'newsletterKey' must be non-empty" } }
   if ($edition_key | is-empty) { error make --unspanned { msg: "path parameter 'editionKey' must be non-empty" } }
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({newsletter_key: (encode-path-segment $newsletter_key), edition_key: (encode-path-segment $edition_key)} | format pattern "/api/Newsletters/{newsletter_key}/Editions/{edition_key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -483,13 +492,14 @@ export def "newsletters-get-article" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> record<editionName: string, htmlBody: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> record<editionName: string, htmlBody: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($newsletter_key | is-empty) { error make --unspanned { msg: "path parameter 'newsletterKey' must be non-empty" } }
   if ($edition_key | is-empty) { error make --unspanned { msg: "path parameter 'editionKey' must be non-empty" } }
   if ($article_key | is-empty) { error make --unspanned { msg: "path parameter 'articleKey' must be non-empty" } }
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({newsletter_key: (encode-path-segment $newsletter_key), edition_key: (encode-path-segment $edition_key), article_key: (encode-path-segment $article_key)} | format pattern "/api/Newsletters/{newsletter_key}/Editions/{edition_key}/Articles/{article_key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -523,11 +533,12 @@ export def "posts-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --post-keys: list<string> # default: 
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> table<assetUrl: string, atomId: string, azureAssets: list<record>, documents: list<record>, facebookPictureUri: string, hasMediaAssets: bool, isNewsOnDemand: bool, keywords: string, kind: string, leadMinistryKey: string, location: string, ministryKeys: list<string>, publishDate: string, redirectUri: string, reference: string, sectorKeys: list<string>, serviceKeys: list<string>, socialMediaHeadline: string, socialMediaSummary: string, summary: string> {
+  --post-keys: list<string> # default: ""
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> table<assetUrl: string, atomId: string, azureAssets: list<record>, documents: list<record>, facebookPictureUri: string, hasMediaAssets: bool, isNewsOnDemand: bool, keywords: string, kind: string, leadMinistryKey: string, location: string, ministryKeys: list<string>, publishDate: string, redirectUri: string, reference: string, sectorKeys: list<string>, serviceKeys: list<string>, socialMediaHeadline: string, socialMediaSummary: string, summary: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "postKeys" $post_keys "multi") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Posts" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -563,15 +574,16 @@ export def "posts-get-all-keys" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --post-kind: string # One of: releases, stories, factsheets, updates or default (releases+stories+factsheets) (default: )
-  --count: int # number of posts to return (format: int32, default: )
-  --skip: int # number of posts to skip (format: int32, default: )
-  --api-version: string # The requested API version (default: 1.0)
+  --post-kind: string # One of: releases, stories, factsheets, updates or default (releases+stories+factsheets) (default: "")
+  --count: int # number of posts to return (format: int32, default: "")
+  --skip: int # number of posts to skip (format: int32, default: "")
+  --api-version: string # The requested API version (required, default: 1.0)
 ]: nothing -> table<key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index_kind | is-empty) { error make --unspanned { msg: "path parameter 'indexKind' must be non-empty" } }
   if ($index_key | is-empty) { error make --unspanned { msg: "path parameter 'indexKey' must be non-empty" } }
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "postKind" $post_kind "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({index_kind: (encode-path-segment $index_kind), index_key: (encode-path-segment $index_key)} | format pattern "/api/Posts/Keys/{index_kind}/{index_key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -606,11 +618,12 @@ export def "posts-get-key-from-reference" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
+  --api-version: string # The requested API version (required, default: 1.0)
 ]: nothing -> record<key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reference | is-empty) { error make --unspanned { msg: "path parameter 'reference' must be non-empty" } }
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({reference: (encode-path-segment $reference)} | format pattern "/api/Posts/Keys/{reference}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -646,15 +659,16 @@ export def "posts-get-latest" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --post-kind: string # One of: releases, stories, factsheets, updates or default (releases+stories except top/feature) (default: )
-  --count: int # number of posts to return (format: int32, default: )
-  --skip: int # number of posts to skip (format: int32, default: )
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> table<assetUrl: string, atomId: string, azureAssets: list<record>, documents: list<record>, facebookPictureUri: string, hasMediaAssets: bool, isNewsOnDemand: bool, keywords: string, kind: string, leadMinistryKey: string, location: string, ministryKeys: list<string>, publishDate: string, redirectUri: string, reference: string, sectorKeys: list<string>, serviceKeys: list<string>, socialMediaHeadline: string, socialMediaSummary: string, summary: string> {
+  --post-kind: string # One of: releases, stories, factsheets, updates or default (releases+stories except top/feature) (default: "")
+  --count: int # number of posts to return (format: int32, default: "")
+  --skip: int # number of posts to skip (format: int32, default: "")
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> table<assetUrl: string, atomId: string, azureAssets: list<record>, documents: list<record>, facebookPictureUri: string, hasMediaAssets: bool, isNewsOnDemand: bool, keywords: string, kind: string, leadMinistryKey: string, location: string, ministryKeys: list<string>, publishDate: string, redirectUri: string, reference: string, sectorKeys: list<string>, serviceKeys: list<string>, socialMediaHeadline: string, socialMediaSummary: string, summary: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index_kind | is-empty) { error make --unspanned { msg: "path parameter 'indexKind' must be non-empty" } }
   if ($index_key | is-empty) { error make --unspanned { msg: "path parameter 'indexKey' must be non-empty" } }
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "postKind" $post_kind "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({index_kind: (encode-path-segment $index_kind), index_key: (encode-path-segment $index_key)} | format pattern "/api/Posts/Latest/{index_kind}/{index_key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -689,11 +703,12 @@ export def "posts-get-latest-media-uri" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
+  --api-version: string # The requested API version (required, default: 1.0)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($media_type | is-empty) { error make --unspanned { msg: "path parameter 'mediaType' must be non-empty" } }
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({media_type: (encode-path-segment $media_type)} | format pattern "/api/Posts/LatestMediaUri/{media_type}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -728,11 +743,12 @@ export def "posts-get-one" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> record<assetUrl: string, atomId: string, azureAssets: table<key: string, label: string, length: int>, documents: table<byline: string, contacts: list, detailsHtml: string, headline: string, languageId: int, pageTitle: string, subheadline: string>, facebookPictureUri: string, hasMediaAssets: bool, isNewsOnDemand: bool, keywords: string, kind: string, leadMinistryKey: string, location: string, ministryKeys: list<string>, publishDate: string, redirectUri: string, reference: string, sectorKeys: list<string>, serviceKeys: list<string>, socialMediaHeadline: string, socialMediaSummary: string, summary: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> record<assetUrl: string, atomId: string, azureAssets: table<key: string, label: string, length: int>, documents: table<byline: string, contacts: list, detailsHtml: string, headline: string, languageId: int, pageTitle: string, subheadline: string>, facebookPictureUri: string, hasMediaAssets: bool, isNewsOnDemand: bool, keywords: string, kind: string, leadMinistryKey: string, location: string, ministryKeys: list<string>, publishDate: string, redirectUri: string, reference: string, sectorKeys: list<string>, serviceKeys: list<string>, socialMediaHeadline: string, socialMediaSummary: string, summary: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/Posts/{key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -766,10 +782,11 @@ export def "resource-links-get-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> table<uri: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> table<uri: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/ResourceLinks" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -803,10 +820,11 @@ export def "sectors-get-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Sectors" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -841,11 +859,12 @@ export def "sectors-get-one" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/Sectors/{key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -879,10 +898,11 @@ export def "services-get-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Services" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -917,11 +937,12 @@ export def "services-get-one" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/Services/{key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -955,10 +976,11 @@ export def "slides-get-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> table<actionLabel: string, actionUri: string, facebookPostUri: string, headline: string, image: string, imageType: string, justify: string, slideId: string, summary: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> table<actionLabel: string, actionUri: string, facebookPostUri: string, headline: string, image: string, imageType: string, justify: string, slideId: string, summary: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Slides" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -993,11 +1015,12 @@ export def "slides-get-one" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> record<actionLabel: string, actionUri: string, facebookPostUri: string, headline: string, image: string, imageType: string, justify: string, slideId: string, summary: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> record<actionLabel: string, actionUri: string, facebookPostUri: string, headline: string, image: string, imageType: string, justify: string, slideId: string, summary: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Slides/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1031,10 +1054,11 @@ export def "tags-get-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Tags" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1069,11 +1093,12 @@ export def "tags-get-one" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/Tags/{key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1107,10 +1132,11 @@ export def "themes-get-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Themes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1145,11 +1171,12 @@ export def "themes-get-one" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # The requested API version (default: 1.0)
-]: nothing -> record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string> {
+  --api-version: string # The requested API version (required, default: 1.0)
+]: nothing -> record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
+  let api_version = ($api_version | default "1.0")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/Themes/{key}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")

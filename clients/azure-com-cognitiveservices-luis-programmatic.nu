@@ -1,4 +1,4 @@
-# Auto-generated client for LUIS Programmatic vv2.0
+# Auto-generated client for LUIS Programmatic v2.0
 # Source: https://api.apis.guru/v2/specs/azure.com/cognitiveservices-LUIS-Programmatic/v2.0/swagger.json
 # Auth: --token flag or $env.LUIS_PROGRAMMATIC_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -850,7 +850,7 @@ export def "apps-publish" [
   --is-staging: oneof<nothing, bool> # Indicates if the staging slot should be used, instead of the Production one. (default: false)
   --region: string # The target region that the application is published to.
   --version-id: string # The version ID to publish.
-]: any -> record {
+]: any -> record<assignedEndpointKey: string, endpointRegion: string, endpointUrl: string, isStaging: bool, publishedDateTime: string, region: string, versionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1263,7 +1263,7 @@ export def "model-list-closed-lists" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # The number of entries to skip. Default value is 0. (default: 0)
   --take: int # The number of entries to return. Maximum page size is 500. Default is 100. (default: 100)
-]: nothing -> table<subLists: list<record>> {
+]: nothing -> table<subLists: list<record>, id: string, name: string, readableType: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -1387,7 +1387,7 @@ export def "model-get-closed-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<subLists: table<id: int>> {
+]: nothing -> record<subLists: table<id: int, canonicalForm: string, list: list>, id: string, name: string, readableType: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -1653,7 +1653,7 @@ export def "model-list-composite-entities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # The number of entries to skip. Default value is 0. (default: 0)
   --take: int # The number of entries to return. Maximum page size is 500. Default is 100. (default: 100)
-]: nothing -> table<children: list<record>> {
+]: nothing -> table<children: list<record>, id: string, name: string, readableType: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -1776,7 +1776,7 @@ export def "model-get-composite-entity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<children: table<id: string, name: string>> {
+]: nothing -> record<children: table<id: string, name: string>, id: string, name: string, readableType: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -2028,7 +2028,7 @@ export def "model-list-custom-prebuilt-entities" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<customPrebuiltDomainName: string, customPrebuiltModelName: string> {
+]: nothing -> table<customPrebuiltDomainName: string, customPrebuiltModelName: string, id: string, name: string, readableType: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -2109,7 +2109,7 @@ export def "model-list-custom-prebuilt-intents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<customPrebuiltDomainName: string, customPrebuiltModelName: string> {
+]: nothing -> table<customPrebuiltDomainName: string, customPrebuiltModelName: string, id: string, name: string, readableType: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -2230,7 +2230,7 @@ export def "model-list-entities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # The number of entries to skip. Default value is 0. (default: 0)
   --take: int # The number of entries to return. Maximum page size is 500. Default is 100. (default: 100)
-]: nothing -> table<customPrebuiltDomainName: string, customPrebuiltModelName: string> {
+]: nothing -> table<customPrebuiltDomainName: string, customPrebuiltModelName: string, id: string, name: string, readableType: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -2352,7 +2352,7 @@ export def "model-get-entity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<customPrebuiltDomainName: string, customPrebuiltModelName: string> {
+]: nothing -> record<customPrebuiltDomainName: string, customPrebuiltModelName: string, id: string, name: string, readableType: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -2685,7 +2685,7 @@ export def "features-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # The number of entries to skip. Default value is 0. (default: 0)
   --take: int # The number of entries to return. Maximum page size is 500. Default is 100. (default: 100)
-]: nothing -> record<patternFeatures: table<pattern: string>, phraselistFeatures: table<isExchangeable: bool, phrases: string>> {
+]: nothing -> record<patternFeatures: table<pattern: string, id: int, isActive: bool, name: string>, phraselistFeatures: table<isExchangeable: bool, phrases: string, id: int, isActive: bool, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -2726,7 +2726,7 @@ export def "model-list-hierarchical-entities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # The number of entries to skip. Default value is 0. (default: 0)
   --take: int # The number of entries to return. Maximum page size is 500. Default is 100. (default: 100)
-]: nothing -> table<children: list<record>> {
+]: nothing -> table<children: list<record>, id: string, name: string, readableType: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -2849,7 +2849,7 @@ export def "model-get-hierarchical-entity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<children: table<id: string, name: string>> {
+]: nothing -> record<children: table<id: string, name: string>, id: string, name: string, readableType: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -3021,7 +3021,7 @@ export def "model-get-hierarchical-entity-child" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<readableType: string, typeId: int> {
+]: nothing -> record<readableType: string, typeId: int, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -3109,7 +3109,7 @@ export def "model-list-intents" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # The number of entries to skip. Default value is 0. (default: 0)
   --take: int # The number of entries to return. Maximum page size is 500. Default is 100. (default: 100)
-]: nothing -> table<customPrebuiltDomainName: string, customPrebuiltModelName: string> {
+]: nothing -> table<customPrebuiltDomainName: string, customPrebuiltModelName: string, id: string, name: string, readableType: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -3233,7 +3233,7 @@ export def "model-get-intent" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<customPrebuiltDomainName: string, customPrebuiltModelName: string> {
+]: nothing -> record<customPrebuiltDomainName: string, customPrebuiltModelName: string, id: string, name: string, readableType: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -3398,7 +3398,7 @@ export def "model-list-models" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # The number of entries to skip. Default value is 0. (default: 0)
   --take: int # The number of entries to return. Maximum page size is 500. Default is 100. (default: 100)
-]: nothing -> table<id: string, name: string, readableType: string, typeId: int> {
+]: nothing -> table<id: string, name: string, readableType: string, typeId: int, children: list<record>, subLists: list<record>, customPrebuiltDomainName: string, customPrebuiltModelName: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -3441,7 +3441,7 @@ export def "features-get-application-version-pattern-features" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # The number of entries to skip. Default value is 0. (default: 0)
   --take: int # The number of entries to return. Maximum page size is 500. Default is 100. (default: 100)
-]: nothing -> table<pattern: string> {
+]: nothing -> table<pattern: string, id: int, isActive: bool, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -3570,7 +3570,7 @@ export def "features-get-pattern-feature-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<pattern: string> {
+]: nothing -> record<pattern: string, id: int, isActive: bool, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -3659,7 +3659,7 @@ export def "features-list-phrase-lists" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # The number of entries to skip. Default value is 0. (default: 0)
   --take: int # The number of entries to return. Maximum page size is 500. Default is 100. (default: 100)
-]: nothing -> table<isExchangeable: bool, phrases: string> {
+]: nothing -> table<isExchangeable: bool, phrases: string, id: int, isActive: bool, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -3783,7 +3783,7 @@ export def "features-get-phrase-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<isExchangeable: bool, phrases: string> {
+]: nothing -> record<isExchangeable: bool, phrases: string, id: int, isActive: bool, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -3871,7 +3871,7 @@ export def "model-list-prebuilts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip: int # The number of entries to skip. Default value is 0. (default: 0)
   --take: int # The number of entries to return. Maximum page size is 500. Default is 100. (default: 100)
-]: nothing -> list<record> {
+]: nothing -> table<id: string, name: string, readableType: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -3911,7 +3911,7 @@ export def "model-add-prebuilt" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> list<record> {
+]: any -> table<id: string, name: string, readableType: string, typeId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3993,7 +3993,7 @@ export def "model-get-prebuilt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<id: string, name: string, readableType: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }

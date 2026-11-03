@@ -192,11 +192,13 @@ export def "get-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Related records to include in the response. Valid option is **masterUser** (e.g. masterUser)
-  --ev-api-key: string # API Key required for the request (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access Token for the request (e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
+  --ev-api-key: string # API Key required for the request (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access Token for the request (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
 ]: nothing -> record<data: record<attributes: record<accountName: string, accountOnboarding: bool, allowedIp: list, branding: bool, brandingSettings: record, clientId: int, complexPasswords: bool, created: string, customDomain: bool, customSignature: string, externalDomains: list, maxUsers: int, modified: string, planDetails: record, quota: record, secureOnly: bool, showReferralLinks: bool, status: int, userCount: int, welcomeEmailContent: string, welcomeEmailSubject: string>, id: int, relationships: record<masterUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account" $qp $auth.query)
   let accept_val = "application/json"
@@ -234,8 +236,8 @@ export def "update-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call. (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access token required to make the API call. (e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
+  --ev-api-key: string # API Key required to make the API call. (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
   --account-onboarding: oneof<nothing, bool> # Whether extra help popups can be enabled for users in the web file manager. (e.g. true)
   --allowed-ip-ranges: list # IP Address Ranges for restricting account access — item shape: {ipEnd?: string, ipStart?: string}
   --branding-settings: record # shape: {companyName?: string, customEmail?: string, theme?: string}
@@ -251,6 +253,8 @@ export def "update-account" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/account" $auth.query)
   let req_body = {"accountOnboarding": $account_onboarding, "allowedIpRanges": $allowed_ip_ranges, "brandingSettings": $branding_settings, "complexPasswords": $complex_passwords, "customSignature": $custom_signature, "emailContent": $email_content, "emailSubject": $email_subject, "externalDomain": $external_domain, "quota": $quota, "secureOnly": $secure_only, "showReferralLinks": $show_referral_links} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -294,13 +298,15 @@ export def "get-session-logs" [
   --type: string # Filter session logs for operation type (see table above for acceptable values) (e.g. EDIT_SHARE)
   --offset: int # Offset of the records list (e.g. 100)
   --limit: int # Limit of the records list (e.g. 10)
-  --qp-sort: string # Comma separated list sort params (e.g. -date)
-  --ev-api-key: string # API Key (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access Token (e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
+  --sort: string # Comma separated list sort params (e.g. -date)
+  --ev-api-key: string # API Key (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access Token (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
 ]: nothing -> record<data: table<attributes: record, id: int, type: string>, responseStatus: int, returnedResults: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "ipAddress" $ip_address "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
+  let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "ipAddress" $ip_address "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/activity/session" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -309,7 +315,7 @@ export def "get-session-logs" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"startDate": $start_date, "endDate": $end_date, "ipAddress": $ip_address, "username": $username, "path": $path, "type": $type, "offset": $offset, "limit": $limit, "sort": $qp_sort} | compact)
+    query: ({"startDate": $start_date, "endDate": $end_date, "ipAddress": $ip_address, "username": $username, "path": $path, "type": $type, "offset": $offset, "limit": $limit, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -343,13 +349,15 @@ export def "get-webhook-logs" [
   --username: string # Filter by triggering username. (e.g. exampleuser)
   --offset: int # Records to skip before returning results. (e.g. 100)
   --limit: int # Limit of the records list (e.g. 100)
-  --qp-sort: string # Comma separated list sort params (e.g. -date,event)
-  --ev-api-key: string # API Key (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access Token (e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
+  --sort: string # Comma separated list sort params (e.g. -date,event)
+  --ev-api-key: string # API Key (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access Token (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
 ]: nothing -> record<data: table<attributes: any, id: int, type: string>, responseStatus: int, returnedResults: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "endpointUrl" $endpoint_url "scalar") (serialize-qp "event" $event "scalar") (serialize-qp "statusCode" $status_code "scalar") (serialize-qp "resourcePath" $resource_path "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
+  let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "endpointUrl" $endpoint_url "scalar") (serialize-qp "event" $event "scalar") (serialize-qp "statusCode" $status_code "scalar") (serialize-qp "resourcePath" $resource_path "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/activity/webhooks" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -358,7 +366,7 @@ export def "get-webhook-logs" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"startDate": $start_date, "endDate": $end_date, "endpointUrl": $endpoint_url, "event": $event, "statusCode": $status_code, "resourcePath": $resource_path, "username": $username, "offset": $offset, "limit": $limit, "sort": $qp_sort} | compact)
+    query: ({"startDate": $start_date, "endDate": $end_date, "endpointUrl": $endpoint_url, "event": $event, "statusCode": $status_code, "resourcePath": $resource_path, "username": $username, "offset": $offset, "limit": $limit, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -384,11 +392,13 @@ export def "get-email-lists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Related record types to include in the response. Valid option is `ownerUser`
-  --ev-api-key: string # API Key required to make the API call. (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int, returnedResults: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/email-lists" $qp $auth.query)
   let accept_val = "application/json"
@@ -423,14 +433,16 @@ export def "add-email-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call. (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   emails: list<string> # Array of email addresses to include in the email list. (e.g. [johns@example.com, jdoe@example.com])
   name: string # Name of the email list. (e.g. My friends list)
 ]: any -> record<data: record<attributes: record<created: string, emails: list, modified: string, name: string>, id: int, relationships: record<ownerUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/email-lists" $auth.query)
   let req_body = {"emails": $emails, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -467,12 +479,14 @@ export def "delete-email-list-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call. (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: list<string>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/email-lists/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -508,12 +522,14 @@ export def "get-email-list-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Related record types to include in the response. Valid option is `ownerUser`
-  --ev-api-key: string # API Key required to make the API call. (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: record<attributes: record<created: string, emails: list, modified: string, name: string>, id: int, relationships: record<ownerUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/email-lists/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -549,8 +565,8 @@ export def "update-email-list-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call. (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   --emails: list<string> # Email addresses that replace existing list. (e.g. [yuk@example.com, jdoe@example.com])
   --name: string # Name of the email list. (e.g. My friends list)
 ]: any -> record<data: record<attributes: record<created: string, emails: list, modified: string, name: string>, id: int, relationships: record<ownerUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int> {
@@ -558,6 +574,8 @@ export def "update-email-list-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/email-lists/{id}") $auth.query)
   let req_body = {"emails": $emails, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -593,14 +611,16 @@ export def "send-referral-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   emails: list<string>
   message: string # e.g. I use ExaVault for secure file sending, and so should you. Follow my link to sign up for a trial.
 ]: any -> record<data: list<string>, responseStatus: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/email/referral" $auth.query)
   let req_body = {"emails": $emails, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -637,12 +657,14 @@ export def "send-welcome-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call. (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: list<string>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/email/welcome/{username}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -676,13 +698,16 @@ export def "get-form-by-share-hash" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --share-hash: string # Share hash to retrieve the form for.
+  --share-hash: string # Share hash to retrieve the form for. (required)
   --include: string@include-completer # Related record types to include in the response. Valid option is **share**
-  --ev-api-key: string # API key required to make the API call.
-  --ev-access-token: string # Access Token required to make the API call.
+  --ev-api-key: string # API key required to make the API call. (required)
+  --ev-access-token: string # Access Token required to make the API call. (required)
 ]: nothing -> record<data: record<attributes: record<cssStyles: string, elements: list, formDescription: string, submitButtonText: string, successMessage: string>, id: int, relationships: record<share: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($share_hash == null) { error make --unspanned { msg: "required query parameter 'shareHash' missing: pass --share-hash" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let qp = [(serialize-qp "shareHash" $share_hash "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/forms" $qp $auth.query)
   let accept_val = "application/json"
@@ -718,12 +743,14 @@ export def "delete-form-message-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: list<string>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/forms/entries/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -760,12 +787,14 @@ export def "get-form-entries" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit of records to be returned (for pagination) (e.g. 10)
   --offset: int # Current offset of records (for pagination) (e.g. 100)
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: table<attributes: record, id: int, type: string>, responseStatus: int, returnedResults: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/forms/entries/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -802,12 +831,14 @@ export def "get-form-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Enter "**share**" to get information about associated receive folder. (e.g. share)
-  --ev-api-key: string # API key required to make the API call.
-  --ev-access-token: string # Access Token required to make the API call.
+  --ev-api-key: string # API key required to make the API call. (required)
+  --ev-access-token: string # Access Token required to make the API call. (required)
 ]: nothing -> record<data: record<attributes: record<cssStyles: string, elements: list, formDescription: string, submitButtonText: string, successMessage: string>, id: int, relationships: record<share: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/forms/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -844,8 +875,8 @@ export def "update-form-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   --css-styles: string # e.g. #ev-widget-form {   /*Change this to change the font. Remove to use your website font*/   font-family: Helvetica Neue, sans-serif;   /*Makes the form the same width as your website */   margin: 0 -2%; } #ev-widget-form label{   width: 100%; } #ev-widget-form input, #ev-widget-form textarea {   /*Changes color and thickness of borders on form elements */   border: 2px solid #ccc;   /*Changes spacing inside the form elements (top/bottom and left/right */   padding: 5px 5px;   /* Changes how far away the inputs are from their label */   margin-top: 2px; }  #ev-widget-form input:focus, #ev-widget-form textarea:focus {   /*Changes the color of the form elements when they are clicked in to */   border: 2px solid #b2cf88;   /*Removes glow effect from form elements that are clicked in to */   outline: none; }  #ev-widget-form label {   font-size: 14px;   font-weight: bold;   /*Changes color of labels */   color: #232323 }  #ev-widget-form .ev-form-element-description {   /*Changes size of descriptions */   font-size: 12px;   /*Changes color of descriptions */   color: #777;   /* Changes how far away the descriptions are from their input */   margin-top: 2px; }  #ev-widget-form textarea {   /* Makes textareas (multiline inputs) a taller. */   min-height: 90px; }     
   --elements: list # item shape: {id?: int, name?: string, order?: int, settings?: record, type?: "name"|"email"|"text"|"textarea"|"upload_area"}
   --form-description: string # Set a description for the form that will be visible to recipients. (e.g. Send your files)
@@ -856,6 +887,8 @@ export def "update-form-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/forms/{id}") $auth.query)
   let req_body = {"cssStyles": $css_styles, "elements": $elements, "formDescription": $form_description, "submitButtonText": $submit_button_text, "successMessage": $success_message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -893,16 +926,18 @@ export def "list-notifications" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # Type of notification include in the list. Valid options are **file**, **folder**, **send_receipt**, **share_receipt**, **file_drop** If this parameter is not used, only **file** and **folder** type notifications are included in the list. (e.g. file)
   --offset: int # Starting notification record in the result set. Can be used for pagination. (format: int32, default: 0, e.g. 50)
-  --qp-sort: string # What order the list of matches should be in. Valid sort fields are **resourcename**, **date**, **action** and **type**. The sort order for each sort field is ascending unless it is prefixed with a minus (“-“), in which case it will be descending. You can chose multiple options for the sort by separating them with commmas, such as "type,-date" to sort by type, then most recent. (e.g. date)
+  --sort: string # What order the list of matches should be in. Valid sort fields are **resourcename**, **date**, **action** and **type**. The sort order for each sort field is ascending unless it is prefixed with a minus (“-“), in which case it will be descending. You can chose multiple options for the sort by separating them with commmas, such as "type,-date" to sort by type, then most recent. (e.g. date)
   --limit: int # Number of notification records to return. Can be used for pagination. (format: int32, default: 25, e.g. 100)
   --include: string@include-completer-1 # Related records to include in the response. Valid options are **ownerUser**, **resource**, **share** (e.g. resource,share,user)
   --action: string@action-completer # The kind of action which triggers the notification. Valid choices are **connect** (only for delivery receipts), **download**, **upload**, **delete**, or **all** **Note** The **all** action matches notifications set to "all", not all notifications. For example, notifications set to trigger only on delete are not included if you filter for action=all (e.g. all)
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "action" $action "scalar")] | flatten | str join "&"
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "action" $action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notifications" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -911,7 +946,7 @@ export def "list-notifications" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"type": $type, "offset": $offset, "sort": $qp_sort, "limit": $limit, "include": $include, "action": $action} | compact)
+    query: ({"type": $type, "offset": $offset, "sort": $sort, "limit": $limit, "include": $include, "action": $action} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -936,8 +971,8 @@ export def "add-notification" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   action: string@action-completer-1 # Type of action be notified about. Notifications will only be fired for the given type of action. Valid choices are **upload**, **download**, **delete** or **all** (upload/download/delete) (e.g. upload)
   --message: string # Custom message to include in notification emails.
   --recipients: list<string> # Email addresses to send notification emails to. If not specified, sends to the current user's email address. (e.g. [myemail@example.com])
@@ -949,9 +984,12 @@ export def "add-notification" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/notifications" $auth.query)
   let req_body = {"action": $action, "message": $message, "recipients": $recipients, "resource": $resource, "sendEmail": $send_email, "type": $type, "usernames": $usernames} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "sendEmail") == null) { error make --unspanned { msg: "required body field 'sendEmail' missing: pass --send-email or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
@@ -985,12 +1023,14 @@ export def "delete-notification-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: list<string>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1026,12 +1066,14 @@ export def "get-notification-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Related record types to include in the response. You can include multiple types by separating them with commas. Valid options are **ownerUser**, **resource**, and **share**. (e.g. resource,share)
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: record<attributes: record<action: string, created: string, message: string, modified: string, name: string, path: string, readableDescription: string, readableDescriptionWithoutPath: string, recipients: list, sendEmail: bool, shareId: string, type: string, userId: string, usernames: list>, id: int, relationships: record<ownerUser: record, resource: record, share: record>, type: string>, included: list<any>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1067,8 +1109,8 @@ export def "update-notification-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   --action: string@action-completer-1 # Type of action be notified about. Notifications will only be sent for the given type of action. Valid choices are **upload**, **download**, **delete** or **all** (upload/download/delete) (e.g. all)
   --message: string # Custom message to insert into the notification emails, along with the matching activity.
   --recipients: list<string> # Email addresses to send notification emails to. If empty, sends to the current user's email address. (e.g. [myemail@example.com])
@@ -1079,6 +1121,8 @@ export def "update-notification-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/{id}") $auth.query)
   let req_body = {"action": $action, "message": $message, "recipients": $recipients, "sendEmail": $send_email, "usernames": $usernames} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1115,14 +1159,16 @@ export def "resend-invitations-for-share" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   --recipient-id: int # ID number of recipient to send a new invitation to. (format: int32)
 ]: any -> record<data: list<string>, responseStatus: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($share_id | is-empty) { error make --unspanned { msg: "path parameter 'shareId' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/recipients/shares/invites/{share_id}") $auth.query)
   let req_body = {"recipientId": $recipient_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1158,13 +1204,15 @@ export def "delete-resources" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access Token (e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
+  --ev-api-key: string # API Key (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access Token (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
   resources: list<string> # Resource identifiers of items to delete.
 ]: any -> record<data: list<string>, responseStatus: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/resources" $auth.query)
   let req_body = {"resources": $resources} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1200,13 +1248,16 @@ export def "get-resource-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource: string # Resource identifier of the file or folder to get metadata for.
+  --resource: string # Resource identifier of the file or folder to get metadata for. (required)
   --include: string # Comma separated list of relationships to include in response. Possible values are **share**, **notifications**, **directFile**, **parentResource**, **ownerUser**, **ownerUser**.
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, included: list<any>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource == null) { error make --unspanned { msg: "required query parameter 'resource' missing: pass --resource" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources" $qp $auth.query)
   let accept_val = "application/json"
@@ -1241,8 +1292,8 @@ export def "add-folder" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   --name: string # Name of the folder to create. Required if **path** is not used
   --parent-resource: string # Resource identifier where to create a folder. Required if **path** is not used
   --path: string # Fully-qualified path to the new folder including folder's name
@@ -1250,6 +1301,8 @@ export def "add-folder" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/resources" $auth.query)
   let req_body = {"name": $name, "parentResource": $parent_resource, "path": $path} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1285,8 +1338,8 @@ export def "compress-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   --archive-name: string # Name of the zip archive to create. If left blank, current date will be used.
   --parent-resource: string # Resource identifier of the folder where zip archive should be created.
   resources: list<string> # Resource identifiers for file(s)/folder(s) to include in new zip file
@@ -1294,6 +1347,8 @@ export def "compress-files" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/resources/compress" $auth.query)
   let req_body = {"archiveName": $archive_name, "parentResource": $parent_resource, "resources": $resources} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1329,14 +1384,16 @@ export def "copy-resources" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   parent_resource: string # Resource identifier for folder where items will be copied to.
   resources: list<string> # Resource identifier(s) of items to be copied to a new location
 ]: any -> record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, meta: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/resources/copy" $auth.query)
   let req_body = {"parentResource": $parent_resource, "resources": $resources} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1373,13 +1430,16 @@ export def "download" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --resources: list<string> # Path of file or folder to be downloaded, starting from the root. Can also be an array of paths.
+  --resources: list<string> # Path of file or folder to be downloaded, starting from the root. Can also be an array of paths. (required)
   --download-archive-name: string # When downloading multiple files, this will be used as the name of the zip file that is created.
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resources == null) { error make --unspanned { msg: "required query parameter 'resources[]' missing: pass --resources" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let qp = [(serialize-qp "resources[]" $resources "multi") (serialize-qp "downloadArchiveName" $download_archive_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/download" $qp $auth.query)
   let accept_val = ($accept | default "application/octet-stream")
@@ -1414,14 +1474,16 @@ export def "extract-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   parent_resource: string # Resource identifier for folder files should be extracted to.
   resource: string # Resource identifier of zip archive to be extracted.
 ]: any -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/resources/extract" $auth.query)
   let req_body = {"parentResource": $parent_resource, "resource": $resource} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1457,19 +1519,22 @@ export def "list-resources" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource: string # Resource identifier to get resources for. Can be path/id/name.
-  --qp-sort: string # Endpoint support multiple sort fields by allowing array of sort params. Sort fields should be applied in the order specified. The sort order for each sort field is ascending unless it is prefixed with a minus (“-“), in which case it will be descending. (e.g. name)
+  --resource: string # Resource identifier to get resources for. Can be path/id/name. (required)
+  --sort: string # Endpoint support multiple sort fields by allowing array of sort params. Sort fields should be applied in the order specified. The sort order for each sort field is ascending unless it is prefixed with a minus (“-“), in which case it will be descending. (e.g. name)
   --offset: int # Determines which item to start on for pagination. Use zero (0) to start at the beginning of the list. e.g, setting `offset=200` would trigger the server to skip the first 200 matching entries when returning the results. (format: int32, default: 0)
   --limit: int # The number of files to limit the result. If you have more files in your directory than this limit, make multiple calls, incrementing the `offset` parameter, above. (format: int32)
   --type: string # Limit types of resources returned to "file" or "dir" only. This is ignored if you are using the `name` parameter to trigger a search.
   --name: string # Text to match resource names. This allows you to filter the results returned. For example, to locate only zip archive files, you can enter `*zip` and only resources ending in "zip" will be included in the list of results.
   --include: string # Comma separated list of relationships to include in response. Possible values are **share**, **notifications**, **directFile**, **parentResource**, **ownerUser**, **ownerAccount**.
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
+  if ($resource == null) { error make --unspanned { msg: "required query parameter 'resource' missing: pass --resource" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
+  let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/list" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1478,7 +1543,7 @@ export def "list-resources" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"resource": $resource, "sort": $qp_sort, "offset": $offset, "limit": $limit, "type": $type, "name": $name, "include": $include} | compact)
+    query: ({"resource": $resource, "sort": $sort, "offset": $offset, "limit": $limit, "type": $type, "name": $name, "include": $include} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1504,18 +1569,20 @@ export def "list-resource-contents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string # Endpoint support multiple sort fields by allowing array of sort params. Sort fields should be applied in the order specified. The sort order for each sort field is ascending unless it is prefixed with a minus (“-“), in which case it will be descending. (e.g. name)
+  --sort: string # Endpoint support multiple sort fields by allowing array of sort params. Sort fields should be applied in the order specified. The sort order for each sort field is ascending unless it is prefixed with a minus (“-“), in which case it will be descending. (e.g. name)
   --offset: int # Determines which item to start on for pagination. Use zero (0) to start at the beginning of the list. (format: int32, default: 0)
   --limit: int # The number of files to limit the result. Cannot be set higher than 100. If you have more than one hundred files in your directory, make multiple calls, incrementing the `offset parameter, above. (format: int32)
   --type: string # Limit types of resources returned to "file" or "dir" only.
   --include: string # Comma separated list of relationships to include in response. Possible values are **share**, **notifications**, **directFile**, **parentResource**, **ownerUser**, **ownerUser**.
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/list/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1524,7 +1591,7 @@ export def "list-resource-contents" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "offset": $offset, "limit": $limit, "type": $type, "include": $include} | compact)
+    query: ({"sort": $sort, "offset": $offset, "limit": $limit, "type": $type, "include": $include} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1549,14 +1616,16 @@ export def "move-resources" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   parent_resource: string # Resource identifier of folder to move files/folders to. (e.g. /copyhere)
   resources: list<string> # Array containing file/folder paths to move. (e.g. [/testone.jpg, /folder])
 ]: any -> record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, meta: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/resources/move" $auth.query)
   let req_body = {"parentResource": $parent_resource, "resources": $resources} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1592,16 +1661,20 @@ export def "get-preview-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource: string # Resource identifier for the image file.
-  --size: string@size-completer # The size of the image.
+  --resource: string # Resource identifier for the image file. (required)
+  --size: string@size-completer # The size of the image. (required)
   --width: int # Overrides sizes. Sets to a specific width. (format: int32)
   --height: int # Overrides sizes. Sets to a specific height. (format: int32)
   --page: int # Page number to extract from a multi-page document (0 is the first page). Vaild for **.pdf** or **.doc** files. (format: int32, default: 0)
-  --ev-api-key: string # API Key (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access Token (e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
+  --ev-api-key: string # API Key (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access Token (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
 ]: nothing -> record<data: record<attributes: record<image: string, imageHash: string, pageCount: int, size: int>, id: int, type: string>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource == null) { error make --unspanned { msg: "required query parameter 'resource' missing: pass --resource" } }
+  if ($size == null) { error make --unspanned { msg: "required query parameter 'size' missing: pass --size" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/preview" $qp $auth.query)
   let accept_val = "application/json"
@@ -1636,18 +1709,22 @@ export def "upload-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --path: string # Destination path for the file being uploaded, including the file name.
-  --file-size: int # File size, in bits, of the file being uploaded. (e.g. 2935)
+  --path: string # Destination path for the file being uploaded, including the file name. (required)
+  --file-size: int # File size, in bits, of the file being uploaded. (required, e.g. 2935)
   --resume: oneof<nothing, bool> # True if upload resume is supported, false if it isn't. (default: true, e.g. true)
   --allow-overwrite: oneof<nothing, bool> # True if a file with the same name is found in the designated path, should be overwritten. False if different file names should be generated. (default: false, e.g. true)
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   --offset-bytes: int # Allows a file upload to resume at a certain number of bytes. (e.g. 4852)
   --file: string # format: binary
 ]: any -> record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, included: list<any>, responseStatus: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
+  if ($file_size == null) { error make --unspanned { msg: "required query parameter 'fileSize' missing: pass --file-size" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "fileSize" $file_size "scalar") (serialize-qp "resume" $resume "scalar") (serialize-qp "allowOverwrite" $allow_overwrite "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/upload" $qp $auth.query)
   let req_body = {"file": $file} | compact
@@ -1656,8 +1733,8 @@ export def "upload-file" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token, "offsetBytes": $offset_bytes} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1687,12 +1764,14 @@ export def "delete-resource-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: list<string>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1728,12 +1807,14 @@ export def "get-resource-info-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Comma separated list of relationships to include in response. Possible values are **share**, **notifications**, **directFile**, **parentResource**, **ownerUser**, **ownerAccount**.
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, included: list<any>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1769,14 +1850,16 @@ export def "update-resource-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-  --ev-api-key: string # API key required to make the API call.
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API key required to make the API call. (required)
   --name: string # The new name for the resource (file or folder). (e.g. my-renamed-file.txt)
 ]: any -> record<data: record<attributes: record<accessedAt: string, accessedTime: int, createdAt: string, createdBy: string, createdTime: int, extension: string, fileCount: int, hash: string, name: string, path: string, previewable: bool, size: int, type: string, updatedAt: string, updatedTime: int, uploadDate: string>, id: int, relationships: record<directFile: record, notifications: list, parentResource: record, share: record>, type: string>, included: list<any>, responseStatus: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/{id}") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1815,7 +1898,7 @@ export def "list-shares" [
   --offset: int # Current offset of records (for pagination) (e.g. 100)
   --limit: int # Limit of records to be returned (for pagination) (default: 100, e.g. 10)
   --scope: string@scope-completer # Set of shares to return. (**all**=all of them, **active**=shares that are currently active, **curentUser**=shares created by you) (e.g. active)
-  --qp-sort: string@sort-completer # What order the list of matches should be in. (e.g. created)
+  --sort: string@sort-completer # What order the list of matches should be in. (e.g. created)
   --type: string@type-completer-2 # Limit the list of matches to only certain types of shares. (e.g. receive)
   --include: string # Comma separated list of relationships to include in response. Possible values are **owner**, **resources**, **notifications**, **activity**. (e.g. owner,notifications)
   --name: string # When provided, only shares whose names include this value will be in the list. Supports wildcards, such as **send\*** to return everything starting with "send". Use this parameter if you are searching for shares or receives for a specific folder name. For example **/Clients/ACME/To Be Processed**. (e.g. Customer*)
@@ -1823,12 +1906,14 @@ export def "list-shares" [
   --message: string # When provided, only shares with a message that contains the text will be included in the list of matches. Both the subject and the body of all messages will be checked for matches. This will always be a wildcard match, so that searching for **taxes** will return any shares with a message that contains the word "taxes". (e.g. submitted)
   --username: string # When provided, only shares created by the user with that `username` will be included in the list. Does not support wildcard searching. (e.g. example)
   --search: string # Searches the share name, username, recipients, share messages fields for the provided value. Supports wildcard searches.
-  --ev-api-key: string # API Key required to make the API call. (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "recipient" $recipient "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "recipient" $recipient "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shares" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1837,7 +1922,7 @@ export def "list-shares" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"offset": $offset, "limit": $limit, "scope": $scope, "sort": $qp_sort, "type": $type, "include": $include, "name": $name, "recipient": $recipient, "message": $message, "username": $username, "search": $search} | compact)
+    query: ({"offset": $offset, "limit": $limit, "scope": $scope, "sort": $sort, "type": $type, "include": $include, "name": $name, "recipient": $recipient, "message": $message, "username": $username, "search": $search} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1864,8 +1949,8 @@ export def "add-share" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call. (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   --access-mode: record # An object defining what a not-logged-in visitor can do with the share contents — shape: {delete?: bool, download?: bool, modify?: bool, upload?: bool}
   --embed: oneof<nothing, bool> # Whether this share can be embedded within a web page. (e.g. false)
   --expiration: string # Expiration date for the share. If someone attempts to use the share after this date, they will receive an error that the share is not available. (format: date-time, e.g. 2017-09-25T14:12:10Z)
@@ -1886,6 +1971,8 @@ export def "add-share" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/shares" $auth.query)
   let req_body = {"accessMode": $access_mode, "embed": $embed, "expiration": $expiration, "fileDropCreateFolders": $file_drop_create_folders, "hasNotification": $has_notification, "isPublic": $is_public, "messageBody": $message_body, "messageSubject": $message_subject, "name": $name, "notificationEmails": $notification_emails, "password": $password, "recipients": $recipients, "requireEmail": $require_email, "resources": $resources, "sendingLocalFiles": $sending_local_files, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1922,12 +2009,14 @@ export def "complete-direct-send" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access Token (e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
+  --ev-api-key: string # API Key (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access Token (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
 ]: nothing -> record<data: record<attributes: record<accessDescription: string, accessMode: record, created: string, embed: bool, expiration: string, expired: bool, fileDropCreateFolders: bool, formId: int, hasNotification: bool, hasPassword: bool, hash: string, inherited: bool, messages: list, modified: string, name: string, ownerHash: string, paths: list, public: bool, recipients: list, requireEmail: bool, resent: string, status: int, trackingStatus: string, type: string>, id: int, relationships: record<messages: list, notifications: list, owner: record, resources: list>, type: string>, included: list<any>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shares/complete-send/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1962,12 +2051,14 @@ export def "delete-share-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call. (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API Key required to make the API call. (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: list<string>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shares/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2003,12 +2094,14 @@ export def "get-share-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Comma separated list of relationships to include in response. Possible values are **owner**, **resources**, **notifications**, **activity**. (e.g. owner,notifications)
-  --ev-api-key: string # API Key (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access Token (e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
+  --ev-api-key: string # API Key (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access Token (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
 ]: nothing -> record<data: record<attributes: record<accessDescription: string, accessMode: record, created: string, embed: bool, expiration: string, expired: bool, fileDropCreateFolders: bool, formId: int, hasNotification: bool, hasPassword: bool, hash: string, inherited: bool, messages: list, modified: string, name: string, ownerHash: string, paths: list, public: bool, recipients: list, requireEmail: bool, resent: string, status: int, trackingStatus: string, type: string>, id: int, relationships: record<messages: list, notifications: list, owner: record, resources: list>, type: string>, included: list<any>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shares/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2046,8 +2139,8 @@ export def "update-share-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access Token (e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
+  --ev-api-key: string # API Key (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access Token (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
   --access-mode: record # An object defining what a not-logged-in visitor can do with the share contents — shape: {delete?: bool, download?: bool, modify?: bool, upload?: bool}
   --embed: oneof<nothing, bool> # Whether the share can be embedded in another web page. (e.g. false)
   --expiration: string # New expiration date and time for the share (format: date-time, e.g. 2017-09-25T14:12:10Z)
@@ -2068,6 +2161,8 @@ export def "update-share-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shares/{id}") $auth.query)
   let req_body = {"accessMode": $access_mode, "embed": $embed, "expiration": $expiration, "fileDropCreateFolders": $file_drop_create_folders, "hasNotification": $has_notification, "isPublic": $is_public, "messageBody": $message_body, "messageSubject": $message_subject, "name": $name, "notificationEmails": $notification_emails, "password": $password, "recipients": $recipients, "requireEmail": $require_email, "resources": $resources, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2106,11 +2201,13 @@ export def "get-ssh-keys-list" [
   --user-id: string # Only return results for the given user ID. This is not the username, but the numeric ID of the user.
   --limit: int # Limits the results by the given number. Cannot be set higher than 100.
   --offset: int # Determines which item to start on for pagination. Use zero (0) to start at the beginning of the list.
-  --ev-api-key: string # API key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int, returnedResults: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ssh-keys" $qp $auth.query)
   let accept_val = "application/json"
@@ -2145,14 +2242,16 @@ export def "add-ssh-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   public_key: string # Public Key to provide ExaVault. You can provide the Public Key as formatted from the ssh-keygen command or a standard rfc-4716 format.
   user_id: int # ID of the user to assign the new key to.
 ]: any -> record<data: record<attributes: record<created: string, fingerprint: string, lastLogin: string>, id: int, relationships: record<ownerUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/ssh-keys" $auth.query)
   let req_body = {"publicKey": $public_key, "userId": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2189,12 +2288,14 @@ export def "delete-ssh-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ssh-keys/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2229,12 +2330,14 @@ export def "get-ssh-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: record<attributes: record<created: string, fingerprint: string, lastLogin: string>, id: int, relationships: record<ownerUser: record>, type: string>, included: table<attributes: record, id: int, relationships: record, type: string>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ssh-keys/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2276,15 +2379,17 @@ export def "list-users" [
   --status: int # Whether a user is locked. Ignored if `username` is provided. **0** means user is locked, **1** means user is not locked.
   --search: string # Searches the nickname, email, role and homeDir fields for the provided value. Ignored if `username` is provided. Supports wildcard searches.
   --offset: int # Starting user record in the result set. Can be used for pagination. (format: int32, e.g. 50)
-  --qp-sort: string # Sort order or matching users. You can sort by multiple columns by separating sort options with a comma; the sort will be applied in the order specified. The sort order for each sort field is ascending unless it is prefixed with a minus (“-“), in which case it will be descending. Valid sort fields are: **nickname**, **username**, **email**, **homeDir** and **modified** (e.g. homeDir,-modified)
+  --sort: string # Sort order or matching users. You can sort by multiple columns by separating sort options with a comma; the sort will be applied in the order specified. The sort order for each sort field is ascending unless it is prefixed with a minus (“-“), in which case it will be descending. Valid sort fields are: **nickname**, **username**, **email**, **homeDir** and **modified** (e.g. homeDir,-modified)
   --limit: int # Number of users to return. Can be used for pagination. (format: int32, e.g. 100)
   --include: string # Comma separated list of relationships to include in response. Valid options are **homeResource** and **ownerAccount**. (e.g. homeResource,ownerAccount)
-  --ev-api-key: string # API key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "homeResource" $home_resource "scalar") (serialize-qp "nickname" $nickname "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "homeResource" $home_resource "scalar") (serialize-qp "nickname" $nickname "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2293,7 +2398,7 @@ export def "list-users" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"username": $username, "homeResource": $home_resource, "nickname": $nickname, "email": $email, "role": $role, "status": $status, "search": $search, "offset": $offset, "sort": $qp_sort, "limit": $limit, "include": $include} | compact)
+    query: ({"username": $username, "homeResource": $home_resource, "nickname": $nickname, "email": $email, "role": $role, "status": $status, "search": $search, "offset": $offset, "sort": $sort, "limit": $limit, "include": $include} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2319,8 +2424,8 @@ export def "add-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API key required to make the API call
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API key required to make the API call (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   email: string # Email address for the user (format: email, e.g. testuser@example.com)
   --expiration: string # Optional timestamp when the user should expire, formatted in date-time. (e.g. 2011-03-21 00:18:56)
   home_resource: string # Resource identifier for the user's home folder. See details on [how to specify resources](#section/Identifying-Resources) above. The user will be locked to this directory and unable to move 'up' in the account. If the folder does not exist in the account, it will be created when the user is created. Users with the `role` **admin** should have their homeResource set to '/' (e.g. /)
@@ -2337,6 +2442,8 @@ export def "add-user" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/users" $auth.query)
   let req_body = {"email": $email, "expiration": $expiration, "homeResource": $home_resource, "locked": $locked, "nickname": $nickname, "onboarding": $onboarding, "password": $password, "permissions": $permissions, "role": $role, "timeZone": $time_zone, "username": $username, "welcomeEmail": $welcome_email} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2373,12 +2480,14 @@ export def "delete-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API Key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
+  --ev-api-key: string # API Key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
 ]: nothing -> record<data: list<string>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2414,12 +2523,14 @@ export def "get-user-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Comma-separated list of relationships to include in response. Possible values include **homeResource** and **ownerAccount**. (e.g. homeResource,ownerAccount)
-  --ev-api-key: string # API Key (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access token required to make the API call. (e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
+  --ev-api-key: string # API Key (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
 ]: nothing -> record<data: record<attributes: record<accessTimestamp: string, accountName: string, created: string, email: string, expiration: string, firstLogin: bool, homePath: string, locked: bool, modified: string, nickname: string, onboarding: bool, permissions: record, role: string, status: int, timeZone: string, username: string>, id: int, relationships: record<homeResource: record, ownerAccount: record>, type: string>, included: list<any>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2456,8 +2567,8 @@ export def "update-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API key required to make the API call. (e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
-  --ev-access-token: string # Access token required to make the API call. (e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
+  --ev-api-key: string # API key required to make the API call. (required, e.g. exampleaccount-zwSuWUZ8S38h33qPS8v0s)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 19853ef63a0bc348024a9e4cfd4a92520d2dfd04e88d8679fb1ed6bc551593d1)
   --email: string # Email address for the user (format: email, e.g. testuser@example.com)
   --expiration: string # Optional timestamp when the user should expire. (e.g. 2011-03-21 00:18:56)
   --home-resource: string # Resource identifier for the user's home folder. See details on [how to specify resources](#section/Identifying-Resources) above. The user will be locked to this directory and unable to move 'up' in the account. If the folder does not exist in the account, it will be created when the user logs in. This setting is ignored for users with the `role` **admin**. (e.g. /)
@@ -2474,6 +2585,8 @@ export def "update-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}") $auth.query)
   let req_body = {"email": $email, "expiration": $expiration, "homeResource": $home_resource, "locked": $locked, "nickname": $nickname, "onboarding": $onboarding, "password": $password, "permissions": $permissions, "role": $role, "timeZone": $time_zone, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2512,11 +2625,13 @@ export def "get-wehooks-list" [
   --include: string # List of related record types to include. Valid options are `owningAccount` and `resource`
   --offset: int # Records to skip before returning results. (e.g. 100)
   --limit: int # Limit of the records list (e.g. 100)
-  --ev-api-key: string # API key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int, returnedResults: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhooks" $qp $auth.query)
   let accept_val = "application/json"
@@ -2552,8 +2667,8 @@ export def "add-webhook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   endpoint_url: string # The endpoint is where the webhook request will be sent. (format: uri, e.g. https://example.com/webhook)
   --resource: string # Resource identifier for the top folder this webhook is associated with (e.g. /uploads-folder)
   --response-version: string@response-version-completer # What version of webhook request should be sent to the endpoint URL when messages are sent (e.g. v2)
@@ -2562,6 +2677,8 @@ export def "add-webhook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/webhooks" $auth.query)
   let req_body = {"endpointUrl": $endpoint_url, "resource": $resource, "responseVersion": $response_version, "triggers": $triggers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2598,12 +2715,14 @@ export def "regenerate-webhook-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/regenerate-token/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2638,12 +2757,14 @@ export def "resend-webhook-activity-entry" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: list<string>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/webhooks/resend/{activity_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2678,12 +2799,14 @@ export def "delete-webhook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: list<string>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2719,12 +2842,14 @@ export def "get-webhook-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Include metadata for related items; `ownerAccount` and/or `resource`
-  --ev-api-key: string # API key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
 ]: nothing -> record<data: table<attributes: record, id: int, relationships: record, type: string>, included: list<any>, responseStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2761,8 +2886,8 @@ export def "update-webhook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ev-api-key: string # API key required to make the API call.
-  --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
+  --ev-api-key: string # API key required to make the API call. (required)
+  --ev-access-token: string # Access token required to make the API call. (required, e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
   --endpoint-url: string # New endpoint URL to use for the webhook configuration (format: uri, e.g. https://example.com/new-endpoint)
   --resource: string # Resource identifier of the top folder watched by this webhook. (e.g. /newfolder)
   --response-version: string@response-version-completer # Version of the webhooks message to send to the endpoint (e.g. v1)
@@ -2772,6 +2897,8 @@ export def "update-webhook" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
+  if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/{id}") $auth.query)
   let req_body = {"endpointUrl": $endpoint_url, "resource": $resource, "responseVersion": $response_version, "triggers": $triggers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

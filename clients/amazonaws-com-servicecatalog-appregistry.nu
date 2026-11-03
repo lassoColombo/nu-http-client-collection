@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -118,6 +118,8 @@ def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors
 def base-url-completer [] { ["http://servicecatalog-appregistry.us-east-1.amazonaws.com" "http://servicecatalog-appregistry.us-east-2.amazonaws.com" "http://servicecatalog-appregistry.us-west-1.amazonaws.com" "http://servicecatalog-appregistry.us-west-2.amazonaws.com" "http://servicecatalog-appregistry.us-gov-west-1.amazonaws.com" "http://servicecatalog-appregistry.us-gov-east-1.amazonaws.com" "http://servicecatalog-appregistry.ca-central-1.amazonaws.com" "http://servicecatalog-appregistry.eu-north-1.amazonaws.com" "http://servicecatalog-appregistry.eu-west-1.amazonaws.com" "http://servicecatalog-appregistry.eu-west-2.amazonaws.com" "http://servicecatalog-appregistry.eu-west-3.amazonaws.com" "http://servicecatalog-appregistry.eu-central-1.amazonaws.com" "http://servicecatalog-appregistry.eu-south-1.amazonaws.com" "http://servicecatalog-appregistry.af-south-1.amazonaws.com" "http://servicecatalog-appregistry.ap-northeast-1.amazonaws.com" "http://servicecatalog-appregistry.ap-northeast-2.amazonaws.com" "http://servicecatalog-appregistry.ap-northeast-3.amazonaws.com" "http://servicecatalog-appregistry.ap-southeast-1.amazonaws.com" "http://servicecatalog-appregistry.ap-southeast-2.amazonaws.com" "http://servicecatalog-appregistry.ap-east-1.amazonaws.com" "http://servicecatalog-appregistry.ap-south-1.amazonaws.com" "http://servicecatalog-appregistry.sa-east-1.amazonaws.com" "http://servicecatalog-appregistry.me-south-1.amazonaws.com" "https://servicecatalog-appregistry.us-east-1.amazonaws.com" "https://servicecatalog-appregistry.us-east-2.amazonaws.com" "https://servicecatalog-appregistry.us-west-1.amazonaws.com" "https://servicecatalog-appregistry.us-west-2.amazonaws.com" "https://servicecatalog-appregistry.us-gov-west-1.amazonaws.com" "https://servicecatalog-appregistry.us-gov-east-1.amazonaws.com" "https://servicecatalog-appregistry.ca-central-1.amazonaws.com" "https://servicecatalog-appregistry.eu-north-1.amazonaws.com" "https://servicecatalog-appregistry.eu-west-1.amazonaws.com" "https://servicecatalog-appregistry.eu-west-2.amazonaws.com" "https://servicecatalog-appregistry.eu-west-3.amazonaws.com" "https://servicecatalog-appregistry.eu-central-1.amazonaws.com" "https://servicecatalog-appregistry.eu-south-1.amazonaws.com" "https://servicecatalog-appregistry.af-south-1.amazonaws.com" "https://servicecatalog-appregistry.ap-northeast-1.amazonaws.com" "https://servicecatalog-appregistry.ap-northeast-2.amazonaws.com" "https://servicecatalog-appregistry.ap-northeast-3.amazonaws.com" "https://servicecatalog-appregistry.ap-southeast-1.amazonaws.com" "https://servicecatalog-appregistry.ap-southeast-2.amazonaws.com" "https://servicecatalog-appregistry.ap-east-1.amazonaws.com" "https://servicecatalog-appregistry.ap-south-1.amazonaws.com" "https://servicecatalog-appregistry.sa-east-1.amazonaws.com" "https://servicecatalog-appregistry.me-south-1.amazonaws.com" "http://servicecatalog-appregistry.cn-north-1.amazonaws.com.cn" "http://servicecatalog-appregistry.cn-northwest-1.amazonaws.com.cn" "https://servicecatalog-appregistry.cn-north-1.amazonaws.com.cn" "https://servicecatalog-appregistry.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def resource-type-completer [] { ["CFN_STACK" "RESOURCE_TAG_VALUE"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -165,7 +167,7 @@ export def "associate-attribute-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<applicationArn: record, attributeGroupArn: record> {
+]: nothing -> record<applicationArn: string, attributeGroupArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -212,7 +214,7 @@ export def "disassociate-attribute-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<applicationArn: record, attributeGroupArn: record> {
+]: nothing -> record<applicationArn: string, attributeGroupArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -242,7 +244,7 @@ export def "disassociate-attribute-group" [
 # operationId: AssociateResource
 export def "associate-resource" [
   application: string
-  resource_type: string
+  resource_type: string@resource-type-completer
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -260,7 +262,7 @@ export def "associate-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<applicationArn: record, resourceArn: record> {
+]: nothing -> record<applicationArn: string, resourceArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -291,7 +293,7 @@ export def "associate-resource" [
 # operationId: DisassociateResource
 export def "disassociate-resource" [
   application: string
-  resource_type: string
+  resource_type: string@resource-type-completer
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,7 +311,7 @@ export def "disassociate-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<applicationArn: record, resourceArn: record> {
+]: nothing -> record<applicationArn: string, resourceArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -340,7 +342,7 @@ export def "disassociate-resource" [
 # operationId: GetAssociatedResource
 export def "get-associated-resource" [
   application: string
-  resource_type: string
+  resource_type: string@resource-type-completer
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -358,7 +360,7 @@ export def "get-associated-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<resource: record<name: record, arn: record, associationTime: record, integrations: record<resourceGroup: record>>> {
+]: nothing -> record<resource: record<name: string, arn: string, associationTime: string, integrations: record<resourceGroup: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -408,7 +410,7 @@ export def "create-application" [
   --description: string # The description of the application.
   --tags: record # Key-value pairs you can use to associate with the application.
   client_token: string # A unique identifier that you provide to ensure idempotency. If you retry a request that completed successfully using the same client token and the same parameters, the retry succeeds without performing any further actions. If you retry a successful request using the same client token, but one or more of the parameters are different, the retry fails.
-]: any -> record<application: record<id: record, arn: record, name: record, description: record, creationTime: record, lastUpdateTime: record, tags: record>> {
+]: any -> record<application: record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -456,7 +458,7 @@ export def "list-applications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<applications: record, nextToken: record> {
+]: nothing -> record<applications: table<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -505,7 +507,7 @@ export def "create-attribute-group" [
   attributes: string # A JSON string in the form of nested key-value pairs that represent the attributes in the group and describes an application and its components.
   --tags: record # Key-value pairs you can use to associate with the attribute group.
   client_token: string # A unique identifier that you provide to ensure idempotency. If you retry a request that completed successfully using the same client token and the same parameters, the retry succeeds without performing any further actions. If you retry a successful request using the same client token, but one or more of the parameters are different, the retry fails.
-]: any -> record<attributeGroup: record<id: record, arn: record, name: record, description: record, creationTime: record, lastUpdateTime: record, tags: record>> {
+]: any -> record<attributeGroup: record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -553,7 +555,7 @@ export def "list-attribute-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<attributeGroups: record, nextToken: record> {
+]: nothing -> record<attributeGroups: table<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, createdBy: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -598,7 +600,7 @@ export def "delete-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<application: record<id: record, arn: record, name: record, description: record, creationTime: record, lastUpdateTime: record>> {
+]: nothing -> record<application: record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -643,7 +645,7 @@ export def "get-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record, arn: record, name: record, description: record, creationTime: record, lastUpdateTime: record, associatedResourceCount: record, tags: record, integrations: record<resourceGroup: record<state: record, arn: record, errorMessage: record>>> {
+]: nothing -> record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, associatedResourceCount: int, tags: record, integrations: record<resourceGroup: record<state: string, arn: string, errorMessage: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -690,7 +692,7 @@ export def "update-application" [
   --x-amz-signed-headers: string
   --name: string # Deprecated: The new name of the application. The name must be unique in the region in which you are updating the application. Please do not use this field as we have stopped supporting name updates.
   --description: string # The new description of the application.
-]: any -> record<application: record<id: record, arn: record, name: record, description: record, creationTime: record, lastUpdateTime: record, tags: record>> {
+]: any -> record<application: record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -738,7 +740,7 @@ export def "delete-attribute-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<attributeGroup: record<id: record, arn: record, name: record, description: record, creationTime: record, lastUpdateTime: record, createdBy: record>> {
+]: nothing -> record<attributeGroup: record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, createdBy: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attribute_group | is-empty) { error make --unspanned { msg: "path parameter 'attributeGroup' must be non-empty" } }
@@ -783,7 +785,7 @@ export def "get-attribute-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record, arn: record, name: record, description: record, attributes: record, creationTime: record, lastUpdateTime: record, tags: record, createdBy: record> {
+]: nothing -> record<id: string, arn: string, name: string, description: string, attributes: string, creationTime: string, lastUpdateTime: string, tags: record, createdBy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attribute_group | is-empty) { error make --unspanned { msg: "path parameter 'attributeGroup' must be non-empty" } }
@@ -831,7 +833,7 @@ export def "update-attribute-group" [
   --name: string # Deprecated: The new name of the attribute group. The name must be unique in the region in which you are updating the attribute group. Please do not use this field as we have stopped supporting name updates.
   --description: string # The description of the attribute group that the user provides.
   --attributes: string # A JSON string in the form of nested key-value pairs that represent the attributes in the group and describes an application and its components.
-]: any -> record<attributeGroup: record<id: record, arn: record, name: record, description: record, creationTime: record, lastUpdateTime: record, tags: record>> {
+]: any -> record<attributeGroup: record<id: string, arn: string, name: string, description: string, creationTime: string, lastUpdateTime: string, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -878,7 +880,7 @@ export def "get-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<configuration: record<tagQueryConfiguration: record<tagKey: record>>> {
+]: nothing -> record<configuration: record<tagQueryConfiguration: record<tagKey: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configuration" $auth.query)
@@ -904,7 +906,7 @@ export def "get-configuration" [
 #
 # PUT /configuration
 # operationId: PutConfiguration
-# --configuration shape: {tagQueryConfiguration?: any}
+# --configuration shape: {tagQueryConfiguration?: record}
 export def "put-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -922,7 +924,7 @@ export def "put-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  configuration: record # Includes all of the AppRegistry settings. — shape: {tagQueryConfiguration?: any}
+  configuration: record # Includes all of the AppRegistry settings. — shape: {tagQueryConfiguration?: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -972,7 +974,7 @@ export def "list-associated-attribute-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<attributeGroups: record, nextToken: record> {
+]: nothing -> record<attributeGroups: list<string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -1020,7 +1022,7 @@ export def "list-associated-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<resources: record, nextToken: record> {
+]: nothing -> record<resources: table<name: string, arn: string, resourceType: string, resourceDetails: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -1068,7 +1070,7 @@ export def "list-attribute-groups-for-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<attributeGroupsDetails: record, nextToken: record> {
+]: nothing -> record<attributeGroupsDetails: table<id: string, arn: string, name: string, createdBy: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'application' must be non-empty" } }
@@ -1191,7 +1193,7 @@ export def "tag-resource" [
 # POST /sync/{resourceType}/{resource}
 # operationId: SyncResource
 export def "sync-resource" [
-  resource_type: string
+  resource_type: string@resource-type-completer
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1209,7 +1211,7 @@ export def "sync-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<applicationArn: record, resourceArn: record, actionTaken: record> {
+]: nothing -> record<applicationArn: string, resourceArn: string, actionTaken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
@@ -1248,7 +1250,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # A list of the tag keys to remove from the specified resource.
+  --tag-keys: list # A list of the tag keys to remove from the specified resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1260,6 +1262,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

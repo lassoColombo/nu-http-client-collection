@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "api_key" => { {scheme: $scheme, headers: {api_key: $token_val}, query: "", location: "header"} }
+    "api_key" => { {scheme: $scheme, headers: {"api_key": $token_val}, query: "", location: "header"} }
     "query-api_key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -137,10 +137,11 @@ export def "5476365e031f5909e4fe331e" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --stop-id: string@stop-id-completer # 7-digit regional stop ID. (default: 1001195)
+  --stop-id: string@stop-id-completer # 7-digit regional stop ID. (required, default: 1001195)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  let stop_id = ($stop_id | default "1001195")
   let qp = [(serialize-qp "StopID" $stop_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Predictions" $qp $auth.query)
   let accept_val = ($accept | default "text/xml")
@@ -173,10 +174,11 @@ export def "5476365e031f5909e4fe331d" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stop-id: string@stop-id-completer # 7-digit regional stop ID. (default: 1001195)
+  --stop-id: string@stop-id-completer # 7-digit regional stop ID. (required, default: 1001195)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  let stop_id = ($stop_id | default "1001195")
   let qp = [(serialize-qp "StopID" $stop_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jPredictions" $qp $auth.query)
   let accept_val = "application/json"

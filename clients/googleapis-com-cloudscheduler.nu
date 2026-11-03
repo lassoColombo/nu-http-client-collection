@@ -1,4 +1,4 @@
-# Auto-generated client for Cloud Scheduler API vv1beta1
+# Auto-generated client for Cloud Scheduler API v1beta1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/cloudscheduler/v1beta1/openapi.json
 # Auth: --token flag or $env.CLOUD_SCHEDULER_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -157,8 +147,8 @@ export def commands []: nothing -> table {
 export def "cloudscheduler-projects-locations-jobs-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -178,7 +168,7 @@ export def "cloudscheduler-projects-locations-jobs-delete" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --legacy-app-engine-cron: oneof<nothing, bool> # This field is used to manage the legacy App Engine Cron jobs using the Cloud Scheduler API. If the field is set to true, the job in the __cron queue with the corresponding name will be deleted instead.
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SCHEDULER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SCHEDULER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "legacyAppEngineCron" $legacy_app_engine_cron "scalar")] | flatten | str join "&"
@@ -206,8 +196,8 @@ export def "cloudscheduler-projects-locations-jobs-delete" [
 export def "cloudscheduler-projects-locations-jobs-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -226,7 +216,7 @@ export def "cloudscheduler-projects-locations-jobs-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<appEngineHttpTarget: record<appEngineRouting: record<host: string, instance: string, service: string, version: string>, body: string, headers: record, httpMethod: string, relativeUri: string>, attemptDeadline: string, description: string, httpTarget: record<body: string, headers: record, httpMethod: string, oauthToken: record<scope: string, serviceAccountEmail: string>, oidcToken: record<audience: string, serviceAccountEmail: string>, uri: string>, lastAttemptTime: string, legacyAppEngineCron: bool, name: string, pubsubTarget: record<attributes: record, data: string, topicName: string>, retryConfig: record<maxBackoffDuration: string, maxDoublings: int, maxRetryDuration: string, minBackoffDuration: string, retryCount: int>, schedule: string, scheduleTime: string, state: string, status: record<code: int, details: list<record>, message: string>, timeZone: string, userUpdateTime: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SCHEDULER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SCHEDULER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -259,8 +249,8 @@ export def "cloudscheduler-projects-locations-jobs-get" [
 export def "cloudscheduler-projects-locations-jobs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -296,7 +286,7 @@ export def "cloudscheduler-projects-locations-jobs-patch" [
   --user-update-time: string # Output only. The creation time of the job. (format: google-datetime)
 ]: any -> record<appEngineHttpTarget: record<appEngineRouting: record<host: string, instance: string, service: string, version: string>, body: string, headers: record, httpMethod: string, relativeUri: string>, attemptDeadline: string, description: string, httpTarget: record<body: string, headers: record, httpMethod: string, oauthToken: record<scope: string, serviceAccountEmail: string>, oidcToken: record<audience: string, serviceAccountEmail: string>, uri: string>, lastAttemptTime: string, legacyAppEngineCron: bool, name: string, pubsubTarget: record<attributes: record, data: string, topicName: string>, retryConfig: record<maxBackoffDuration: string, maxDoublings: int, maxRetryDuration: string, minBackoffDuration: string, retryCount: int>, schedule: string, scheduleTime: string, state: string, status: record<code: int, details: list<record>, message: string>, timeZone: string, userUpdateTime: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SCHEDULER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SCHEDULER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
@@ -326,8 +316,8 @@ export def "cloudscheduler-projects-locations-jobs-patch" [
 export def "cloudscheduler-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -349,7 +339,7 @@ export def "cloudscheduler-projects-locations-list" [
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the `next_page_token` field in the response. Send that page token to receive the subsequent page.
 ]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SCHEDULER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SCHEDULER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -377,8 +367,8 @@ export def "cloudscheduler-projects-locations-list" [
 export def "cloudscheduler-projects-locations-jobs-pause" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -399,7 +389,7 @@ export def "cloudscheduler-projects-locations-jobs-pause" [
   --body: record
 ]: any -> record<appEngineHttpTarget: record<appEngineRouting: record<host: string, instance: string, service: string, version: string>, body: string, headers: record, httpMethod: string, relativeUri: string>, attemptDeadline: string, description: string, httpTarget: record<body: string, headers: record, httpMethod: string, oauthToken: record<scope: string, serviceAccountEmail: string>, oidcToken: record<audience: string, serviceAccountEmail: string>, uri: string>, lastAttemptTime: string, legacyAppEngineCron: bool, name: string, pubsubTarget: record<attributes: record, data: string, topicName: string>, retryConfig: record<maxBackoffDuration: string, maxDoublings: int, maxRetryDuration: string, minBackoffDuration: string, retryCount: int>, schedule: string, scheduleTime: string, state: string, status: record<code: int, details: list<record>, message: string>, timeZone: string, userUpdateTime: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SCHEDULER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SCHEDULER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -429,8 +419,8 @@ export def "cloudscheduler-projects-locations-jobs-pause" [
 export def "cloudscheduler-projects-locations-jobs-resume" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -451,7 +441,7 @@ export def "cloudscheduler-projects-locations-jobs-resume" [
   --body: record
 ]: any -> record<appEngineHttpTarget: record<appEngineRouting: record<host: string, instance: string, service: string, version: string>, body: string, headers: record, httpMethod: string, relativeUri: string>, attemptDeadline: string, description: string, httpTarget: record<body: string, headers: record, httpMethod: string, oauthToken: record<scope: string, serviceAccountEmail: string>, oidcToken: record<audience: string, serviceAccountEmail: string>, uri: string>, lastAttemptTime: string, legacyAppEngineCron: bool, name: string, pubsubTarget: record<attributes: record, data: string, topicName: string>, retryConfig: record<maxBackoffDuration: string, maxDoublings: int, maxRetryDuration: string, minBackoffDuration: string, retryCount: int>, schedule: string, scheduleTime: string, state: string, status: record<code: int, details: list<record>, message: string>, timeZone: string, userUpdateTime: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SCHEDULER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SCHEDULER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -481,8 +471,8 @@ export def "cloudscheduler-projects-locations-jobs-resume" [
 export def "cloudscheduler-projects-locations-jobs-run" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -503,7 +493,7 @@ export def "cloudscheduler-projects-locations-jobs-run" [
   --legacy-app-engine-cron: oneof<nothing, bool> # This field is used to manage the legacy App Engine Cron jobs using the Cloud Scheduler API. If the field is set to true, the job in the __cron queue with the corresponding name will be forced to run instead.
 ]: any -> record<appEngineHttpTarget: record<appEngineRouting: record<host: string, instance: string, service: string, version: string>, body: string, headers: record, httpMethod: string, relativeUri: string>, attemptDeadline: string, description: string, httpTarget: record<body: string, headers: record, httpMethod: string, oauthToken: record<scope: string, serviceAccountEmail: string>, oidcToken: record<audience: string, serviceAccountEmail: string>, uri: string>, lastAttemptTime: string, legacyAppEngineCron: bool, name: string, pubsubTarget: record<attributes: record, data: string, topicName: string>, retryConfig: record<maxBackoffDuration: string, maxDoublings: int, maxRetryDuration: string, minBackoffDuration: string, retryCount: int>, schedule: string, scheduleTime: string, state: string, status: record<code: int, details: list<record>, message: string>, timeZone: string, userUpdateTime: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SCHEDULER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SCHEDULER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -533,8 +523,8 @@ export def "cloudscheduler-projects-locations-jobs-run" [
 export def "cloudscheduler-projects-locations-jobs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -557,7 +547,7 @@ export def "cloudscheduler-projects-locations-jobs-list" [
   --page-size: int # Requested page size. The maximum page size is 500. If unspecified, the page size will be the maximum. Fewer jobs than requested might be returned, even if more jobs exist; use next_page_token to determine if more jobs exist.
   --page-token: string # A token identifying a page of results the server will return. To request the first page results, page_token must be empty. To request the next page of results, page_token must be the value of next_page_token returned from the previous call to ListJobs. It is an error to switch the value of filter or order_by while iterating through pages.
 ]: nothing -> record<jobs: table<appEngineHttpTarget: record, attemptDeadline: string, description: string, httpTarget: record, lastAttemptTime: string, legacyAppEngineCron: bool, name: string, pubsubTarget: record, retryConfig: record, schedule: string, scheduleTime: string, state: string, status: record, timeZone: string, userUpdateTime: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SCHEDULER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SCHEDULER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "legacyAppEngineCron" $legacy_app_engine_cron "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -590,8 +580,8 @@ export def "cloudscheduler-projects-locations-jobs-list" [
 export def "cloudscheduler-projects-locations-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -626,7 +616,7 @@ export def "cloudscheduler-projects-locations-jobs-create" [
   --user-update-time: string # Output only. The creation time of the job. (format: google-datetime)
 ]: any -> record<appEngineHttpTarget: record<appEngineRouting: record<host: string, instance: string, service: string, version: string>, body: string, headers: record, httpMethod: string, relativeUri: string>, attemptDeadline: string, description: string, httpTarget: record<body: string, headers: record, httpMethod: string, oauthToken: record<scope: string, serviceAccountEmail: string>, oidcToken: record<audience: string, serviceAccountEmail: string>, uri: string>, lastAttemptTime: string, legacyAppEngineCron: bool, name: string, pubsubTarget: record<attributes: record, data: string, topicName: string>, retryConfig: record<maxBackoffDuration: string, maxDoublings: int, maxRetryDuration: string, minBackoffDuration: string, retryCount: int>, schedule: string, scheduleTime: string, state: string, status: record<code: int, details: list<record>, message: string>, timeZone: string, userUpdateTime: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SCHEDULER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SCHEDULER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"

@@ -1,6 +1,8 @@
-# Auto-generated client for Stream Chat API vv79.19.1
+# Auto-generated client for Stream Chat API v79.19.1
 # Source: https://api.apis.guru/v2/specs/stream-io-api.com/v79.19.1/openapi.json
-# Auth: --token flag or $env.STREAM_CHAT_API_TOKEN
+# Auth (JWT): --token-jwt flag or $env.STREAM_CHAT_API_JWT_TOKEN
+# Auth (api_key): --token-apikey flag or $env.STREAM_CHAT_API_APIKEY_TOKEN
+# Auth (stream-auth-type): --token-streamauthtype flag or $env.STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN
 
 const BASE_URL = "https://chat.stream-io-api.com"
 
@@ -12,9 +14,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "jwt" => { {scheme: $scheme, headers: {Authorization: $"JWT ($token_val)"}, query: "", location: "header"} }
+    "jwt" => { {scheme: $scheme, headers: {"Authorization": $"JWT ($token_val)"}, query: "", location: "header"} }
     "query-api_key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)", location: "query"} }
-    "stream-auth-type" => { {scheme: $scheme, headers: {Stream-Auth-Type: $token_val}, query: "", location: "header"} }
+    "stream-auth-type" => { {scheme: $scheme, headers: {"Stream-Auth-Type": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -176,7 +178,7 @@ def user-completer [] { ["hard" "pruning" "soft"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-jwt" "token-apikey" "token-streamauthtype"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-app" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -923,15 +925,15 @@ export def "query-channels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string
   --connection-id: string
-  --client-id-body: string #  (body field)
-  --connection-id-body: string #  (body field)
+  --client-id-body: string # (body field)
+  --connection-id-body: string # (body field)
   --filter-conditions: record
   --limit: float # Number of channels to limit
   --member-limit: float # Number of members to limit
   --message-limit: float # Number of messages to limit
   --offset: float # Channel pagination offset
   --presence: oneof<nothing, bool>
-  --body-sort: list # List of sort parameters — item shape: {direction?: float, field?: string}
+  sort: list # List of sort parameters — item shape: {direction?: float, field?: string}
   --state: oneof<nothing, bool> # Whether to update channel state or not
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
@@ -942,7 +944,7 @@ export def "query-channels" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "connection_id" $connection_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels" $qp $auth.query)
-  let req_body = {"client_id": $client_id_body, "connection_id": $connection_id_body, "filter_conditions": $filter_conditions, "limit": $limit, "member_limit": $member_limit, "message_limit": $message_limit, "offset": $offset, "presence": $presence, "sort": $body_sort, "state": $state, "user": $user, "user_id": $user_id, "watch": $watch} | compact
+  let req_body = {"client_id": $client_id_body, "connection_id": $connection_id_body, "filter_conditions": $filter_conditions, "limit": $limit, "member_limit": $member_limit, "message_limit": $message_limit, "offset": $offset, "presence": $presence, "sort": $sort, "state": $state, "user": $user, "user_id": $user_id, "watch": $watch} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1063,8 +1065,8 @@ export def "get-or-create-channel-type-1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string
   --connection-id: string
-  --client-id-body: string #  (body field)
-  --connection-id-body: string #  (body field)
+  --client-id-body: string # (body field)
+  --connection-id-body: string # (body field)
   --data: record # shape: {auto_translation_enabled?: bool, auto_translation_language?: string, config_overrides?: record, created_by?: record, disabled?: bool, frozen?: bool, members?: list, own_capabilities?: list<float>, team?: string, truncated_at?: list<float>, truncated_by?: list<float>, truncated_by_id?: string}
   --members: record # shape: {id_gt?: float, id_gte?: float, id_lt?: float, id_lte?: float, limit?: float, offset?: float}
   --messages: record # shape: {created_at_after?: string, created_at_after_or_equal?: string, created_at_around?: string, created_at_before?: string, created_at_before_or_equal?: string, id_around?: string, id_gt?: string, id_gte?: string, id_lt?: string, id_lte?: string, limit?: float, offset?: float}
@@ -1280,6 +1282,8 @@ export def "create-call" [
   let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/channels/{type}/{id}/call") $auth.query)
   let req_body = {"id": $body_id, "options": $options, "type": $body_type, "user": $user, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "id") == null) { error make --unspanned { msg: "required body field 'id' missing: pass --body-id or pipe a record" } }
+  if (($req_body | get -o "type") == null) { error make --unspanned { msg: "required body field 'type' missing: pass --body-type or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1412,8 +1416,8 @@ export def "upload-file" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1548,8 +1552,8 @@ export def "upload-image" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1677,8 +1681,8 @@ export def "get-or-create-channel-type-id-0" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string
   --connection-id: string
-  --client-id-body: string #  (body field)
-  --connection-id-body: string #  (body field)
+  --client-id-body: string # (body field)
+  --connection-id-body: string # (body field)
   --data: record # shape: {auto_translation_enabled?: bool, auto_translation_language?: string, config_overrides?: record, created_by?: record, disabled?: bool, frozen?: bool, members?: list, own_capabilities?: list<float>, team?: string, truncated_at?: list<float>, truncated_by?: list<float>, truncated_by_id?: string}
   --members: record # shape: {id_gt?: float, id_gte?: float, id_lt?: float, id_lte?: float, limit?: float, offset?: float}
   --messages: record # shape: {created_at_after?: string, created_at_after_or_equal?: string, created_at_around?: string, created_at_before?: string, created_at_before_or_equal?: string, id_around?: string, id_gt?: string, id_gte?: string, id_lt?: string, id_lte?: string, limit?: float, offset?: float}
@@ -1822,8 +1826,8 @@ export def "stop-watching-channel" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string
   --connection-id: string
-  --client-id-body: string #  (body field)
-  --connection-id-body: string #  (body field)
+  --client-id-body: string # (body field)
+  --connection-id-body: string # (body field)
 ]: any -> record<duration: string> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
@@ -4520,8 +4524,8 @@ export def "sync" [
   --client-id: string
   --connection-id: string
   --channel-cids: list<string> # List of channel CIDs to sync
-  --client-id-body: string #  (body field)
-  --connection-id-body: string #  (body field)
+  --client-id-body: string # (body field)
+  --connection-id-body: string # (body field)
   last_sync_at: string # Date from which synchronization should happen (format: date-time)
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
   --user-id: string
@@ -4937,6 +4941,7 @@ export def "deactivate-user" [
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/deactivate") $auth.query)
   let req_body = {"created_by_id": $created_by_id, "mark_messages_deleted": $mark_messages_deleted, "user_id": $body_user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "user_id") == null) { error make --unspanned { msg: "required body field 'user_id' missing: pass --body-user-id or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -5059,6 +5064,7 @@ export def "reactivate-user" [
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/reactivate") $auth.query)
   let req_body = {"created_by_id": $created_by_id, "name": $name, "restore_messages": $restore_messages, "user_id": $body_user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "user_id") == null) { error make --unspanned { msg: "required body field 'user_id' missing: pass --body-user-id or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

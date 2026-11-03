@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -103,7 +103,9 @@ def x-amz-target-completer-3 [] { ["CodeBuild_20161006.BatchGetProjects"] }
 def x-amz-target-completer-4 [] { ["CodeBuild_20161006.BatchGetReportGroups"] }
 def x-amz-target-completer-5 [] { ["CodeBuild_20161006.BatchGetReports"] }
 def x-amz-target-completer-6 [] { ["CodeBuild_20161006.CreateProject"] }
+def type-completer [] { ["CODE_COVERAGE" "TEST"] }
 def x-amz-target-completer-7 [] { ["CodeBuild_20161006.CreateReportGroup"] }
+def build-type-completer [] { ["BUILD" "BUILD_BATCH"] }
 def x-amz-target-completer-8 [] { ["CodeBuild_20161006.CreateWebhook"] }
 def x-amz-target-completer-9 [] { ["CodeBuild_20161006.DeleteBuildBatch"] }
 def x-amz-target-completer-10 [] { ["CodeBuild_20161006.DeleteProject"] }
@@ -112,10 +114,15 @@ def x-amz-target-completer-12 [] { ["CodeBuild_20161006.DeleteReportGroup"] }
 def x-amz-target-completer-13 [] { ["CodeBuild_20161006.DeleteResourcePolicy"] }
 def x-amz-target-completer-14 [] { ["CodeBuild_20161006.DeleteSourceCredentials"] }
 def x-amz-target-completer-15 [] { ["CodeBuild_20161006.DeleteWebhook"] }
+def sort-order-completer [] { ["ASCENDING" "DESCENDING"] }
+def sort-by-completer [] { ["FILE_PATH" "LINE_COVERAGE_PERCENTAGE"] }
 def x-amz-target-completer-16 [] { ["CodeBuild_20161006.DescribeCodeCoverages"] }
 def x-amz-target-completer-17 [] { ["CodeBuild_20161006.DescribeTestCases"] }
+def trend-field-completer [] { ["BRANCHES_COVERED" "BRANCHES_MISSED" "BRANCH_COVERAGE" "DURATION" "LINES_COVERED" "LINES_MISSED" "LINE_COVERAGE" "PASS_RATE" "TOTAL"] }
 def x-amz-target-completer-18 [] { ["CodeBuild_20161006.GetReportGroupTrend"] }
 def x-amz-target-completer-19 [] { ["CodeBuild_20161006.GetResourcePolicy"] }
+def server-type-completer [] { ["BITBUCKET" "GITHUB" "GITHUB_ENTERPRISE"] }
+def auth-type-completer [] { ["BASIC_AUTH" "OAUTH" "PERSONAL_ACCESS_TOKEN"] }
 def x-amz-target-completer-20 [] { ["CodeBuild_20161006.ImportSourceCredentials"] }
 def x-amz-target-completer-21 [] { ["CodeBuild_20161006.InvalidateProjectCache"] }
 def x-amz-target-completer-22 [] { ["CodeBuild_20161006.ListBuildBatches"] }
@@ -123,16 +130,23 @@ def x-amz-target-completer-23 [] { ["CodeBuild_20161006.ListBuildBatchesForProje
 def x-amz-target-completer-24 [] { ["CodeBuild_20161006.ListBuilds"] }
 def x-amz-target-completer-25 [] { ["CodeBuild_20161006.ListBuildsForProject"] }
 def x-amz-target-completer-26 [] { ["CodeBuild_20161006.ListCuratedEnvironmentImages"] }
+def sort-by-completer-1 [] { ["CREATED_TIME" "LAST_MODIFIED_TIME" "NAME"] }
 def x-amz-target-completer-27 [] { ["CodeBuild_20161006.ListProjects"] }
 def x-amz-target-completer-28 [] { ["CodeBuild_20161006.ListReportGroups"] }
 def x-amz-target-completer-29 [] { ["CodeBuild_20161006.ListReports"] }
 def x-amz-target-completer-30 [] { ["CodeBuild_20161006.ListReportsForReportGroup"] }
+def sort-by-completer-2 [] { ["ARN" "MODIFIED_TIME"] }
 def x-amz-target-completer-31 [] { ["CodeBuild_20161006.ListSharedProjects"] }
 def x-amz-target-completer-32 [] { ["CodeBuild_20161006.ListSharedReportGroups"] }
 def x-amz-target-completer-33 [] { ["CodeBuild_20161006.ListSourceCredentials"] }
 def x-amz-target-completer-34 [] { ["CodeBuild_20161006.PutResourcePolicy"] }
 def x-amz-target-completer-35 [] { ["CodeBuild_20161006.RetryBuild"] }
+def retry-type-completer [] { ["RETRY_ALL_BUILDS" "RETRY_FAILED_BUILDS"] }
 def x-amz-target-completer-36 [] { ["CodeBuild_20161006.RetryBuildBatch"] }
+def source-type-override-completer [] { ["BITBUCKET" "CODECOMMIT" "CODEPIPELINE" "GITHUB" "GITHUB_ENTERPRISE" "NO_SOURCE" "S3"] }
+def environment-type-override-completer [] { ["ARM_CONTAINER" "LINUX_CONTAINER" "LINUX_GPU_CONTAINER" "WINDOWS_CONTAINER" "WINDOWS_SERVER_2019_CONTAINER"] }
+def compute-type-override-completer [] { ["BUILD_GENERAL1_2XLARGE" "BUILD_GENERAL1_LARGE" "BUILD_GENERAL1_MEDIUM" "BUILD_GENERAL1_SMALL"] }
+def image-pull-credentials-type-override-completer [] { ["CODEBUILD" "SERVICE_ROLE"] }
 def x-amz-target-completer-37 [] { ["CodeBuild_20161006.StartBuild"] }
 def x-amz-target-completer-38 [] { ["CodeBuild_20161006.StartBuildBatch"] }
 def x-amz-target-completer-39 [] { ["CodeBuild_20161006.StopBuild"] }
@@ -187,12 +201,13 @@ export def "batch-delete-builds" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  ids: any
-]: any -> record<buildsDeleted: record, buildsNotDeleted: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  ids: list<string> # The IDs of the builds to delete.
+]: any -> record<buildsDeleted: list<string>, buildsNotDeleted: table<id: string, statusCode: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.BatchDeleteBuilds")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ids": $ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -235,12 +250,13 @@ export def "batch-get-build-batches" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  ids: any
-]: any -> record<buildBatches: record, buildBatchesNotFound: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  ids: list<string> # An array that contains the batch build identifiers to retrieve.
+]: any -> record<buildBatches: table<id: string, arn: string, startTime: string, endTime: string, currentPhase: string, buildBatchStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list, source: record, secondarySources: list, secondarySourceVersions: list, artifacts: record, secondaryArtifacts: list, cache: record, environment: record, serviceRole: string, logConfig: record, buildTimeoutInMinutes: int, queuedTimeoutInMinutes: int, complete: bool, initiator: string, vpcConfig: record, encryptionKey: string, buildBatchNumber: int, fileSystemLocations: list, buildBatchConfig: record, buildGroups: list, debugSessionEnabled: bool>, buildBatchesNotFound: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.BatchGetBuildBatches")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ids": $ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -283,12 +299,13 @@ export def "batch-get-builds" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  ids: any
-]: any -> record<builds: record, buildsNotFound: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  ids: list<string> # The IDs of the builds.
+]: any -> record<builds: table<id: string, arn: string, buildNumber: int, startTime: string, endTime: string, currentPhase: string, buildStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list, source: record, secondarySources: list, secondarySourceVersions: list, artifacts: record, secondaryArtifacts: list, cache: record, environment: record, serviceRole: string, logs: record, timeoutInMinutes: int, queuedTimeoutInMinutes: int, buildComplete: bool, initiator: string, vpcConfig: record, networkInterface: record, encryptionKey: string, exportedEnvironmentVariables: list, reportArns: list, fileSystemLocations: list, debugSession: record, buildBatchArn: string>, buildsNotFound: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.BatchGetBuilds")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ids": $ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -331,12 +348,13 @@ export def "batch-get-projects" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  names: any
-]: any -> record<projects: record, projectsNotFound: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  names: list<string> # The names or ARNs of the build projects. To get information about a project shared with your Amazon Web Services account, its ARN must be specified. You cannot specify a shared project using its name.
+]: any -> record<projects: table<name: string, arn: string, description: string, source: record, secondarySources: list, sourceVersion: string, secondarySourceVersions: list, artifacts: record, secondaryArtifacts: list, cache: record, environment: record, serviceRole: string, timeoutInMinutes: int, queuedTimeoutInMinutes: int, encryptionKey: string, tags: list, created: string, lastModified: string, webhook: record, vpcConfig: record, badge: record, logsConfig: record, fileSystemLocations: list, buildBatchConfig: record, concurrentBuildLimit: int, projectVisibility: string, publicProjectAlias: string, resourceAccessRole: string>, projectsNotFound: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.BatchGetProjects")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"names": $names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -379,12 +397,13 @@ export def "batch-get-report-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  report_group_arns: any
-]: any -> record<reportGroups: record, reportGroupsNotFound: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  report_group_arns: list<string> # An array of report group ARNs that identify the report groups to return.
+]: any -> record<reportGroups: table<arn: string, name: string, type: string, exportConfig: record, created: string, lastModified: string, tags: list, status: string>, reportGroupsNotFound: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.BatchGetReportGroups")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"reportGroupArns": $report_group_arns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -427,12 +446,13 @@ export def "batch-get-reports" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  report_arns: any
-]: any -> record<reports: record, reportsNotFound: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  report_arns: list<string> # An array of ARNs that identify the Report objects to return.
+]: any -> record<reports: table<arn: string, type: string, name: string, reportGroupArn: string, executionId: string, status: string, created: string, expired: string, exportConfig: record, truncated: bool, testSummary: record, codeCoverageSummary: record>, reportsNotFound: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.BatchGetReports")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"reportArns": $report_arns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -458,6 +478,18 @@ export def "batch-get-reports" [
 #
 # POST /
 # operationId: CreateProject
+# --source shape: {type: "CODECOMMIT"|"CODEPIPELINE"|"GITHUB"|"S3"|"BITBUCKET"|"GITHUB_ENTERPRISE"|"NO_SOURCE", location?: string, gitCloneDepth?: int, gitSubmodulesConfig?: record, buildspec?: string, auth?: record, reportBuildStatus?: bool, buildStatusConfig?: record, insecureSsl?: bool, sourceIdentifier?: string}
+# --secondarySources item shape: {type: "CODECOMMIT"|"CODEPIPELINE"|"GITHUB"|"S3"|"BITBUCKET"|"GITHUB_ENTERPRISE"|"NO_SOURCE", location?: string, gitCloneDepth?: int, gitSubmodulesConfig?: record, buildspec?: string, auth?: record, reportBuildStatus?: bool, buildStatusConfig?: record, insecureSsl?: bool, sourceIdentifier?: string}
+# --secondarySourceVersions item shape: {sourceIdentifier: string, sourceVersion: string}
+# --artifacts shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
+# --secondaryArtifacts item shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
+# --cache shape: {type: "NO_CACHE"|"S3"|"LOCAL", location?: string, modes?: list<string>}
+# --environment shape: {type: "WINDOWS_CONTAINER"|"LINUX_CONTAINER"|"LINUX_GPU_CONTAINER"|"ARM_CONTAINER"|"WINDOWS_SERVER_2019_CONTAINER", image: string, computeType: "BUILD_GENERAL1_SMALL"|"BUILD_GENERAL1_MEDIUM"|"BUILD_GENERAL1_LARGE"|"BUILD_GENERAL1_2XLARGE", environmentVariables?: list, privilegedMode?: bool, certificate?: string, registryCredential?: record, imagePullCredentialsType?: "CODEBUILD"|"SERVICE_ROLE"}
+# --tags item shape: {key?: string, value?: string}
+# --vpcConfig shape: {vpcId?: string, subnets?: list<string>, securityGroupIds?: list<string>}
+# --logsConfig shape: {cloudWatchLogs?: record, s3Logs?: record}
+# --fileSystemLocations item shape: {type?: "EFS", location?: string, mountPoint?: string, identifier?: string, mountOptions?: string}
+# --buildBatchConfig shape: {serviceRole?: string, combineArtifacts?: bool, restrictions?: record, timeoutInMins?: int, batchReportMode?: "REPORT_INDIVIDUAL_BUILDS"|"REPORT_AGGREGATED_BATCH"}
 export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,34 +507,35 @@ export def "create-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  name: any
-  --description: any
-  --body-source: any
-  --secondary-sources: any
-  --source-version: any
-  --secondary-source-versions: any
-  artifacts: any
-  --secondary-artifacts: any
-  --cache: any
-  environment: any
-  service_role: any
-  --timeout-in-minutes: any
-  --queued-timeout-in-minutes: any
-  --encryption-key: any
-  --tags: any
-  --vpc-config: any
-  --badge-enabled: any
-  --logs-config: any
-  --file-system-locations: any
-  --build-batch-config: any
-  --concurrent-build-limit: any
-]: any -> record<project: record<name: record, arn: record, description: record, source: record<type: record, location: record, gitCloneDepth: record, gitSubmodulesConfig: record, buildspec: record, auth: record, reportBuildStatus: record, buildStatusConfig: record, insecureSsl: record, sourceIdentifier: record>, secondarySources: record, sourceVersion: record, secondarySourceVersions: record, artifacts: record<type: record, location: record, path: record, namespaceType: record, name: record, packaging: record, overrideArtifactName: record, encryptionDisabled: record, artifactIdentifier: record, bucketOwnerAccess: string>, secondaryArtifacts: record, cache: record<type: record, location: record, modes: record>, environment: record<type: record, image: record, computeType: record, environmentVariables: record, privilegedMode: record, certificate: record, registryCredential: record, imagePullCredentialsType: record>, serviceRole: record, timeoutInMinutes: record, queuedTimeoutInMinutes: record, encryptionKey: record, tags: record, created: record, lastModified: record, webhook: record<url: record, payloadUrl: record, secret: record, branchFilter: record, filterGroups: record, buildType: record, lastModifiedSecret: record>, vpcConfig: record<vpcId: record, subnets: record, securityGroupIds: record>, badge: record<badgeEnabled: record, badgeRequestUrl: record>, logsConfig: record<cloudWatchLogs: record, s3Logs: record>, fileSystemLocations: record, buildBatchConfig: record<serviceRole: record, combineArtifacts: record, restrictions: record, timeoutInMins: record, batchReportMode: record>, concurrentBuildLimit: record, projectVisibility: string, publicProjectAlias: record, resourceAccessRole: record>> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  name: string # The name of the build project.
+  --description: string # A description that makes the build project easy to identify.
+  source: record # Information about the build input source code for the build project. — shape: {type: "CODECOMMIT"|"CODEPIPELINE"|"GITHUB"|"S3"|"BITBUCKET"|"GITHUB_ENTERPRISE"|"NO_SOURCE", location?: string, gitCloneDepth?: int, gitSubmodulesConfig?: record, buildspec?: string, auth?: record, reportBuildStatus?: bool, buildStatusConfig?: record, insecureSsl?: bool, sourceIdentifier?: string}
+  --secondary-sources: list # An array of ProjectSource objects. — item shape: {type: "CODECOMMIT"|"CODEPIPELINE"|"GITHUB"|"S3"|"BITBUCKET"|"GITHUB_ENTERPRISE"|"NO_SOURCE", location?: string, gitCloneDepth?: int, gitSubmodulesConfig?: record, buildspec?: string, auth?: record, reportBuildStatus?: bool, buildStatusConfig?: record, insecureSsl?: bool, sourceIdentifier?: string}
+  --source-version: string # A version of the build input to be built for this project. If not specified, the latest version is used. If specified, it must be one of: For CodeCommit: the commit ID, branch, or Git tag to use. For GitHub: the commit ID, pull request ID, branch name, or tag name that corresponds to the version of the source code you want to build. If a pull request ID is specified, it must use the format pr/pull-request-ID (for example pr/25). If a branch name is specified, the branch's HEAD commit ID is used. If not specified, the default branch's HEAD commit ID is used. For Bitbucket: the commit ID, branch name, or tag name that corresponds to the version of the source code you want to build. If a branch name is specified, the branch's HEAD commit ID is used. If not specified, the default branch's HEAD commit ID is used. For Amazon S3: the version ID of the object that represents the build input ZIP file to use. If sourceVersion is specified at the build level, then that version takes precedence over this sourceVersion (at the project level). For more information, see Source Version Sample with CodeBuild (https://docs.aws.amazon.com/codebuild/latest/userguide/sample-source-version.html) in the CodeBuild User Guide.
+  --secondary-source-versions: list # An array of ProjectSourceVersion objects. If secondarySourceVersions is specified at the build level, then they take precedence over these secondarySourceVersions (at the project level). — item shape: {sourceIdentifier: string, sourceVersion: string}
+  artifacts: record # Information about the build output artifacts for the build project. — shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
+  --secondary-artifacts: list # An array of ProjectArtifacts objects. — item shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
+  --cache: record # Information about the cache for the build project. — shape: {type: "NO_CACHE"|"S3"|"LOCAL", location?: string, modes?: list<string>}
+  environment: record # Information about the build environment of the build project. — shape: {type: "WINDOWS_CONTAINER"|"LINUX_CONTAINER"|"LINUX_GPU_CONTAINER"|"ARM_CONTAINER"|"WINDOWS_SERVER_2019_CONTAINER", image: string, computeType: "BUILD_GENERAL1_SMALL"|"BUILD_GENERAL1_MEDIUM"|"BUILD_GENERAL1_LARGE"|"BUILD_GENERAL1_2XLARGE", environmentVariables?: list, privilegedMode?: bool, certificate?: string, registryCredential?: record, imagePullCredentialsType?: "CODEBUILD"|"SERVICE_ROLE"}
+  service_role: string # The ARN of the IAM role that enables CodeBuild to interact with dependent Amazon Web Services services on behalf of the Amazon Web Services account.
+  --timeout-in-minutes: int # How long, in minutes, from 5 to 480 (8 hours), for CodeBuild to wait before it times out any build that has not been marked as completed. The default is 60 minutes.
+  --queued-timeout-in-minutes: int # The number of minutes a build is allowed to be queued before it times out.
+  --encryption-key: string # The Key Management Service customer master key (CMK) to be used for encrypting the build output artifacts. You can use a cross-account KMS key to encrypt the build output artifacts if your service role has permission to that key. You can specify either the Amazon Resource Name (ARN) of the CMK or, if available, the CMK's alias (using the format alias/<alias-name>).
+  --tags: list # A list of tag key and value pairs associated with this build project. These tags are available for use by Amazon Web Services services that support CodeBuild build project tags. — item shape: {key?: string, value?: string}
+  --vpc-config: record # Information about the VPC configuration that CodeBuild accesses. — shape: {vpcId?: string, subnets?: list<string>, securityGroupIds?: list<string>}
+  --badge-enabled: oneof<nothing, bool> # Set this to true to generate a publicly accessible URL for your project's build badge.
+  --logs-config: record # Information about logs for a build project. These can be logs in CloudWatch Logs, built in a specified S3 bucket, or both. — shape: {cloudWatchLogs?: record, s3Logs?: record}
+  --file-system-locations: list # An array of ProjectFileSystemLocation objects for a CodeBuild build project. A ProjectFileSystemLocation object specifies the identifier, location, mountOptions, mountPoint, and type of a file system created using Amazon Elastic File System. — item shape: {type?: "EFS", location?: string, mountPoint?: string, identifier?: string, mountOptions?: string}
+  --build-batch-config: record # Contains configuration information about a batch build project. — shape: {serviceRole?: string, combineArtifacts?: bool, restrictions?: record, timeoutInMins?: int, batchReportMode?: "REPORT_INDIVIDUAL_BUILDS"|"REPORT_AGGREGATED_BATCH"}
+  --concurrent-build-limit: int # The maximum number of concurrent builds that are allowed for this project. New builds are only started if the current number of builds is less than or equal to this limit. If the current build count meets this limit, new builds are throttled and are not run.
+]: any -> record<project: record<name: string, arn: string, description: string, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, sourceVersion: string, secondarySourceVersions: list<record>, artifacts: record<type: string, location: string, path: string, namespaceType: string, name: string, packaging: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, timeoutInMinutes: int, queuedTimeoutInMinutes: int, encryptionKey: string, tags: list<record>, created: string, lastModified: string, webhook: record<url: string, payloadUrl: string, secret: string, branchFilter: string, filterGroups: list, buildType: string, lastModifiedSecret: string>, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, badge: record<badgeEnabled: bool, badgeRequestUrl: string>, logsConfig: record<cloudWatchLogs: record, s3Logs: record>, fileSystemLocations: list<record>, buildBatchConfig: record<serviceRole: string, combineArtifacts: bool, restrictions: record, timeoutInMins: int, batchReportMode: string>, concurrentBuildLimit: int, projectVisibility: string, publicProjectAlias: string, resourceAccessRole: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.CreateProject")
   let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"name": $name, "description": $description, "source": $body_source, "secondarySources": $secondary_sources, "sourceVersion": $source_version, "secondarySourceVersions": $secondary_source_versions, "artifacts": $artifacts, "secondaryArtifacts": $secondary_artifacts, "cache": $cache, "environment": $environment, "serviceRole": $service_role, "timeoutInMinutes": $timeout_in_minutes, "queuedTimeoutInMinutes": $queued_timeout_in_minutes, "encryptionKey": $encryption_key, "tags": $tags, "vpcConfig": $vpc_config, "badgeEnabled": $badge_enabled, "logsConfig": $logs_config, "fileSystemLocations": $file_system_locations, "buildBatchConfig": $build_batch_config, "concurrentBuildLimit": $concurrent_build_limit} | compact
+  let req_body = {"name": $name, "description": $description, "source": $source, "secondarySources": $secondary_sources, "sourceVersion": $source_version, "secondarySourceVersions": $secondary_source_versions, "artifacts": $artifacts, "secondaryArtifacts": $secondary_artifacts, "cache": $cache, "environment": $environment, "serviceRole": $service_role, "timeoutInMinutes": $timeout_in_minutes, "queuedTimeoutInMinutes": $queued_timeout_in_minutes, "encryptionKey": $encryption_key, "tags": $tags, "vpcConfig": $vpc_config, "badgeEnabled": $badge_enabled, "logsConfig": $logs_config, "fileSystemLocations": $file_system_locations, "buildBatchConfig": $build_batch_config, "concurrentBuildLimit": $concurrent_build_limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -526,6 +559,8 @@ export def "create-project" [
 #
 # POST /
 # operationId: CreateReportGroup
+# --exportConfig shape: {exportConfigType?: "S3"|"NO_EXPORT", s3Destination?: record}
+# --tags item shape: {key?: string, value?: string}
 export def "create-report-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -543,15 +578,16 @@ export def "create-report-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  name: any
-  type: any
-  export_config: any
-  --tags: any
-]: any -> record<reportGroup: record<arn: record, name: record, type: record, exportConfig: record<exportConfigType: record, s3Destination: record>, created: record, lastModified: record, tags: record, status: record>> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  name: string # The name of the report group.
+  type: string@type-completer # The type of report group.
+  export_config: record # Information about the location where the run of a report is exported. — shape: {exportConfigType?: "S3"|"NO_EXPORT", s3Destination?: record}
+  --tags: list # A list of tag key and value pairs associated with this report group. These tags are available for use by Amazon Web Services services that support CodeBuild report group tags. — item shape: {key?: string, value?: string}
+]: any -> record<reportGroup: record<arn: string, name: string, type: string, exportConfig: record<exportConfigType: string, s3Destination: record>, created: string, lastModified: string, tags: list<record>, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.CreateReportGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "type": $type, "exportConfig": $export_config, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -594,15 +630,16 @@ export def "create-webhook" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  project_name: any
-  --branch-filter: any
-  --filter-groups: any
-  --build-type: any
-]: any -> record<webhook: record<url: record, payloadUrl: record, secret: record, branchFilter: record, filterGroups: record, buildType: record, lastModifiedSecret: record>> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  project_name: string # The name of the CodeBuild project.
+  --branch-filter: string # A regular expression used to determine which repository branches are built when a webhook is triggered. If the name of a branch matches the regular expression, then it is built. If branchFilter is empty, then all branches are built. It is recommended that you use filterGroups instead of branchFilter.
+  --filter-groups: list # An array of arrays of WebhookFilter objects used to determine which webhooks are triggered. At least one WebhookFilter in the array must specify EVENT as its type. For a build to be triggered, at least one filter group in the filterGroups array must pass. For a filter group to pass, each of its filters must pass.
+  --build-type: string@build-type-completer # Specifies the type of build this webhook will trigger.
+]: any -> record<webhook: record<url: string, payloadUrl: string, secret: string, branchFilter: string, filterGroups: list<list>, buildType: string, lastModifiedSecret: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.CreateWebhook")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"projectName": $project_name, "branchFilter": $branch_filter, "filterGroups": $filter_groups, "buildType": $build_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -645,12 +682,13 @@ export def "delete-build-batch" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  id: any
-]: any -> record<statusCode: record, buildsDeleted: record, buildsNotDeleted: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  id: string # The identifier of the batch build to delete.
+]: any -> record<statusCode: string, buildsDeleted: list<string>, buildsNotDeleted: table<id: string, statusCode: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.DeleteBuildBatch")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -693,12 +731,13 @@ export def "delete-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  name: any
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  name: string # The name of the build project.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.DeleteProject")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -741,12 +780,13 @@ export def "delete-report" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  arn: any
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  arn: string # The ARN of the report to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.DeleteReport")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"arn": $arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -789,13 +829,14 @@ export def "delete-report-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  arn: any
-  --delete-reports: any
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  arn: string # The ARN of the report group to delete.
+  --delete-reports: oneof<nothing, bool> # If true, deletes any reports that belong to a report group before deleting the report group. If false, you must delete any reports in the report group. Use ListReportsForReportGroup (https://docs.aws.amazon.com/codebuild/latest/APIReference/API_ListReportsForReportGroup.html) to get the reports in a report group. Use DeleteReport (https://docs.aws.amazon.com/codebuild/latest/APIReference/API_DeleteReport.html) to delete the reports. If you call DeleteReportGroup for a report group that contains one or more reports, an exception is thrown.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.DeleteReportGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"arn": $arn, "deleteReports": $delete_reports} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -838,12 +879,13 @@ export def "delete-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  resource_arn: any
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  resource_arn: string # The ARN of the resource that is associated with the resource policy.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.DeleteResourcePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -886,12 +928,13 @@ export def "delete-source-credentials" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  arn: any
-]: any -> record<arn: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  arn: string # The Amazon Resource Name (ARN) of the token.
+]: any -> record<arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.DeleteSourceCredentials")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"arn": $arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -934,12 +977,13 @@ export def "delete-webhook" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  project_name: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  project_name: string # The name of the CodeBuild project.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.DeleteWebhook")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"projectName": $project_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -984,18 +1028,19 @@ export def "describe-code-coverages" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  report_arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --sort-order: any
-  --sort-by: any
-  --min-line-coverage-percentage: any
-  --max-line-coverage-percentage: any
-]: any -> record<nextToken: record, codeCoverages: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  report_arn: string # The ARN of the report for which test cases are returned.
+  --next-token-body: string # The nextToken value returned from a previous call to DescribeCodeCoverages. This specifies the next item to return. To return the beginning of the list, exclude this parameter. (body field)
+  --max-results-body: int # The maximum number of results to return. (body field)
+  --sort-order: string@sort-order-completer # Specifies if the results are sorted in ascending or descending order.
+  --sort-by: string@sort-by-completer # Specifies how the results are sorted. Possible values are: FILE_PATH The results are sorted by file path. LINE_COVERAGE_PERCENTAGE The results are sorted by the percentage of lines that are covered.
+  --min-line-coverage-percentage: float # The minimum line coverage percentage to report. (format: double)
+  --max-line-coverage-percentage: float # The maximum line coverage percentage to report. (format: double)
+]: any -> record<nextToken: string, codeCoverages: table<id: string, reportARN: string, filePath: string, lineCoveragePercentage: float, linesCovered: int, linesMissed: int, branchCoveragePercentage: float, branchesCovered: int, branchesMissed: int, expired: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.DescribeCodeCoverages")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"reportArn": $report_arn, "nextToken": $next_token_body, "maxResults": $max_results_body, "sortOrder": $sort_order, "sortBy": $sort_by, "minLineCoveragePercentage": $min_line_coverage_percentage, "maxLineCoveragePercentage": $max_line_coverage_percentage} | compact
@@ -1022,6 +1067,7 @@ export def "describe-code-coverages" [
 #
 # POST /
 # operationId: DescribeTestCases
+# --filter shape: {status?: string, keyword?: string}
 export def "describe-test-cases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1041,15 +1087,16 @@ export def "describe-test-cases" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  report_arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filter: any
-]: any -> record<nextToken: record, testCases: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  report_arn: string # The ARN of the report for which test cases are returned.
+  --next-token-body: string # During a previous call, the maximum number of items that can be returned is the value specified in maxResults. If there more items in the list, then a unique string called a nextToken is returned. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
+  --max-results-body: int # The maximum number of paginated test cases returned per response. Use nextToken to iterate pages in the list of returned TestCase objects. The default value is 100. (body field)
+  --filter: record # A filter used to return specific types of test cases. In order to pass the filter, the report must meet all of the filter properties. — shape: {status?: string, keyword?: string}
+]: any -> record<nextToken: string, testCases: table<reportArn: string, testRawDataPath: string, prefix: string, name: string, status: string, durationInNanoSeconds: int, message: string, expired: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.DescribeTestCases")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"reportArn": $report_arn, "nextToken": $next_token_body, "maxResults": $max_results_body, "filter": $filter} | compact
@@ -1093,14 +1140,15 @@ export def "get-report-group-trend" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  report_group_arn: any
-  --num-of-reports: any
-  trend_field: any
-]: any -> record<stats: record<average: record, max: record, min: record>, rawData: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  report_group_arn: string # The ARN of the report group that contains the reports to analyze.
+  --num-of-reports: int # The number of reports to analyze. This operation always retrieves the most recent reports. If this parameter is omitted, the most recent 100 reports are analyzed.
+  trend_field: string@trend-field-completer # The test report value to accumulate. This must be one of the following values: Test reports: DURATION Accumulate the test run times for the specified reports. PASS_RATE Accumulate the percentage of tests that passed for the specified test reports. TOTAL Accumulate the total number of tests for the specified test reports. Code coverage reports: BRANCH_COVERAGE Accumulate the branch coverage percentages for the specified test reports. BRANCHES_COVERED Accumulate the branches covered values for the specified test reports. BRANCHES_MISSED Accumulate the branches missed values for the specified test reports. LINE_COVERAGE Accumulate the line coverage percentages for the specified test reports. LINES_COVERED Accumulate the lines covered values for the specified test reports. LINES_MISSED Accumulate the lines not covered values for the specified test reports.
+]: any -> record<stats: record<average: string, max: string, min: string>, rawData: table<reportArn: string, data: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.GetReportGroupTrend")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"reportGroupArn": $report_group_arn, "numOfReports": $num_of_reports, "trendField": $trend_field} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1143,12 +1191,13 @@ export def "get-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  resource_arn: any
-]: any -> record<policy: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  resource_arn: string # The ARN of the resource that is associated with the resource policy.
+]: any -> record<policy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.GetResourcePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1191,19 +1240,21 @@ export def "import-source-credentials" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  --username: any
-  --body-token: any
-  server_type: any
-  auth_type: any
-  --should-overwrite: any
-]: any -> record<arn: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  --username: string # The Bitbucket username when the authType is BASIC_AUTH. This parameter is not valid for other types of source providers or connections.
+  --body-token: string # For GitHub or GitHub Enterprise, this is the personal access token. For Bitbucket, this is the app password. (format: password)
+  server_type: string@server-type-completer # The source provider used for this project.
+  auth_type: string@auth-type-completer # The type of authentication used to connect to a GitHub, GitHub Enterprise, or Bitbucket repository. An OAUTH connection is not supported by the API and must be created using the CodeBuild console.
+  --should-overwrite: oneof<nothing, bool> # Set to false to prevent overwriting the repository source credentials. Set to true to overwrite the repository source credentials. The default value is true.
+]: any -> record<arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.ImportSourceCredentials")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"username": $username, "token": $body_token, "serverType": $server_type, "authType": $auth_type, "shouldOverwrite": $should_overwrite} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -1243,12 +1294,13 @@ export def "invalidate-project-cache" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  project_name: any
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  project_name: string # The name of the CodeBuild build project that the cache is reset for.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.InvalidateProjectCache")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"projectName": $project_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1274,6 +1326,7 @@ export def "invalidate-project-cache" [
 #
 # POST /
 # operationId: ListBuildBatches
+# --filter shape: {status?: "SUCCEEDED"|"FAILED"|"FAULT"|"TIMED_OUT"|"IN_PROGRESS"|"STOPPED"}
 export def "list-build-batches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1293,15 +1346,16 @@ export def "list-build-batches" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  --filter: any
-  --max-results-body: any #  (body field)
-  --sort-order: any
-  --next-token-body: any #  (body field)
-]: any -> record<ids: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  --filter: record # Specifies filters when retrieving batch builds. — shape: {status?: "SUCCEEDED"|"FAILED"|"FAULT"|"TIMED_OUT"|"IN_PROGRESS"|"STOPPED"}
+  --max-results-body: int # The maximum number of results to return. (body field)
+  --sort-order: string@sort-order-completer # Specifies the sort order of the returned items. Valid values include: ASCENDING: List the batch build identifiers in ascending order by identifier. DESCENDING: List the batch build identifiers in descending order by identifier.
+  --next-token-body: string # The nextToken value returned from a previous call to ListBuildBatches. This specifies the next item to return. To return the beginning of the list, exclude this parameter. (body field)
+]: any -> record<ids: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.ListBuildBatches")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"filter": $filter, "maxResults": $max_results_body, "sortOrder": $sort_order, "nextToken": $next_token_body} | compact
@@ -1328,6 +1382,7 @@ export def "list-build-batches" [
 #
 # POST /
 # operationId: ListBuildBatchesForProject
+# --filter shape: {status?: "SUCCEEDED"|"FAILED"|"FAULT"|"TIMED_OUT"|"IN_PROGRESS"|"STOPPED"}
 export def "list-build-batches-for-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1347,16 +1402,17 @@ export def "list-build-batches-for-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  --project-name: any
-  --filter: any
-  --max-results-body: any #  (body field)
-  --sort-order: any
-  --next-token-body: any #  (body field)
-]: any -> record<ids: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  --project-name: string # The name of the project.
+  --filter: record # Specifies filters when retrieving batch builds. — shape: {status?: "SUCCEEDED"|"FAILED"|"FAULT"|"TIMED_OUT"|"IN_PROGRESS"|"STOPPED"}
+  --max-results-body: int # The maximum number of results to return. (body field)
+  --sort-order: string@sort-order-completer # Specifies the sort order of the returned items. Valid values include: ASCENDING: List the batch build identifiers in ascending order by identifier. DESCENDING: List the batch build identifiers in descending order by identifier.
+  --next-token-body: string # The nextToken value returned from a previous call to ListBuildBatchesForProject. This specifies the next item to return. To return the beginning of the list, exclude this parameter. (body field)
+]: any -> record<ids: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.ListBuildBatchesForProject")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"projectName": $project_name, "filter": $filter, "maxResults": $max_results_body, "sortOrder": $sort_order, "nextToken": $next_token_body} | compact
@@ -1401,13 +1457,14 @@ export def "list-builds" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  --sort-order: any
-  --next-token-body: any #  (body field)
-]: any -> record<ids: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  --sort-order: string@sort-order-completer # The order to list build IDs. Valid values include: ASCENDING: List the build IDs in ascending order by build ID. DESCENDING: List the build IDs in descending order by build ID.
+  --next-token-body: string # During a previous call, if there are more than 100 items in the list, only the first 100 items are returned, along with a unique string called a nextToken. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
+]: any -> record<ids: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.ListBuilds")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"sortOrder": $sort_order, "nextToken": $next_token_body} | compact
@@ -1452,14 +1509,15 @@ export def "list-builds-for-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  project_name: any
-  --sort-order: any
-  --next-token-body: any #  (body field)
-]: any -> record<ids: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  project_name: string # The name of the CodeBuild project.
+  --sort-order: string@sort-order-completer # The order to sort the results in. The results are sorted by build number, not the build identifier. If this is not specified, the results are sorted in descending order. Valid values include: ASCENDING: List the build identifiers in ascending order, by build number. DESCENDING: List the build identifiers in descending order, by build number. If the project has more than 100 builds, setting the sort order will result in an error.
+  --next-token-body: string # During a previous call, if there are more than 100 items in the list, only the first 100 items are returned, along with a unique string called a nextToken. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
+]: any -> record<ids: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.ListBuildsForProject")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"projectName": $project_name, "sortOrder": $sort_order, "nextToken": $next_token_body} | compact
@@ -1503,12 +1561,13 @@ export def "list-curated-environment-images" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
+  --x-amz-target: string@x-amz-target-completer-26 # required
   --body: record
-]: any -> record<platforms: record> {
+]: any -> record<platforms: table<platform: string, languages: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.ListCuratedEnvironmentImages")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1552,14 +1611,15 @@ export def "list-projects" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  --sort-by: any
-  --sort-order: any
-  --next-token-body: any #  (body field)
-]: any -> record<nextToken: record, projects: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  --sort-by: string@sort-by-completer-1 # The criterion to be used to list build project names. Valid values include: CREATED_TIME: List based on when each build project was created. LAST_MODIFIED_TIME: List based on when information about each build project was last changed. NAME: List based on each build project's name. Use sortOrder to specify in what order to list the build project names based on the preceding criteria.
+  --sort-order: string@sort-order-completer # The order in which to list build projects. Valid values include: ASCENDING: List in ascending order. DESCENDING: List in descending order. Use sortBy to specify the criterion to be used to list build project names.
+  --next-token-body: string # During a previous call, if there are more than 100 items in the list, only the first 100 items are returned, along with a unique string called a nextToken. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
+]: any -> record<nextToken: string, projects: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.ListProjects")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"sortBy": $sort_by, "sortOrder": $sort_order, "nextToken": $next_token_body} | compact
@@ -1605,15 +1665,16 @@ export def "list-report-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  --sort-order: any
-  --sort-by: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<nextToken: record, reportGroups: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  --sort-order: string@sort-order-completer # Used to specify the order to sort the list of returned report groups. Valid values are ASCENDING and DESCENDING.
+  --sort-by: string@sort-by-completer-1 # The criterion to be used to list build report groups. Valid values include: CREATED_TIME: List based on when each report group was created. LAST_MODIFIED_TIME: List based on when each report group was last changed. NAME: List based on each report group's name.
+  --next-token-body: string # During a previous call, the maximum number of items that can be returned is the value specified in maxResults. If there more items in the list, then a unique string called a nextToken is returned. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
+  --max-results-body: int # The maximum number of paginated report groups returned per response. Use nextToken to iterate pages in the list of returned ReportGroup objects. The default value is 100. (body field)
+]: any -> record<nextToken: string, reportGroups: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.ListReportGroups")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"sortOrder": $sort_order, "sortBy": $sort_by, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1640,6 +1701,7 @@ export def "list-report-groups" [
 #
 # POST /
 # operationId: ListReports
+# --filter shape: {status?: "GENERATING"|"SUCCEEDED"|"FAILED"|"INCOMPLETE"|"DELETING"}
 export def "list-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1659,15 +1721,16 @@ export def "list-reports" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  --sort-order: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filter: any
-]: any -> record<nextToken: record, reports: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  --sort-order: string@sort-order-completer # Specifies the sort order for the list of returned reports. Valid values are: ASCENDING: return reports in chronological order based on their creation date. DESCENDING: return reports in the reverse chronological order based on their creation date.
+  --next-token-body: string # During a previous call, the maximum number of items that can be returned is the value specified in maxResults. If there more items in the list, then a unique string called a nextToken is returned. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
+  --max-results-body: int # The maximum number of paginated reports returned per response. Use nextToken to iterate pages in the list of returned Report objects. The default value is 100. (body field)
+  --filter: record # A filter used to return reports with the status specified by the input status parameter. — shape: {status?: "GENERATING"|"SUCCEEDED"|"FAILED"|"INCOMPLETE"|"DELETING"}
+]: any -> record<nextToken: string, reports: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.ListReports")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"sortOrder": $sort_order, "nextToken": $next_token_body, "maxResults": $max_results_body, "filter": $filter} | compact
@@ -1694,6 +1757,7 @@ export def "list-reports" [
 #
 # POST /
 # operationId: ListReportsForReportGroup
+# --filter shape: {status?: "GENERATING"|"SUCCEEDED"|"FAILED"|"INCOMPLETE"|"DELETING"}
 export def "list-reports-for-report-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1713,16 +1777,17 @@ export def "list-reports-for-report-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  report_group_arn: any
-  --next-token-body: any #  (body field)
-  --sort-order: any
-  --max-results-body: any #  (body field)
-  --filter: any
-]: any -> record<nextToken: record, reports: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  report_group_arn: string # The ARN of the report group for which you want to return report ARNs.
+  --next-token-body: string # During a previous call, the maximum number of items that can be returned is the value specified in maxResults. If there more items in the list, then a unique string called a nextToken is returned. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
+  --sort-order: string@sort-order-completer # Use to specify whether the results are returned in ascending or descending order.
+  --max-results-body: int # The maximum number of paginated reports in this report group returned per response. Use nextToken to iterate pages in the list of returned Report objects. The default value is 100. (body field)
+  --filter: record # A filter used to return reports with the status specified by the input status parameter. — shape: {status?: "GENERATING"|"SUCCEEDED"|"FAILED"|"INCOMPLETE"|"DELETING"}
+]: any -> record<nextToken: string, reports: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.ListReportsForReportGroup")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"reportGroupArn": $report_group_arn, "nextToken": $next_token_body, "sortOrder": $sort_order, "maxResults": $max_results_body, "filter": $filter} | compact
@@ -1768,15 +1833,16 @@ export def "list-shared-projects" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  --sort-by: any
-  --sort-order: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<nextToken: record, projects: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  --sort-by: string@sort-by-completer-2 # The criterion to be used to list build projects shared with the current Amazon Web Services account or user. Valid values include: ARN: List based on the ARN. MODIFIED_TIME: List based on when information about the shared project was last changed.
+  --sort-order: string@sort-order-completer # The order in which to list shared build projects. Valid values include: ASCENDING: List in ascending order. DESCENDING: List in descending order.
+  --max-results-body: int # The maximum number of paginated shared build projects returned per response. Use nextToken to iterate pages in the list of returned Project objects. The default value is 100. (body field)
+  --next-token-body: string # During a previous call, the maximum number of items that can be returned is the value specified in maxResults. If there more items in the list, then a unique string called a nextToken is returned. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
+]: any -> record<nextToken: string, projects: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.ListSharedProjects")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"sortBy": $sort_by, "sortOrder": $sort_order, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
@@ -1822,15 +1888,16 @@ export def "list-shared-report-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  --sort-order: any
-  --sort-by: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<nextToken: record, reportGroups: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  --sort-order: string@sort-order-completer # The order in which to list shared report groups. Valid values include: ASCENDING: List in ascending order. DESCENDING: List in descending order.
+  --sort-by: string@sort-by-completer-2 # The criterion to be used to list report groups shared with the current Amazon Web Services account or user. Valid values include: ARN: List based on the ARN. MODIFIED_TIME: List based on when information about the shared report group was last changed.
+  --next-token-body: string # During a previous call, the maximum number of items that can be returned is the value specified in maxResults. If there more items in the list, then a unique string called a nextToken is returned. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
+  --max-results-body: int # The maximum number of paginated shared report groups per response. Use nextToken to iterate pages in the list of returned ReportGroup objects. The default value is 100. (body field)
+]: any -> record<nextToken: string, reportGroups: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.ListSharedReportGroups")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"sortOrder": $sort_order, "sortBy": $sort_by, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1874,12 +1941,13 @@ export def "list-source-credentials" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
+  --x-amz-target: string@x-amz-target-completer-33 # required
   --body: record
-]: any -> record<sourceCredentialsInfos: record> {
+]: any -> record<sourceCredentialsInfos: table<arn: string, serverType: string, authType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.ListSourceCredentials")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1922,13 +1990,14 @@ export def "put-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  policy: any
-  resource_arn: any
-]: any -> record<resourceArn: record> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  policy: string # A JSON-formatted resource policy. For more information, see Sharing a Project (https://docs.aws.amazon.com/codebuild/latest/userguide/project-sharing.html#project-sharing-share) and Sharing a Report Group (https://docs.aws.amazon.com/codebuild/latest/userguide/report-groups-sharing.html#report-groups-sharing-share) in the CodeBuild User Guide.
+  resource_arn: string # The ARN of the Project or ReportGroup resource you want to associate with a resource policy.
+]: any -> record<resourceArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.PutResourcePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"policy": $policy, "resourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1971,12 +2040,13 @@ export def "retry-build" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  --id: any
-]: any -> record<build: record<id: record, arn: record, buildNumber: record, startTime: record, endTime: record, currentPhase: record, buildStatus: record, sourceVersion: record, resolvedSourceVersion: record, projectName: record, phases: record, source: record<type: record, location: record, gitCloneDepth: record, gitSubmodulesConfig: record, buildspec: record, auth: record, reportBuildStatus: record, buildStatusConfig: record, insecureSsl: record, sourceIdentifier: record>, secondarySources: record, secondarySourceVersions: record, artifacts: record<location: record, sha256sum: record, md5sum: record, overrideArtifactName: record, encryptionDisabled: record, artifactIdentifier: record, bucketOwnerAccess: string>, secondaryArtifacts: record, cache: record<type: record, location: record, modes: record>, environment: record<type: record, image: record, computeType: record, environmentVariables: record, privilegedMode: record, certificate: record, registryCredential: record, imagePullCredentialsType: record>, serviceRole: record, logs: record<groupName: record, streamName: record, deepLink: record, s3DeepLink: record, cloudWatchLogsArn: record, s3LogsArn: record, cloudWatchLogs: record, s3Logs: record>, timeoutInMinutes: record, queuedTimeoutInMinutes: record, buildComplete: record, initiator: record, vpcConfig: record<vpcId: record, subnets: record, securityGroupIds: record>, networkInterface: record<subnetId: record, networkInterfaceId: record>, encryptionKey: record, exportedEnvironmentVariables: record, reportArns: record, fileSystemLocations: record, debugSession: record<sessionEnabled: record, sessionTarget: record>, buildBatchArn: record>> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  --id: string # Specifies the identifier of the build to restart.
+]: any -> record<build: record<id: string, arn: string, buildNumber: int, startTime: string, endTime: string, currentPhase: string, buildStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list<record>, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, secondarySourceVersions: list<record>, artifacts: record<location: string, sha256sum: string, md5sum: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, logs: record<groupName: string, streamName: string, deepLink: string, s3DeepLink: string, cloudWatchLogsArn: string, s3LogsArn: string, cloudWatchLogs: record, s3Logs: record>, timeoutInMinutes: int, queuedTimeoutInMinutes: int, buildComplete: bool, initiator: string, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, networkInterface: record<subnetId: string, networkInterfaceId: string>, encryptionKey: string, exportedEnvironmentVariables: list<record>, reportArns: list<string>, fileSystemLocations: list<record>, debugSession: record<sessionEnabled: bool, sessionTarget: string>, buildBatchArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.RetryBuild")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2019,13 +2089,14 @@ export def "retry-build-batch" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  --id: any
-  --retry-type: any
-]: any -> record<buildBatch: record<id: record, arn: record, startTime: record, endTime: record, currentPhase: record, buildBatchStatus: record, sourceVersion: record, resolvedSourceVersion: record, projectName: record, phases: record, source: record<type: record, location: record, gitCloneDepth: record, gitSubmodulesConfig: record, buildspec: record, auth: record, reportBuildStatus: record, buildStatusConfig: record, insecureSsl: record, sourceIdentifier: record>, secondarySources: record, secondarySourceVersions: record, artifacts: record<location: record, sha256sum: record, md5sum: record, overrideArtifactName: record, encryptionDisabled: record, artifactIdentifier: record, bucketOwnerAccess: string>, secondaryArtifacts: record, cache: record<type: record, location: record, modes: record>, environment: record<type: record, image: record, computeType: record, environmentVariables: record, privilegedMode: record, certificate: record, registryCredential: record, imagePullCredentialsType: record>, serviceRole: record, logConfig: record<cloudWatchLogs: record, s3Logs: record>, buildTimeoutInMinutes: record, queuedTimeoutInMinutes: record, complete: record, initiator: record, vpcConfig: record<vpcId: record, subnets: record, securityGroupIds: record>, encryptionKey: record, buildBatchNumber: record, fileSystemLocations: record, buildBatchConfig: record<serviceRole: record, combineArtifacts: record, restrictions: record, timeoutInMins: record, batchReportMode: record>, buildGroups: record, debugSessionEnabled: record>> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  --id: string # Specifies the identifier of the batch build to restart.
+  --retry-type: string@retry-type-completer # Specifies the type of retry to perform.
+]: any -> record<buildBatch: record<id: string, arn: string, startTime: string, endTime: string, currentPhase: string, buildBatchStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list<record>, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, secondarySourceVersions: list<record>, artifacts: record<location: string, sha256sum: string, md5sum: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, logConfig: record<cloudWatchLogs: record, s3Logs: record>, buildTimeoutInMinutes: int, queuedTimeoutInMinutes: int, complete: bool, initiator: string, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, encryptionKey: string, buildBatchNumber: int, fileSystemLocations: list<record>, buildBatchConfig: record<serviceRole: string, combineArtifacts: bool, restrictions: record, timeoutInMins: int, batchReportMode: string>, buildGroups: list<record>, debugSessionEnabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.RetryBuildBatch")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id, "retryType": $retry_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2051,6 +2122,17 @@ export def "retry-build-batch" [
 #
 # POST /
 # operationId: StartBuild
+# --secondarySourcesOverride item shape: {type: "CODECOMMIT"|"CODEPIPELINE"|"GITHUB"|"S3"|"BITBUCKET"|"GITHUB_ENTERPRISE"|"NO_SOURCE", location?: string, gitCloneDepth?: int, gitSubmodulesConfig?: record, buildspec?: string, auth?: record, reportBuildStatus?: bool, buildStatusConfig?: record, insecureSsl?: bool, sourceIdentifier?: string}
+# --secondarySourcesVersionOverride item shape: {sourceIdentifier: string, sourceVersion: string}
+# --artifactsOverride shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
+# --secondaryArtifactsOverride item shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
+# --environmentVariablesOverride item shape: {name: string, value: string, type?: "PLAINTEXT"|"PARAMETER_STORE"|"SECRETS_MANAGER"}
+# --sourceAuthOverride shape: {type: "OAUTH", resource?: string}
+# --gitSubmodulesConfigOverride shape: {fetchSubmodules: bool}
+# --buildStatusConfigOverride shape: {context?: string, targetUrl?: string}
+# --cacheOverride shape: {type: "NO_CACHE"|"S3"|"LOCAL", location?: string, modes?: list<string>}
+# --logsConfigOverride shape: {cloudWatchLogs?: record, s3Logs?: record}
+# --registryCredentialOverride shape: {credential: string, credentialProvider: "SECRETS_MANAGER"}
 export def "start-build" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2068,41 +2150,42 @@ export def "start-build" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  project_name: any
-  --secondary-sources-override: any
-  --secondary-sources-version-override: any
-  --source-version: any
-  --artifacts-override: any
-  --secondary-artifacts-override: any
-  --environment-variables-override: any
-  --source-type-override: any
-  --source-location-override: any
-  --source-auth-override: any
-  --git-clone-depth-override: any
-  --git-submodules-config-override: any
-  --buildspec-override: any
-  --insecure-ssl-override: any
-  --report-build-status-override: any
-  --build-status-config-override: any
-  --environment-type-override: any
-  --image-override: any
-  --compute-type-override: any
-  --certificate-override: any
-  --cache-override: any
-  --service-role-override: any
-  --privileged-mode-override: any
-  --timeout-in-minutes-override: any
-  --queued-timeout-in-minutes-override: any
-  --encryption-key-override: any
-  --logs-config-override: any
-  --registry-credential-override: any
-  --image-pull-credentials-type-override: any
-  --debug-session-enabled: any
-]: any -> record<build: record<id: record, arn: record, buildNumber: record, startTime: record, endTime: record, currentPhase: record, buildStatus: record, sourceVersion: record, resolvedSourceVersion: record, projectName: record, phases: record, source: record<type: record, location: record, gitCloneDepth: record, gitSubmodulesConfig: record, buildspec: record, auth: record, reportBuildStatus: record, buildStatusConfig: record, insecureSsl: record, sourceIdentifier: record>, secondarySources: record, secondarySourceVersions: record, artifacts: record<location: record, sha256sum: record, md5sum: record, overrideArtifactName: record, encryptionDisabled: record, artifactIdentifier: record, bucketOwnerAccess: string>, secondaryArtifacts: record, cache: record<type: record, location: record, modes: record>, environment: record<type: record, image: record, computeType: record, environmentVariables: record, privilegedMode: record, certificate: record, registryCredential: record, imagePullCredentialsType: record>, serviceRole: record, logs: record<groupName: record, streamName: record, deepLink: record, s3DeepLink: record, cloudWatchLogsArn: record, s3LogsArn: record, cloudWatchLogs: record, s3Logs: record>, timeoutInMinutes: record, queuedTimeoutInMinutes: record, buildComplete: record, initiator: record, vpcConfig: record<vpcId: record, subnets: record, securityGroupIds: record>, networkInterface: record<subnetId: record, networkInterfaceId: record>, encryptionKey: record, exportedEnvironmentVariables: record, reportArns: record, fileSystemLocations: record, debugSession: record<sessionEnabled: record, sessionTarget: record>, buildBatchArn: record>> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  project_name: string # The name of the CodeBuild build project to start running a build.
+  --secondary-sources-override: list # An array of ProjectSource objects. — item shape: {type: "CODECOMMIT"|"CODEPIPELINE"|"GITHUB"|"S3"|"BITBUCKET"|"GITHUB_ENTERPRISE"|"NO_SOURCE", location?: string, gitCloneDepth?: int, gitSubmodulesConfig?: record, buildspec?: string, auth?: record, reportBuildStatus?: bool, buildStatusConfig?: record, insecureSsl?: bool, sourceIdentifier?: string}
+  --secondary-sources-version-override: list # An array of ProjectSourceVersion objects that specify one or more versions of the project's secondary sources to be used for this build only. — item shape: {sourceIdentifier: string, sourceVersion: string}
+  --source-version: string # The version of the build input to be built, for this build only. If not specified, the latest version is used. If specified, the contents depends on the source provider: CodeCommit The commit ID, branch, or Git tag to use. GitHub The commit ID, pull request ID, branch name, or tag name that corresponds to the version of the source code you want to build. If a pull request ID is specified, it must use the format pr/pull-request-ID (for example pr/25). If a branch name is specified, the branch's HEAD commit ID is used. If not specified, the default branch's HEAD commit ID is used. Bitbucket The commit ID, branch name, or tag name that corresponds to the version of the source code you want to build. If a branch name is specified, the branch's HEAD commit ID is used. If not specified, the default branch's HEAD commit ID is used. Amazon S3 The version ID of the object that represents the build input ZIP file to use. If sourceVersion is specified at the project level, then this sourceVersion (at the build level) takes precedence. For more information, see Source Version Sample with CodeBuild (https://docs.aws.amazon.com/codebuild/latest/userguide/sample-source-version.html) in the CodeBuild User Guide.
+  --artifacts-override: record # Information about the build output artifacts for the build project. — shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
+  --secondary-artifacts-override: list # An array of ProjectArtifacts objects. — item shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
+  --environment-variables-override: list # A set of environment variables that overrides, for this build only, the latest ones already defined in the build project. — item shape: {name: string, value: string, type?: "PLAINTEXT"|"PARAMETER_STORE"|"SECRETS_MANAGER"}
+  --source-type-override: string@source-type-override-completer # A source input type, for this build, that overrides the source input defined in the build project.
+  --source-location-override: string # A location that overrides, for this build, the source location for the one defined in the build project.
+  --source-auth-override: record # Information about the authorization settings for CodeBuild to access the source code to be built. This information is for the CodeBuild console's use only. Your code should not get or set this information directly. — shape: {type: "OAUTH", resource?: string}
+  --git-clone-depth-override: int # The user-defined depth of history, with a minimum value of 0, that overrides, for this build only, any previous depth of history defined in the build project.
+  --git-submodules-config-override: record # Information about the Git submodules configuration for an CodeBuild build project. — shape: {fetchSubmodules: bool}
+  --buildspec-override: string # A buildspec file declaration that overrides, for this build only, the latest one already defined in the build project. If this value is set, it can be either an inline buildspec definition, the path to an alternate buildspec file relative to the value of the built-in CODEBUILD_SRC_DIR environment variable, or the path to an S3 bucket. The bucket must be in the same Amazon Web Services Region as the build project. Specify the buildspec file using its ARN (for example, arn:aws:s3:::my-codebuild-sample2/buildspec.yml). If this value is not provided or is set to an empty string, the source code must contain a buildspec file in its root directory. For more information, see Buildspec File Name and Storage Location (https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html#build-spec-ref-name-storage).
+  --insecure-ssl-override: oneof<nothing, bool> # Enable this flag to override the insecure SSL setting that is specified in the build project. The insecure SSL setting determines whether to ignore SSL warnings while connecting to the project source code. This override applies only if the build's source is GitHub Enterprise.
+  --report-build-status-override: oneof<nothing, bool> # Set to true to report to your source provider the status of a build's start and completion. If you use this option with a source provider other than GitHub, GitHub Enterprise, or Bitbucket, an invalidInputException is thrown. To be able to report the build status to the source provider, the user associated with the source provider must have write access to the repo. If the user does not have write access, the build status cannot be updated. For more information, see Source provider access (https://docs.aws.amazon.com/codebuild/latest/userguide/access-tokens.html) in the CodeBuild User Guide. The status of a build triggered by a webhook is always reported to your source provider.
+  --build-status-config-override: record # Contains information that defines how the CodeBuild build project reports the build status to the source provider. — shape: {context?: string, targetUrl?: string}
+  --environment-type-override: string@environment-type-override-completer # A container type for this build that overrides the one specified in the build project.
+  --image-override: string # The name of an image for this build that overrides the one specified in the build project.
+  --compute-type-override: string@compute-type-override-completer # The name of a compute type for this build that overrides the one specified in the build project.
+  --certificate-override: string # The name of a certificate for this build that overrides the one specified in the build project.
+  --cache-override: record # Information about the cache for the build project. — shape: {type: "NO_CACHE"|"S3"|"LOCAL", location?: string, modes?: list<string>}
+  --service-role-override: string # The name of a service role for this build that overrides the one specified in the build project.
+  --privileged-mode-override: oneof<nothing, bool> # Enable this flag to override privileged mode in the build project.
+  --timeout-in-minutes-override: int # The number of build timeout minutes, from 5 to 480 (8 hours), that overrides, for this build only, the latest setting already defined in the build project.
+  --queued-timeout-in-minutes-override: int # The number of minutes a build is allowed to be queued before it times out.
+  --encryption-key-override: string # The Key Management Service customer master key (CMK) that overrides the one specified in the build project. The CMK key encrypts the build output artifacts. You can use a cross-account KMS key to encrypt the build output artifacts if your service role has permission to that key. You can specify either the Amazon Resource Name (ARN) of the CMK or, if available, the CMK's alias (using the format alias/<alias-name>).
+  --logs-config-override: record # Information about logs for a build project. These can be logs in CloudWatch Logs, built in a specified S3 bucket, or both. — shape: {cloudWatchLogs?: record, s3Logs?: record}
+  --registry-credential-override: record # Information about credentials that provide access to a private Docker registry. When this is set: imagePullCredentialsType must be set to SERVICE_ROLE. images cannot be curated or an Amazon ECR image. For more information, see Private Registry with Secrets Manager Sample for CodeBuild (https://docs.aws.amazon.com/codebuild/latest/userguide/sample-private-registry.html). — shape: {credential: string, credentialProvider: "SECRETS_MANAGER"}
+  --image-pull-credentials-type-override: string@image-pull-credentials-type-override-completer # The type of credentials CodeBuild uses to pull images in your build. There are two valid values: CODEBUILD Specifies that CodeBuild uses its own credentials. This requires that you modify your ECR repository policy to trust CodeBuild's service principal. SERVICE_ROLE Specifies that CodeBuild uses your build project's service role. When using a cross-account or private registry image, you must use SERVICE_ROLE credentials. When using an CodeBuild curated image, you must use CODEBUILD credentials.
+  --debug-session-enabled: oneof<nothing, bool> # Specifies if session debugging is enabled for this build. For more information, see Viewing a running build in Session Manager (https://docs.aws.amazon.com/codebuild/latest/userguide/session-manager.html).
+]: any -> record<build: record<id: string, arn: string, buildNumber: int, startTime: string, endTime: string, currentPhase: string, buildStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list<record>, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, secondarySourceVersions: list<record>, artifacts: record<location: string, sha256sum: string, md5sum: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, logs: record<groupName: string, streamName: string, deepLink: string, s3DeepLink: string, cloudWatchLogsArn: string, s3LogsArn: string, cloudWatchLogs: record, s3Logs: record>, timeoutInMinutes: int, queuedTimeoutInMinutes: int, buildComplete: bool, initiator: string, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, networkInterface: record<subnetId: string, networkInterfaceId: string>, encryptionKey: string, exportedEnvironmentVariables: list<record>, reportArns: list<string>, fileSystemLocations: list<record>, debugSession: record<sessionEnabled: bool, sessionTarget: string>, buildBatchArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.StartBuild")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"projectName": $project_name, "secondarySourcesOverride": $secondary_sources_override, "secondarySourcesVersionOverride": $secondary_sources_version_override, "sourceVersion": $source_version, "artifactsOverride": $artifacts_override, "secondaryArtifactsOverride": $secondary_artifacts_override, "environmentVariablesOverride": $environment_variables_override, "sourceTypeOverride": $source_type_override, "sourceLocationOverride": $source_location_override, "sourceAuthOverride": $source_auth_override, "gitCloneDepthOverride": $git_clone_depth_override, "gitSubmodulesConfigOverride": $git_submodules_config_override, "buildspecOverride": $buildspec_override, "insecureSslOverride": $insecure_ssl_override, "reportBuildStatusOverride": $report_build_status_override, "buildStatusConfigOverride": $build_status_config_override, "environmentTypeOverride": $environment_type_override, "imageOverride": $image_override, "computeTypeOverride": $compute_type_override, "certificateOverride": $certificate_override, "cacheOverride": $cache_override, "serviceRoleOverride": $service_role_override, "privilegedModeOverride": $privileged_mode_override, "timeoutInMinutesOverride": $timeout_in_minutes_override, "queuedTimeoutInMinutesOverride": $queued_timeout_in_minutes_override, "encryptionKeyOverride": $encryption_key_override, "logsConfigOverride": $logs_config_override, "registryCredentialOverride": $registry_credential_override, "imagePullCredentialsTypeOverride": $image_pull_credentials_type_override, "debugSessionEnabled": $debug_session_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2128,6 +2211,17 @@ export def "start-build" [
 #
 # POST /
 # operationId: StartBuildBatch
+# --secondarySourcesOverride item shape: {type: "CODECOMMIT"|"CODEPIPELINE"|"GITHUB"|"S3"|"BITBUCKET"|"GITHUB_ENTERPRISE"|"NO_SOURCE", location?: string, gitCloneDepth?: int, gitSubmodulesConfig?: record, buildspec?: string, auth?: record, reportBuildStatus?: bool, buildStatusConfig?: record, insecureSsl?: bool, sourceIdentifier?: string}
+# --secondarySourcesVersionOverride item shape: {sourceIdentifier: string, sourceVersion: string}
+# --artifactsOverride shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
+# --secondaryArtifactsOverride item shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
+# --environmentVariablesOverride item shape: {name: string, value: string, type?: "PLAINTEXT"|"PARAMETER_STORE"|"SECRETS_MANAGER"}
+# --sourceAuthOverride shape: {type: "OAUTH", resource?: string}
+# --gitSubmodulesConfigOverride shape: {fetchSubmodules: bool}
+# --cacheOverride shape: {type: "NO_CACHE"|"S3"|"LOCAL", location?: string, modes?: list<string>}
+# --logsConfigOverride shape: {cloudWatchLogs?: record, s3Logs?: record}
+# --registryCredentialOverride shape: {credential: string, credentialProvider: "SECRETS_MANAGER"}
+# --buildBatchConfigOverride shape: {serviceRole?: string, combineArtifacts?: bool, restrictions?: record, timeoutInMins?: int, batchReportMode?: "REPORT_INDIVIDUAL_BUILDS"|"REPORT_AGGREGATED_BATCH"}
 export def "start-build-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2145,41 +2239,42 @@ export def "start-build-batch" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  project_name: any
-  --secondary-sources-override: any
-  --secondary-sources-version-override: any
-  --source-version: any
-  --artifacts-override: any
-  --secondary-artifacts-override: any
-  --environment-variables-override: any
-  --source-type-override: any
-  --source-location-override: any
-  --source-auth-override: any
-  --git-clone-depth-override: any
-  --git-submodules-config-override: any
-  --buildspec-override: any
-  --insecure-ssl-override: any
-  --report-build-batch-status-override: any
-  --environment-type-override: any
-  --image-override: any
-  --compute-type-override: any
-  --certificate-override: any
-  --cache-override: any
-  --service-role-override: any
-  --privileged-mode-override: any
-  --build-timeout-in-minutes-override: any
-  --queued-timeout-in-minutes-override: any
-  --encryption-key-override: any
-  --logs-config-override: any
-  --registry-credential-override: any
-  --image-pull-credentials-type-override: any
-  --build-batch-config-override: any
-  --debug-session-enabled: any
-]: any -> record<buildBatch: record<id: record, arn: record, startTime: record, endTime: record, currentPhase: record, buildBatchStatus: record, sourceVersion: record, resolvedSourceVersion: record, projectName: record, phases: record, source: record<type: record, location: record, gitCloneDepth: record, gitSubmodulesConfig: record, buildspec: record, auth: record, reportBuildStatus: record, buildStatusConfig: record, insecureSsl: record, sourceIdentifier: record>, secondarySources: record, secondarySourceVersions: record, artifacts: record<location: record, sha256sum: record, md5sum: record, overrideArtifactName: record, encryptionDisabled: record, artifactIdentifier: record, bucketOwnerAccess: string>, secondaryArtifacts: record, cache: record<type: record, location: record, modes: record>, environment: record<type: record, image: record, computeType: record, environmentVariables: record, privilegedMode: record, certificate: record, registryCredential: record, imagePullCredentialsType: record>, serviceRole: record, logConfig: record<cloudWatchLogs: record, s3Logs: record>, buildTimeoutInMinutes: record, queuedTimeoutInMinutes: record, complete: record, initiator: record, vpcConfig: record<vpcId: record, subnets: record, securityGroupIds: record>, encryptionKey: record, buildBatchNumber: record, fileSystemLocations: record, buildBatchConfig: record<serviceRole: record, combineArtifacts: record, restrictions: record, timeoutInMins: record, batchReportMode: record>, buildGroups: record, debugSessionEnabled: record>> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  project_name: string # The name of the project.
+  --secondary-sources-override: list # An array of ProjectSource objects that override the secondary sources defined in the batch build project. — item shape: {type: "CODECOMMIT"|"CODEPIPELINE"|"GITHUB"|"S3"|"BITBUCKET"|"GITHUB_ENTERPRISE"|"NO_SOURCE", location?: string, gitCloneDepth?: int, gitSubmodulesConfig?: record, buildspec?: string, auth?: record, reportBuildStatus?: bool, buildStatusConfig?: record, insecureSsl?: bool, sourceIdentifier?: string}
+  --secondary-sources-version-override: list # An array of ProjectSourceVersion objects that override the secondary source versions in the batch build project. — item shape: {sourceIdentifier: string, sourceVersion: string}
+  --source-version: string # The version of the batch build input to be built, for this build only. If not specified, the latest version is used. If specified, the contents depends on the source provider: CodeCommit The commit ID, branch, or Git tag to use. GitHub The commit ID, pull request ID, branch name, or tag name that corresponds to the version of the source code you want to build. If a pull request ID is specified, it must use the format pr/pull-request-ID (for example pr/25). If a branch name is specified, the branch's HEAD commit ID is used. If not specified, the default branch's HEAD commit ID is used. Bitbucket The commit ID, branch name, or tag name that corresponds to the version of the source code you want to build. If a branch name is specified, the branch's HEAD commit ID is used. If not specified, the default branch's HEAD commit ID is used. Amazon S3 The version ID of the object that represents the build input ZIP file to use. If sourceVersion is specified at the project level, then this sourceVersion (at the build level) takes precedence. For more information, see Source Version Sample with CodeBuild (https://docs.aws.amazon.com/codebuild/latest/userguide/sample-source-version.html) in the CodeBuild User Guide.
+  --artifacts-override: record # Information about the build output artifacts for the build project. — shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
+  --secondary-artifacts-override: list # An array of ProjectArtifacts objects that override the secondary artifacts defined in the batch build project. — item shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
+  --environment-variables-override: list # An array of EnvironmentVariable objects that override, or add to, the environment variables defined in the batch build project. — item shape: {name: string, value: string, type?: "PLAINTEXT"|"PARAMETER_STORE"|"SECRETS_MANAGER"}
+  --source-type-override: string@source-type-override-completer # The source input type that overrides the source input defined in the batch build project.
+  --source-location-override: string # A location that overrides, for this batch build, the source location defined in the batch build project.
+  --source-auth-override: record # Information about the authorization settings for CodeBuild to access the source code to be built. This information is for the CodeBuild console's use only. Your code should not get or set this information directly. — shape: {type: "OAUTH", resource?: string}
+  --git-clone-depth-override: int # The user-defined depth of history, with a minimum value of 0, that overrides, for this batch build only, any previous depth of history defined in the batch build project.
+  --git-submodules-config-override: record # Information about the Git submodules configuration for an CodeBuild build project. — shape: {fetchSubmodules: bool}
+  --buildspec-override: string # A buildspec file declaration that overrides, for this build only, the latest one already defined in the build project. If this value is set, it can be either an inline buildspec definition, the path to an alternate buildspec file relative to the value of the built-in CODEBUILD_SRC_DIR environment variable, or the path to an S3 bucket. The bucket must be in the same Amazon Web Services Region as the build project. Specify the buildspec file using its ARN (for example, arn:aws:s3:::my-codebuild-sample2/buildspec.yml). If this value is not provided or is set to an empty string, the source code must contain a buildspec file in its root directory. For more information, see Buildspec File Name and Storage Location (https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html#build-spec-ref-name-storage).
+  --insecure-ssl-override: oneof<nothing, bool> # Enable this flag to override the insecure SSL setting that is specified in the batch build project. The insecure SSL setting determines whether to ignore SSL warnings while connecting to the project source code. This override applies only if the build's source is GitHub Enterprise.
+  --report-build-batch-status-override: oneof<nothing, bool> # Set to true to report to your source provider the status of a batch build's start and completion. If you use this option with a source provider other than GitHub, GitHub Enterprise, or Bitbucket, an invalidInputException is thrown. The status of a build triggered by a webhook is always reported to your source provider.
+  --environment-type-override: string@environment-type-override-completer # A container type for this batch build that overrides the one specified in the batch build project.
+  --image-override: string # The name of an image for this batch build that overrides the one specified in the batch build project.
+  --compute-type-override: string@compute-type-override-completer # The name of a compute type for this batch build that overrides the one specified in the batch build project.
+  --certificate-override: string # The name of a certificate for this batch build that overrides the one specified in the batch build project.
+  --cache-override: record # Information about the cache for the build project. — shape: {type: "NO_CACHE"|"S3"|"LOCAL", location?: string, modes?: list<string>}
+  --service-role-override: string # The name of a service role for this batch build that overrides the one specified in the batch build project.
+  --privileged-mode-override: oneof<nothing, bool> # Enable this flag to override privileged mode in the batch build project.
+  --build-timeout-in-minutes-override: int # Overrides the build timeout specified in the batch build project.
+  --queued-timeout-in-minutes-override: int # The number of minutes a batch build is allowed to be queued before it times out.
+  --encryption-key-override: string # The Key Management Service customer master key (CMK) that overrides the one specified in the batch build project. The CMK key encrypts the build output artifacts. You can use a cross-account KMS key to encrypt the build output artifacts if your service role has permission to that key. You can specify either the Amazon Resource Name (ARN) of the CMK or, if available, the CMK's alias (using the format alias/<alias-name>).
+  --logs-config-override: record # Information about logs for a build project. These can be logs in CloudWatch Logs, built in a specified S3 bucket, or both. — shape: {cloudWatchLogs?: record, s3Logs?: record}
+  --registry-credential-override: record # Information about credentials that provide access to a private Docker registry. When this is set: imagePullCredentialsType must be set to SERVICE_ROLE. images cannot be curated or an Amazon ECR image. For more information, see Private Registry with Secrets Manager Sample for CodeBuild (https://docs.aws.amazon.com/codebuild/latest/userguide/sample-private-registry.html). — shape: {credential: string, credentialProvider: "SECRETS_MANAGER"}
+  --image-pull-credentials-type-override: string@image-pull-credentials-type-override-completer # The type of credentials CodeBuild uses to pull images in your batch build. There are two valid values: CODEBUILD Specifies that CodeBuild uses its own credentials. This requires that you modify your ECR repository policy to trust CodeBuild's service principal. SERVICE_ROLE Specifies that CodeBuild uses your build project's service role. When using a cross-account or private registry image, you must use SERVICE_ROLE credentials. When using an CodeBuild curated image, you must use CODEBUILD credentials.
+  --build-batch-config-override: record # Contains configuration information about a batch build project. — shape: {serviceRole?: string, combineArtifacts?: bool, restrictions?: record, timeoutInMins?: int, batchReportMode?: "REPORT_INDIVIDUAL_BUILDS"|"REPORT_AGGREGATED_BATCH"}
+  --debug-session-enabled: oneof<nothing, bool> # Specifies if session debugging is enabled for this batch build. For more information, see Viewing a running build in Session Manager (https://docs.aws.amazon.com/codebuild/latest/userguide/session-manager.html). Batch session debugging is not supported for matrix batch builds.
+]: any -> record<buildBatch: record<id: string, arn: string, startTime: string, endTime: string, currentPhase: string, buildBatchStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list<record>, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, secondarySourceVersions: list<record>, artifacts: record<location: string, sha256sum: string, md5sum: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, logConfig: record<cloudWatchLogs: record, s3Logs: record>, buildTimeoutInMinutes: int, queuedTimeoutInMinutes: int, complete: bool, initiator: string, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, encryptionKey: string, buildBatchNumber: int, fileSystemLocations: list<record>, buildBatchConfig: record<serviceRole: string, combineArtifacts: bool, restrictions: record, timeoutInMins: int, batchReportMode: string>, buildGroups: list<record>, debugSessionEnabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.StartBuildBatch")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"projectName": $project_name, "secondarySourcesOverride": $secondary_sources_override, "secondarySourcesVersionOverride": $secondary_sources_version_override, "sourceVersion": $source_version, "artifactsOverride": $artifacts_override, "secondaryArtifactsOverride": $secondary_artifacts_override, "environmentVariablesOverride": $environment_variables_override, "sourceTypeOverride": $source_type_override, "sourceLocationOverride": $source_location_override, "sourceAuthOverride": $source_auth_override, "gitCloneDepthOverride": $git_clone_depth_override, "gitSubmodulesConfigOverride": $git_submodules_config_override, "buildspecOverride": $buildspec_override, "insecureSslOverride": $insecure_ssl_override, "reportBuildBatchStatusOverride": $report_build_batch_status_override, "environmentTypeOverride": $environment_type_override, "imageOverride": $image_override, "computeTypeOverride": $compute_type_override, "certificateOverride": $certificate_override, "cacheOverride": $cache_override, "serviceRoleOverride": $service_role_override, "privilegedModeOverride": $privileged_mode_override, "buildTimeoutInMinutesOverride": $build_timeout_in_minutes_override, "queuedTimeoutInMinutesOverride": $queued_timeout_in_minutes_override, "encryptionKeyOverride": $encryption_key_override, "logsConfigOverride": $logs_config_override, "registryCredentialOverride": $registry_credential_override, "imagePullCredentialsTypeOverride": $image_pull_credentials_type_override, "buildBatchConfigOverride": $build_batch_config_override, "debugSessionEnabled": $debug_session_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2222,12 +2317,13 @@ export def "stop-build" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  id: any
-]: any -> record<build: record<id: record, arn: record, buildNumber: record, startTime: record, endTime: record, currentPhase: record, buildStatus: record, sourceVersion: record, resolvedSourceVersion: record, projectName: record, phases: record, source: record<type: record, location: record, gitCloneDepth: record, gitSubmodulesConfig: record, buildspec: record, auth: record, reportBuildStatus: record, buildStatusConfig: record, insecureSsl: record, sourceIdentifier: record>, secondarySources: record, secondarySourceVersions: record, artifacts: record<location: record, sha256sum: record, md5sum: record, overrideArtifactName: record, encryptionDisabled: record, artifactIdentifier: record, bucketOwnerAccess: string>, secondaryArtifacts: record, cache: record<type: record, location: record, modes: record>, environment: record<type: record, image: record, computeType: record, environmentVariables: record, privilegedMode: record, certificate: record, registryCredential: record, imagePullCredentialsType: record>, serviceRole: record, logs: record<groupName: record, streamName: record, deepLink: record, s3DeepLink: record, cloudWatchLogsArn: record, s3LogsArn: record, cloudWatchLogs: record, s3Logs: record>, timeoutInMinutes: record, queuedTimeoutInMinutes: record, buildComplete: record, initiator: record, vpcConfig: record<vpcId: record, subnets: record, securityGroupIds: record>, networkInterface: record<subnetId: record, networkInterfaceId: record>, encryptionKey: record, exportedEnvironmentVariables: record, reportArns: record, fileSystemLocations: record, debugSession: record<sessionEnabled: record, sessionTarget: record>, buildBatchArn: record>> {
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  id: string # The ID of the build.
+]: any -> record<build: record<id: string, arn: string, buildNumber: int, startTime: string, endTime: string, currentPhase: string, buildStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list<record>, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, secondarySourceVersions: list<record>, artifacts: record<location: string, sha256sum: string, md5sum: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, logs: record<groupName: string, streamName: string, deepLink: string, s3DeepLink: string, cloudWatchLogsArn: string, s3LogsArn: string, cloudWatchLogs: record, s3Logs: record>, timeoutInMinutes: int, queuedTimeoutInMinutes: int, buildComplete: bool, initiator: string, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, networkInterface: record<subnetId: string, networkInterfaceId: string>, encryptionKey: string, exportedEnvironmentVariables: list<record>, reportArns: list<string>, fileSystemLocations: list<record>, debugSession: record<sessionEnabled: bool, sessionTarget: string>, buildBatchArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.StopBuild")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2270,12 +2366,13 @@ export def "stop-build-batch" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  id: any
-]: any -> record<buildBatch: record<id: record, arn: record, startTime: record, endTime: record, currentPhase: record, buildBatchStatus: record, sourceVersion: record, resolvedSourceVersion: record, projectName: record, phases: record, source: record<type: record, location: record, gitCloneDepth: record, gitSubmodulesConfig: record, buildspec: record, auth: record, reportBuildStatus: record, buildStatusConfig: record, insecureSsl: record, sourceIdentifier: record>, secondarySources: record, secondarySourceVersions: record, artifacts: record<location: record, sha256sum: record, md5sum: record, overrideArtifactName: record, encryptionDisabled: record, artifactIdentifier: record, bucketOwnerAccess: string>, secondaryArtifacts: record, cache: record<type: record, location: record, modes: record>, environment: record<type: record, image: record, computeType: record, environmentVariables: record, privilegedMode: record, certificate: record, registryCredential: record, imagePullCredentialsType: record>, serviceRole: record, logConfig: record<cloudWatchLogs: record, s3Logs: record>, buildTimeoutInMinutes: record, queuedTimeoutInMinutes: record, complete: record, initiator: record, vpcConfig: record<vpcId: record, subnets: record, securityGroupIds: record>, encryptionKey: record, buildBatchNumber: record, fileSystemLocations: record, buildBatchConfig: record<serviceRole: record, combineArtifacts: record, restrictions: record, timeoutInMins: record, batchReportMode: record>, buildGroups: record, debugSessionEnabled: record>> {
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  id: string # The identifier of the batch build to stop.
+]: any -> record<buildBatch: record<id: string, arn: string, startTime: string, endTime: string, currentPhase: string, buildBatchStatus: string, sourceVersion: string, resolvedSourceVersion: string, projectName: string, phases: list<record>, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, secondarySourceVersions: list<record>, artifacts: record<location: string, sha256sum: string, md5sum: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, logConfig: record<cloudWatchLogs: record, s3Logs: record>, buildTimeoutInMinutes: int, queuedTimeoutInMinutes: int, complete: bool, initiator: string, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, encryptionKey: string, buildBatchNumber: int, fileSystemLocations: list<record>, buildBatchConfig: record<serviceRole: string, combineArtifacts: bool, restrictions: record, timeoutInMins: int, batchReportMode: string>, buildGroups: list<record>, debugSessionEnabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.StopBuildBatch")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2301,7 +2398,18 @@ export def "stop-build-batch" [
 #
 # POST /
 # operationId: UpdateProject
-# --buildBatchConfig shape: {serviceRole?: any, combineArtifacts?: any, restrictions?: any, timeoutInMins?: any, batchReportMode?: any}
+# --source shape: {type: "CODECOMMIT"|"CODEPIPELINE"|"GITHUB"|"S3"|"BITBUCKET"|"GITHUB_ENTERPRISE"|"NO_SOURCE", location?: string, gitCloneDepth?: int, gitSubmodulesConfig?: record, buildspec?: string, auth?: record, reportBuildStatus?: bool, buildStatusConfig?: record, insecureSsl?: bool, sourceIdentifier?: string}
+# --secondarySources item shape: {type: "CODECOMMIT"|"CODEPIPELINE"|"GITHUB"|"S3"|"BITBUCKET"|"GITHUB_ENTERPRISE"|"NO_SOURCE", location?: string, gitCloneDepth?: int, gitSubmodulesConfig?: record, buildspec?: string, auth?: record, reportBuildStatus?: bool, buildStatusConfig?: record, insecureSsl?: bool, sourceIdentifier?: string}
+# --secondarySourceVersions item shape: {sourceIdentifier: string, sourceVersion: string}
+# --artifacts shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
+# --secondaryArtifacts item shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
+# --cache shape: {type: "NO_CACHE"|"S3"|"LOCAL", location?: string, modes?: list<string>}
+# --environment shape: {type: "WINDOWS_CONTAINER"|"LINUX_CONTAINER"|"LINUX_GPU_CONTAINER"|"ARM_CONTAINER"|"WINDOWS_SERVER_2019_CONTAINER", image: string, computeType: "BUILD_GENERAL1_SMALL"|"BUILD_GENERAL1_MEDIUM"|"BUILD_GENERAL1_LARGE"|"BUILD_GENERAL1_2XLARGE", environmentVariables?: list, privilegedMode?: bool, certificate?: string, registryCredential?: record, imagePullCredentialsType?: "CODEBUILD"|"SERVICE_ROLE"}
+# --tags item shape: {key?: string, value?: string}
+# --vpcConfig shape: {vpcId?: string, subnets?: list<string>, securityGroupIds?: list<string>}
+# --logsConfig shape: {cloudWatchLogs?: record, s3Logs?: record}
+# --fileSystemLocations item shape: {type?: "EFS", location?: string, mountPoint?: string, identifier?: string, mountOptions?: string}
+# --buildBatchConfig shape: {serviceRole?: string, combineArtifacts?: bool, restrictions?: record, timeoutInMins?: int, batchReportMode?: "REPORT_INDIVIDUAL_BUILDS"|"REPORT_AGGREGATED_BATCH"}
 export def "update-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2319,34 +2427,35 @@ export def "update-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  name: any
-  --description: any
-  --body-source: any
-  --secondary-sources: any
-  --source-version: any
-  --secondary-source-versions: any
-  --artifacts: any
-  --secondary-artifacts: any
-  --cache: any
-  --environment: any
-  --service-role: any
-  --timeout-in-minutes: any
-  --queued-timeout-in-minutes: any
-  --encryption-key: any
-  --tags: any
-  --vpc-config: any
-  --badge-enabled: any
-  --logs-config: any
-  --file-system-locations: any
-  --build-batch-config: record # Contains configuration information about a batch build project. — shape: {serviceRole?: any, combineArtifacts?: any, restrictions?: any, timeoutInMins?: any, batchReportMode?: any}
-  --concurrent-build-limit: any
-]: any -> record<project: record<name: record, arn: record, description: record, source: record<type: record, location: record, gitCloneDepth: record, gitSubmodulesConfig: record, buildspec: record, auth: record, reportBuildStatus: record, buildStatusConfig: record, insecureSsl: record, sourceIdentifier: record>, secondarySources: record, sourceVersion: record, secondarySourceVersions: record, artifacts: record<type: record, location: record, path: record, namespaceType: record, name: record, packaging: record, overrideArtifactName: record, encryptionDisabled: record, artifactIdentifier: record, bucketOwnerAccess: string>, secondaryArtifacts: record, cache: record<type: record, location: record, modes: record>, environment: record<type: record, image: record, computeType: record, environmentVariables: record, privilegedMode: record, certificate: record, registryCredential: record, imagePullCredentialsType: record>, serviceRole: record, timeoutInMinutes: record, queuedTimeoutInMinutes: record, encryptionKey: record, tags: record, created: record, lastModified: record, webhook: record<url: record, payloadUrl: record, secret: record, branchFilter: record, filterGroups: record, buildType: record, lastModifiedSecret: record>, vpcConfig: record<vpcId: record, subnets: record, securityGroupIds: record>, badge: record<badgeEnabled: record, badgeRequestUrl: record>, logsConfig: record<cloudWatchLogs: record, s3Logs: record>, fileSystemLocations: record, buildBatchConfig: record<serviceRole: record, combineArtifacts: record, restrictions: record, timeoutInMins: record, batchReportMode: record>, concurrentBuildLimit: record, projectVisibility: string, publicProjectAlias: record, resourceAccessRole: record>> {
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  name: string # The name of the build project. You cannot change a build project's name.
+  --description: string # A new or replacement description of the build project.
+  --source: record # Information about the build input source code for the build project. — shape: {type: "CODECOMMIT"|"CODEPIPELINE"|"GITHUB"|"S3"|"BITBUCKET"|"GITHUB_ENTERPRISE"|"NO_SOURCE", location?: string, gitCloneDepth?: int, gitSubmodulesConfig?: record, buildspec?: string, auth?: record, reportBuildStatus?: bool, buildStatusConfig?: record, insecureSsl?: bool, sourceIdentifier?: string}
+  --secondary-sources: list # An array of ProjectSource objects. — item shape: {type: "CODECOMMIT"|"CODEPIPELINE"|"GITHUB"|"S3"|"BITBUCKET"|"GITHUB_ENTERPRISE"|"NO_SOURCE", location?: string, gitCloneDepth?: int, gitSubmodulesConfig?: record, buildspec?: string, auth?: record, reportBuildStatus?: bool, buildStatusConfig?: record, insecureSsl?: bool, sourceIdentifier?: string}
+  --source-version: string # A version of the build input to be built for this project. If not specified, the latest version is used. If specified, it must be one of: For CodeCommit: the commit ID, branch, or Git tag to use. For GitHub: the commit ID, pull request ID, branch name, or tag name that corresponds to the version of the source code you want to build. If a pull request ID is specified, it must use the format pr/pull-request-ID (for example pr/25). If a branch name is specified, the branch's HEAD commit ID is used. If not specified, the default branch's HEAD commit ID is used. For Bitbucket: the commit ID, branch name, or tag name that corresponds to the version of the source code you want to build. If a branch name is specified, the branch's HEAD commit ID is used. If not specified, the default branch's HEAD commit ID is used. For Amazon S3: the version ID of the object that represents the build input ZIP file to use. If sourceVersion is specified at the build level, then that version takes precedence over this sourceVersion (at the project level). For more information, see Source Version Sample with CodeBuild (https://docs.aws.amazon.com/codebuild/latest/userguide/sample-source-version.html) in the CodeBuild User Guide.
+  --secondary-source-versions: list # An array of ProjectSourceVersion objects. If secondarySourceVersions is specified at the build level, then they take over these secondarySourceVersions (at the project level). — item shape: {sourceIdentifier: string, sourceVersion: string}
+  --artifacts: record # Information about the build output artifacts for the build project. — shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
+  --secondary-artifacts: list # An array of ProjectArtifact objects. — item shape: {type: "CODEPIPELINE"|"S3"|"NO_ARTIFACTS", location?: string, path?: string, namespaceType?: "NONE"|"BUILD_ID", name?: string, packaging?: "NONE"|"ZIP", overrideArtifactName?: bool, encryptionDisabled?: bool, artifactIdentifier?: string, bucketOwnerAccess?: "NONE"|"READ_ONLY"|"FULL"}
+  --cache: record # Information about the cache for the build project. — shape: {type: "NO_CACHE"|"S3"|"LOCAL", location?: string, modes?: list<string>}
+  --environment: record # Information about the build environment of the build project. — shape: {type: "WINDOWS_CONTAINER"|"LINUX_CONTAINER"|"LINUX_GPU_CONTAINER"|"ARM_CONTAINER"|"WINDOWS_SERVER_2019_CONTAINER", image: string, computeType: "BUILD_GENERAL1_SMALL"|"BUILD_GENERAL1_MEDIUM"|"BUILD_GENERAL1_LARGE"|"BUILD_GENERAL1_2XLARGE", environmentVariables?: list, privilegedMode?: bool, certificate?: string, registryCredential?: record, imagePullCredentialsType?: "CODEBUILD"|"SERVICE_ROLE"}
+  --service-role: string # The replacement ARN of the IAM role that enables CodeBuild to interact with dependent Amazon Web Services services on behalf of the Amazon Web Services account.
+  --timeout-in-minutes: int # The replacement value in minutes, from 5 to 480 (8 hours), for CodeBuild to wait before timing out any related build that did not get marked as completed.
+  --queued-timeout-in-minutes: int # The number of minutes a build is allowed to be queued before it times out.
+  --encryption-key: string # The Key Management Service customer master key (CMK) to be used for encrypting the build output artifacts. You can use a cross-account KMS key to encrypt the build output artifacts if your service role has permission to that key. You can specify either the Amazon Resource Name (ARN) of the CMK or, if available, the CMK's alias (using the format alias/<alias-name>).
+  --tags: list # An updated list of tag key and value pairs associated with this build project. These tags are available for use by Amazon Web Services services that support CodeBuild build project tags. — item shape: {key?: string, value?: string}
+  --vpc-config: record # Information about the VPC configuration that CodeBuild accesses. — shape: {vpcId?: string, subnets?: list<string>, securityGroupIds?: list<string>}
+  --badge-enabled: oneof<nothing, bool> # Set this to true to generate a publicly accessible URL for your project's build badge.
+  --logs-config: record # Information about logs for a build project. These can be logs in CloudWatch Logs, built in a specified S3 bucket, or both. — shape: {cloudWatchLogs?: record, s3Logs?: record}
+  --file-system-locations: list # An array of ProjectFileSystemLocation objects for a CodeBuild build project. A ProjectFileSystemLocation object specifies the identifier, location, mountOptions, mountPoint, and type of a file system created using Amazon Elastic File System. — item shape: {type?: "EFS", location?: string, mountPoint?: string, identifier?: string, mountOptions?: string}
+  --build-batch-config: record # Contains configuration information about a batch build project. — shape: {serviceRole?: string, combineArtifacts?: bool, restrictions?: record, timeoutInMins?: int, batchReportMode?: "REPORT_INDIVIDUAL_BUILDS"|"REPORT_AGGREGATED_BATCH"}
+  --concurrent-build-limit: int # The maximum number of concurrent builds that are allowed for this project. New builds are only started if the current number of builds is less than or equal to this limit. If the current build count meets this limit, new builds are throttled and are not run. To remove this limit, set this value to -1.
+]: any -> record<project: record<name: string, arn: string, description: string, source: record<type: string, location: string, gitCloneDepth: int, gitSubmodulesConfig: record, buildspec: string, auth: record, reportBuildStatus: bool, buildStatusConfig: record, insecureSsl: bool, sourceIdentifier: string>, secondarySources: list<record>, sourceVersion: string, secondarySourceVersions: list<record>, artifacts: record<type: string, location: string, path: string, namespaceType: string, name: string, packaging: string, overrideArtifactName: bool, encryptionDisabled: bool, artifactIdentifier: string, bucketOwnerAccess: string>, secondaryArtifacts: list<record>, cache: record<type: string, location: string, modes: list>, environment: record<type: string, image: string, computeType: string, environmentVariables: list, privilegedMode: bool, certificate: string, registryCredential: record, imagePullCredentialsType: string>, serviceRole: string, timeoutInMinutes: int, queuedTimeoutInMinutes: int, encryptionKey: string, tags: list<record>, created: string, lastModified: string, webhook: record<url: string, payloadUrl: string, secret: string, branchFilter: string, filterGroups: list, buildType: string, lastModifiedSecret: string>, vpcConfig: record<vpcId: string, subnets: list, securityGroupIds: list>, badge: record<badgeEnabled: bool, badgeRequestUrl: string>, logsConfig: record<cloudWatchLogs: record, s3Logs: record>, fileSystemLocations: list<record>, buildBatchConfig: record<serviceRole: string, combineArtifacts: bool, restrictions: record, timeoutInMins: int, batchReportMode: string>, concurrentBuildLimit: int, projectVisibility: string, publicProjectAlias: string, resourceAccessRole: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.UpdateProject")
   let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"name": $name, "description": $description, "source": $body_source, "secondarySources": $secondary_sources, "sourceVersion": $source_version, "secondarySourceVersions": $secondary_source_versions, "artifacts": $artifacts, "secondaryArtifacts": $secondary_artifacts, "cache": $cache, "environment": $environment, "serviceRole": $service_role, "timeoutInMinutes": $timeout_in_minutes, "queuedTimeoutInMinutes": $queued_timeout_in_minutes, "encryptionKey": $encryption_key, "tags": $tags, "vpcConfig": $vpc_config, "badgeEnabled": $badge_enabled, "logsConfig": $logs_config, "fileSystemLocations": $file_system_locations, "buildBatchConfig": $build_batch_config, "concurrentBuildLimit": $concurrent_build_limit} | compact
+  let req_body = {"name": $name, "description": $description, "source": $source, "secondarySources": $secondary_sources, "sourceVersion": $source_version, "secondarySourceVersions": $secondary_source_versions, "artifacts": $artifacts, "secondaryArtifacts": $secondary_artifacts, "cache": $cache, "environment": $environment, "serviceRole": $service_role, "timeoutInMinutes": $timeout_in_minutes, "queuedTimeoutInMinutes": $queued_timeout_in_minutes, "encryptionKey": $encryption_key, "tags": $tags, "vpcConfig": $vpc_config, "badgeEnabled": $badge_enabled, "logsConfig": $logs_config, "fileSystemLocations": $file_system_locations, "buildBatchConfig": $build_batch_config, "concurrentBuildLimit": $concurrent_build_limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2387,14 +2496,15 @@ export def "update-project-visibility" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  project_arn: any
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  project_arn: string # The Amazon Resource Name (ARN) of the build project.
   project_visibility: string@project-visibility-completer # Specifies the visibility of the project's builds. Possible values are: PUBLIC_READ The project builds are visible to the public. PRIVATE The project builds are not visible to the public.
-  --resource-access-role: any
-]: any -> record<projectArn: record, publicProjectAlias: record, projectVisibility: string> {
+  --resource-access-role: string # The ARN of the IAM role that enables CodeBuild to access the CloudWatch Logs and Amazon S3 artifacts for the project's builds.
+]: any -> record<projectArn: string, publicProjectAlias: string, projectVisibility: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.UpdateProjectVisibility")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"projectArn": $project_arn, "projectVisibility": $project_visibility, "resourceAccessRole": $resource_access_role} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2420,6 +2530,8 @@ export def "update-project-visibility" [
 #
 # POST /
 # operationId: UpdateReportGroup
+# --exportConfig shape: {exportConfigType?: "S3"|"NO_EXPORT", s3Destination?: record}
+# --tags item shape: {key?: string, value?: string}
 export def "update-report-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2437,14 +2549,15 @@ export def "update-report-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  arn: any
-  --export-config: any
-  --tags: any
-]: any -> record<reportGroup: record<arn: record, name: record, type: record, exportConfig: record<exportConfigType: record, s3Destination: record>, created: record, lastModified: record, tags: record, status: record>> {
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  arn: string # The ARN of the report group to update.
+  --export-config: record # Information about the location where the run of a report is exported. — shape: {exportConfigType?: "S3"|"NO_EXPORT", s3Destination?: record}
+  --tags: list # An updated list of tag key and value pairs associated with this report group. These tags are available for use by Amazon Web Services services that support CodeBuild report group tags. — item shape: {key?: string, value?: string}
+]: any -> record<reportGroup: record<arn: string, name: string, type: string, exportConfig: record<exportConfigType: string, s3Destination: record>, created: string, lastModified: string, tags: list<record>, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.UpdateReportGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"arn": $arn, "exportConfig": $export_config, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2487,16 +2600,17 @@ export def "update-webhook" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  project_name: any
-  --branch-filter: any
-  --rotate-secret: any
-  --filter-groups: any
-  --build-type: any
-]: any -> record<webhook: record<url: record, payloadUrl: record, secret: record, branchFilter: record, filterGroups: record, buildType: record, lastModifiedSecret: record>> {
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  project_name: string # The name of the CodeBuild project.
+  --branch-filter: string # A regular expression used to determine which repository branches are built when a webhook is triggered. If the name of a branch matches the regular expression, then it is built. If branchFilter is empty, then all branches are built. It is recommended that you use filterGroups instead of branchFilter.
+  --rotate-secret: oneof<nothing, bool> # A boolean value that specifies whether the associated GitHub repository's secret token should be updated. If you use Bitbucket for your repository, rotateSecret is ignored.
+  --filter-groups: list # An array of arrays of WebhookFilter objects used to determine if a webhook event can trigger a build. A filter group must contain at least one EVENT WebhookFilter.
+  --build-type: string@build-type-completer # Specifies the type of build this webhook will trigger.
+]: any -> record<webhook: record<url: string, payloadUrl: string, secret: string, branchFilter: string, filterGroups: list<list>, buildType: string, lastModifiedSecret: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeBuild_20161006.UpdateWebhook")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"projectName": $project_name, "branchFilter": $branch_filter, "rotateSecret": $rotate_secret, "filterGroups": $filter_groups, "buildType": $build_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

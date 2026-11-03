@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -94,6 +94,8 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["https://api.cisco.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def severity-completer [] { ["critical" "high" "low" "medium"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -269,10 +271,11 @@ export def "get-security-advisories-cvrf-product" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product: string # An product name to obtain security advisories that matches given product name. (format: string)
+  --product: string # An product name to obtain security advisories that matches given product name. (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($product == null) { error make --unspanned { msg: "required query parameter 'product' missing: pass --product" } }
   let qp = [(serialize-qp "product" $product "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/security/advisories/cvrf/product" $qp $auth.query)
   let accept_val = "application/json"
@@ -295,7 +298,7 @@ export def "get-security-advisories-cvrf-product" [
 #
 # GET /security/advisories/cvrf/severity/{severity}
 export def "get-security-advisories-cvrf-severity-severity" [
-  severity: string
+  severity: string@severity-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,7 +333,7 @@ export def "get-security-advisories-cvrf-severity-severity" [
 #
 # GET /security/advisories/cvrf/severity/{severity}/firstpublished
 export def "get-security-advisories-cvrf-severity-severity-firstpublished" [
-  severity: string
+  severity: string@severity-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,12 +343,14 @@ export def "get-security-advisories-cvrf-severity-severity-firstpublished" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # format: date
-  --end-date: string # format: date
+  --start-date: string # required, format: date
+  --end-date: string # required, format: date
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($severity | is-empty) { error make --unspanned { msg: "path parameter 'severity' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({severity: (encode-path-segment $severity)} | format pattern "/security/advisories/cvrf/severity/{severity}/firstpublished") $qp $auth.query)
   let accept_val = "application/json"
@@ -368,7 +373,7 @@ export def "get-security-advisories-cvrf-severity-severity-firstpublished" [
 #
 # GET /security/advisories/cvrf/severity/{severity}/lastpublished
 export def "get-security-advisories-cvrf-severity-severity-lastpublished" [
-  severity: string
+  severity: string@severity-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,12 +383,14 @@ export def "get-security-advisories-cvrf-severity-severity-lastpublished" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # format: date
-  --end-date: string # format: date
+  --start-date: string # required, format: date
+  --end-date: string # required, format: date
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($severity | is-empty) { error make --unspanned { msg: "path parameter 'severity' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({severity: (encode-path-segment $severity)} | format pattern "/security/advisories/cvrf/severity/{severity}/lastpublished") $qp $auth.query)
   let accept_val = "application/json"
@@ -450,10 +457,11 @@ export def "get-security-advisories-ios" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --version: string # IOS version to obtain security advisories (format: string)
+  --version: string # IOS version to obtain security advisories (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/security/advisories/ios" $qp $auth.query)
   let accept_val = "application/json"
@@ -485,10 +493,11 @@ export def "get-security-advisories-iosxe" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --version: string # IOS version to obtain security advisories (format: string)
+  --version: string # IOS version to obtain security advisories (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/security/advisories/iosxe" $qp $auth.query)
   let accept_val = "application/json"
@@ -658,10 +667,11 @@ export def "get-security-advisories-oval-product" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product: string # An product name to obtain security advisories that matches given product name. (format: string)
+  --product: string # An product name to obtain security advisories that matches given product name. (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($product == null) { error make --unspanned { msg: "required query parameter 'product' missing: pass --product" } }
   let qp = [(serialize-qp "product" $product "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/security/advisories/oval/product" $qp $auth.query)
   let accept_val = "application/json"
@@ -684,7 +694,7 @@ export def "get-security-advisories-oval-product" [
 #
 # GET /security/advisories/oval/severity/{severity}
 export def "get-security-advisories-oval-severity-severity" [
-  severity: string
+  severity: string@severity-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -719,7 +729,7 @@ export def "get-security-advisories-oval-severity-severity" [
 #
 # GET /security/advisories/oval/severity/{severity}/firstpublished
 export def "get-security-advisories-oval-severity-severity-firstpublished" [
-  severity: string
+  severity: string@severity-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -729,12 +739,14 @@ export def "get-security-advisories-oval-severity-severity-firstpublished" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # format: date
-  --end-date: string # format: date
+  --start-date: string # required, format: date
+  --end-date: string # required, format: date
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($severity | is-empty) { error make --unspanned { msg: "path parameter 'severity' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({severity: (encode-path-segment $severity)} | format pattern "/security/advisories/oval/severity/{severity}/firstpublished") $qp $auth.query)
   let accept_val = "application/json"
@@ -757,7 +769,7 @@ export def "get-security-advisories-oval-severity-severity-firstpublished" [
 #
 # GET /security/advisories/oval/severity/{severity}/lastpublished
 export def "get-security-advisories-oval-severity-severity-lastpublished" [
-  severity: string
+  severity: string@severity-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -767,12 +779,14 @@ export def "get-security-advisories-oval-severity-severity-lastpublished" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # format: date
-  --end-date: string # format: date
+  --start-date: string # required, format: date
+  --end-date: string # required, format: date
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($severity | is-empty) { error make --unspanned { msg: "path parameter 'severity' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({severity: (encode-path-segment $severity)} | format pattern "/security/advisories/oval/severity/{severity}/lastpublished") $qp $auth.query)
   let accept_val = "application/json"

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -105,7 +105,11 @@ def x-amz-target-completer-5 [] { ["PhotonAdminProxyService.CopyImage"] }
 def x-amz-target-completer-6 [] { ["PhotonAdminProxyService.CreateAppBlock"] }
 def x-amz-target-completer-7 [] { ["PhotonAdminProxyService.CreateApplication"] }
 def x-amz-target-completer-8 [] { ["PhotonAdminProxyService.CreateDirectoryConfig"] }
+def app-visibility-completer [] { ["ALL" "ASSOCIATED"] }
 def x-amz-target-completer-9 [] { ["PhotonAdminProxyService.CreateEntitlement"] }
+def fleet-type-completer [] { ["ALWAYS_ON" "ELASTIC" "ON_DEMAND"] }
+def stream-view-completer [] { ["APP" "DESKTOP"] }
+def platform-completer [] { ["AMAZON_LINUX2" "WINDOWS" "WINDOWS_SERVER_2016" "WINDOWS_SERVER_2019"] }
 def x-amz-target-completer-10 [] { ["PhotonAdminProxyService.CreateFleet"] }
 def x-amz-target-completer-11 [] { ["PhotonAdminProxyService.CreateImageBuilder"] }
 def x-amz-target-completer-12 [] { ["PhotonAdminProxyService.CreateImageBuilderStreamingURL"] }
@@ -113,6 +117,8 @@ def x-amz-target-completer-13 [] { ["PhotonAdminProxyService.CreateStack"] }
 def x-amz-target-completer-14 [] { ["PhotonAdminProxyService.CreateStreamingURL"] }
 def x-amz-target-completer-15 [] { ["PhotonAdminProxyService.CreateUpdatedImage"] }
 def x-amz-target-completer-16 [] { ["PhotonAdminProxyService.CreateUsageReportSubscription"] }
+def message-action-completer [] { ["RESEND" "SUPPRESS"] }
+def authentication-type-completer [] { ["API" "AWS_AD" "SAML" "USERPOOL"] }
 def x-amz-target-completer-17 [] { ["PhotonAdminProxyService.CreateUser"] }
 def x-amz-target-completer-18 [] { ["PhotonAdminProxyService.DeleteAppBlock"] }
 def x-amz-target-completer-19 [] { ["PhotonAdminProxyService.DeleteApplication"] }
@@ -133,6 +139,7 @@ def x-amz-target-completer-33 [] { ["PhotonAdminProxyService.DescribeEntitlement
 def x-amz-target-completer-34 [] { ["PhotonAdminProxyService.DescribeFleets"] }
 def x-amz-target-completer-35 [] { ["PhotonAdminProxyService.DescribeImageBuilders"] }
 def x-amz-target-completer-36 [] { ["PhotonAdminProxyService.DescribeImagePermissions"] }
+def type-completer [] { ["PRIVATE" "PUBLIC" "SHARED"] }
 def x-amz-target-completer-37 [] { ["PhotonAdminProxyService.DescribeImages"] }
 def x-amz-target-completer-38 [] { ["PhotonAdminProxyService.DescribeSessions"] }
 def x-amz-target-completer-39 [] { ["PhotonAdminProxyService.DescribeStacks"] }
@@ -206,13 +213,14 @@ export def "associate-application-fleet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  fleet_name: any
-  application_arn: any
-]: any -> record<ApplicationFleetAssociation: record<FleetName: record, ApplicationArn: record>> {
+  --x-amz-target: string@x-amz-target-completer # required
+  fleet_name: string # The name of the fleet.
+  application_arn: string # The ARN of the application.
+]: any -> record<ApplicationFleetAssociation: record<FleetName: string, ApplicationArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.AssociateApplicationFleet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetName": $fleet_name, "ApplicationArn": $application_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -255,14 +263,15 @@ export def "associate-application-to-entitlement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  stack_name: any
-  entitlement_name: any
-  application_identifier: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  stack_name: string # The name of the stack.
+  entitlement_name: string # The name of the entitlement.
+  application_identifier: string # The identifier of the application.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.AssociateApplicationToEntitlement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StackName": $stack_name, "EntitlementName": $entitlement_name, "ApplicationIdentifier": $application_identifier} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -305,13 +314,14 @@ export def "associate-fleet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  fleet_name: any
-  stack_name: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  fleet_name: string # The name of the fleet.
+  stack_name: string # The name of the stack.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.AssociateFleet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetName": $fleet_name, "StackName": $stack_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -337,6 +347,7 @@ export def "associate-fleet" [
 #
 # POST /
 # operationId: BatchAssociateUserStack
+# --UserStackAssociations item shape: {StackName: string, UserName: string, AuthenticationType: "API"|"SAML"|"USERPOOL"|"AWS_AD", SendEmailNotification?: bool}
 export def "batch-associate-user-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -354,12 +365,13 @@ export def "batch-associate-user-stack" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  user_stack_associations: any
-]: any -> record<errors: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  user_stack_associations: list # The list of UserStackAssociation objects. — item shape: {StackName: string, UserName: string, AuthenticationType: "API"|"SAML"|"USERPOOL"|"AWS_AD", SendEmailNotification?: bool}
+]: any -> record<errors: table<UserStackAssociation: record, ErrorCode: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.BatchAssociateUserStack")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UserStackAssociations": $user_stack_associations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -385,6 +397,7 @@ export def "batch-associate-user-stack" [
 #
 # POST /
 # operationId: BatchDisassociateUserStack
+# --UserStackAssociations item shape: {StackName: string, UserName: string, AuthenticationType: "API"|"SAML"|"USERPOOL"|"AWS_AD", SendEmailNotification?: bool}
 export def "batch-disassociate-user-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -402,12 +415,13 @@ export def "batch-disassociate-user-stack" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  user_stack_associations: any
-]: any -> record<errors: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  user_stack_associations: list # The list of UserStackAssociation objects. — item shape: {StackName: string, UserName: string, AuthenticationType: "API"|"SAML"|"USERPOOL"|"AWS_AD", SendEmailNotification?: bool}
+]: any -> record<errors: table<UserStackAssociation: record, ErrorCode: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.BatchDisassociateUserStack")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UserStackAssociations": $user_stack_associations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -450,15 +464,16 @@ export def "copy-image" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  source_image_name: any
-  destination_image_name: any
-  destination_region: any
-  --destination-image-description: any
-]: any -> record<DestinationImageName: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  source_image_name: string # The name of the image to copy.
+  destination_image_name: string # The name that the image will have when it is copied to the destination.
+  destination_region: string # The destination region to which the image will be copied. This parameter is required, even if you are copying an image within the same region.
+  --destination-image-description: string # The description that the image will have when it is copied to the destination.
+]: any -> record<DestinationImageName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.CopyImage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SourceImageName": $source_image_name, "DestinationImageName": $destination_image_name, "DestinationRegion": $destination_region, "DestinationImageDescription": $destination_image_description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -484,6 +499,8 @@ export def "copy-image" [
 #
 # POST /
 # operationId: CreateAppBlock
+# --SourceS3Location shape: {S3Bucket: string, S3Key: string}
+# --SetupScriptDetails shape: {ScriptS3Location: record, ExecutablePath: string, ExecutableParameters?: string, TimeoutInSeconds: int}
 export def "create-app-block" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -501,17 +518,18 @@ export def "create-app-block" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  name: any
-  --description: any
-  --display-name: any
-  source_s3_location: any
-  setup_script_details: any
-  --tags: any
-]: any -> record<AppBlock: record<Name: record, Arn: record, Description: record, DisplayName: record, SourceS3Location: record<S3Bucket: record, S3Key: record>, SetupScriptDetails: record<ScriptS3Location: record, ExecutablePath: record, ExecutableParameters: record, TimeoutInSeconds: record>, CreatedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  name: string # The name of the app block.
+  --description: string # The description of the app block.
+  --display-name: string # The display name of the app block. This is not displayed to the user.
+  source_s3_location: record # Describes the S3 location. — shape: {S3Bucket: string, S3Key: string}
+  setup_script_details: record # Describes the details of the script. — shape: {ScriptS3Location: record, ExecutablePath: string, ExecutableParameters?: string, TimeoutInSeconds: int}
+  --tags: record # The tags assigned to the app block.
+]: any -> record<AppBlock: record<Name: string, Arn: string, Description: string, DisplayName: string, SourceS3Location: record<S3Bucket: string, S3Key: string>, SetupScriptDetails: record<ScriptS3Location: record, ExecutablePath: string, ExecutableParameters: string, TimeoutInSeconds: int>, CreatedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.CreateAppBlock")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "DisplayName": $display_name, "SourceS3Location": $source_s3_location, "SetupScriptDetails": $setup_script_details, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -537,6 +555,7 @@ export def "create-app-block" [
 #
 # POST /
 # operationId: CreateApplication
+# --IconS3Location shape: {S3Bucket: string, S3Key: string}
 export def "create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,22 +573,23 @@ export def "create-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  name: any
-  --display-name: any
-  --description: any
-  icon_s3_location: any
-  launch_path: any
-  --working-directory: any
-  --launch-parameters: any
-  platforms: any
-  instance_families: any
-  app_block_arn: any
-  --tags: any
-]: any -> record<Application: record<Name: record, DisplayName: record, IconURL: record, LaunchPath: record, LaunchParameters: record, Enabled: record, Metadata: record, WorkingDirectory: record, Description: record, Arn: record, AppBlockArn: record, IconS3Location: record<S3Bucket: record, S3Key: record>, Platforms: record, InstanceFamilies: record, CreatedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  name: string # The name of the application. This name is visible to users when display name is not specified.
+  --display-name: string # The display name of the application. This name is visible to users in the application catalog.
+  --description: string # The description of the application.
+  icon_s3_location: record # Describes the S3 location. — shape: {S3Bucket: string, S3Key: string}
+  launch_path: string # The launch path of the application.
+  --working-directory: string # The working directory of the application.
+  --launch-parameters: string # The launch parameters of the application.
+  platforms: list<string> # The platforms the application supports. WINDOWS_SERVER_2019 and AMAZON_LINUX2 are supported for Elastic fleets.
+  instance_families: list<string> # The instance families the application supports. Valid values are GENERAL_PURPOSE and GRAPHICS_G4.
+  app_block_arn: string # The app block ARN to which the application should be associated
+  --tags: record # The tags assigned to the application.
+]: any -> record<Application: record<Name: string, DisplayName: string, IconURL: string, LaunchPath: string, LaunchParameters: string, Enabled: bool, Metadata: record, WorkingDirectory: string, Description: string, Arn: string, AppBlockArn: string, IconS3Location: record<S3Bucket: string, S3Key: string>, Platforms: list<string>, InstanceFamilies: list<string>, CreatedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.CreateApplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "DisplayName": $display_name, "Description": $description, "IconS3Location": $icon_s3_location, "LaunchPath": $launch_path, "WorkingDirectory": $working_directory, "LaunchParameters": $launch_parameters, "Platforms": $platforms, "InstanceFamilies": $instance_families, "AppBlockArn": $app_block_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -595,6 +615,8 @@ export def "create-application" [
 #
 # POST /
 # operationId: CreateDirectoryConfig
+# --ServiceAccountCredentials shape: {AccountName: string, AccountPassword: string}
+# --CertificateBasedAuthProperties shape: {Status?: "DISABLED"|"ENABLED"|"ENABLED_NO_DIRECTORY_LOGIN_FALLBACK", CertificateAuthorityArn?: string}
 export def "create-directory-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -612,15 +634,16 @@ export def "create-directory-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  directory_name: any
-  organizational_unit_distinguished_names: any
-  --service-account-credentials: any
-  --certificate-based-auth-properties: any
-]: any -> record<DirectoryConfig: record<DirectoryName: record, OrganizationalUnitDistinguishedNames: record, ServiceAccountCredentials: record<AccountName: record, AccountPassword: record>, CreatedTime: record, CertificateBasedAuthProperties: record<Status: record, CertificateAuthorityArn: record>>> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  directory_name: string # The fully qualified name of the directory (for example, corp.example.com).
+  organizational_unit_distinguished_names: list<string> # The distinguished names of the organizational units for computer accounts.
+  --service-account-credentials: record # Describes the credentials for the service account used by the fleet or image builder to connect to the directory. — shape: {AccountName: string, AccountPassword: string}
+  --certificate-based-auth-properties: record # The certificate-based authentication properties used to authenticate SAML 2.0 Identity Provider (IdP) user identities to Active Directory domain-joined streaming instances. Fallback is turned on by default when certificate-based authentication is Enabled . Fallback allows users to log in using their AD domain password if certificate-based authentication is unsuccessful, or to unlock a desktop lock screen. Enabled_no_directory_login_fallback enables certificate-based authentication, but does not allow users to log in using their AD domain password. Users will be disconnected to re-authenticate using certificates. — shape: {Status?: "DISABLED"|"ENABLED"|"ENABLED_NO_DIRECTORY_LOGIN_FALLBACK", CertificateAuthorityArn?: string}
+]: any -> record<DirectoryConfig: record<DirectoryName: string, OrganizationalUnitDistinguishedNames: list<string>, ServiceAccountCredentials: record<AccountName: string, AccountPassword: string>, CreatedTime: string, CertificateBasedAuthProperties: record<Status: string, CertificateAuthorityArn: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.CreateDirectoryConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryName": $directory_name, "OrganizationalUnitDistinguishedNames": $organizational_unit_distinguished_names, "ServiceAccountCredentials": $service_account_credentials, "CertificateBasedAuthProperties": $certificate_based_auth_properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -646,6 +669,7 @@ export def "create-directory-config" [
 #
 # POST /
 # operationId: CreateEntitlement
+# --Attributes item shape: {Name: string, Value: string}
 export def "create-entitlement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -663,16 +687,17 @@ export def "create-entitlement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  name: any
-  stack_name: any
-  --description: any
-  app_visibility: any
-  attributes: any
-]: any -> record<Entitlement: record<Name: record, StackName: record, Description: record, AppVisibility: record, Attributes: record, CreatedTime: record, LastModifiedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  name: string # The name of the entitlement.
+  stack_name: string # The name of the stack with which the entitlement is associated.
+  --description: string # The description of the entitlement.
+  app_visibility: string@app-visibility-completer # Specifies whether all or selected apps are entitled.
+  attributes: list # The attributes of the entitlement. — item shape: {Name: string, Value: string}
+]: any -> record<Entitlement: record<Name: string, StackName: string, Description: string, AppVisibility: string, Attributes: list<record>, CreatedTime: string, LastModifiedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.CreateEntitlement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "StackName": $stack_name, "Description": $description, "AppVisibility": $app_visibility, "Attributes": $attributes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -698,6 +723,10 @@ export def "create-entitlement" [
 #
 # POST /
 # operationId: CreateFleet
+# --ComputeCapacity shape: {DesiredInstances: int}
+# --VpcConfig shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
+# --DomainJoinInfo shape: {DirectoryName?: string, OrganizationalUnitDistinguishedName?: string}
+# --SessionScriptS3Location shape: {S3Bucket: string, S3Key: string}
 export def "create-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -715,32 +744,33 @@ export def "create-fleet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  name: any
-  --image-name: any
-  --image-arn: any
-  instance_type: any
-  --fleet-type: any
-  --compute-capacity: any
-  --vpc-config: any
-  --max-user-duration-in-seconds: any
-  --disconnect-timeout-in-seconds: any
-  --description: any
-  --display-name: any
-  --enable-default-internet-access: any
-  --domain-join-info: any
-  --tags: any
-  --idle-disconnect-timeout-in-seconds: any
-  --iam-role-arn: any
-  --stream-view: any
-  --platform: any
-  --max-concurrent-sessions: any
-  --usb-device-filter-strings: any
-  --session-script-s3-location: any
-]: any -> record<Fleet: record<Arn: record, Name: record, DisplayName: record, Description: record, ImageName: record, ImageArn: record, InstanceType: record, FleetType: record, ComputeCapacityStatus: record<Desired: record, Running: record, InUse: record, Available: record>, MaxUserDurationInSeconds: record, DisconnectTimeoutInSeconds: record, State: record, VpcConfig: record<SubnetIds: record, SecurityGroupIds: record>, CreatedTime: record, FleetErrors: record, EnableDefaultInternetAccess: record, DomainJoinInfo: record<DirectoryName: record, OrganizationalUnitDistinguishedName: record>, IdleDisconnectTimeoutInSeconds: record, IamRoleArn: record, StreamView: record, Platform: record, MaxConcurrentSessions: record, UsbDeviceFilterStrings: record, SessionScriptS3Location: record<S3Bucket: record, S3Key: record>>> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  name: string # A unique name for the fleet.
+  --image-name: string # The name of the image used to create the fleet.
+  --image-arn: string # The ARN of the public, private, or shared image to use.
+  instance_type: string # The instance type to use when launching fleet instances. The following instance types are available: stream.standard.small stream.standard.medium stream.standard.large stream.standard.xlarge stream.standard.2xlarge stream.compute.large stream.compute.xlarge stream.compute.2xlarge stream.compute.4xlarge stream.compute.8xlarge stream.memory.large stream.memory.xlarge stream.memory.2xlarge stream.memory.4xlarge stream.memory.8xlarge stream.memory.z1d.large stream.memory.z1d.xlarge stream.memory.z1d.2xlarge stream.memory.z1d.3xlarge stream.memory.z1d.6xlarge stream.memory.z1d.12xlarge stream.graphics-design.large stream.graphics-design.xlarge stream.graphics-design.2xlarge stream.graphics-design.4xlarge stream.graphics-desktop.2xlarge stream.graphics.g4dn.xlarge stream.graphics.g4dn.2xlarge stream.graphics.g4dn.4xlarge stream.graphics.g4dn.8xlarge stream.graphics.g4dn.12xlarge stream.graphics.g4dn.16xlarge stream.graphics-pro.4xlarge stream.graphics-pro.8xlarge stream.graphics-pro.16xlarge The following instance types are available for Elastic fleets: stream.standard.small stream.standard.medium stream.standard.large stream.standard.xlarge stream.standard.2xlarge
+  --fleet-type: string@fleet-type-completer # The fleet type. ALWAYS_ON Provides users with instant-on access to their apps. You are charged for all running instances in your fleet, even if no users are streaming apps. ON_DEMAND Provide users with access to applications after they connect, which takes one to two minutes. You are charged for instance streaming when users are connected and a small hourly fee for instances that are not streaming apps.
+  --compute-capacity: record # Describes the capacity for a fleet. — shape: {DesiredInstances: int}
+  --vpc-config: record # Describes VPC configuration information for fleets and image builders. — shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
+  --max-user-duration-in-seconds: int # The maximum amount of time that a streaming session can remain active, in seconds. If users are still connected to a streaming instance five minutes before this limit is reached, they are prompted to save any open documents before being disconnected. After this time elapses, the instance is terminated and replaced by a new instance. Specify a value between 600 and 360000.
+  --disconnect-timeout-in-seconds: int # The amount of time that a streaming session remains active after users disconnect. If users try to reconnect to the streaming session after a disconnection or network interruption within this time interval, they are connected to their previous session. Otherwise, they are connected to a new session with a new streaming instance. Specify a value between 60 and 360000.
+  --description: string # The description to display.
+  --display-name: string # The fleet name to display.
+  --enable-default-internet-access: oneof<nothing, bool> # Enables or disables default internet access for the fleet.
+  --domain-join-info: record # Describes the configuration information required to join fleets and image builders to Microsoft Active Directory domains. — shape: {DirectoryName?: string, OrganizationalUnitDistinguishedName?: string}
+  --tags: record # The tags to associate with the fleet. A tag is a key-value pair, and the value is optional. For example, Environment=Test. If you do not specify a value, Environment=. If you do not specify a value, the value is set to an empty string. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following special characters: _ . : / = + \ - @ For more information, see Tagging Your Resources (https://docs.aws.amazon.com/appstream2/latest/developerguide/tagging-basic.html) in the Amazon AppStream 2.0 Administration Guide.
+  --idle-disconnect-timeout-in-seconds: int # The amount of time that users can be idle (inactive) before they are disconnected from their streaming session and the DisconnectTimeoutInSeconds time interval begins. Users are notified before they are disconnected due to inactivity. If they try to reconnect to the streaming session before the time interval specified in DisconnectTimeoutInSeconds elapses, they are connected to their previous session. Users are considered idle when they stop providing keyboard or mouse input during their streaming session. File uploads and downloads, audio in, audio out, and pixels changing do not qualify as user activity. If users continue to be idle after the time interval in IdleDisconnectTimeoutInSeconds elapses, they are disconnected. To prevent users from being disconnected due to inactivity, specify a value of 0. Otherwise, specify a value between 60 and 3600. The default value is 0. If you enable this feature, we recommend that you specify a value that corresponds exactly to a whole number of minutes (for example, 60, 120, and 180). If you don't do this, the value is rounded to the nearest minute. For example, if you specify a value of 70, users are disconnected after 1 minute of inactivity. If you specify a value that is at the midpoint between two different minutes, the value is rounded up. For example, if you specify a value of 90, users are disconnected after 2 minutes of inactivity.
+  --iam-role-arn: string # The Amazon Resource Name (ARN) of the IAM role to apply to the fleet. To assume a role, a fleet instance calls the AWS Security Token Service (STS) AssumeRole API operation and passes the ARN of the role to use. The operation creates a new session with temporary credentials. AppStream 2.0 retrieves the temporary credentials and creates the appstream_machine_role credential profile on the instance. For more information, see Using an IAM Role to Grant Permissions to Applications and Scripts Running on AppStream 2.0 Streaming Instances (https://docs.aws.amazon.com/appstream2/latest/developerguide/using-iam-roles-to-grant-permissions-to-applications-scripts-streaming-instances.html) in the Amazon AppStream 2.0 Administration Guide.
+  --stream-view: string@stream-view-completer # The AppStream 2.0 view that is displayed to your users when they stream from the fleet. When APP is specified, only the windows of applications opened by users display. When DESKTOP is specified, the standard desktop that is provided by the operating system displays. The default value is APP.
+  --platform: string@platform-completer # The fleet platform. WINDOWS_SERVER_2019 and AMAZON_LINUX2 are supported for Elastic fleets.
+  --max-concurrent-sessions: int # The maximum concurrent sessions of the Elastic fleet. This is required for Elastic fleets, and not allowed for other fleet types.
+  --usb-device-filter-strings: list<string> # The USB device filter strings that specify which USB devices a user can redirect to the fleet streaming session, when using the Windows native client. This is allowed but not required for Elastic fleets.
+  --session-script-s3-location: record # Describes the S3 location. — shape: {S3Bucket: string, S3Key: string}
+]: any -> record<Fleet: record<Arn: string, Name: string, DisplayName: string, Description: string, ImageName: string, ImageArn: string, InstanceType: string, FleetType: string, ComputeCapacityStatus: record<Desired: int, Running: int, InUse: int, Available: int>, MaxUserDurationInSeconds: int, DisconnectTimeoutInSeconds: int, State: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list>, CreatedTime: string, FleetErrors: list<record>, EnableDefaultInternetAccess: bool, DomainJoinInfo: record<DirectoryName: string, OrganizationalUnitDistinguishedName: string>, IdleDisconnectTimeoutInSeconds: int, IamRoleArn: string, StreamView: string, Platform: string, MaxConcurrentSessions: int, UsbDeviceFilterStrings: list<string>, SessionScriptS3Location: record<S3Bucket: string, S3Key: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.CreateFleet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "ImageName": $image_name, "ImageArn": $image_arn, "InstanceType": $instance_type, "FleetType": $fleet_type, "ComputeCapacity": $compute_capacity, "VpcConfig": $vpc_config, "MaxUserDurationInSeconds": $max_user_duration_in_seconds, "DisconnectTimeoutInSeconds": $disconnect_timeout_in_seconds, "Description": $description, "DisplayName": $display_name, "EnableDefaultInternetAccess": $enable_default_internet_access, "DomainJoinInfo": $domain_join_info, "Tags": $tags, "IdleDisconnectTimeoutInSeconds": $idle_disconnect_timeout_in_seconds, "IamRoleArn": $iam_role_arn, "StreamView": $stream_view, "Platform": $platform, "MaxConcurrentSessions": $max_concurrent_sessions, "UsbDeviceFilterStrings": $usb_device_filter_strings, "SessionScriptS3Location": $session_script_s3_location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -766,6 +796,9 @@ export def "create-fleet" [
 #
 # POST /
 # operationId: CreateImageBuilder
+# --VpcConfig shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
+# --DomainJoinInfo shape: {DirectoryName?: string, OrganizationalUnitDistinguishedName?: string}
+# --AccessEndpoints item shape: {EndpointType: "STREAMING", VpceId?: string}
 export def "create-image-builder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -783,24 +816,25 @@ export def "create-image-builder" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  name: any
-  --image-name: any
-  --image-arn: any
-  instance_type: any
-  --description: any
-  --display-name: any
-  --vpc-config: any
-  --iam-role-arn: any
-  --enable-default-internet-access: any
-  --domain-join-info: any
-  --appstream-agent-version: any
-  --tags: any
-  --access-endpoints: any
-]: any -> record<ImageBuilder: record<Name: record, Arn: record, ImageArn: record, Description: record, DisplayName: record, VpcConfig: record<SubnetIds: record, SecurityGroupIds: record>, InstanceType: record, Platform: record, IamRoleArn: record, State: record, StateChangeReason: record<Code: record, Message: record>, CreatedTime: record, EnableDefaultInternetAccess: record, DomainJoinInfo: record<DirectoryName: record, OrganizationalUnitDistinguishedName: record>, NetworkAccessConfiguration: record<EniPrivateIpAddress: record, EniId: record>, ImageBuilderErrors: record, AppstreamAgentVersion: record, AccessEndpoints: record>> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  name: string # A unique name for the image builder.
+  --image-name: string # The name of the image used to create the image builder.
+  --image-arn: string # The ARN of the public, private, or shared image to use.
+  instance_type: string # The instance type to use when launching the image builder. The following instance types are available: stream.standard.small stream.standard.medium stream.standard.large stream.compute.large stream.compute.xlarge stream.compute.2xlarge stream.compute.4xlarge stream.compute.8xlarge stream.memory.large stream.memory.xlarge stream.memory.2xlarge stream.memory.4xlarge stream.memory.8xlarge stream.memory.z1d.large stream.memory.z1d.xlarge stream.memory.z1d.2xlarge stream.memory.z1d.3xlarge stream.memory.z1d.6xlarge stream.memory.z1d.12xlarge stream.graphics-design.large stream.graphics-design.xlarge stream.graphics-design.2xlarge stream.graphics-design.4xlarge stream.graphics-desktop.2xlarge stream.graphics.g4dn.xlarge stream.graphics.g4dn.2xlarge stream.graphics.g4dn.4xlarge stream.graphics.g4dn.8xlarge stream.graphics.g4dn.12xlarge stream.graphics.g4dn.16xlarge stream.graphics-pro.4xlarge stream.graphics-pro.8xlarge stream.graphics-pro.16xlarge
+  --description: string # The description to display.
+  --display-name: string # The image builder name to display.
+  --vpc-config: record # Describes VPC configuration information for fleets and image builders. — shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
+  --iam-role-arn: string # The Amazon Resource Name (ARN) of the IAM role to apply to the image builder. To assume a role, the image builder calls the AWS Security Token Service (STS) AssumeRole API operation and passes the ARN of the role to use. The operation creates a new session with temporary credentials. AppStream 2.0 retrieves the temporary credentials and creates the appstream_machine_role credential profile on the instance. For more information, see Using an IAM Role to Grant Permissions to Applications and Scripts Running on AppStream 2.0 Streaming Instances (https://docs.aws.amazon.com/appstream2/latest/developerguide/using-iam-roles-to-grant-permissions-to-applications-scripts-streaming-instances.html) in the Amazon AppStream 2.0 Administration Guide.
+  --enable-default-internet-access: oneof<nothing, bool> # Enables or disables default internet access for the image builder.
+  --domain-join-info: record # Describes the configuration information required to join fleets and image builders to Microsoft Active Directory domains. — shape: {DirectoryName?: string, OrganizationalUnitDistinguishedName?: string}
+  --appstream-agent-version: string # The version of the AppStream 2.0 agent to use for this image builder. To use the latest version of the AppStream 2.0 agent, specify [LATEST].
+  --tags: record # The tags to associate with the image builder. A tag is a key-value pair, and the value is optional. For example, Environment=Test. If you do not specify a value, Environment=. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following special characters: _ . : / = + \ - @ If you do not specify a value, the value is set to an empty string. For more information about tags, see Tagging Your Resources (https://docs.aws.amazon.com/appstream2/latest/developerguide/tagging-basic.html) in the Amazon AppStream 2.0 Administration Guide.
+  --access-endpoints: list # The list of interface VPC endpoint (interface endpoint) objects. Administrators can connect to the image builder only through the specified endpoints. — item shape: {EndpointType: "STREAMING", VpceId?: string}
+]: any -> record<ImageBuilder: record<Name: string, Arn: string, ImageArn: string, Description: string, DisplayName: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list>, InstanceType: string, Platform: string, IamRoleArn: string, State: string, StateChangeReason: record<Code: string, Message: string>, CreatedTime: string, EnableDefaultInternetAccess: bool, DomainJoinInfo: record<DirectoryName: string, OrganizationalUnitDistinguishedName: string>, NetworkAccessConfiguration: record<EniPrivateIpAddress: string, EniId: string>, ImageBuilderErrors: list<record>, AppstreamAgentVersion: string, AccessEndpoints: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.CreateImageBuilder")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "ImageName": $image_name, "ImageArn": $image_arn, "InstanceType": $instance_type, "Description": $description, "DisplayName": $display_name, "VpcConfig": $vpc_config, "IamRoleArn": $iam_role_arn, "EnableDefaultInternetAccess": $enable_default_internet_access, "DomainJoinInfo": $domain_join_info, "AppstreamAgentVersion": $appstream_agent_version, "Tags": $tags, "AccessEndpoints": $access_endpoints} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -843,13 +877,14 @@ export def "create-image-builder-streaming-url" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  name: any
-  --validity: any
-]: any -> record<StreamingURL: record, Expires: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  name: string # The name of the image builder.
+  --validity: int # The time that the streaming URL will be valid, in seconds. Specify a value between 1 and 604800 seconds. The default is 3600 seconds.
+]: any -> record<StreamingURL: string, Expires: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.CreateImageBuilderStreamingURL")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Validity": $validity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -875,6 +910,11 @@ export def "create-image-builder-streaming-url" [
 #
 # POST /
 # operationId: CreateStack
+# --StorageConnectors item shape: {ConnectorType: "HOMEFOLDERS"|"GOOGLE_DRIVE"|"ONE_DRIVE", ResourceIdentifier?: string, Domains?: list<string>}
+# --UserSettings item shape: {Action: "CLIPBOARD_COPY_FROM_LOCAL_DEVICE"|"CLIPBOARD_COPY_TO_LOCAL_DEVICE"|"FILE_UPLOAD"|"FILE_DOWNLOAD"|"PRINTING_TO_LOCAL_DEVICE"|"DOMAIN_PASSWORD_SIGNIN"|"DOMAIN_SMART_CARD_SIGNIN", Permission: "ENABLED"|"DISABLED"}
+# --ApplicationSettings shape: {Enabled: bool, SettingsGroup?: string}
+# --AccessEndpoints item shape: {EndpointType: "STREAMING", VpceId?: string}
+# --StreamingExperienceSettings shape: {PreferredProtocol?: "TCP"|"UDP"}
 export def "create-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -892,23 +932,24 @@ export def "create-stack" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  name: any
-  --description: any
-  --display-name: any
-  --storage-connectors: any
-  --redirect-url: any
-  --feedback-url: any
-  --user-settings: any
-  --application-settings: any
-  --tags: any
-  --access-endpoints: any
-  --embed-host-domains: any
-  --streaming-experience-settings: any
-]: any -> record<Stack: record<Arn: record, Name: record, Description: record, DisplayName: record, CreatedTime: record, StorageConnectors: record, RedirectURL: record, FeedbackURL: record, StackErrors: record, UserSettings: record, ApplicationSettings: record<Enabled: record, SettingsGroup: record, S3BucketName: record>, AccessEndpoints: record, EmbedHostDomains: record, StreamingExperienceSettings: record<PreferredProtocol: record>>> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  name: string # The name of the stack.
+  --description: string # The description to display.
+  --display-name: string # The stack name to display.
+  --storage-connectors: list # The storage connectors. — item shape: {ConnectorType: "HOMEFOLDERS"|"GOOGLE_DRIVE"|"ONE_DRIVE", ResourceIdentifier?: string, Domains?: list<string>}
+  --redirect-url: string # The URL that users are redirected to after their streaming session ends.
+  --feedback-url: string # The URL that users are redirected to after they click the Send Feedback link. If no URL is specified, no Send Feedback link is displayed.
+  --user-settings: list # The actions that are enabled or disabled for users during their streaming sessions. By default, these actions are enabled. — item shape: {Action: "CLIPBOARD_COPY_FROM_LOCAL_DEVICE"|"CLIPBOARD_COPY_TO_LOCAL_DEVICE"|"FILE_UPLOAD"|"FILE_DOWNLOAD"|"PRINTING_TO_LOCAL_DEVICE"|"DOMAIN_PASSWORD_SIGNIN"|"DOMAIN_SMART_CARD_SIGNIN", Permission: "ENABLED"|"DISABLED"}
+  --application-settings: record # The persistent application settings for users of a stack. — shape: {Enabled: bool, SettingsGroup?: string}
+  --tags: record # The tags to associate with the stack. A tag is a key-value pair, and the value is optional. For example, Environment=Test. If you do not specify a value, Environment=. If you do not specify a value, the value is set to an empty string. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following special characters: _ . : / = + \ - @ For more information about tags, see Tagging Your Resources (https://docs.aws.amazon.com/appstream2/latest/developerguide/tagging-basic.html) in the Amazon AppStream 2.0 Administration Guide.
+  --access-endpoints: list # The list of interface VPC endpoint (interface endpoint) objects. Users of the stack can connect to AppStream 2.0 only through the specified endpoints. — item shape: {EndpointType: "STREAMING", VpceId?: string}
+  --embed-host-domains: list<string> # The domains where AppStream 2.0 streaming sessions can be embedded in an iframe. You must approve the domains that you want to host embedded AppStream 2.0 streaming sessions.
+  --streaming-experience-settings: record # The streaming protocol you want your stack to prefer. This can be UDP or TCP. Currently, UDP is only supported in the Windows native client. — shape: {PreferredProtocol?: "TCP"|"UDP"}
+]: any -> record<Stack: record<Arn: string, Name: string, Description: string, DisplayName: string, CreatedTime: string, StorageConnectors: list<record>, RedirectURL: string, FeedbackURL: string, StackErrors: list<record>, UserSettings: list<record>, ApplicationSettings: record<Enabled: bool, SettingsGroup: string, S3BucketName: string>, AccessEndpoints: list<record>, EmbedHostDomains: list<string>, StreamingExperienceSettings: record<PreferredProtocol: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.CreateStack")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "DisplayName": $display_name, "StorageConnectors": $storage_connectors, "RedirectURL": $redirect_url, "FeedbackURL": $feedback_url, "UserSettings": $user_settings, "ApplicationSettings": $application_settings, "Tags": $tags, "AccessEndpoints": $access_endpoints, "EmbedHostDomains": $embed_host_domains, "StreamingExperienceSettings": $streaming_experience_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -951,17 +992,18 @@ export def "create-streaming-url" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  stack_name: any
-  fleet_name: any
-  user_id: any
-  --application-id: any
-  --validity: any
-  --session-context: any
-]: any -> record<StreamingURL: record, Expires: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  stack_name: string # The name of the stack.
+  fleet_name: string # The name of the fleet.
+  user_id: string # The identifier of the user.
+  --application-id: string # The name of the application to launch after the session starts. This is the name that you specified as Name in the Image Assistant. If your fleet is enabled for the Desktop stream view, you can also choose to launch directly to the operating system desktop. To do so, specify Desktop.
+  --validity: int # The time that the streaming URL will be valid, in seconds. Specify a value between 1 and 604800 seconds. The default is 60 seconds.
+  --session-context: string # The session context. For more information, see Session Context (https://docs.aws.amazon.com/appstream2/latest/developerguide/managing-stacks-fleets.html#managing-stacks-fleets-parameters) in the Amazon AppStream 2.0 Administration Guide.
+]: any -> record<StreamingURL: string, Expires: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.CreateStreamingURL")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StackName": $stack_name, "FleetName": $fleet_name, "UserId": $user_id, "ApplicationId": $application_id, "Validity": $validity, "SessionContext": $session_context} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1004,17 +1046,18 @@ export def "create-updated-image" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  existing_image_name: any
-  new_image_name: any
-  --new-image-description: any
-  --new-image-display-name: any
-  --new-image-tags: any
-  --body-dry-run: any
-]: any -> record<image: record<Name: record, Arn: record, BaseImageArn: record, DisplayName: record, State: record, Visibility: record, ImageBuilderSupported: record, ImageBuilderName: record, Platform: record, Description: record, StateChangeReason: record<Code: record, Message: record>, Applications: record, CreatedTime: record, PublicBaseImageReleasedDate: record, AppstreamAgentVersion: record, ImagePermissions: record<allowFleet: record, allowImageBuilder: record>, ImageErrors: record>, canUpdateImage: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  existing_image_name: string # The name of the image to update.
+  new_image_name: string # The name of the new image. The name must be unique within the AWS account and Region.
+  --new-image-description: string # The description to display for the new image.
+  --new-image-display-name: string # The name to display for the new image.
+  --new-image-tags: record # The tags to associate with the new image. A tag is a key-value pair, and the value is optional. For example, Environment=Test. If you do not specify a value, Environment=. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following special characters: _ . : / = + \ - @ If you do not specify a value, the value is set to an empty string. For more information about tags, see Tagging Your Resources (https://docs.aws.amazon.com/appstream2/latest/developerguide/tagging-basic.html) in the Amazon AppStream 2.0 Administration Guide.
+  --body-dry-run: oneof<nothing, bool> # Indicates whether to display the status of image update availability before AppStream 2.0 initiates the process of creating a new updated image. If this value is set to true, AppStream 2.0 displays whether image updates are available. If this value is set to false, AppStream 2.0 initiates the process of creating a new updated image without displaying whether image updates are available.
+]: any -> record<image: record<Name: string, Arn: string, BaseImageArn: string, DisplayName: string, State: string, Visibility: string, ImageBuilderSupported: bool, ImageBuilderName: string, Platform: string, Description: string, StateChangeReason: record<Code: string, Message: string>, Applications: list<record>, CreatedTime: string, PublicBaseImageReleasedDate: string, AppstreamAgentVersion: string, ImagePermissions: record<allowFleet: bool, allowImageBuilder: bool>, ImageErrors: list<record>>, canUpdateImage: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.CreateUpdatedImage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"existingImageName": $existing_image_name, "newImageName": $new_image_name, "newImageDescription": $new_image_description, "newImageDisplayName": $new_image_display_name, "newImageTags": $new_image_tags, "dryRun": $body_dry_run} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1057,12 +1100,13 @@ export def "create-usage-report-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
+  --x-amz-target: string@x-amz-target-completer-16 # required
   --body: record
-]: any -> record<S3BucketName: record, Schedule: record> {
+]: any -> record<S3BucketName: string, Schedule: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.CreateUsageReportSubscription")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1105,16 +1149,17 @@ export def "create-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  user_name: any
-  --message-action: any
-  --first-name: any
-  --last-name: any
-  authentication_type: any
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  user_name: string # The email address of the user. Users' email addresses are case-sensitive. During login, if they specify an email address that doesn't use the same capitalization as the email address specified when their user pool account was created, a "user does not exist" error message displays. (format: password)
+  --message-action: string@message-action-completer # The action to take for the welcome email that is sent to a user after the user is created in the user pool. If you specify SUPPRESS, no email is sent. If you specify RESEND, do not specify the first name or last name of the user. If the value is null, the email is sent. The temporary password in the welcome email is valid for only 7 days. If users don’t set their passwords within 7 days, you must send them a new welcome email.
+  --first-name: string # The first name, or given name, of the user. (format: password)
+  --last-name: string # The last name, or surname, of the user. (format: password)
+  authentication_type: string@authentication-type-completer # The authentication type for the user. You must specify USERPOOL.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.CreateUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UserName": $user_name, "MessageAction": $message_action, "FirstName": $first_name, "LastName": $last_name, "AuthenticationType": $authentication_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1157,12 +1202,13 @@ export def "delete-app-block" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  name: any
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  name: string # The name of the app block.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DeleteAppBlock")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1205,12 +1251,13 @@ export def "delete-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  name: any
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  name: string # The name of the application.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DeleteApplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1253,12 +1300,13 @@ export def "delete-directory-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  directory_name: any
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  directory_name: string # The name of the directory configuration.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DeleteDirectoryConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryName": $directory_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1301,13 +1349,14 @@ export def "delete-entitlement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  name: any
-  stack_name: any
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  name: string # The name of the entitlement.
+  stack_name: string # The name of the stack with which the entitlement is associated.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DeleteEntitlement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "StackName": $stack_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1350,12 +1399,13 @@ export def "delete-fleet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  name: any
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  name: string # The name of the fleet.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DeleteFleet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1398,12 +1448,13 @@ export def "delete-image" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  name: any
-]: any -> record<Image: record<Name: record, Arn: record, BaseImageArn: record, DisplayName: record, State: record, Visibility: record, ImageBuilderSupported: record, ImageBuilderName: record, Platform: record, Description: record, StateChangeReason: record<Code: record, Message: record>, Applications: record, CreatedTime: record, PublicBaseImageReleasedDate: record, AppstreamAgentVersion: record, ImagePermissions: record<allowFleet: record, allowImageBuilder: record>, ImageErrors: record>> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  name: string # The name of the image.
+]: any -> record<Image: record<Name: string, Arn: string, BaseImageArn: string, DisplayName: string, State: string, Visibility: string, ImageBuilderSupported: bool, ImageBuilderName: string, Platform: string, Description: string, StateChangeReason: record<Code: string, Message: string>, Applications: list<record>, CreatedTime: string, PublicBaseImageReleasedDate: string, AppstreamAgentVersion: string, ImagePermissions: record<allowFleet: bool, allowImageBuilder: bool>, ImageErrors: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DeleteImage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1446,12 +1497,13 @@ export def "delete-image-builder" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  name: any
-]: any -> record<ImageBuilder: record<Name: record, Arn: record, ImageArn: record, Description: record, DisplayName: record, VpcConfig: record<SubnetIds: record, SecurityGroupIds: record>, InstanceType: record, Platform: record, IamRoleArn: record, State: record, StateChangeReason: record<Code: record, Message: record>, CreatedTime: record, EnableDefaultInternetAccess: record, DomainJoinInfo: record<DirectoryName: record, OrganizationalUnitDistinguishedName: record>, NetworkAccessConfiguration: record<EniPrivateIpAddress: record, EniId: record>, ImageBuilderErrors: record, AppstreamAgentVersion: record, AccessEndpoints: record>> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  name: string # The name of the image builder.
+]: any -> record<ImageBuilder: record<Name: string, Arn: string, ImageArn: string, Description: string, DisplayName: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list>, InstanceType: string, Platform: string, IamRoleArn: string, State: string, StateChangeReason: record<Code: string, Message: string>, CreatedTime: string, EnableDefaultInternetAccess: bool, DomainJoinInfo: record<DirectoryName: string, OrganizationalUnitDistinguishedName: string>, NetworkAccessConfiguration: record<EniPrivateIpAddress: string, EniId: string>, ImageBuilderErrors: list<record>, AppstreamAgentVersion: string, AccessEndpoints: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DeleteImageBuilder")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1494,13 +1546,14 @@ export def "delete-image-permissions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  name: any
-  shared_account_id: any
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  name: string # The name of the private image.
+  shared_account_id: string # The 12-digit identifier of the AWS account for which to delete image permissions.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DeleteImagePermissions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "SharedAccountId": $shared_account_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1543,12 +1596,13 @@ export def "delete-stack" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  name: any
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  name: string # The name of the stack.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DeleteStack")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1591,12 +1645,13 @@ export def "delete-usage-report-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
+  --x-amz-target: string@x-amz-target-completer-27 # required
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DeleteUsageReportSubscription")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1639,13 +1694,14 @@ export def "delete-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  user_name: any
-  authentication_type: any
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  user_name: string # The email address of the user. Users' email addresses are case-sensitive. (format: password)
+  authentication_type: string@authentication-type-completer # The authentication type for the user. You must specify USERPOOL.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DeleteUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UserName": $user_name, "AuthenticationType": $authentication_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1688,14 +1744,15 @@ export def "describe-app-blocks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  --arns: any
-  --next-token: any
-  --max-results: any
-]: any -> record<AppBlocks: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  --arns: list<string> # The ARNs of the app blocks.
+  --next-token: string # The pagination token used to retrieve the next page of results for this operation.
+  --max-results: int # The maximum size of each page of results.
+]: any -> record<AppBlocks: table<Name: string, Arn: string, Description: string, DisplayName: string, SourceS3Location: record, SetupScriptDetails: record, CreatedTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DescribeAppBlocks")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Arns": $arns, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1738,15 +1795,16 @@ export def "describe-application-fleet-associations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  --fleet-name: any
-  --application-arn: any
-  --max-results: any
-  --next-token: any
-]: any -> record<ApplicationFleetAssociations: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  --fleet-name: string # The name of the fleet.
+  --application-arn: string # The ARN of the application.
+  --max-results: int # The maximum size of each page of results.
+  --next-token: string # The pagination token used to retrieve the next page of results for this operation.
+]: any -> record<ApplicationFleetAssociations: table<FleetName: string, ApplicationArn: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DescribeApplicationFleetAssociations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetName": $fleet_name, "ApplicationArn": $application_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1789,14 +1847,15 @@ export def "describe-applications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  --arns: any
-  --next-token: any
-  --max-results: any
-]: any -> record<Applications: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  --arns: list<string> # The ARNs for the applications.
+  --next-token: string # The pagination token used to retrieve the next page of results for this operation.
+  --max-results: int # The maximum size of each page of results.
+]: any -> record<Applications: table<Name: string, DisplayName: string, IconURL: string, LaunchPath: string, LaunchParameters: string, Enabled: bool, Metadata: record, WorkingDirectory: string, Description: string, Arn: string, AppBlockArn: string, IconS3Location: record, Platforms: list, InstanceFamilies: list, CreatedTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DescribeApplications")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Arns": $arns, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1839,14 +1898,15 @@ export def "describe-directory-configs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  --directory-names: any
-  --max-results: any
-  --next-token: any
-]: any -> record<DirectoryConfigs: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  --directory-names: list<string> # The directory names.
+  --max-results: int # The maximum size of each page of results.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+]: any -> record<DirectoryConfigs: table<DirectoryName: string, OrganizationalUnitDistinguishedNames: list, ServiceAccountCredentials: record, CreatedTime: string, CertificateBasedAuthProperties: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DescribeDirectoryConfigs")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryNames": $directory_names, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1889,15 +1949,16 @@ export def "describe-entitlements" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  --name: any
-  stack_name: any
-  --next-token: any
-  --max-results: any
-]: any -> record<Entitlements: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  --name: string # The name of the entitlement.
+  stack_name: string # The name of the stack with which the entitlement is associated.
+  --next-token: string # The pagination token used to retrieve the next page of results for this operation.
+  --max-results: int # The maximum size of each page of results.
+]: any -> record<Entitlements: table<Name: string, StackName: string, Description: string, AppVisibility: string, Attributes: list, CreatedTime: string, LastModifiedTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DescribeEntitlements")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "StackName": $stack_name, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1940,13 +2001,14 @@ export def "describe-fleets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  --names: any
-  --next-token: any
-]: any -> record<Fleets: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  --names: list<string> # The names of the fleets to describe.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+]: any -> record<Fleets: table<Arn: string, Name: string, DisplayName: string, Description: string, ImageName: string, ImageArn: string, InstanceType: string, FleetType: string, ComputeCapacityStatus: record, MaxUserDurationInSeconds: int, DisconnectTimeoutInSeconds: int, State: string, VpcConfig: record, CreatedTime: string, FleetErrors: list, EnableDefaultInternetAccess: bool, DomainJoinInfo: record, IdleDisconnectTimeoutInSeconds: int, IamRoleArn: string, StreamView: string, Platform: string, MaxConcurrentSessions: int, UsbDeviceFilterStrings: list, SessionScriptS3Location: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DescribeFleets")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Names": $names, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1989,14 +2051,15 @@ export def "describe-image-builders" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  --names: any
-  --max-results: any
-  --next-token: any
-]: any -> record<ImageBuilders: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  --names: list<string> # The names of the image builders to describe.
+  --max-results: int # The maximum size of each page of results.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+]: any -> record<ImageBuilders: table<Name: string, Arn: string, ImageArn: string, Description: string, DisplayName: string, VpcConfig: record, InstanceType: string, Platform: string, IamRoleArn: string, State: string, StateChangeReason: record, CreatedTime: string, EnableDefaultInternetAccess: bool, DomainJoinInfo: record, NetworkAccessConfiguration: record, ImageBuilderErrors: list, AppstreamAgentVersion: string, AccessEndpoints: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DescribeImageBuilders")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Names": $names, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2041,15 +2104,16 @@ export def "describe-image-permissions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  name: any
-  --max-results-body: any #  (body field)
-  --shared-aws-account-ids: any
-  --next-token-body: any #  (body field)
-]: any -> record<Name: record, SharedImagePermissionsList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  name: string # The name of the private image for which to describe permissions. The image must be one that you own.
+  --max-results-body: int # The maximum size of each page of results. (body field)
+  --shared-aws-account-ids: list<string> # The 12-digit identifier of one or more AWS accounts with which the image is shared.
+  --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
+]: any -> record<Name: string, SharedImagePermissionsList: table<sharedAccountId: string, imagePermissions: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DescribeImagePermissions")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Name": $name, "MaxResults": $max_results_body, "SharedAwsAccountIds": $shared_aws_account_ids, "NextToken": $next_token_body} | compact
@@ -2095,16 +2159,17 @@ export def "describe-images" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  --names: any
-  --arns: any
-  --type: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Images: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  --names: list<string> # The names of the public or private images to describe.
+  --arns: list<string> # The ARNs of the public, private, and shared images to describe.
+  --type: string@type-completer # The type of image (public, private, or shared) to describe.
+  --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
+  --max-results-body: int # The maximum size of each page of results. (body field)
+]: any -> record<Images: table<Name: string, Arn: string, BaseImageArn: string, DisplayName: string, State: string, Visibility: string, ImageBuilderSupported: bool, ImageBuilderName: string, Platform: string, Description: string, StateChangeReason: record, Applications: list, CreatedTime: string, PublicBaseImageReleasedDate: string, AppstreamAgentVersion: string, ImagePermissions: record, ImageErrors: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DescribeImages")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Names": $names, "Arns": $arns, "Type": $type, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2148,17 +2213,18 @@ export def "describe-sessions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  stack_name: any
-  fleet_name: any
-  --user-id: any
-  --next-token: any
-  --limit: any
-  --authentication-type: any
-]: any -> record<Sessions: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  stack_name: string # The name of the stack. This value is case-sensitive.
+  fleet_name: string # The name of the fleet. This value is case-sensitive.
+  --user-id: string # The user identifier (ID). If you specify a user ID, you must also specify the authentication type.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+  --limit: int # The size of each page of results. The default value is 20 and the maximum value is 50.
+  --authentication-type: string@authentication-type-completer # The authentication method. Specify API for a user authenticated using a streaming URL or SAML for a SAML federated user. The default is to authenticate users using a streaming URL.
+]: any -> record<Sessions: table<Id: string, UserId: string, StackName: string, FleetName: string, State: string, ConnectionState: string, StartTime: string, MaxExpirationTime: string, AuthenticationType: string, NetworkAccessConfiguration: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DescribeSessions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StackName": $stack_name, "FleetName": $fleet_name, "UserId": $user_id, "NextToken": $next_token, "Limit": $limit, "AuthenticationType": $authentication_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2201,13 +2267,14 @@ export def "describe-stacks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  --names: any
-  --next-token: any
-]: any -> record<Stacks: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  --names: list<string> # The names of the stacks to describe.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+]: any -> record<Stacks: table<Arn: string, Name: string, Description: string, DisplayName: string, CreatedTime: string, StorageConnectors: list, RedirectURL: string, FeedbackURL: string, StackErrors: list, UserSettings: list, ApplicationSettings: record, AccessEndpoints: list, EmbedHostDomains: list, StreamingExperienceSettings: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DescribeStacks")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Names": $names, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2250,13 +2317,14 @@ export def "describe-usage-report-subscriptions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  --max-results: any
-  --next-token: any
-]: any -> record<UsageReportSubscriptions: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  --max-results: int # The maximum size of each page of results.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+]: any -> record<UsageReportSubscriptions: table<S3BucketName: string, Schedule: string, LastGeneratedReportDate: string, SubscriptionErrors: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DescribeUsageReportSubscriptions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2299,16 +2367,17 @@ export def "describe-user-stack-associations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  --stack-name: any
-  --user-name: any
-  --authentication-type: any
-  --max-results: any
-  --next-token: any
-]: any -> record<UserStackAssociations: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  --stack-name: string # The name of the stack that is associated with the user.
+  --user-name: string # The email address of the user who is associated with the stack. Users' email addresses are case-sensitive. (format: password)
+  --authentication-type: string@authentication-type-completer # The authentication type for the user who is associated with the stack. You must specify USERPOOL.
+  --max-results: int # The maximum size of each page of results.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+]: any -> record<UserStackAssociations: table<StackName: string, UserName: string, AuthenticationType: string, SendEmailNotification: bool>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DescribeUserStackAssociations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StackName": $stack_name, "UserName": $user_name, "AuthenticationType": $authentication_type, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2351,14 +2420,15 @@ export def "describe-users" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  authentication_type: any
-  --max-results: any
-  --next-token: any
-]: any -> record<Users: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  authentication_type: string@authentication-type-completer # The authentication type for the users in the user pool to describe. You must specify USERPOOL.
+  --max-results: int # The maximum size of each page of results.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+]: any -> record<Users: table<Arn: string, UserName: string, Enabled: bool, Status: string, FirstName: string, LastName: string, CreatedTime: string, AuthenticationType: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DescribeUsers")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AuthenticationType": $authentication_type, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2401,13 +2471,14 @@ export def "disable-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  user_name: any
-  authentication_type: any
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  user_name: string # The email address of the user. Users' email addresses are case-sensitive. (format: password)
+  authentication_type: string@authentication-type-completer # The authentication type for the user. You must specify USERPOOL.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DisableUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UserName": $user_name, "AuthenticationType": $authentication_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2450,13 +2521,14 @@ export def "disassociate-application-fleet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  fleet_name: any
-  application_arn: any
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  fleet_name: string # The name of the fleet.
+  application_arn: string # The ARN of the application.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DisassociateApplicationFleet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetName": $fleet_name, "ApplicationArn": $application_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2499,14 +2571,15 @@ export def "disassociate-application-from-entitlement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  stack_name: any
-  entitlement_name: any
-  application_identifier: any
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  stack_name: string # The name of the stack with which the entitlement is associated.
+  entitlement_name: string # The name of the entitlement.
+  application_identifier: string # The identifier of the application to remove from the entitlement.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DisassociateApplicationFromEntitlement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StackName": $stack_name, "EntitlementName": $entitlement_name, "ApplicationIdentifier": $application_identifier} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2549,13 +2622,14 @@ export def "disassociate-fleet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  fleet_name: any
-  stack_name: any
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  fleet_name: string # The name of the fleet.
+  stack_name: string # The name of the stack.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.DisassociateFleet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetName": $fleet_name, "StackName": $stack_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2598,13 +2672,14 @@ export def "enable-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  user_name: any
-  authentication_type: any
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  user_name: string # The email address of the user. Users' email addresses are case-sensitive. During login, if they specify an email address that doesn't use the same capitalization as the email address specified when their user pool account was created, a "user does not exist" error message displays. (format: password)
+  authentication_type: string@authentication-type-completer # The authentication type for the user. You must specify USERPOOL.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.EnableUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UserName": $user_name, "AuthenticationType": $authentication_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2647,12 +2722,13 @@ export def "expire-session" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-48
-  session_id: any
+  --x-amz-target: string@x-amz-target-completer-48 # required
+  session_id: string # The identifier of the streaming session.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.ExpireSession")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SessionId": $session_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2695,13 +2771,14 @@ export def "list-associated-fleets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-49
-  stack_name: any
-  --next-token: any
-]: any -> record<Names: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-49 # required
+  stack_name: string # The name of the stack.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+]: any -> record<Names: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.ListAssociatedFleets")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StackName": $stack_name, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2744,13 +2821,14 @@ export def "list-associated-stacks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-50
-  fleet_name: any
-  --next-token: any
-]: any -> record<Names: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-50 # required
+  fleet_name: string # The name of the fleet.
+  --next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page.
+]: any -> record<Names: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.ListAssociatedStacks")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetName": $fleet_name, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2793,15 +2871,16 @@ export def "list-entitled-applications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-51
-  stack_name: any
-  entitlement_name: any
-  --next-token: any
-  --max-results: any
-]: any -> record<EntitledApplications: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-51 # required
+  stack_name: string # The name of the stack with which the entitlement is associated.
+  entitlement_name: string # The name of the entitlement.
+  --next-token: string # The pagination token used to retrieve the next page of results for this operation.
+  --max-results: int # The maximum size of each page of results.
+]: any -> record<EntitledApplications: table<ApplicationIdentifier: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.ListEntitledApplications")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StackName": $stack_name, "EntitlementName": $entitlement_name, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2844,12 +2923,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-52
-  resource_arn: any
+  --x-amz-target: string@x-amz-target-completer-52 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource.
 ]: any -> record<Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2892,12 +2972,13 @@ export def "start-fleet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-53
-  name: any
+  --x-amz-target: string@x-amz-target-completer-53 # required
+  name: string # The name of the fleet.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.StartFleet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2940,13 +3021,14 @@ export def "start-image-builder" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-54
-  name: any
-  --appstream-agent-version: any
-]: any -> record<ImageBuilder: record<Name: record, Arn: record, ImageArn: record, Description: record, DisplayName: record, VpcConfig: record<SubnetIds: record, SecurityGroupIds: record>, InstanceType: record, Platform: record, IamRoleArn: record, State: record, StateChangeReason: record<Code: record, Message: record>, CreatedTime: record, EnableDefaultInternetAccess: record, DomainJoinInfo: record<DirectoryName: record, OrganizationalUnitDistinguishedName: record>, NetworkAccessConfiguration: record<EniPrivateIpAddress: record, EniId: record>, ImageBuilderErrors: record, AppstreamAgentVersion: record, AccessEndpoints: record>> {
+  --x-amz-target: string@x-amz-target-completer-54 # required
+  name: string # The name of the image builder.
+  --appstream-agent-version: string # The version of the AppStream 2.0 agent to use for this image builder. To use the latest version of the AppStream 2.0 agent, specify [LATEST].
+]: any -> record<ImageBuilder: record<Name: string, Arn: string, ImageArn: string, Description: string, DisplayName: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list>, InstanceType: string, Platform: string, IamRoleArn: string, State: string, StateChangeReason: record<Code: string, Message: string>, CreatedTime: string, EnableDefaultInternetAccess: bool, DomainJoinInfo: record<DirectoryName: string, OrganizationalUnitDistinguishedName: string>, NetworkAccessConfiguration: record<EniPrivateIpAddress: string, EniId: string>, ImageBuilderErrors: list<record>, AppstreamAgentVersion: string, AccessEndpoints: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.StartImageBuilder")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "AppstreamAgentVersion": $appstream_agent_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2989,12 +3071,13 @@ export def "stop-fleet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-55
-  name: any
+  --x-amz-target: string@x-amz-target-completer-55 # required
+  name: string # The name of the fleet.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.StopFleet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3037,12 +3120,13 @@ export def "stop-image-builder" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-56
-  name: any
-]: any -> record<ImageBuilder: record<Name: record, Arn: record, ImageArn: record, Description: record, DisplayName: record, VpcConfig: record<SubnetIds: record, SecurityGroupIds: record>, InstanceType: record, Platform: record, IamRoleArn: record, State: record, StateChangeReason: record<Code: record, Message: record>, CreatedTime: record, EnableDefaultInternetAccess: record, DomainJoinInfo: record<DirectoryName: record, OrganizationalUnitDistinguishedName: record>, NetworkAccessConfiguration: record<EniPrivateIpAddress: record, EniId: record>, ImageBuilderErrors: record, AppstreamAgentVersion: record, AccessEndpoints: record>> {
+  --x-amz-target: string@x-amz-target-completer-56 # required
+  name: string # The name of the image builder.
+]: any -> record<ImageBuilder: record<Name: string, Arn: string, ImageArn: string, Description: string, DisplayName: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list>, InstanceType: string, Platform: string, IamRoleArn: string, State: string, StateChangeReason: record<Code: string, Message: string>, CreatedTime: string, EnableDefaultInternetAccess: bool, DomainJoinInfo: record<DirectoryName: string, OrganizationalUnitDistinguishedName: string>, NetworkAccessConfiguration: record<EniPrivateIpAddress: string, EniId: string>, ImageBuilderErrors: list<record>, AppstreamAgentVersion: string, AccessEndpoints: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.StopImageBuilder")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3085,13 +3169,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-57
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-57 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource.
+  tags: record # The tags to associate. A tag is a key-value pair, and the value is optional. For example, Environment=Test. If you do not specify a value, Environment=. If you do not specify a value, the value is set to an empty string. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following special characters: _ . : / = + \ - @
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3134,13 +3219,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-58
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-58 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource.
+  tag_keys: list<string> # The tag keys for the tags to disassociate.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3166,6 +3252,7 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateApplication
+# --IconS3Location shape: {S3Bucket: string, S3Key: string}
 export def "update-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3183,20 +3270,21 @@ export def "update-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-59
-  name: any
-  --display-name: any
-  --description: any
-  --icon-s3-location: any
-  --launch-path: any
-  --working-directory: any
-  --launch-parameters: any
-  --app-block-arn: any
-  --attributes-to-delete: any
-]: any -> record<Application: record<Name: record, DisplayName: record, IconURL: record, LaunchPath: record, LaunchParameters: record, Enabled: record, Metadata: record, WorkingDirectory: record, Description: record, Arn: record, AppBlockArn: record, IconS3Location: record<S3Bucket: record, S3Key: record>, Platforms: record, InstanceFamilies: record, CreatedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-59 # required
+  name: string # The name of the application. This name is visible to users when display name is not specified.
+  --display-name: string # The display name of the application. This name is visible to users in the application catalog.
+  --description: string # The description of the application.
+  --icon-s3-location: record # Describes the S3 location. — shape: {S3Bucket: string, S3Key: string}
+  --launch-path: string # The launch path of the application.
+  --working-directory: string # The working directory of the application.
+  --launch-parameters: string # The launch parameters of the application.
+  --app-block-arn: string # The ARN of the app block.
+  --attributes-to-delete: list<string> # The attributes to delete for an application.
+]: any -> record<Application: record<Name: string, DisplayName: string, IconURL: string, LaunchPath: string, LaunchParameters: string, Enabled: bool, Metadata: record, WorkingDirectory: string, Description: string, Arn: string, AppBlockArn: string, IconS3Location: record<S3Bucket: string, S3Key: string>, Platforms: list<string>, InstanceFamilies: list<string>, CreatedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.UpdateApplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "DisplayName": $display_name, "Description": $description, "IconS3Location": $icon_s3_location, "LaunchPath": $launch_path, "WorkingDirectory": $working_directory, "LaunchParameters": $launch_parameters, "AppBlockArn": $app_block_arn, "AttributesToDelete": $attributes_to_delete} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3222,6 +3310,8 @@ export def "update-application" [
 #
 # POST /
 # operationId: UpdateDirectoryConfig
+# --ServiceAccountCredentials shape: {AccountName: string, AccountPassword: string}
+# --CertificateBasedAuthProperties shape: {Status?: "DISABLED"|"ENABLED"|"ENABLED_NO_DIRECTORY_LOGIN_FALLBACK", CertificateAuthorityArn?: string}
 export def "update-directory-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3239,15 +3329,16 @@ export def "update-directory-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-60
-  directory_name: any
-  --organizational-unit-distinguished-names: any
-  --service-account-credentials: any
-  --certificate-based-auth-properties: any
-]: any -> record<DirectoryConfig: record<DirectoryName: record, OrganizationalUnitDistinguishedNames: record, ServiceAccountCredentials: record<AccountName: record, AccountPassword: record>, CreatedTime: record, CertificateBasedAuthProperties: record<Status: record, CertificateAuthorityArn: record>>> {
+  --x-amz-target: string@x-amz-target-completer-60 # required
+  directory_name: string # The name of the Directory Config object.
+  --organizational-unit-distinguished-names: list<string> # The distinguished names of the organizational units for computer accounts.
+  --service-account-credentials: record # Describes the credentials for the service account used by the fleet or image builder to connect to the directory. — shape: {AccountName: string, AccountPassword: string}
+  --certificate-based-auth-properties: record # The certificate-based authentication properties used to authenticate SAML 2.0 Identity Provider (IdP) user identities to Active Directory domain-joined streaming instances. Fallback is turned on by default when certificate-based authentication is Enabled . Fallback allows users to log in using their AD domain password if certificate-based authentication is unsuccessful, or to unlock a desktop lock screen. Enabled_no_directory_login_fallback enables certificate-based authentication, but does not allow users to log in using their AD domain password. Users will be disconnected to re-authenticate using certificates. — shape: {Status?: "DISABLED"|"ENABLED"|"ENABLED_NO_DIRECTORY_LOGIN_FALLBACK", CertificateAuthorityArn?: string}
+]: any -> record<DirectoryConfig: record<DirectoryName: string, OrganizationalUnitDistinguishedNames: list<string>, ServiceAccountCredentials: record<AccountName: string, AccountPassword: string>, CreatedTime: string, CertificateBasedAuthProperties: record<Status: string, CertificateAuthorityArn: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.UpdateDirectoryConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryName": $directory_name, "OrganizationalUnitDistinguishedNames": $organizational_unit_distinguished_names, "ServiceAccountCredentials": $service_account_credentials, "CertificateBasedAuthProperties": $certificate_based_auth_properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3273,6 +3364,7 @@ export def "update-directory-config" [
 #
 # POST /
 # operationId: UpdateEntitlement
+# --Attributes item shape: {Name: string, Value: string}
 export def "update-entitlement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3290,16 +3382,17 @@ export def "update-entitlement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-61
-  name: any
-  stack_name: any
-  --description: any
-  --app-visibility: any
-  --attributes: any
-]: any -> record<Entitlement: record<Name: record, StackName: record, Description: record, AppVisibility: record, Attributes: record, CreatedTime: record, LastModifiedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-61 # required
+  name: string # The name of the entitlement.
+  stack_name: string # The name of the stack with which the entitlement is associated.
+  --description: string # The description of the entitlement.
+  --app-visibility: string@app-visibility-completer # Specifies whether all or only selected apps are entitled.
+  --attributes: list # The attributes of the entitlement. — item shape: {Name: string, Value: string}
+]: any -> record<Entitlement: record<Name: string, StackName: string, Description: string, AppVisibility: string, Attributes: list<record>, CreatedTime: string, LastModifiedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.UpdateEntitlement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "StackName": $stack_name, "Description": $description, "AppVisibility": $app_visibility, "Attributes": $attributes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3325,6 +3418,10 @@ export def "update-entitlement" [
 #
 # POST /
 # operationId: UpdateFleet
+# --ComputeCapacity shape: {DesiredInstances: int}
+# --VpcConfig shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
+# --DomainJoinInfo shape: {DirectoryName?: string, OrganizationalUnitDistinguishedName?: string}
+# --SessionScriptS3Location shape: {S3Bucket: string, S3Key: string}
 export def "update-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3342,32 +3439,33 @@ export def "update-fleet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-62
-  --image-name: any
-  --image-arn: any
-  --name: any
-  --instance-type: any
-  --compute-capacity: any
-  --vpc-config: any
-  --max-user-duration-in-seconds: any
-  --disconnect-timeout-in-seconds: any
-  --delete-vpc-config: any
-  --description: any
-  --display-name: any
-  --enable-default-internet-access: any
-  --domain-join-info: any
-  --idle-disconnect-timeout-in-seconds: any
-  --attributes-to-delete: any
-  --iam-role-arn: any
-  --stream-view: any
-  --platform: any
-  --max-concurrent-sessions: any
-  --usb-device-filter-strings: any
-  --session-script-s3-location: any
-]: any -> record<Fleet: record<Arn: record, Name: record, DisplayName: record, Description: record, ImageName: record, ImageArn: record, InstanceType: record, FleetType: record, ComputeCapacityStatus: record<Desired: record, Running: record, InUse: record, Available: record>, MaxUserDurationInSeconds: record, DisconnectTimeoutInSeconds: record, State: record, VpcConfig: record<SubnetIds: record, SecurityGroupIds: record>, CreatedTime: record, FleetErrors: record, EnableDefaultInternetAccess: record, DomainJoinInfo: record<DirectoryName: record, OrganizationalUnitDistinguishedName: record>, IdleDisconnectTimeoutInSeconds: record, IamRoleArn: record, StreamView: record, Platform: record, MaxConcurrentSessions: record, UsbDeviceFilterStrings: record, SessionScriptS3Location: record<S3Bucket: record, S3Key: record>>> {
+  --x-amz-target: string@x-amz-target-completer-62 # required
+  --image-name: string # The name of the image used to create the fleet.
+  --image-arn: string # The ARN of the public, private, or shared image to use.
+  --name: string # A unique name for the fleet.
+  --instance-type: string # The instance type to use when launching fleet instances. The following instance types are available: stream.standard.small stream.standard.medium stream.standard.large stream.standard.xlarge stream.standard.2xlarge stream.compute.large stream.compute.xlarge stream.compute.2xlarge stream.compute.4xlarge stream.compute.8xlarge stream.memory.large stream.memory.xlarge stream.memory.2xlarge stream.memory.4xlarge stream.memory.8xlarge stream.memory.z1d.large stream.memory.z1d.xlarge stream.memory.z1d.2xlarge stream.memory.z1d.3xlarge stream.memory.z1d.6xlarge stream.memory.z1d.12xlarge stream.graphics-design.large stream.graphics-design.xlarge stream.graphics-design.2xlarge stream.graphics-design.4xlarge stream.graphics-desktop.2xlarge stream.graphics.g4dn.xlarge stream.graphics.g4dn.2xlarge stream.graphics.g4dn.4xlarge stream.graphics.g4dn.8xlarge stream.graphics.g4dn.12xlarge stream.graphics.g4dn.16xlarge stream.graphics-pro.4xlarge stream.graphics-pro.8xlarge stream.graphics-pro.16xlarge The following instance types are available for Elastic fleets: stream.standard.small stream.standard.medium stream.standard.large stream.standard.xlarge stream.standard.2xlarge
+  --compute-capacity: record # Describes the capacity for a fleet. — shape: {DesiredInstances: int}
+  --vpc-config: record # Describes VPC configuration information for fleets and image builders. — shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
+  --max-user-duration-in-seconds: int # The maximum amount of time that a streaming session can remain active, in seconds. If users are still connected to a streaming instance five minutes before this limit is reached, they are prompted to save any open documents before being disconnected. After this time elapses, the instance is terminated and replaced by a new instance. Specify a value between 600 and 360000.
+  --disconnect-timeout-in-seconds: int # The amount of time that a streaming session remains active after users disconnect. If users try to reconnect to the streaming session after a disconnection or network interruption within this time interval, they are connected to their previous session. Otherwise, they are connected to a new session with a new streaming instance. Specify a value between 60 and 360000.
+  --delete-vpc-config: oneof<nothing, bool> # Deletes the VPC association for the specified fleet.
+  --description: string # The description to display.
+  --display-name: string # The fleet name to display.
+  --enable-default-internet-access: oneof<nothing, bool> # Enables or disables default internet access for the fleet.
+  --domain-join-info: record # Describes the configuration information required to join fleets and image builders to Microsoft Active Directory domains. — shape: {DirectoryName?: string, OrganizationalUnitDistinguishedName?: string}
+  --idle-disconnect-timeout-in-seconds: int # The amount of time that users can be idle (inactive) before they are disconnected from their streaming session and the DisconnectTimeoutInSeconds time interval begins. Users are notified before they are disconnected due to inactivity. If users try to reconnect to the streaming session before the time interval specified in DisconnectTimeoutInSeconds elapses, they are connected to their previous session. Users are considered idle when they stop providing keyboard or mouse input during their streaming session. File uploads and downloads, audio in, audio out, and pixels changing do not qualify as user activity. If users continue to be idle after the time interval in IdleDisconnectTimeoutInSeconds elapses, they are disconnected. To prevent users from being disconnected due to inactivity, specify a value of 0. Otherwise, specify a value between 60 and 3600. The default value is 0. If you enable this feature, we recommend that you specify a value that corresponds exactly to a whole number of minutes (for example, 60, 120, and 180). If you don't do this, the value is rounded to the nearest minute. For example, if you specify a value of 70, users are disconnected after 1 minute of inactivity. If you specify a value that is at the midpoint between two different minutes, the value is rounded up. For example, if you specify a value of 90, users are disconnected after 2 minutes of inactivity.
+  --attributes-to-delete: list<string> # The fleet attributes.
+  --iam-role-arn: string # The Amazon Resource Name (ARN) of the IAM role to apply to the fleet. To assume a role, a fleet instance calls the AWS Security Token Service (STS) AssumeRole API operation and passes the ARN of the role to use. The operation creates a new session with temporary credentials. AppStream 2.0 retrieves the temporary credentials and creates the appstream_machine_role credential profile on the instance. For more information, see Using an IAM Role to Grant Permissions to Applications and Scripts Running on AppStream 2.0 Streaming Instances (https://docs.aws.amazon.com/appstream2/latest/developerguide/using-iam-roles-to-grant-permissions-to-applications-scripts-streaming-instances.html) in the Amazon AppStream 2.0 Administration Guide.
+  --stream-view: string@stream-view-completer # The AppStream 2.0 view that is displayed to your users when they stream from the fleet. When APP is specified, only the windows of applications opened by users display. When DESKTOP is specified, the standard desktop that is provided by the operating system displays. The default value is APP.
+  --platform: string@platform-completer # The platform of the fleet. WINDOWS_SERVER_2019 and AMAZON_LINUX2 are supported for Elastic fleets.
+  --max-concurrent-sessions: int # The maximum number of concurrent sessions for a fleet.
+  --usb-device-filter-strings: list<string> # The USB device filter strings that specify which USB devices a user can redirect to the fleet streaming session, when using the Windows native client. This is allowed but not required for Elastic fleets.
+  --session-script-s3-location: record # Describes the S3 location. — shape: {S3Bucket: string, S3Key: string}
+]: any -> record<Fleet: record<Arn: string, Name: string, DisplayName: string, Description: string, ImageName: string, ImageArn: string, InstanceType: string, FleetType: string, ComputeCapacityStatus: record<Desired: int, Running: int, InUse: int, Available: int>, MaxUserDurationInSeconds: int, DisconnectTimeoutInSeconds: int, State: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list>, CreatedTime: string, FleetErrors: list<record>, EnableDefaultInternetAccess: bool, DomainJoinInfo: record<DirectoryName: string, OrganizationalUnitDistinguishedName: string>, IdleDisconnectTimeoutInSeconds: int, IamRoleArn: string, StreamView: string, Platform: string, MaxConcurrentSessions: int, UsbDeviceFilterStrings: list<string>, SessionScriptS3Location: record<S3Bucket: string, S3Key: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.UpdateFleet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ImageName": $image_name, "ImageArn": $image_arn, "Name": $name, "InstanceType": $instance_type, "ComputeCapacity": $compute_capacity, "VpcConfig": $vpc_config, "MaxUserDurationInSeconds": $max_user_duration_in_seconds, "DisconnectTimeoutInSeconds": $disconnect_timeout_in_seconds, "DeleteVpcConfig": $delete_vpc_config, "Description": $description, "DisplayName": $display_name, "EnableDefaultInternetAccess": $enable_default_internet_access, "DomainJoinInfo": $domain_join_info, "IdleDisconnectTimeoutInSeconds": $idle_disconnect_timeout_in_seconds, "AttributesToDelete": $attributes_to_delete, "IamRoleArn": $iam_role_arn, "StreamView": $stream_view, "Platform": $platform, "MaxConcurrentSessions": $max_concurrent_sessions, "UsbDeviceFilterStrings": $usb_device_filter_strings, "SessionScriptS3Location": $session_script_s3_location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3393,6 +3491,7 @@ export def "update-fleet" [
 #
 # POST /
 # operationId: UpdateImagePermissions
+# --ImagePermissions shape: {allowFleet?: bool, allowImageBuilder?: bool}
 export def "update-image-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3410,14 +3509,15 @@ export def "update-image-permissions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-63
-  name: any
-  shared_account_id: any
-  image_permissions: any
+  --x-amz-target: string@x-amz-target-completer-63 # required
+  name: string # The name of the private image.
+  shared_account_id: string # The 12-digit identifier of the AWS account for which you want add or update image permissions.
+  image_permissions: record # Describes the permissions for an image. — shape: {allowFleet?: bool, allowImageBuilder?: bool}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.UpdateImagePermissions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "SharedAccountId": $shared_account_id, "ImagePermissions": $image_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3443,6 +3543,11 @@ export def "update-image-permissions" [
 #
 # POST /
 # operationId: UpdateStack
+# --StorageConnectors item shape: {ConnectorType: "HOMEFOLDERS"|"GOOGLE_DRIVE"|"ONE_DRIVE", ResourceIdentifier?: string, Domains?: list<string>}
+# --UserSettings item shape: {Action: "CLIPBOARD_COPY_FROM_LOCAL_DEVICE"|"CLIPBOARD_COPY_TO_LOCAL_DEVICE"|"FILE_UPLOAD"|"FILE_DOWNLOAD"|"PRINTING_TO_LOCAL_DEVICE"|"DOMAIN_PASSWORD_SIGNIN"|"DOMAIN_SMART_CARD_SIGNIN", Permission: "ENABLED"|"DISABLED"}
+# --ApplicationSettings shape: {Enabled: bool, SettingsGroup?: string}
+# --AccessEndpoints item shape: {EndpointType: "STREAMING", VpceId?: string}
+# --StreamingExperienceSettings shape: {PreferredProtocol?: "TCP"|"UDP"}
 export def "update-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3460,24 +3565,25 @@ export def "update-stack" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-64
-  --display-name: any
-  --description: any
-  name: any
-  --storage-connectors: any
-  --delete-storage-connectors: any
-  --redirect-url: any
-  --feedback-url: any
-  --attributes-to-delete: any
-  --user-settings: any
-  --application-settings: any
-  --access-endpoints: any
-  --embed-host-domains: any
-  --streaming-experience-settings: any
-]: any -> record<Stack: record<Arn: record, Name: record, Description: record, DisplayName: record, CreatedTime: record, StorageConnectors: record, RedirectURL: record, FeedbackURL: record, StackErrors: record, UserSettings: record, ApplicationSettings: record<Enabled: record, SettingsGroup: record, S3BucketName: record>, AccessEndpoints: record, EmbedHostDomains: record, StreamingExperienceSettings: record<PreferredProtocol: record>>> {
+  --x-amz-target: string@x-amz-target-completer-64 # required
+  --display-name: string # The stack name to display.
+  --description: string # The description to display.
+  name: string # The name of the stack.
+  --storage-connectors: list # The storage connectors. — item shape: {ConnectorType: "HOMEFOLDERS"|"GOOGLE_DRIVE"|"ONE_DRIVE", ResourceIdentifier?: string, Domains?: list<string>}
+  --delete-storage-connectors: oneof<nothing, bool> # Deletes the storage connectors currently enabled for the stack.
+  --redirect-url: string # The URL that users are redirected to after their streaming session ends.
+  --feedback-url: string # The URL that users are redirected to after they choose the Send Feedback link. If no URL is specified, no Send Feedback link is displayed.
+  --attributes-to-delete: list<string> # The stack attributes to delete.
+  --user-settings: list # The actions that are enabled or disabled for users during their streaming sessions. By default, these actions are enabled. — item shape: {Action: "CLIPBOARD_COPY_FROM_LOCAL_DEVICE"|"CLIPBOARD_COPY_TO_LOCAL_DEVICE"|"FILE_UPLOAD"|"FILE_DOWNLOAD"|"PRINTING_TO_LOCAL_DEVICE"|"DOMAIN_PASSWORD_SIGNIN"|"DOMAIN_SMART_CARD_SIGNIN", Permission: "ENABLED"|"DISABLED"}
+  --application-settings: record # The persistent application settings for users of a stack. — shape: {Enabled: bool, SettingsGroup?: string}
+  --access-endpoints: list # The list of interface VPC endpoint (interface endpoint) objects. Users of the stack can connect to AppStream 2.0 only through the specified endpoints. — item shape: {EndpointType: "STREAMING", VpceId?: string}
+  --embed-host-domains: list<string> # The domains where AppStream 2.0 streaming sessions can be embedded in an iframe. You must approve the domains that you want to host embedded AppStream 2.0 streaming sessions.
+  --streaming-experience-settings: record # The streaming protocol you want your stack to prefer. This can be UDP or TCP. Currently, UDP is only supported in the Windows native client. — shape: {PreferredProtocol?: "TCP"|"UDP"}
+]: any -> record<Stack: record<Arn: string, Name: string, Description: string, DisplayName: string, CreatedTime: string, StorageConnectors: list<record>, RedirectURL: string, FeedbackURL: string, StackErrors: list<record>, UserSettings: list<record>, ApplicationSettings: record<Enabled: bool, SettingsGroup: string, S3BucketName: string>, AccessEndpoints: list<record>, EmbedHostDomains: list<string>, StreamingExperienceSettings: record<PreferredProtocol: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "PhotonAdminProxyService.UpdateStack")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DisplayName": $display_name, "Description": $description, "Name": $name, "StorageConnectors": $storage_connectors, "DeleteStorageConnectors": $delete_storage_connectors, "RedirectURL": $redirect_url, "FeedbackURL": $feedback_url, "AttributesToDelete": $attributes_to_delete, "UserSettings": $user_settings, "ApplicationSettings": $application_settings, "AccessEndpoints": $access_endpoints, "EmbedHostDomains": $embed_host_domains, "StreamingExperienceSettings": $streaming_experience_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

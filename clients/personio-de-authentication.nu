@@ -131,11 +131,13 @@ export def "post-auth" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --client-id: string # Client id of the downloaded credentials file
-  --client-secret: string # Client secret of the downloaded credentials file
+  --client-id: string # Client id of the downloaded credentials file (required)
+  --client-secret: string # Client secret of the downloaded credentials file (required)
 ]: nothing -> record<data: record<token: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id == null) { error make --unspanned { msg: "required query parameter 'client_id' missing: pass --client-id" } }
+  if ($client_secret == null) { error make --unspanned { msg: "required query parameter 'client_secret' missing: pass --client-secret" } }
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "client_secret" $client_secret "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/auth" $qp $auth.query)
   let accept_val = "application/json"

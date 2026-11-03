@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -157,7 +157,7 @@ export def "associate-alias2020-05-31" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alias: string # The alias (also known as a CNAME) to add to the target distribution.
+  --alias: string # The alias (also known as a CNAME) to add to the target distribution. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -169,6 +169,7 @@ export def "associate-alias2020-05-31" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_distribution_id | is-empty) { error make --unspanned { msg: "path parameter 'TargetDistributionId' must be non-empty" } }
+  if ($alias == null) { error make --unspanned { msg: "required query parameter 'Alias' missing: pass --alias" } }
   let qp = [(serialize-qp "Alias" $alias "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({target_distribution_id: (encode-path-segment $target_distribution_id)} | format pattern "/2020-05-31/distribution/{target_distribution_id}/associate-alias") $qp $auth.query)
   let accept_val = "application/json"
@@ -214,7 +215,7 @@ export def "copy-distribution2020-05-31" [
   --staging: oneof<nothing, bool> # The type of distribution that your primary distribution will be copied to. The only valid value is True, indicating that you are copying to a staging distribution.
   --if-match: string # The version identifier of the primary distribution whose configuration you are copying. This is the ETag value returned in the response to GetDistribution and GetDistributionConfig.
   --body: any
-]: any -> record<Distribution: record<Id: record, ARN: record, Status: record, LastModifiedTime: record, InProgressInvalidationBatches: record, DomainName: record, ActiveTrustedSigners: record<Enabled: record, Quantity: record, Items: record>, ActiveTrustedKeyGroups: record<Enabled: record, Quantity: record, Items: record>, DistributionConfig: record<CallerReference: record, Aliases: record, DefaultRootObject: record, Origins: record, OriginGroups: record, DefaultCacheBehavior: record, CacheBehaviors: record, CustomErrorResponses: record, Comment: record, Logging: record, PriceClass: record, Enabled: record, ViewerCertificate: record, Restrictions: record, WebACLId: record, HttpVersion: record, IsIPV6Enabled: record, ContinuousDeploymentPolicyId: record, Staging: record>, AliasICPRecordals: record>> {
+]: any -> record<Distribution: record<Id: string, ARN: string, Status: string, LastModifiedTime: string, InProgressInvalidationBatches: int, DomainName: string, ActiveTrustedSigners: record<Enabled: bool, Quantity: int, Items: list>, ActiveTrustedKeyGroups: record<Enabled: bool, Quantity: int, Items: list>, DistributionConfig: record<CallerReference: string, Aliases: record, DefaultRootObject: string, Origins: record, OriginGroups: record, DefaultCacheBehavior: record, CacheBehaviors: record, CustomErrorResponses: record, Comment: string, Logging: record, PriceClass: string, Enabled: bool, ViewerCertificate: record, Restrictions: record, WebACLId: string, HttpVersion: string, IsIPV6Enabled: bool, ContinuousDeploymentPolicyId: string, Staging: bool>, AliasICPRecordals: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -262,7 +263,7 @@ export def "create-cache-policy2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<CachePolicy: record<Id: record, LastModifiedTime: record, CachePolicyConfig: record<Comment: record, Name: record, DefaultTTL: record, MaxTTL: record, MinTTL: record, ParametersInCacheKeyAndForwardedToOrigin: record>>> {
+]: any -> record<CachePolicy: record<Id: string, LastModifiedTime: string, CachePolicyConfig: record<Comment: string, Name: string, DefaultTTL: int, MaxTTL: int, MinTTL: int, ParametersInCacheKeyAndForwardedToOrigin: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -311,7 +312,7 @@ export def "list-cache-policies2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CachePolicyList: record<NextMarker: record, MaxItems: record, Quantity: record, Items: record>> {
+]: nothing -> record<CachePolicyList: record<NextMarker: string, MaxItems: int, Quantity: int, Items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Type" $type "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
@@ -356,7 +357,7 @@ export def "create-cloud-front-origin-access-identity2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<CloudFrontOriginAccessIdentity: record<Id: record, S3CanonicalUserId: record, CloudFrontOriginAccessIdentityConfig: record<CallerReference: record, Comment: record>>> {
+]: any -> record<CloudFrontOriginAccessIdentity: record<Id: string, S3CanonicalUserId: string, CloudFrontOriginAccessIdentityConfig: record<CallerReference: string, Comment: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -404,7 +405,7 @@ export def "list-cloud-front-origin-access-identities2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CloudFrontOriginAccessIdentityList: record<Marker: record, NextMarker: record, MaxItems: record, IsTruncated: record, Quantity: record, Items: record>> {
+]: nothing -> record<CloudFrontOriginAccessIdentityList: record<Marker: string, NextMarker: string, MaxItems: int, IsTruncated: bool, Quantity: int, Items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
@@ -449,7 +450,7 @@ export def "create-continuous-deployment-policy2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ContinuousDeploymentPolicy: record<Id: record, LastModifiedTime: record, ContinuousDeploymentPolicyConfig: record<StagingDistributionDnsNames: record, Enabled: record, TrafficConfig: record>>> {
+]: any -> record<ContinuousDeploymentPolicy: record<Id: string, LastModifiedTime: string, ContinuousDeploymentPolicyConfig: record<StagingDistributionDnsNames: record, Enabled: bool, TrafficConfig: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -497,7 +498,7 @@ export def "list-continuous-deployment-policies2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ContinuousDeploymentPolicyList: record<NextMarker: record, MaxItems: record, Quantity: record, Items: record>> {
+]: nothing -> record<ContinuousDeploymentPolicyList: record<NextMarker: string, MaxItems: int, Quantity: int, Items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
@@ -542,7 +543,7 @@ export def "create-distribution2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Distribution: record<Id: record, ARN: record, Status: record, LastModifiedTime: record, InProgressInvalidationBatches: record, DomainName: record, ActiveTrustedSigners: record<Enabled: record, Quantity: record, Items: record>, ActiveTrustedKeyGroups: record<Enabled: record, Quantity: record, Items: record>, DistributionConfig: record<CallerReference: record, Aliases: record, DefaultRootObject: record, Origins: record, OriginGroups: record, DefaultCacheBehavior: record, CacheBehaviors: record, CustomErrorResponses: record, Comment: record, Logging: record, PriceClass: record, Enabled: record, ViewerCertificate: record, Restrictions: record, WebACLId: record, HttpVersion: record, IsIPV6Enabled: record, ContinuousDeploymentPolicyId: record, Staging: record>, AliasICPRecordals: record>> {
+]: any -> record<Distribution: record<Id: string, ARN: string, Status: string, LastModifiedTime: string, InProgressInvalidationBatches: int, DomainName: string, ActiveTrustedSigners: record<Enabled: bool, Quantity: int, Items: list>, ActiveTrustedKeyGroups: record<Enabled: bool, Quantity: int, Items: list>, DistributionConfig: record<CallerReference: string, Aliases: record, DefaultRootObject: string, Origins: record, OriginGroups: record, DefaultCacheBehavior: record, CacheBehaviors: record, CustomErrorResponses: record, Comment: string, Logging: record, PriceClass: string, Enabled: bool, ViewerCertificate: record, Restrictions: record, WebACLId: string, HttpVersion: string, IsIPV6Enabled: bool, ContinuousDeploymentPolicyId: string, Staging: bool>, AliasICPRecordals: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -590,7 +591,7 @@ export def "list-distributions2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DistributionList: record<Marker: record, NextMarker: record, MaxItems: record, IsTruncated: record, Quantity: record, Items: record>> {
+]: nothing -> record<DistributionList: record<Marker: string, NextMarker: string, MaxItems: int, IsTruncated: bool, Quantity: int, Items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
@@ -627,7 +628,7 @@ export def "create-distribution-with-tags2020-05-31" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --with-tags: oneof<nothing, bool> # allows empty value
+  --with-tags: oneof<nothing, bool> # required, allows empty value
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -636,10 +637,11 @@ export def "create-distribution-with-tags2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Distribution: record<Id: record, ARN: record, Status: record, LastModifiedTime: record, InProgressInvalidationBatches: record, DomainName: record, ActiveTrustedSigners: record<Enabled: record, Quantity: record, Items: record>, ActiveTrustedKeyGroups: record<Enabled: record, Quantity: record, Items: record>, DistributionConfig: record<CallerReference: record, Aliases: record, DefaultRootObject: record, Origins: record, OriginGroups: record, DefaultCacheBehavior: record, CacheBehaviors: record, CustomErrorResponses: record, Comment: record, Logging: record, PriceClass: record, Enabled: record, ViewerCertificate: record, Restrictions: record, WebACLId: record, HttpVersion: record, IsIPV6Enabled: record, ContinuousDeploymentPolicyId: record, Staging: record>, AliasICPRecordals: record>> {
+]: any -> record<Distribution: record<Id: string, ARN: string, Status: string, LastModifiedTime: string, InProgressInvalidationBatches: int, DomainName: string, ActiveTrustedSigners: record<Enabled: bool, Quantity: int, Items: list>, ActiveTrustedKeyGroups: record<Enabled: bool, Quantity: int, Items: list>, DistributionConfig: record<CallerReference: string, Aliases: record, DefaultRootObject: string, Origins: record, OriginGroups: record, DefaultCacheBehavior: record, CacheBehaviors: record, CustomErrorResponses: record, Comment: string, Logging: record, PriceClass: string, Enabled: bool, ViewerCertificate: record, Restrictions: record, WebACLId: string, HttpVersion: string, IsIPV6Enabled: bool, ContinuousDeploymentPolicyId: string, Staging: bool>, AliasICPRecordals: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let with_tags = ($with_tags | default true)
   let qp = [(serialize-qp "WithTags" $with_tags "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2020-05-31/distribution" $qp $auth.query)
   let req_body = $body
@@ -684,7 +686,7 @@ export def "create-field-level-encryption-config2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<FieldLevelEncryption: record<Id: record, LastModifiedTime: record, FieldLevelEncryptionConfig: record<CallerReference: record, Comment: record, QueryArgProfileConfig: record, ContentTypeProfileConfig: record>>> {
+]: any -> record<FieldLevelEncryption: record<Id: string, LastModifiedTime: string, FieldLevelEncryptionConfig: record<CallerReference: string, Comment: string, QueryArgProfileConfig: record, ContentTypeProfileConfig: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -732,7 +734,7 @@ export def "list-field-level-encryption-configs2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FieldLevelEncryptionList: record<NextMarker: record, MaxItems: record, Quantity: record, Items: record>> {
+]: nothing -> record<FieldLevelEncryptionList: record<NextMarker: string, MaxItems: int, Quantity: int, Items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
@@ -777,7 +779,7 @@ export def "create-field-level-encryption-profile2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<FieldLevelEncryptionProfile: record<Id: record, LastModifiedTime: record, FieldLevelEncryptionProfileConfig: record<Name: record, CallerReference: record, Comment: record, EncryptionEntities: record>>> {
+]: any -> record<FieldLevelEncryptionProfile: record<Id: string, LastModifiedTime: string, FieldLevelEncryptionProfileConfig: record<Name: string, CallerReference: string, Comment: string, EncryptionEntities: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -825,7 +827,7 @@ export def "list-field-level-encryption-profiles2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FieldLevelEncryptionProfileList: record<NextMarker: record, MaxItems: record, Quantity: record, Items: record>> {
+]: nothing -> record<FieldLevelEncryptionProfileList: record<NextMarker: string, MaxItems: int, Quantity: int, Items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
@@ -870,7 +872,7 @@ export def "create-function2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<FunctionSummary: record<Name: record, Status: record, FunctionConfig: record<Comment: record, Runtime: record>, FunctionMetadata: record<FunctionARN: record, Stage: record, CreatedTime: record, LastModifiedTime: record>>> {
+]: any -> record<FunctionSummary: record<Name: string, Status: string, FunctionConfig: record<Comment: string, Runtime: string>, FunctionMetadata: record<FunctionARN: string, Stage: string, CreatedTime: string, LastModifiedTime: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -919,7 +921,7 @@ export def "list-functions2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FunctionList: record<NextMarker: record, MaxItems: record, Quantity: record, Items: record>> {
+]: nothing -> record<FunctionList: record<NextMarker: string, MaxItems: int, Quantity: int, Items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Stage" $stage "scalar")] | flatten | str join "&"
@@ -965,7 +967,7 @@ export def "create-invalidation2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Invalidation: record<Id: record, Status: record, CreateTime: record, InvalidationBatch: record<Paths: record, CallerReference: record>>> {
+]: any -> record<Invalidation: record<Id: string, Status: string, CreateTime: string, InvalidationBatch: record<Paths: record, CallerReference: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1015,7 +1017,7 @@ export def "list-invalidations2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<InvalidationList: record<Marker: record, NextMarker: record, MaxItems: record, IsTruncated: record, Quantity: record, Items: record>> {
+]: nothing -> record<InvalidationList: record<Marker: string, NextMarker: string, MaxItems: int, IsTruncated: bool, Quantity: int, Items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($distribution_id | is-empty) { error make --unspanned { msg: "path parameter 'DistributionId' must be non-empty" } }
@@ -1061,7 +1063,7 @@ export def "create-key-group2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<KeyGroup: record<Id: record, LastModifiedTime: record, KeyGroupConfig: record<Name: record, Items: record, Comment: record>>> {
+]: any -> record<KeyGroup: record<Id: string, LastModifiedTime: string, KeyGroupConfig: record<Name: string, Items: list, Comment: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1109,7 +1111,7 @@ export def "list-key-groups2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<KeyGroupList: record<NextMarker: record, MaxItems: record, Quantity: record, Items: record>> {
+]: nothing -> record<KeyGroupList: record<NextMarker: string, MaxItems: int, Quantity: int, Items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
@@ -1155,7 +1157,7 @@ export def "create-monitoring-subscription2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MonitoringSubscription: record<RealtimeMetricsSubscriptionConfig: record<RealtimeMetricsSubscriptionStatus: record>>> {
+]: any -> record<MonitoringSubscription: record<RealtimeMetricsSubscriptionConfig: record<RealtimeMetricsSubscriptionStatus: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1248,7 +1250,7 @@ export def "get-monitoring-subscription2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MonitoringSubscription: record<RealtimeMetricsSubscriptionConfig: record<RealtimeMetricsSubscriptionStatus: record>>> {
+]: nothing -> record<MonitoringSubscription: record<RealtimeMetricsSubscriptionConfig: record<RealtimeMetricsSubscriptionStatus: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($distribution_id | is-empty) { error make --unspanned { msg: "path parameter 'DistributionId' must be non-empty" } }
@@ -1293,7 +1295,7 @@ export def "create-origin-access-control2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<OriginAccessControl: record<Id: record, OriginAccessControlConfig: record<Name: record, Description: record, SigningProtocol: record, SigningBehavior: record, OriginAccessControlOriginType: record>>> {
+]: any -> record<OriginAccessControl: record<Id: string, OriginAccessControlConfig: record<Name: string, Description: string, SigningProtocol: string, SigningBehavior: string, OriginAccessControlOriginType: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1341,7 +1343,7 @@ export def "list-origin-access-controls2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OriginAccessControlList: record<Marker: record, NextMarker: record, MaxItems: record, IsTruncated: record, Quantity: record, Items: record>> {
+]: nothing -> record<OriginAccessControlList: record<Marker: string, NextMarker: string, MaxItems: int, IsTruncated: bool, Quantity: int, Items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
@@ -1386,7 +1388,7 @@ export def "create-origin-request-policy2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<OriginRequestPolicy: record<Id: record, LastModifiedTime: record, OriginRequestPolicyConfig: record<Comment: record, Name: record, HeadersConfig: record, CookiesConfig: record, QueryStringsConfig: record>>> {
+]: any -> record<OriginRequestPolicy: record<Id: string, LastModifiedTime: string, OriginRequestPolicyConfig: record<Comment: string, Name: string, HeadersConfig: record, CookiesConfig: record, QueryStringsConfig: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1435,7 +1437,7 @@ export def "list-origin-request-policies2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OriginRequestPolicyList: record<NextMarker: record, MaxItems: record, Quantity: record, Items: record>> {
+]: nothing -> record<OriginRequestPolicyList: record<NextMarker: string, MaxItems: int, Quantity: int, Items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Type" $type "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
@@ -1480,7 +1482,7 @@ export def "create-public-key2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PublicKey: record<Id: record, CreatedTime: record, PublicKeyConfig: record<CallerReference: record, Name: record, EncodedKey: record, Comment: record>>> {
+]: any -> record<PublicKey: record<Id: string, CreatedTime: string, PublicKeyConfig: record<CallerReference: string, Name: string, EncodedKey: string, Comment: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1528,7 +1530,7 @@ export def "list-public-keys2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PublicKeyList: record<NextMarker: record, MaxItems: record, Quantity: record, Items: record>> {
+]: nothing -> record<PublicKeyList: record<NextMarker: string, MaxItems: int, Quantity: int, Items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
@@ -1573,7 +1575,7 @@ export def "create-realtime-log-config2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<RealtimeLogConfig: record<ARN: record, Name: record, SamplingRate: record, EndPoints: record, Fields: record>> {
+]: any -> record<RealtimeLogConfig: record<ARN: string, Name: string, SamplingRate: int, EndPoints: list<record>, Fields: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1621,7 +1623,7 @@ export def "list-realtime-log-configs2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RealtimeLogConfigs: record<MaxItems: record, Items: record, IsTruncated: record, Marker: record, NextMarker: record>> {
+]: nothing -> record<RealtimeLogConfigs: record<MaxItems: int, Items: list<record>, IsTruncated: bool, Marker: string, NextMarker: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
@@ -1666,7 +1668,7 @@ export def "create-response-headers-policy2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ResponseHeadersPolicy: record<Id: record, LastModifiedTime: record, ResponseHeadersPolicyConfig: record<Comment: record, Name: record, CorsConfig: record, SecurityHeadersConfig: record, ServerTimingHeadersConfig: record, CustomHeadersConfig: record, RemoveHeadersConfig: record>>> {
+]: any -> record<ResponseHeadersPolicy: record<Id: string, LastModifiedTime: string, ResponseHeadersPolicyConfig: record<Comment: string, Name: string, CorsConfig: record, SecurityHeadersConfig: record, ServerTimingHeadersConfig: record, CustomHeadersConfig: record, RemoveHeadersConfig: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1715,7 +1717,7 @@ export def "list-response-headers-policies2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ResponseHeadersPolicyList: record<NextMarker: record, MaxItems: record, Quantity: record, Items: record>> {
+]: nothing -> record<ResponseHeadersPolicyList: record<NextMarker: string, MaxItems: int, Quantity: int, Items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Type" $type "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
@@ -1760,7 +1762,7 @@ export def "create-streaming-distribution2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StreamingDistribution: record<Id: record, ARN: record, Status: record, LastModifiedTime: record, DomainName: record, ActiveTrustedSigners: record<Enabled: record, Quantity: record, Items: record>, StreamingDistributionConfig: record<CallerReference: record, S3Origin: record, Aliases: record, Comment: record, Logging: record, TrustedSigners: record, PriceClass: record, Enabled: record>>> {
+]: any -> record<StreamingDistribution: record<Id: string, ARN: string, Status: string, LastModifiedTime: string, DomainName: string, ActiveTrustedSigners: record<Enabled: bool, Quantity: int, Items: list>, StreamingDistributionConfig: record<CallerReference: string, S3Origin: record, Aliases: record, Comment: string, Logging: record, TrustedSigners: record, PriceClass: string, Enabled: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1808,7 +1810,7 @@ export def "list-streaming-distributions2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StreamingDistributionList: record<Marker: record, NextMarker: record, MaxItems: record, IsTruncated: record, Quantity: record, Items: record>> {
+]: nothing -> record<StreamingDistributionList: record<Marker: string, NextMarker: string, MaxItems: int, IsTruncated: bool, Quantity: int, Items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
@@ -1845,7 +1847,7 @@ export def "create-streaming-distribution-with-tags2020-05-31" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --with-tags: oneof<nothing, bool> # allows empty value
+  --with-tags: oneof<nothing, bool> # required, allows empty value
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1854,10 +1856,11 @@ export def "create-streaming-distribution-with-tags2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StreamingDistribution: record<Id: record, ARN: record, Status: record, LastModifiedTime: record, DomainName: record, ActiveTrustedSigners: record<Enabled: record, Quantity: record, Items: record>, StreamingDistributionConfig: record<CallerReference: record, S3Origin: record, Aliases: record, Comment: record, Logging: record, TrustedSigners: record, PriceClass: record, Enabled: record>>> {
+]: any -> record<StreamingDistribution: record<Id: string, ARN: string, Status: string, LastModifiedTime: string, DomainName: string, ActiveTrustedSigners: record<Enabled: bool, Quantity: int, Items: list>, StreamingDistributionConfig: record<CallerReference: string, S3Origin: record, Aliases: record, Comment: string, Logging: record, TrustedSigners: record, PriceClass: string, Enabled: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let with_tags = ($with_tags | default true)
   let qp = [(serialize-qp "WithTags" $with_tags "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2020-05-31/streaming-distribution" $qp $auth.query)
   let req_body = $body
@@ -1948,7 +1951,7 @@ export def "get-cache-policy2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CachePolicy: record<Id: record, LastModifiedTime: record, CachePolicyConfig: record<Comment: record, Name: record, DefaultTTL: record, MaxTTL: record, MinTTL: record, ParametersInCacheKeyAndForwardedToOrigin: record>>> {
+]: nothing -> record<CachePolicy: record<Id: string, LastModifiedTime: string, CachePolicyConfig: record<Comment: string, Name: string, DefaultTTL: int, MaxTTL: int, MinTTL: int, ParametersInCacheKeyAndForwardedToOrigin: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -1995,7 +1998,7 @@ export def "update-cache-policy2020-05-31" [
   --x-amz-signed-headers: string
   --if-match: string # The version of the cache policy that you are updating. The version is returned in the cache policy's ETag field in the response to GetCachePolicyConfig.
   --body: any
-]: any -> record<CachePolicy: record<Id: record, LastModifiedTime: record, CachePolicyConfig: record<Comment: record, Name: record, DefaultTTL: record, MaxTTL: record, MinTTL: record, ParametersInCacheKeyAndForwardedToOrigin: record>>> {
+]: any -> record<CachePolicy: record<Id: string, LastModifiedTime: string, CachePolicyConfig: record<Comment: string, Name: string, DefaultTTL: int, MaxTTL: int, MinTTL: int, ParametersInCacheKeyAndForwardedToOrigin: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2089,7 +2092,7 @@ export def "get-cloud-front-origin-access-identity2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CloudFrontOriginAccessIdentity: record<Id: record, S3CanonicalUserId: record, CloudFrontOriginAccessIdentityConfig: record<CallerReference: record, Comment: record>>> {
+]: nothing -> record<CloudFrontOriginAccessIdentity: record<Id: string, S3CanonicalUserId: string, CloudFrontOriginAccessIdentityConfig: record<CallerReference: string, Comment: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2180,7 +2183,7 @@ export def "get-continuous-deployment-policy2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ContinuousDeploymentPolicy: record<Id: record, LastModifiedTime: record, ContinuousDeploymentPolicyConfig: record<StagingDistributionDnsNames: record, Enabled: record, TrafficConfig: record>>> {
+]: nothing -> record<ContinuousDeploymentPolicy: record<Id: string, LastModifiedTime: string, ContinuousDeploymentPolicyConfig: record<StagingDistributionDnsNames: record, Enabled: bool, TrafficConfig: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2227,7 +2230,7 @@ export def "update-continuous-deployment-policy2020-05-31" [
   --x-amz-signed-headers: string
   --if-match: string # The current version (ETag value) of the continuous deployment policy that you are updating.
   --body: any
-]: any -> record<ContinuousDeploymentPolicy: record<Id: record, LastModifiedTime: record, ContinuousDeploymentPolicyConfig: record<StagingDistributionDnsNames: record, Enabled: record, TrafficConfig: record>>> {
+]: any -> record<ContinuousDeploymentPolicy: record<Id: string, LastModifiedTime: string, ContinuousDeploymentPolicyConfig: record<StagingDistributionDnsNames: record, Enabled: bool, TrafficConfig: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2321,7 +2324,7 @@ export def "get-distribution2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Distribution: record<Id: record, ARN: record, Status: record, LastModifiedTime: record, InProgressInvalidationBatches: record, DomainName: record, ActiveTrustedSigners: record<Enabled: record, Quantity: record, Items: record>, ActiveTrustedKeyGroups: record<Enabled: record, Quantity: record, Items: record>, DistributionConfig: record<CallerReference: record, Aliases: record, DefaultRootObject: record, Origins: record, OriginGroups: record, DefaultCacheBehavior: record, CacheBehaviors: record, CustomErrorResponses: record, Comment: record, Logging: record, PriceClass: record, Enabled: record, ViewerCertificate: record, Restrictions: record, WebACLId: record, HttpVersion: record, IsIPV6Enabled: record, ContinuousDeploymentPolicyId: record, Staging: record>, AliasICPRecordals: record>> {
+]: nothing -> record<Distribution: record<Id: string, ARN: string, Status: string, LastModifiedTime: string, InProgressInvalidationBatches: int, DomainName: string, ActiveTrustedSigners: record<Enabled: bool, Quantity: int, Items: list>, ActiveTrustedKeyGroups: record<Enabled: bool, Quantity: int, Items: list>, DistributionConfig: record<CallerReference: string, Aliases: record, DefaultRootObject: string, Origins: record, OriginGroups: record, DefaultCacheBehavior: record, CacheBehaviors: record, CustomErrorResponses: record, Comment: string, Logging: record, PriceClass: string, Enabled: bool, ViewerCertificate: record, Restrictions: record, WebACLId: string, HttpVersion: string, IsIPV6Enabled: bool, ContinuousDeploymentPolicyId: string, Staging: bool>, AliasICPRecordals: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2412,7 +2415,7 @@ export def "get-field-level-encryption2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FieldLevelEncryption: record<Id: record, LastModifiedTime: record, FieldLevelEncryptionConfig: record<CallerReference: record, Comment: record, QueryArgProfileConfig: record, ContentTypeProfileConfig: record>>> {
+]: nothing -> record<FieldLevelEncryption: record<Id: string, LastModifiedTime: string, FieldLevelEncryptionConfig: record<CallerReference: string, Comment: string, QueryArgProfileConfig: record, ContentTypeProfileConfig: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2503,7 +2506,7 @@ export def "get-field-level-encryption-profile2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FieldLevelEncryptionProfile: record<Id: record, LastModifiedTime: record, FieldLevelEncryptionProfileConfig: record<Name: record, CallerReference: record, Comment: record, EncryptionEntities: record>>> {
+]: nothing -> record<FieldLevelEncryptionProfile: record<Id: string, LastModifiedTime: string, FieldLevelEncryptionProfileConfig: record<Name: string, CallerReference: string, Comment: string, EncryptionEntities: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2548,11 +2551,12 @@ export def "delete-function2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --if-match: string # The current version (ETag value) of the function that you are deleting, which you can get using DescribeFunction.
+  --if-match: string # The current version (ETag value) of the function that you are deleting, which you can get using DescribeFunction. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
+  if ($if_match == null) { error make --unspanned { msg: "required header parameter 'If-Match' missing: pass --if-match" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/2020-05-31/function/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2594,13 +2598,14 @@ export def "update-function2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --if-match: string # The current version (ETag value) of the function that you are updating, which you can get using DescribeFunction.
+  --if-match: string # The current version (ETag value) of the function that you are updating, which you can get using DescribeFunction. (required)
   --body: any
-]: any -> record<FunctionSummary: record<Name: record, Status: record, FunctionConfig: record<Comment: record, Runtime: record>, FunctionMetadata: record<FunctionARN: record, Stage: record, CreatedTime: record, LastModifiedTime: record>>> {
+]: any -> record<FunctionSummary: record<Name: string, Status: string, FunctionConfig: record<Comment: string, Runtime: string>, FunctionMetadata: record<FunctionARN: string, Stage: string, CreatedTime: string, LastModifiedTime: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
+  if ($if_match == null) { error make --unspanned { msg: "required header parameter 'If-Match' missing: pass --if-match" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/2020-05-31/function/{name}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -2690,7 +2695,7 @@ export def "get-key-group2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<KeyGroup: record<Id: record, LastModifiedTime: record, KeyGroupConfig: record<Name: record, Items: record, Comment: record>>> {
+]: nothing -> record<KeyGroup: record<Id: string, LastModifiedTime: string, KeyGroupConfig: record<Name: string, Items: list, Comment: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2737,7 +2742,7 @@ export def "update-key-group2020-05-31" [
   --x-amz-signed-headers: string
   --if-match: string # The version of the key group that you are updating. The version is the key group's ETag value.
   --body: any
-]: any -> record<KeyGroup: record<Id: record, LastModifiedTime: record, KeyGroupConfig: record<Name: record, Items: record, Comment: record>>> {
+]: any -> record<KeyGroup: record<Id: string, LastModifiedTime: string, KeyGroupConfig: record<Name: string, Items: list, Comment: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2831,7 +2836,7 @@ export def "get-origin-access-control2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OriginAccessControl: record<Id: record, OriginAccessControlConfig: record<Name: record, Description: record, SigningProtocol: record, SigningBehavior: record, OriginAccessControlOriginType: record>>> {
+]: nothing -> record<OriginAccessControl: record<Id: string, OriginAccessControlConfig: record<Name: string, Description: string, SigningProtocol: string, SigningBehavior: string, OriginAccessControlOriginType: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2922,7 +2927,7 @@ export def "get-origin-request-policy2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OriginRequestPolicy: record<Id: record, LastModifiedTime: record, OriginRequestPolicyConfig: record<Comment: record, Name: record, HeadersConfig: record, CookiesConfig: record, QueryStringsConfig: record>>> {
+]: nothing -> record<OriginRequestPolicy: record<Id: string, LastModifiedTime: string, OriginRequestPolicyConfig: record<Comment: string, Name: string, HeadersConfig: record, CookiesConfig: record, QueryStringsConfig: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2969,7 +2974,7 @@ export def "update-origin-request-policy2020-05-31" [
   --x-amz-signed-headers: string
   --if-match: string # The version of the origin request policy that you are updating. The version is returned in the origin request policy's ETag field in the response to GetOriginRequestPolicyConfig.
   --body: any
-]: any -> record<OriginRequestPolicy: record<Id: record, LastModifiedTime: record, OriginRequestPolicyConfig: record<Comment: record, Name: record, HeadersConfig: record, CookiesConfig: record, QueryStringsConfig: record>>> {
+]: any -> record<OriginRequestPolicy: record<Id: string, LastModifiedTime: string, OriginRequestPolicyConfig: record<Comment: string, Name: string, HeadersConfig: record, CookiesConfig: record, QueryStringsConfig: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3063,7 +3068,7 @@ export def "get-public-key2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PublicKey: record<Id: record, CreatedTime: record, PublicKeyConfig: record<CallerReference: record, Name: record, EncodedKey: record, Comment: record>>> {
+]: nothing -> record<PublicKey: record<Id: string, CreatedTime: string, PublicKeyConfig: record<CallerReference: string, Name: string, EncodedKey: string, Comment: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -3201,7 +3206,7 @@ export def "get-response-headers-policy2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ResponseHeadersPolicy: record<Id: record, LastModifiedTime: record, ResponseHeadersPolicyConfig: record<Comment: record, Name: record, CorsConfig: record, SecurityHeadersConfig: record, ServerTimingHeadersConfig: record, CustomHeadersConfig: record, RemoveHeadersConfig: record>>> {
+]: nothing -> record<ResponseHeadersPolicy: record<Id: string, LastModifiedTime: string, ResponseHeadersPolicyConfig: record<Comment: string, Name: string, CorsConfig: record, SecurityHeadersConfig: record, ServerTimingHeadersConfig: record, CustomHeadersConfig: record, RemoveHeadersConfig: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -3248,7 +3253,7 @@ export def "update-response-headers-policy2020-05-31" [
   --x-amz-signed-headers: string
   --if-match: string # The version of the response headers policy that you are updating. The version is returned in the cache policy's ETag field in the response to GetResponseHeadersPolicyConfig.
   --body: any
-]: any -> record<ResponseHeadersPolicy: record<Id: record, LastModifiedTime: record, ResponseHeadersPolicyConfig: record<Comment: record, Name: record, CorsConfig: record, SecurityHeadersConfig: record, ServerTimingHeadersConfig: record, CustomHeadersConfig: record, RemoveHeadersConfig: record>>> {
+]: any -> record<ResponseHeadersPolicy: record<Id: string, LastModifiedTime: string, ResponseHeadersPolicyConfig: record<Comment: string, Name: string, CorsConfig: record, SecurityHeadersConfig: record, ServerTimingHeadersConfig: record, CustomHeadersConfig: record, RemoveHeadersConfig: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3342,7 +3347,7 @@ export def "get-streaming-distribution2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StreamingDistribution: record<Id: record, ARN: record, Status: record, LastModifiedTime: record, DomainName: record, ActiveTrustedSigners: record<Enabled: record, Quantity: record, Items: record>, StreamingDistributionConfig: record<CallerReference: record, S3Origin: record, Aliases: record, Comment: record, Logging: record, TrustedSigners: record, PriceClass: record, Enabled: record>>> {
+]: nothing -> record<StreamingDistribution: record<Id: string, ARN: string, Status: string, LastModifiedTime: string, DomainName: string, ActiveTrustedSigners: record<Enabled: bool, Quantity: int, Items: list>, StreamingDistributionConfig: record<CallerReference: string, S3Origin: record, Aliases: record, Comment: string, Logging: record, TrustedSigners: record, PriceClass: string, Enabled: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -3388,7 +3393,7 @@ export def "describe-function2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FunctionSummary: record<Name: record, Status: record, FunctionConfig: record<Comment: record, Runtime: record>, FunctionMetadata: record<FunctionARN: record, Stage: record, CreatedTime: record, LastModifiedTime: record>>> {
+]: nothing -> record<FunctionSummary: record<Name: string, Status: string, FunctionConfig: record<Comment: string, Runtime: string>, FunctionMetadata: record<FunctionARN: string, Stage: string, CreatedTime: string, LastModifiedTime: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
@@ -3434,7 +3439,7 @@ export def "get-cache-policy-config2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CachePolicyConfig: record<Comment: record, Name: record, DefaultTTL: record, MaxTTL: record, MinTTL: record, ParametersInCacheKeyAndForwardedToOrigin: record<EnableAcceptEncodingGzip: record, EnableAcceptEncodingBrotli: record, HeadersConfig: record, CookiesConfig: record, QueryStringsConfig: record>>> {
+]: nothing -> record<CachePolicyConfig: record<Comment: string, Name: string, DefaultTTL: int, MaxTTL: int, MinTTL: int, ParametersInCacheKeyAndForwardedToOrigin: record<EnableAcceptEncodingGzip: bool, EnableAcceptEncodingBrotli: bool, HeadersConfig: record, CookiesConfig: record, QueryStringsConfig: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -3479,7 +3484,7 @@ export def "get-cloud-front-origin-access-identity-config2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CloudFrontOriginAccessIdentityConfig: record<CallerReference: record, Comment: record>> {
+]: nothing -> record<CloudFrontOriginAccessIdentityConfig: record<CallerReference: string, Comment: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -3526,7 +3531,7 @@ export def "update-cloud-front-origin-access-identity2020-05-31" [
   --x-amz-signed-headers: string
   --if-match: string # The value of the ETag header that you received when retrieving the identity's configuration. For example: E2QWRUHAPOMQZL.
   --body: any
-]: any -> record<CloudFrontOriginAccessIdentity: record<Id: record, S3CanonicalUserId: record, CloudFrontOriginAccessIdentityConfig: record<CallerReference: record, Comment: record>>> {
+]: any -> record<CloudFrontOriginAccessIdentity: record<Id: string, S3CanonicalUserId: string, CloudFrontOriginAccessIdentityConfig: record<CallerReference: string, Comment: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3574,7 +3579,7 @@ export def "get-continuous-deployment-policy-config2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ContinuousDeploymentPolicyConfig: record<StagingDistributionDnsNames: record<Quantity: record, Items: record>, Enabled: record, TrafficConfig: record<SingleWeightConfig: record, SingleHeaderConfig: record, Type: record>>> {
+]: nothing -> record<ContinuousDeploymentPolicyConfig: record<StagingDistributionDnsNames: record<Quantity: int, Items: list>, Enabled: bool, TrafficConfig: record<SingleWeightConfig: record, SingleHeaderConfig: record, Type: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -3619,7 +3624,7 @@ export def "get-distribution-config2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DistributionConfig: record<CallerReference: record, Aliases: record<Quantity: record, Items: record>, DefaultRootObject: record, Origins: record<Quantity: record, Items: record>, OriginGroups: record<Quantity: record, Items: record>, DefaultCacheBehavior: record<TargetOriginId: record, TrustedSigners: record, TrustedKeyGroups: record, ViewerProtocolPolicy: record, AllowedMethods: record, SmoothStreaming: record, Compress: record, LambdaFunctionAssociations: record, FunctionAssociations: record, FieldLevelEncryptionId: record, RealtimeLogConfigArn: record, CachePolicyId: record, OriginRequestPolicyId: record, ResponseHeadersPolicyId: record, ForwardedValues: record, MinTTL: record, DefaultTTL: record, MaxTTL: record>, CacheBehaviors: record<Quantity: record, Items: record>, CustomErrorResponses: record<Quantity: record, Items: record>, Comment: record, Logging: record<Enabled: record, IncludeCookies: record, Bucket: record, Prefix: record>, PriceClass: record, Enabled: record, ViewerCertificate: record<CloudFrontDefaultCertificate: record, IAMCertificateId: record, ACMCertificateArn: record, SSLSupportMethod: record, MinimumProtocolVersion: record, Certificate: record, CertificateSource: record>, Restrictions: record<GeoRestriction: record>, WebACLId: record, HttpVersion: record, IsIPV6Enabled: record, ContinuousDeploymentPolicyId: record, Staging: record>> {
+]: nothing -> record<DistributionConfig: record<CallerReference: string, Aliases: record<Quantity: int, Items: list>, DefaultRootObject: string, Origins: record<Quantity: int, Items: list>, OriginGroups: record<Quantity: int, Items: list>, DefaultCacheBehavior: record<TargetOriginId: string, TrustedSigners: record, TrustedKeyGroups: record, ViewerProtocolPolicy: string, AllowedMethods: record, SmoothStreaming: bool, Compress: bool, LambdaFunctionAssociations: record, FunctionAssociations: record, FieldLevelEncryptionId: string, RealtimeLogConfigArn: string, CachePolicyId: string, OriginRequestPolicyId: string, ResponseHeadersPolicyId: string, ForwardedValues: record, MinTTL: int, DefaultTTL: int, MaxTTL: int>, CacheBehaviors: record<Quantity: int, Items: list>, CustomErrorResponses: record<Quantity: int, Items: list>, Comment: string, Logging: record<Enabled: bool, IncludeCookies: bool, Bucket: string, Prefix: string>, PriceClass: string, Enabled: bool, ViewerCertificate: record<CloudFrontDefaultCertificate: bool, IAMCertificateId: string, ACMCertificateArn: string, SSLSupportMethod: string, MinimumProtocolVersion: string, Certificate: string, CertificateSource: string>, Restrictions: record<GeoRestriction: record>, WebACLId: string, HttpVersion: string, IsIPV6Enabled: bool, ContinuousDeploymentPolicyId: string, Staging: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -3666,7 +3671,7 @@ export def "update-distribution2020-05-31" [
   --x-amz-signed-headers: string
   --if-match: string # The value of the ETag header that you received when retrieving the distribution's configuration. For example: E2QWRUHAPOMQZL.
   --body: any
-]: any -> record<Distribution: record<Id: record, ARN: record, Status: record, LastModifiedTime: record, InProgressInvalidationBatches: record, DomainName: record, ActiveTrustedSigners: record<Enabled: record, Quantity: record, Items: record>, ActiveTrustedKeyGroups: record<Enabled: record, Quantity: record, Items: record>, DistributionConfig: record<CallerReference: record, Aliases: record, DefaultRootObject: record, Origins: record, OriginGroups: record, DefaultCacheBehavior: record, CacheBehaviors: record, CustomErrorResponses: record, Comment: record, Logging: record, PriceClass: record, Enabled: record, ViewerCertificate: record, Restrictions: record, WebACLId: record, HttpVersion: record, IsIPV6Enabled: record, ContinuousDeploymentPolicyId: record, Staging: record>, AliasICPRecordals: record>> {
+]: any -> record<Distribution: record<Id: string, ARN: string, Status: string, LastModifiedTime: string, InProgressInvalidationBatches: int, DomainName: string, ActiveTrustedSigners: record<Enabled: bool, Quantity: int, Items: list>, ActiveTrustedKeyGroups: record<Enabled: bool, Quantity: int, Items: list>, DistributionConfig: record<CallerReference: string, Aliases: record, DefaultRootObject: string, Origins: record, OriginGroups: record, DefaultCacheBehavior: record, CacheBehaviors: record, CustomErrorResponses: record, Comment: string, Logging: record, PriceClass: string, Enabled: bool, ViewerCertificate: record, Restrictions: record, WebACLId: string, HttpVersion: string, IsIPV6Enabled: bool, ContinuousDeploymentPolicyId: string, Staging: bool>, AliasICPRecordals: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3714,7 +3719,7 @@ export def "get-field-level-encryption-config2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FieldLevelEncryptionConfig: record<CallerReference: record, Comment: record, QueryArgProfileConfig: record<ForwardWhenQueryArgProfileIsUnknown: record, QueryArgProfiles: record>, ContentTypeProfileConfig: record<ForwardWhenContentTypeIsUnknown: record, ContentTypeProfiles: record>>> {
+]: nothing -> record<FieldLevelEncryptionConfig: record<CallerReference: string, Comment: string, QueryArgProfileConfig: record<ForwardWhenQueryArgProfileIsUnknown: bool, QueryArgProfiles: record>, ContentTypeProfileConfig: record<ForwardWhenContentTypeIsUnknown: bool, ContentTypeProfiles: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -3761,7 +3766,7 @@ export def "update-field-level-encryption-config2020-05-31" [
   --x-amz-signed-headers: string
   --if-match: string # The value of the ETag header that you received when retrieving the configuration identity to update. For example: E2QWRUHAPOMQZL.
   --body: any
-]: any -> record<FieldLevelEncryption: record<Id: record, LastModifiedTime: record, FieldLevelEncryptionConfig: record<CallerReference: record, Comment: record, QueryArgProfileConfig: record, ContentTypeProfileConfig: record>>> {
+]: any -> record<FieldLevelEncryption: record<Id: string, LastModifiedTime: string, FieldLevelEncryptionConfig: record<CallerReference: string, Comment: string, QueryArgProfileConfig: record, ContentTypeProfileConfig: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3809,7 +3814,7 @@ export def "get-field-level-encryption-profile-config2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FieldLevelEncryptionProfileConfig: record<Name: record, CallerReference: record, Comment: record, EncryptionEntities: record<Quantity: record, Items: record>>> {
+]: nothing -> record<FieldLevelEncryptionProfileConfig: record<Name: string, CallerReference: string, Comment: string, EncryptionEntities: record<Quantity: int, Items: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -3856,7 +3861,7 @@ export def "update-field-level-encryption-profile2020-05-31" [
   --x-amz-signed-headers: string
   --if-match: string # The value of the ETag header that you received when retrieving the profile identity to update. For example: E2QWRUHAPOMQZL.
   --body: any
-]: any -> record<FieldLevelEncryptionProfile: record<Id: record, LastModifiedTime: record, FieldLevelEncryptionProfileConfig: record<Name: record, CallerReference: record, Comment: record, EncryptionEntities: record>>> {
+]: any -> record<FieldLevelEncryptionProfile: record<Id: string, LastModifiedTime: string, FieldLevelEncryptionProfileConfig: record<Name: string, CallerReference: string, Comment: string, EncryptionEntities: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3905,7 +3910,7 @@ export def "get-function2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FunctionCode: record> {
+]: nothing -> record<FunctionCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
@@ -3952,7 +3957,7 @@ export def "get-invalidation2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Invalidation: record<Id: record, Status: record, CreateTime: record, InvalidationBatch: record<Paths: record, CallerReference: record>>> {
+]: nothing -> record<Invalidation: record<Id: string, Status: string, CreateTime: string, InvalidationBatch: record<Paths: record, CallerReference: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($distribution_id | is-empty) { error make --unspanned { msg: "path parameter 'DistributionId' must be non-empty" } }
@@ -3998,7 +4003,7 @@ export def "get-key-group-config2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<KeyGroupConfig: record<Name: record, Items: record, Comment: record>> {
+]: nothing -> record<KeyGroupConfig: record<Name: string, Items: list<string>, Comment: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -4043,7 +4048,7 @@ export def "get-origin-access-control-config2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OriginAccessControlConfig: record<Name: record, Description: record, SigningProtocol: record, SigningBehavior: record, OriginAccessControlOriginType: record>> {
+]: nothing -> record<OriginAccessControlConfig: record<Name: string, Description: string, SigningProtocol: string, SigningBehavior: string, OriginAccessControlOriginType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -4090,7 +4095,7 @@ export def "update-origin-access-control2020-05-31" [
   --x-amz-signed-headers: string
   --if-match: string # The current version (ETag value) of the origin access control that you are updating.
   --body: any
-]: any -> record<OriginAccessControl: record<Id: record, OriginAccessControlConfig: record<Name: record, Description: record, SigningProtocol: record, SigningBehavior: record, OriginAccessControlOriginType: record>>> {
+]: any -> record<OriginAccessControl: record<Id: string, OriginAccessControlConfig: record<Name: string, Description: string, SigningProtocol: string, SigningBehavior: string, OriginAccessControlOriginType: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4138,7 +4143,7 @@ export def "get-origin-request-policy-config2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OriginRequestPolicyConfig: record<Comment: record, Name: record, HeadersConfig: record<HeaderBehavior: record, Headers: record>, CookiesConfig: record<CookieBehavior: record, Cookies: record>, QueryStringsConfig: record<QueryStringBehavior: record, QueryStrings: record>>> {
+]: nothing -> record<OriginRequestPolicyConfig: record<Comment: string, Name: string, HeadersConfig: record<HeaderBehavior: string, Headers: record>, CookiesConfig: record<CookieBehavior: string, Cookies: record>, QueryStringsConfig: record<QueryStringBehavior: string, QueryStrings: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -4183,7 +4188,7 @@ export def "get-public-key-config2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PublicKeyConfig: record<CallerReference: record, Name: record, EncodedKey: record, Comment: record>> {
+]: nothing -> record<PublicKeyConfig: record<CallerReference: string, Name: string, EncodedKey: string, Comment: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -4230,7 +4235,7 @@ export def "update-public-key2020-05-31" [
   --x-amz-signed-headers: string
   --if-match: string # The value of the ETag header that you received when retrieving the public key to update. For example: E2QWRUHAPOMQZL.
   --body: any
-]: any -> record<PublicKey: record<Id: record, CreatedTime: record, PublicKeyConfig: record<CallerReference: record, Name: record, EncodedKey: record, Comment: record>>> {
+]: any -> record<PublicKey: record<Id: string, CreatedTime: string, PublicKeyConfig: record<CallerReference: string, Name: string, EncodedKey: string, Comment: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4278,7 +4283,7 @@ export def "get-realtime-log-config2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<RealtimeLogConfig: record<ARN: record, Name: record, SamplingRate: record, EndPoints: record, Fields: record>> {
+]: any -> record<RealtimeLogConfig: record<ARN: string, Name: string, SamplingRate: int, EndPoints: list<record>, Fields: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4325,7 +4330,7 @@ export def "get-response-headers-policy-config2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ResponseHeadersPolicyConfig: record<Comment: record, Name: record, CorsConfig: record<AccessControlAllowOrigins: record, AccessControlAllowHeaders: record, AccessControlAllowMethods: record, AccessControlAllowCredentials: record, AccessControlExposeHeaders: record, AccessControlMaxAgeSec: record, OriginOverride: record>, SecurityHeadersConfig: record<XSSProtection: record, FrameOptions: record, ReferrerPolicy: record, ContentSecurityPolicy: record, ContentTypeOptions: record, StrictTransportSecurity: record>, ServerTimingHeadersConfig: record<Enabled: record, SamplingRate: record>, CustomHeadersConfig: record<Quantity: record, Items: record>, RemoveHeadersConfig: record<Quantity: record, Items: record>>> {
+]: nothing -> record<ResponseHeadersPolicyConfig: record<Comment: string, Name: string, CorsConfig: record<AccessControlAllowOrigins: record, AccessControlAllowHeaders: record, AccessControlAllowMethods: record, AccessControlAllowCredentials: bool, AccessControlExposeHeaders: record, AccessControlMaxAgeSec: int, OriginOverride: bool>, SecurityHeadersConfig: record<XSSProtection: record, FrameOptions: record, ReferrerPolicy: record, ContentSecurityPolicy: record, ContentTypeOptions: record, StrictTransportSecurity: record>, ServerTimingHeadersConfig: record<Enabled: bool, SamplingRate: float>, CustomHeadersConfig: record<Quantity: int, Items: list>, RemoveHeadersConfig: record<Quantity: int, Items: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -4370,7 +4375,7 @@ export def "get-streaming-distribution-config2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StreamingDistributionConfig: record<CallerReference: record, S3Origin: record<DomainName: record, OriginAccessIdentity: record>, Aliases: record<Quantity: record, Items: record>, Comment: record, Logging: record<Enabled: record, Bucket: record, Prefix: record>, TrustedSigners: record<Enabled: record, Quantity: record, Items: record>, PriceClass: record, Enabled: record>> {
+]: nothing -> record<StreamingDistributionConfig: record<CallerReference: string, S3Origin: record<DomainName: string, OriginAccessIdentity: string>, Aliases: record<Quantity: int, Items: list>, Comment: string, Logging: record<Enabled: bool, Bucket: string, Prefix: string>, TrustedSigners: record<Enabled: bool, Quantity: int, Items: list>, PriceClass: string, Enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -4417,7 +4422,7 @@ export def "update-streaming-distribution2020-05-31" [
   --x-amz-signed-headers: string
   --if-match: string # The value of the ETag header that you received when retrieving the streaming distribution's configuration. For example: E2QWRUHAPOMQZL.
   --body: any
-]: any -> record<StreamingDistribution: record<Id: record, ARN: record, Status: record, LastModifiedTime: record, DomainName: record, ActiveTrustedSigners: record<Enabled: record, Quantity: record, Items: record>, StreamingDistributionConfig: record<CallerReference: record, S3Origin: record, Aliases: record, Comment: record, Logging: record, TrustedSigners: record, PriceClass: record, Enabled: record>>> {
+]: any -> record<StreamingDistribution: record<Id: string, ARN: string, Status: string, LastModifiedTime: string, DomainName: string, ActiveTrustedSigners: record<Enabled: bool, Quantity: int, Items: list>, StreamingDistributionConfig: record<CallerReference: string, S3Origin: record, Aliases: record, Comment: string, Logging: record, TrustedSigners: record, PriceClass: string, Enabled: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4457,8 +4462,8 @@ export def "list-conflicting-aliases2020-05-31" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --distribution-id: string # The ID of a distribution in your account that has an attached SSL/TLS certificate that includes the provided alias.
-  --alias: string # The alias (also called a CNAME) to search for conflicting aliases.
+  --distribution-id: string # The ID of a distribution in your account that has an attached SSL/TLS certificate that includes the provided alias. (required)
+  --alias: string # The alias (also called a CNAME) to search for conflicting aliases. (required)
   --marker: string # Use this field when paginating results to indicate where to begin in the list of conflicting aliases. The response includes conflicting aliases in the list that occur after the marker. To get the next page of the list, set this field's value to the value of NextMarker from the current page's response.
   --max-items: int # The maximum number of conflicting aliases that you want in the response.
   --x-amz-content-sha256: string
@@ -4468,9 +4473,11 @@ export def "list-conflicting-aliases2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConflictingAliasesList: record<NextMarker: record, MaxItems: record, Quantity: record, Items: record>> {
+]: nothing -> record<ConflictingAliasesList: record<NextMarker: string, MaxItems: int, Quantity: int, Items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($distribution_id == null) { error make --unspanned { msg: "required query parameter 'DistributionId' missing: pass --distribution-id" } }
+  if ($alias == null) { error make --unspanned { msg: "required query parameter 'Alias' missing: pass --alias" } }
   let qp = [(serialize-qp "DistributionId" $distribution_id "scalar") (serialize-qp "Alias" $alias "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2020-05-31/conflicting-alias" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4515,7 +4522,7 @@ export def "list-distributions-by-cache-policy-id2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DistributionIdList: record<Marker: record, NextMarker: record, MaxItems: record, IsTruncated: record, Quantity: record, Items: record>> {
+]: nothing -> record<DistributionIdList: record<Marker: string, NextMarker: string, MaxItems: int, IsTruncated: bool, Quantity: int, Items: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cache_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'CachePolicyId' must be non-empty" } }
@@ -4563,7 +4570,7 @@ export def "list-distributions-by-key-group2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DistributionIdList: record<Marker: record, NextMarker: record, MaxItems: record, IsTruncated: record, Quantity: record, Items: record>> {
+]: nothing -> record<DistributionIdList: record<Marker: string, NextMarker: string, MaxItems: int, IsTruncated: bool, Quantity: int, Items: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_group_id | is-empty) { error make --unspanned { msg: "path parameter 'KeyGroupId' must be non-empty" } }
@@ -4611,7 +4618,7 @@ export def "list-distributions-by-origin-request-policy-id2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DistributionIdList: record<Marker: record, NextMarker: record, MaxItems: record, IsTruncated: record, Quantity: record, Items: record>> {
+]: nothing -> record<DistributionIdList: record<Marker: string, NextMarker: string, MaxItems: int, IsTruncated: bool, Quantity: int, Items: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($origin_request_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'OriginRequestPolicyId' must be non-empty" } }
@@ -4657,7 +4664,7 @@ export def "list-distributions-by-realtime-log-config2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DistributionList: record<Marker: record, NextMarker: record, MaxItems: record, IsTruncated: record, Quantity: record, Items: record>> {
+]: any -> record<DistributionList: record<Marker: string, NextMarker: string, MaxItems: int, IsTruncated: bool, Quantity: int, Items: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4706,7 +4713,7 @@ export def "list-distributions-by-response-headers-policy-id2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DistributionIdList: record<Marker: record, NextMarker: record, MaxItems: record, IsTruncated: record, Quantity: record, Items: record>> {
+]: nothing -> record<DistributionIdList: record<Marker: string, NextMarker: string, MaxItems: int, IsTruncated: bool, Quantity: int, Items: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($response_headers_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'ResponseHeadersPolicyId' must be non-empty" } }
@@ -4754,7 +4761,7 @@ export def "list-distributions-by-web-acl-id2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DistributionList: record<Marker: record, NextMarker: record, MaxItems: record, IsTruncated: record, Quantity: record, Items: record>> {
+]: nothing -> record<DistributionList: record<Marker: string, NextMarker: string, MaxItems: int, IsTruncated: bool, Quantity: int, Items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_acl_id | is-empty) { error make --unspanned { msg: "path parameter 'WebACLId' must be non-empty" } }
@@ -4792,7 +4799,7 @@ export def "list-tags-for-resource2020-05-31" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource: string # An ARN of a CloudFront resource.
+  --resource: string # An ARN of a CloudFront resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4800,9 +4807,10 @@ export def "list-tags-for-resource2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record<Items: record>> {
+]: nothing -> record<Tags: record<Items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource == null) { error make --unspanned { msg: "required query parameter 'Resource' missing: pass --resource" } }
   let qp = [(serialize-qp "Resource" $resource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2020-05-31/tagging" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4845,11 +4853,12 @@ export def "publish-function2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --if-match: string # The current version (ETag value) of the function that you are publishing, which you can get using DescribeFunction.
-]: nothing -> record<FunctionSummary: record<Name: record, Status: record, FunctionConfig: record<Comment: record, Runtime: record>, FunctionMetadata: record<FunctionARN: record, Stage: record, CreatedTime: record, LastModifiedTime: record>>> {
+  --if-match: string # The current version (ETag value) of the function that you are publishing, which you can get using DescribeFunction. (required)
+]: nothing -> record<FunctionSummary: record<Name: string, Status: string, FunctionConfig: record<Comment: string, Runtime: string>, FunctionMetadata: record<FunctionARN: string, Stage: string, CreatedTime: string, LastModifiedTime: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
+  if ($if_match == null) { error make --unspanned { msg: "required header parameter 'If-Match' missing: pass --if-match" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/2020-05-31/function/{name}/publish") $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4883,8 +4892,8 @@ export def "tag-resource2020-05-31" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource: string # An ARN of a CloudFront resource.
-  --operation: string@operation-completer
+  --resource: string # An ARN of a CloudFront resource. (required)
+  --operation: string@operation-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4897,6 +4906,8 @@ export def "tag-resource2020-05-31" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource == null) { error make --unspanned { msg: "required query parameter 'Resource' missing: pass --resource" } }
+  let operation = ($operation | default "Tag")
   let qp = [(serialize-qp "Resource" $resource "scalar") (serialize-qp "Operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2020-05-31/tagging" $qp $auth.query)
   let req_body = $body
@@ -4941,13 +4952,14 @@ export def "test-function2020-05-31" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --if-match: string # The current version (ETag value) of the function that you are testing, which you can get using DescribeFunction.
+  --if-match: string # The current version (ETag value) of the function that you are testing, which you can get using DescribeFunction. (required)
   --body: any
-]: any -> record<TestResult: record<FunctionSummary: record<Name: record, Status: record, FunctionConfig: record, FunctionMetadata: record>, ComputeUtilization: record, FunctionExecutionLogs: record, FunctionErrorMessage: record, FunctionOutput: record>> {
+]: any -> record<TestResult: record<FunctionSummary: record<Name: string, Status: string, FunctionConfig: record, FunctionMetadata: record>, ComputeUtilization: string, FunctionExecutionLogs: list<string>, FunctionErrorMessage: string, FunctionOutput: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
+  if ($if_match == null) { error make --unspanned { msg: "required header parameter 'If-Match' missing: pass --if-match" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/2020-05-31/function/{name}/test") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -4983,8 +4995,8 @@ export def "untag-resource2020-05-31" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource: string # An ARN of a CloudFront resource.
-  --operation: string@operation-completer-1
+  --resource: string # An ARN of a CloudFront resource. (required)
+  --operation: string@operation-completer-1 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4997,6 +5009,8 @@ export def "untag-resource2020-05-31" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource == null) { error make --unspanned { msg: "required query parameter 'Resource' missing: pass --resource" } }
+  let operation = ($operation | default "Untag")
   let qp = [(serialize-qp "Resource" $resource "scalar") (serialize-qp "Operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2020-05-31/tagging" $qp $auth.query)
   let req_body = $body
@@ -5043,7 +5057,7 @@ export def "update-distribution-with-staging-config2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --if-match: string # The current versions (ETag values) of both primary and staging distributions. Provide these in the following format: <primary ETag>, <staging ETag>
-]: nothing -> record<Distribution: record<Id: record, ARN: record, Status: record, LastModifiedTime: record, InProgressInvalidationBatches: record, DomainName: record, ActiveTrustedSigners: record<Enabled: record, Quantity: record, Items: record>, ActiveTrustedKeyGroups: record<Enabled: record, Quantity: record, Items: record>, DistributionConfig: record<CallerReference: record, Aliases: record, DefaultRootObject: record, Origins: record, OriginGroups: record, DefaultCacheBehavior: record, CacheBehaviors: record, CustomErrorResponses: record, Comment: record, Logging: record, PriceClass: record, Enabled: record, ViewerCertificate: record, Restrictions: record, WebACLId: record, HttpVersion: record, IsIPV6Enabled: record, ContinuousDeploymentPolicyId: record, Staging: record>, AliasICPRecordals: record>> {
+]: nothing -> record<Distribution: record<Id: string, ARN: string, Status: string, LastModifiedTime: string, InProgressInvalidationBatches: int, DomainName: string, ActiveTrustedSigners: record<Enabled: bool, Quantity: int, Items: list>, ActiveTrustedKeyGroups: record<Enabled: bool, Quantity: int, Items: list>, DistributionConfig: record<CallerReference: string, Aliases: record, DefaultRootObject: string, Origins: record, OriginGroups: record, DefaultCacheBehavior: record, CacheBehaviors: record, CustomErrorResponses: record, Comment: string, Logging: record, PriceClass: string, Enabled: bool, ViewerCertificate: record, Restrictions: record, WebACLId: string, HttpVersion: string, IsIPV6Enabled: bool, ContinuousDeploymentPolicyId: string, Staging: bool>, AliasICPRecordals: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -5089,7 +5103,7 @@ export def "update-realtime-log-config2020-05-31" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<RealtimeLogConfig: record<ARN: record, Name: record, SamplingRate: record, EndPoints: record, Fields: record>> {
+]: any -> record<RealtimeLogConfig: record<ARN: string, Name: string, SamplingRate: int, EndPoints: list<record>, Fields: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

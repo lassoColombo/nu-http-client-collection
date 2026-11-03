@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -115,12 +115,17 @@ def auth-scheme-completer [] { ["bearer" "none"] }
 # Completers for enum parameters
 def psu-http-method-completer [] { ["DELETE" "GET" "PATCH" "POST" "PUT"] }
 def booking-status-completer [] { ["booked" "both" "information" "pending"] }
+def accept-completer [] { ["application/json" "application/xml" "text/plain"] }
+def payment-service-completer [] { ["bulk-payments" "payments" "periodic-payments"] }
+def payment-product-completer [] { ["domestic-swiss-credit-transfers" "domestic-swiss-credit-transfers-isr" "domestic-swiss-credit-transfers-qr" "domestic-swiss-foreign-credit-transfers" "pain.001-cross-border-credit-transfers" "pain.001-sepa-credit-transfers" "pain.001-swiss-six-credit-transfers" "swiss-cross-border-credit-transfers" "swiss-sepa-credit-transfers"] }
 def charge-bearer-completer [] { ["CRED" "DEBT" "SHAR" "SLEV"] }
 def purpose-code-completer [] { ["PENS" "SALA"] }
 def service-level-completer [] { ["PRPT" "SDVA" "SEPA" "URGP"] }
 def day-of-execution-completer [] { ["1" "10" "11" "12" "13" "14" "15" "16" "17" "18" "19" "2" "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "3" "30" "31" "4" "5" "6" "7" "8" "9"] }
 def execution-rule-completer [] { ["following" "preceding"] }
 def frequency-completer [] { ["Annual" "Daily" "EveryTwoMonths" "EveryTwoWeeks" "Monthly" "MonthlyVariable" "Quarterly" "SemiAnnual" "Weekly"] }
+def accept-completer-1 [] { ["application/json" "application/xml" "multipart/form-data"] }
+def accept-completer-2 [] { ["application/json" "application/xml"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -160,12 +165,12 @@ export def "get-account-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-balance: oneof<nothing, bool> # If contained, this function reads the list of accessible payment accounts including the booking balance, if granted by the PSU in the related consent and available by the ASPSP. This parameter might be ignored by the ASPSP.
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --consent-id: string # This then contains the consentId of the related AIS consent, which was performed prior to this payment initiation.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --consent-id: string # This then contains the consentId of the related AIS consent, which was performed prior to this payment initiation. (required)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -175,9 +180,11 @@ export def "get-account-list" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<accounts: table<_links: record, balances: list, bban: string, bic: string, cashAccountType: string, currency: string, details: string, displayName: string, iban: string, linkedAccounts: string, msisdn: string, name: string, ownerName: string, product: string, resourceId: string, status: string, usage: string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
+  if ($consent_id == null) { error make --unspanned { msg: "required header parameter 'Consent-ID' missing: pass --consent-id" } }
   let qp = [(serialize-qp "withBalance" $with_balance "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/accounts" $qp $auth.query)
   let accept_val = "application/json"
@@ -214,12 +221,12 @@ export def "read-account-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-balance: oneof<nothing, bool> # If contained, this function reads the list of accessible payment accounts including the booking balance, if granted by the PSU in the related consent and available by the ASPSP. This parameter might be ignored by the ASPSP.
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --consent-id: string # This then contains the consentId of the related AIS consent, which was performed prior to this payment initiation.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --consent-id: string # This then contains the consentId of the related AIS consent, which was performed prior to this payment initiation. (required)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -229,10 +236,12 @@ export def "read-account-details" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<account: record<_links: record<balances: record, transactions: record>, balances: list<record>, bban: string, bic: string, cashAccountType: string, currency: string, details: string, displayName: string, iban: string, linkedAccounts: string, msisdn: string, name: string, ownerName: string, product: string, resourceId: string, status: string, usage: string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account-id' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
+  if ($consent_id == null) { error make --unspanned { msg: "required header parameter 'Consent-ID' missing: pass --consent-id" } }
   let qp = [(serialize-qp "withBalance" $with_balance "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -268,12 +277,12 @@ export def "get-balances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --consent-id: string # This then contains the consentId of the related AIS consent, which was performed prior to this payment initiation.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --consent-id: string # This then contains the consentId of the related AIS consent, which was performed prior to this payment initiation. (required)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -283,10 +292,12 @@ export def "get-balances" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<account: record<cashAccountType: string, currency: string, iban: string, otherAccountIdentification: string>, balances: table<balanceAmount: record, balanceType: string, creditLimitIncluded: bool, lastChangeDateTime: string, lastCommittedTransaction: string, referenceDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account-id' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
+  if ($consent_id == null) { error make --unspanned { msg: "required header parameter 'Consent-ID' missing: pass --consent-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/balances") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -321,18 +332,19 @@ export def "get-transaction-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --date-from: string # Conditional: Starting date (inclusive the date dateFrom) of the transaction list, mandated if no delta access is required and if bookingStatus does not equal "information". For booked transactions, the relevant date is the booking date. For pending transactions, the relevant date is the entry date, which may not be transparent neither in this API nor other channels of the ASPSP. (format: date)
   --date-to: string # End date (inclusive the data dateTo) of the transaction list, default is "now" if not given. Might be ignored if a delta function is used. For booked transactions, the relevant date is the booking date. For pending transactions, the relevant date is the entry date, which may not be transparent neither in this API nor other channels of the ASPSP. (format: date)
   --entry-reference-from: string # This data attribute is indicating that the AISP is in favour to get all transactions after the transaction with identification entryReferenceFrom alternatively to the above defined period. This is a implementation of a delta access. If this data element is contained, the entries "dateFrom" and "dateTo" might be ignored by the ASPSP if a delta report is supported. Optional if supported by API provider.
-  --booking-status: string@booking-status-completer # Permitted codes are * "information", * "booked", * "pending", and * "both" "booked" shall be supported by the ASPSP. To support the "pending" and "both" feature is optional for the ASPSP, Error code if not supported in the online banking frontend
+  --booking-status: string@booking-status-completer # Permitted codes are * "information", * "booked", * "pending", and * "both" "booked" shall be supported by the ASPSP. To support the "pending" and "both" feature is optional for the ASPSP, Error code if not supported in the online banking frontend (required)
   --delta-list: oneof<nothing, bool> # This data attribute is indicating that the AISP is in favour to get all transactions after the last report access for this PSU on the addressed account. This is another implementation of a delta access-report. This delta indicator might be rejected by the ASPSP if this function is not supported. Optional if supported by API provider
   --with-balance: oneof<nothing, bool> # If contained, this function reads the list of accessible payment accounts including the booking balance, if granted by the PSU in the related consent and available by the ASPSP. This parameter might be ignored by the ASPSP.
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --consent-id: string # This then contains the consentId of the related AIS consent, which was performed prior to this payment initiation.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --consent-id: string # This then contains the consentId of the related AIS consent, which was performed prior to this payment initiation. (required)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -342,13 +354,16 @@ export def "get-transaction-list" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<_links: record<download: record<href: string>>, account: record<cashAccountType: string, currency: string, iban: string, otherAccountIdentification: string>, balances: table<balanceAmount: record, balanceType: string, creditLimitIncluded: bool, lastChangeDateTime: string, lastCommittedTransaction: string, referenceDate: string>, transactions: record<_links: record<account: record, first: record, last: record, next: record, previous: record>, booked: list<record>, information: list<record>, pending: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account-id' must be non-empty" } }
+  if ($booking_status == null) { error make --unspanned { msg: "required query parameter 'bookingStatus' missing: pass --booking-status" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
+  if ($consent_id == null) { error make --unspanned { msg: "required header parameter 'Consent-ID' missing: pass --consent-id" } }
   let qp = [(serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "entryReferenceFrom" $entry_reference_from "scalar") (serialize-qp "bookingStatus" $booking_status "scalar") (serialize-qp "deltaList" $delta_list "scalar") (serialize-qp "withBalance" $with_balance "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/transactions") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "Consent-ID": $consent_id, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -382,12 +397,12 @@ export def "get-transaction-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --consent-id: string # This then contains the consentId of the related AIS consent, which was performed prior to this payment initiation.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --consent-id: string # This then contains the consentId of the related AIS consent, which was performed prior to this payment initiation. (required)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -397,11 +412,13 @@ export def "get-transaction-details" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<transactionsDetails: record<transactionDetails: record<_links: record, additionalInformation: string, additionalInformationStructured: record, balanceAfterTransaction: record, bankTransactionCode: string, batchIndicator: bool, batchNumberOfTransactions: int, bookingDate: string, checkId: string, creditorAccount: record, creditorAgent: string, creditorId: string, creditorName: string, currencyExchange: list, debtorAccount: record, debtorAgent: string, debtorName: string, endToEndId: string, entryDetails: list, entryReference: string, mandateId: string, proprietaryBankTransactionCode: string, purposeCode: string, remittanceInformationStructured: string, remittanceInformationStructuredArray: list, remittanceInformationUnstructured: string, remittanceInformationUnstructuredArray: list, transactionAmount: record, transactionId: string, ultimateCreditor: string, ultimateDebtor: string, valueDate: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account-id' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
+  if ($consent_id == null) { error make --unspanned { msg: "required header parameter 'Consent-ID' missing: pass --consent-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/v1/accounts/{account_id}/transactions/{transaction_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -436,23 +453,23 @@ export def "create-consent" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
   --psu-id: string # Client ID of the PSU in the ASPSP client interface. Might be mandated in the ASPSP's documentation. It might be contained even if an OAuth2 based authentication was performed in a pre-step or an OAuth2 based SCA was performed in an preceding AIS service in the same session. In this case the ASPSP might check whether PSU-ID and token match, according to ASPSP documentation. (e.g. PSU-1234)
   --psu-id-type: string # Type of the PSU-ID, needed in scenarios where PSUs have several PSU-IDs as access possibility. In this case, the mean and use are then defined in the ASPSP's documentation.
   --psu-corporate-id: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --psu-corporate-id-type: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --tpp-redirect-preferred: oneof<nothing, bool> # If it equals "true", the TPP prefers a redirect over an embedded SCA approach. If it equals "false", the TPP prefers not to be redirected for SCA. The ASPSP will then choose between the Embedded or the Decoupled SCA approach, depending on the choice of the SCA procedure by the TPP/PSU. If the parameter is not used, the ASPSP will choose the SCA approach to be applied depending on the SCA method chosen by the TPP/PSU.
-  --tpp-redirect-uri: string # URI of the TPP, where the transaction flow shall be redirected to after a Redirect. Mandated for the Redirect SCA Approach, specifically when TPP-Redirect-Preferred equals "true". It is recommended to always use this header field. **Remark for Future:** This field might be changed to mandatory in the next version of the specification.
-  --tpp-nok-redirect-uri: string # If this URI is contained, the TPP is asking to redirect the transaction flow to this address instead of the TPP-Redirect-URI in case of a negative result of the redirect SCA method. This might be ignored by the ASPSP.
+  --tpp-redirect-uri: string # URI of the TPP, where the transaction flow shall be redirected to after a Redirect. Mandated for the Redirect SCA Approach, specifically when TPP-Redirect-Preferred equals "true". It is recommended to always use this header field. **Remark for Future:** This field might be changed to mandatory in the next version of the specification. (format: uri)
+  --tpp-nok-redirect-uri: string # If this URI is contained, the TPP is asking to redirect the transaction flow to this address instead of the TPP-Redirect-URI in case of a negative result of the redirect SCA method. This might be ignored by the ASPSP. (format: uri)
   --tpp-explicit-authorisation-preferred: oneof<nothing, bool> # If it equals "true", the TPP prefers to start the authorisation process separately, e.g. because of the usage of a signing basket. This preference might be ignored by the ASPSP, if a signing basket is not supported as functionality. If it equals "false" or if the parameter is not used, there is no preference of the TPP. This especially indicates that the TPP assumes a direct authorisation of the transaction in the next step, without using a signing basket.
   --tpp-brand-logging-information: string # This header might be used by TPPs to inform the ASPSP about the brand used by the TPP towards the PSU. This information is meant for logging entries to enhance communication between ASPSP and PSU or ASPSP and TPP. This header might be ignored by the ASPSP.
   --tpp-notification-uri: string # URI for the Endpoint of the TPP-API to which the status of the payment initiation should be sent. This header field may by ignored by the ASPSP. For security reasons, it shall be ensured that the TPP-Notification-URI as introduced above is secured by the TPP eIDAS QWAC used for identification of the TPP. The following applies: URIs which are provided by TPPs in TPP-Notification-URI shall comply with the domain secured by the eIDAS QWAC certificate of the TPP in the field CN or SubjectAltName of the certificate. Please note that in case of example-TPP.com as certificate entry TPP- Notification-URI like www.example-TPP.com/xs2a-client/v1/ASPSPidentifcation/mytransaction- id/notifications or notifications.example-TPP.com/xs2a-client/v1/ASPSPidentifcation/mytransaction- id/notifications would be compliant. Wildcard definitions shall be taken into account for compliance checks by the ASPSP. ASPSPs may respond with ASPSP-Notification-Support set to false, if the provided URIs do not comply.
   --tpp-notification-content-preferred: string # The string has the form status=X1, ..., Xn where Xi is one of the constants SCA, PROCESS, LAST and where constants are not repeated. The usage of the constants supports the of following semantics: SCA: A notification on every change of the scaStatus attribute for all related authorisation processes is preferred by the TPP. PROCESS: A notification on all changes of consentStatus or transactionStatus attributes is preferred by the TPP. LAST: Only a notification on the last consentStatus or transactionStatus as available in the XS2A interface is preferred by the TPP. This header field may be ignored, if the ASPSP does not support resource notification services for the related TPP.
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. If not available, the TPP shall use the IP Address used by the TPP when submitting this request. (e.g. 192.168.8.78)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. If not available, the TPP shall use the IP Address used by the TPP when submitting this request. (required, format: ipv4, e.g. 192.168.8.78)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-encoding: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -466,13 +483,17 @@ export def "create-consent" [
   frequency_per_day: int # This field indicates the requested maximum frequency for an access without PSU involvement per day. For a one-off access, this attribute is set to "1". The frequency needs to be greater equal to one. If not otherwise agreed bilaterally between TPP and ASPSP, the frequency is less equal to 4. (e.g. 4)
   --recurring-indicator: oneof<nothing, bool> # "true", if the consent is for recurring access to the account data. "false", if the consent is for one access to the account data. (e.g. false)
   valid_until: string # This parameter is defining a valid until date (including the mentioned date) for the requested consent. The content is the local ASPSP date in ISO-Date format, e.g. 2017-10-30. Future dates might get adjusted by ASPSP. If a maximal available date is requested, a date in far future is to be used: "9999-12-31". In both cases the consent object to be retrieved by the get consent request will contain the adjusted date. (format: date, e.g. 2020-12-31)
-]: any -> any {
+]: any -> record<_links: record<confirmation: record<href: string>, scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, self: record<href: string>, startAuthorisation: record<href: string>, startAuthorisationWithAuthenticationMethodSelection: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, startAuthorisationWithPsuIdentification: record<href: string>, startAuthorisationWithTransactionAuthorisation: record<href: string>, status: record<href: string>>, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, consentId: string, consentStatus: string, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
+  if ($psu_ip_address == null) { error make --unspanned { msg: "required header parameter 'PSU-IP-Address' missing: pass --psu-ip-address" } }
   let full_url = (build-url $base "/v1/consents" $auth.query)
   let req_body = {"access": $access, "combinedServiceIndicator": $combined_service_indicator, "frequencyPerDay": $frequency_per_day, "recurringIndicator": $recurring_indicator, "validUntil": $valid_until} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "combinedServiceIndicator") == null) { error make --unspanned { msg: "required body field 'combinedServiceIndicator' missing: pass --combined-service-indicator or pipe a record" } }
+  if (($req_body | get -o "recurringIndicator") == null) { error make --unspanned { msg: "required body field 'recurringIndicator' missing: pass --recurring-indicator or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "TPP-Redirect-Preferred": $tpp_redirect_preferred, "TPP-Redirect-URI": $tpp_redirect_uri, "TPP-Nok-Redirect-URI": $tpp_nok_redirect_uri, "TPP-Explicit-Authorisation-Preferred": $tpp_explicit_authorisation_preferred, "TPP-Brand-Logging-Information": $tpp_brand_logging_information, "TPP-Notification-URI": $tpp_notification_uri, "TPP-Notification-Content-Preferred": $tpp_notification_content_preferred, "PSU-IP-Port": $psu_ip_port, "PSU-IP-Address": $psu_ip_address, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
@@ -506,11 +527,11 @@ export def "delete-consent" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -524,6 +545,7 @@ export def "delete-consent" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -558,11 +580,11 @@ export def "get-consent-information" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -572,10 +594,11 @@ export def "get-consent-information" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<_links: record<account: record<href: string>, card_account: record<href: string>>, access: record<accounts: list<record>, additionalInformation: record<ownerName: list, trustedBeneficiaries: list>, allPsd2: string, availableAccounts: string, availableAccountsWithBalance: string, balances: list<record>, restrictedTo: list<string>, transactions: list<record>>, consentStatus: string, frequencyPerDay: int, lastActionDate: string, recurringIndicator: bool, validUntil: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -610,11 +633,11 @@ export def "get-consent-authorisation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -624,10 +647,11 @@ export def "get-consent-authorisation" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<authorisationIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}/authorisations") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -663,20 +687,20 @@ export def "start-consent-authorisation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
   --psu-id: string # Client ID of the PSU in the ASPSP client interface. Might be mandated in the ASPSP's documentation. It might be contained even if an OAuth2 based authentication was performed in a pre-step or an OAuth2 based SCA was performed in an preceding AIS service in the same session. In this case the ASPSP might check whether PSU-ID and token match, according to ASPSP documentation. (e.g. PSU-1234)
   --psu-id-type: string # Type of the PSU-ID, needed in scenarios where PSUs have several PSU-IDs as access possibility. In this case, the mean and use are then defined in the ASPSP's documentation.
   --psu-corporate-id: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --psu-corporate-id-type: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --tpp-redirect-preferred: oneof<nothing, bool> # If it equals "true", the TPP prefers a redirect over an embedded SCA approach. If it equals "false", the TPP prefers not to be redirected for SCA. The ASPSP will then choose between the Embedded or the Decoupled SCA approach, depending on the choice of the SCA procedure by the TPP/PSU. If the parameter is not used, the ASPSP will choose the SCA approach to be applied depending on the SCA method chosen by the TPP/PSU.
-  --tpp-redirect-uri: string # URI of the TPP, where the transaction flow shall be redirected to after a Redirect. Mandated for the Redirect SCA Approach, specifically when TPP-Redirect-Preferred equals "true". It is recommended to always use this header field. **Remark for Future:** This field might be changed to mandatory in the next version of the specification.
-  --tpp-nok-redirect-uri: string # If this URI is contained, the TPP is asking to redirect the transaction flow to this address instead of the TPP-Redirect-URI in case of a negative result of the redirect SCA method. This might be ignored by the ASPSP.
+  --tpp-redirect-uri: string # URI of the TPP, where the transaction flow shall be redirected to after a Redirect. Mandated for the Redirect SCA Approach, specifically when TPP-Redirect-Preferred equals "true". It is recommended to always use this header field. **Remark for Future:** This field might be changed to mandatory in the next version of the specification. (format: uri)
+  --tpp-nok-redirect-uri: string # If this URI is contained, the TPP is asking to redirect the transaction flow to this address instead of the TPP-Redirect-URI in case of a negative result of the redirect SCA method. This might be ignored by the ASPSP. (format: uri)
   --tpp-notification-uri: string # URI for the Endpoint of the TPP-API to which the status of the payment initiation should be sent. This header field may by ignored by the ASPSP. For security reasons, it shall be ensured that the TPP-Notification-URI as introduced above is secured by the TPP eIDAS QWAC used for identification of the TPP. The following applies: URIs which are provided by TPPs in TPP-Notification-URI shall comply with the domain secured by the eIDAS QWAC certificate of the TPP in the field CN or SubjectAltName of the certificate. Please note that in case of example-TPP.com as certificate entry TPP- Notification-URI like www.example-TPP.com/xs2a-client/v1/ASPSPidentifcation/mytransaction- id/notifications or notifications.example-TPP.com/xs2a-client/v1/ASPSPidentifcation/mytransaction- id/notifications would be compliant. Wildcard definitions shall be taken into account for compliance checks by the ASPSP. ASPSPs may respond with ASPSP-Notification-Support set to false, if the provided URIs do not comply.
   --tpp-notification-content-preferred: string # The string has the form status=X1, ..., Xn where Xi is one of the constants SCA, PROCESS, LAST and where constants are not repeated. The usage of the constants supports the of following semantics: SCA: A notification on every change of the scaStatus attribute for all related authorisation processes is preferred by the TPP. PROCESS: A notification on all changes of consentStatus or transactionStatus attributes is preferred by the TPP. LAST: Only a notification on the last consentStatus or transactionStatus as available in the XS2A interface is preferred by the TPP. This header field may be ignored, if the ASPSP does not support resource notification services for the related TPP.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (e.g. 192.168.8.78)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -689,11 +713,12 @@ export def "start-consent-authorisation" [
   --psu-data: record # PSU Data for Update PSU authentication. — shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
   --authentication-method-id: string # An identification provided by the ASPSP for the later identification of the authentication method selection. (e.g. myAuthenticationID)
   --sca-authentication-data: string # SCA authentication data, depending on the chosen authentication method. If the data is binary, then it is base64 encoded.
-]: any -> any {
+]: any -> record<_links: record<authoriseTransaction: record<href: string>, confirmation: record<href: string>, scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, selectAuthenticationMethod: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, updatePsuIdentification: record<href: string>>, authorisationId: string, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, scaStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}/authorisations") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -731,11 +756,11 @@ export def "get-consent-sca-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -745,11 +770,12 @@ export def "get-consent-sca-status" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<psuMessage: string, scaStatus: string, trustedBeneficiaryFlag: bool> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/consents/{consent_id}/authorisations/{authorisation_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -786,15 +812,15 @@ export def "update-consents-psu-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
   --psu-id: string # Client ID of the PSU in the ASPSP client interface. Might be mandated in the ASPSP's documentation. It might be contained even if an OAuth2 based authentication was performed in a pre-step or an OAuth2 based SCA was performed in an preceding AIS service in the same session. In this case the ASPSP might check whether PSU-ID and token match, according to ASPSP documentation. (e.g. PSU-1234)
   --psu-id-type: string # Type of the PSU-ID, needed in scenarios where PSUs have several PSU-IDs as access possibility. In this case, the mean and use are then defined in the ASPSP's documentation.
   --psu-corporate-id: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --psu-corporate-id-type: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (e.g. 192.168.8.78)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -814,6 +840,7 @@ export def "update-consents-psu-data" [
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/consents/{consent_id}/authorisations/{authorisation_id}") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data, "confirmationCode": $confirmation_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -850,11 +877,11 @@ export def "get-consent-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding HTTP request IP Address field between PSU and TPP. It shall be contained if and only if this request was actively initiated by the PSU. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -864,10 +891,11 @@ export def "get-consent-status" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<consentStatus: string, psuMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}/status") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -903,19 +931,20 @@ export def "check-availability-of-funds" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --authorization: string # This field might be used in case where a consent was agreed between ASPSP and PSU through an OAuth2 based protocol, facilitated by the TPP.
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
   account: record # Reference to an account by either * IBAN, of a payment accounts, or * otherAccountIdentification, for payment accounts if there is no IBAN adapted from ISO pain.001.001.03.ch.02 CashAccount16-CH_IdTpCcy — shape: {cashAccountType?: string, currency?: string, iban?: string, otherAccountIdentification?: string}
   --card-number: string # Card Number of the card issued by the PIISP. Should be delivered if available.
   instructed_amount: record # e.g. {amount: 123, currency: EUR} — shape: {amount: string, currency: string}
   --payee: string # Name payee.
-]: any -> any {
+]: any -> record<fundsAvailable: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base "/v1/funds-confirmations" $auth.query)
   let req_body = {"account": $account, "cardNumber": $card_number, "instructedAmount": $instructed_amount, "payee": $payee} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -951,19 +980,19 @@ export def "create-signing-basket" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
   --psu-id: string # Client ID of the PSU in the ASPSP client interface. Might be mandated in the ASPSP's documentation. It might be contained even if an OAuth2 based authentication was performed in a pre-step or an OAuth2 based SCA was performed in an preceding AIS service in the same session. In this case the ASPSP might check whether PSU-ID and token match, according to ASPSP documentation. (e.g. PSU-1234)
   --psu-id-type: string # Type of the PSU-ID, needed in scenarios where PSUs have several PSU-IDs as access possibility. In this case, the mean and use are then defined in the ASPSP's documentation.
   --psu-corporate-id: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --psu-corporate-id-type: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --consent-id: string # This data element may be contained, if the payment initiation transaction is part of a session, i.e. combined AIS/PIS service. This then contains the consentId of the related AIS consent, which was performed prior to this payment initiation.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. If not available, the TPP shall use the IP Address used by the TPP when submitting this request. (e.g. 192.168.8.78)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. If not available, the TPP shall use the IP Address used by the TPP when submitting this request. (required, format: ipv4, e.g. 192.168.8.78)
   --tpp-redirect-preferred: oneof<nothing, bool> # If it equals "true", the TPP prefers a redirect over an embedded SCA approach. If it equals "false", the TPP prefers not to be redirected for SCA. The ASPSP will then choose between the Embedded or the Decoupled SCA approach, depending on the choice of the SCA procedure by the TPP/PSU. If the parameter is not used, the ASPSP will choose the SCA approach to be applied depending on the SCA method chosen by the TPP/PSU.
-  --tpp-redirect-uri: string # URI of the TPP, where the transaction flow shall be redirected to after a Redirect. Mandated for the Redirect SCA Approach, specifically when TPP-Redirect-Preferred equals "true". It is recommended to always use this header field. **Remark for Future:** This field might be changed to mandatory in the next version of the specification.
-  --tpp-nok-redirect-uri: string # If this URI is contained, the TPP is asking to redirect the transaction flow to this address instead of the TPP-Redirect-URI in case of a negative result of the redirect SCA method. This might be ignored by the ASPSP.
+  --tpp-redirect-uri: string # URI of the TPP, where the transaction flow shall be redirected to after a Redirect. Mandated for the Redirect SCA Approach, specifically when TPP-Redirect-Preferred equals "true". It is recommended to always use this header field. **Remark for Future:** This field might be changed to mandatory in the next version of the specification. (format: uri)
+  --tpp-nok-redirect-uri: string # If this URI is contained, the TPP is asking to redirect the transaction flow to this address instead of the TPP-Redirect-URI in case of a negative result of the redirect SCA method. This might be ignored by the ASPSP. (format: uri)
   --tpp-explicit-authorisation-preferred: oneof<nothing, bool> # If it equals "true", the TPP prefers to start the authorisation process separately, e.g. because of the usage of a signing basket. This preference might be ignored by the ASPSP, if a signing basket is not supported as functionality. If it equals "false" or if the parameter is not used, there is no preference of the TPP. This especially indicates that the TPP assumes a direct authorisation of the transaction in the next step, without using a signing basket.
   --tpp-notification-uri: string # URI for the Endpoint of the TPP-API to which the status of the payment initiation should be sent. This header field may by ignored by the ASPSP. For security reasons, it shall be ensured that the TPP-Notification-URI as introduced above is secured by the TPP eIDAS QWAC used for identification of the TPP. The following applies: URIs which are provided by TPPs in TPP-Notification-URI shall comply with the domain secured by the eIDAS QWAC certificate of the TPP in the field CN or SubjectAltName of the certificate. Please note that in case of example-TPP.com as certificate entry TPP- Notification-URI like www.example-TPP.com/xs2a-client/v1/ASPSPidentifcation/mytransaction- id/notifications or notifications.example-TPP.com/xs2a-client/v1/ASPSPidentifcation/mytransaction- id/notifications would be compliant. Wildcard definitions shall be taken into account for compliance checks by the ASPSP. ASPSPs may respond with ASPSP-Notification-Support set to false, if the provided URIs do not comply.
   --tpp-notification-content-preferred: string # The string has the form status=X1, ..., Xn where Xi is one of the constants SCA, PROCESS, LAST and where constants are not repeated. The usage of the constants supports the of following semantics: SCA: A notification on every change of the scaStatus attribute for all related authorisation processes is preferred by the TPP. PROCESS: A notification on all changes of consentStatus or transactionStatus attributes is preferred by the TPP. LAST: Only a notification on the last consentStatus or transactionStatus as available in the XS2A interface is preferred by the TPP. This header field may be ignored, if the ASPSP does not support resource notification services for the related TPP.
@@ -978,10 +1007,12 @@ export def "create-signing-basket" [
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
   --consent-ids: list<string> # A list of consentIds.
   --payment-ids: list<string> # A list of paymentIds.
-]: any -> any {
+]: any -> record<_links: record<scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, self: record<href: string>, startAuthorisation: record<href: string>, startAuthorisationWithAuthenticationMethodSelection: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, startAuthorisationWithPsuIdentification: record<href: string>, startAuthorisationWithTransactionAuthorisation: record<href: string>, status: record<href: string>>, basketId: string, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, tppMessages: table<category: string, code: string, path: string, text: string>, transactionStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
+  if ($psu_ip_address == null) { error make --unspanned { msg: "required header parameter 'PSU-IP-Address' missing: pass --psu-ip-address" } }
   let full_url = (build-url $base "/v1/signing-baskets" $auth.query)
   let req_body = {"consentIds": $consent_ids, "paymentIds": $payment_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1018,11 +1049,11 @@ export def "delete-signing-basket" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -1036,6 +1067,7 @@ export def "delete-signing-basket" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1070,11 +1102,11 @@ export def "get-signing-basket" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -1084,10 +1116,11 @@ export def "get-signing-basket" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<_links: record<scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, self: record<href: string>, startAuthorisation: record<href: string>, startAuthorisationWithAuthenticationMethodSelection: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, startAuthorisationWithPsuIdentification: record<href: string>, startAuthorisationWithTransactionAuthorisation: record<href: string>, status: record<href: string>>, consents: list<string>, payments: list<string>, transactionStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1122,11 +1155,11 @@ export def "get-signing-basket-authorisation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -1136,10 +1169,11 @@ export def "get-signing-basket-authorisation" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<authorisationIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}/authorisations") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1175,20 +1209,20 @@ export def "start-signing-basket-authorisation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
   --psu-id: string # Client ID of the PSU in the ASPSP client interface. Might be mandated in the ASPSP's documentation. It might be contained even if an OAuth2 based authentication was performed in a pre-step or an OAuth2 based SCA was performed in an preceding AIS service in the same session. In this case the ASPSP might check whether PSU-ID and token match, according to ASPSP documentation. (e.g. PSU-1234)
   --psu-id-type: string # Type of the PSU-ID, needed in scenarios where PSUs have several PSU-IDs as access possibility. In this case, the mean and use are then defined in the ASPSP's documentation.
   --psu-corporate-id: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --psu-corporate-id-type: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --tpp-redirect-preferred: oneof<nothing, bool> # If it equals "true", the TPP prefers a redirect over an embedded SCA approach. If it equals "false", the TPP prefers not to be redirected for SCA. The ASPSP will then choose between the Embedded or the Decoupled SCA approach, depending on the choice of the SCA procedure by the TPP/PSU. If the parameter is not used, the ASPSP will choose the SCA approach to be applied depending on the SCA method chosen by the TPP/PSU.
-  --tpp-redirect-uri: string # URI of the TPP, where the transaction flow shall be redirected to after a Redirect. Mandated for the Redirect SCA Approach, specifically when TPP-Redirect-Preferred equals "true". It is recommended to always use this header field. **Remark for Future:** This field might be changed to mandatory in the next version of the specification.
-  --tpp-nok-redirect-uri: string # If this URI is contained, the TPP is asking to redirect the transaction flow to this address instead of the TPP-Redirect-URI in case of a negative result of the redirect SCA method. This might be ignored by the ASPSP.
+  --tpp-redirect-uri: string # URI of the TPP, where the transaction flow shall be redirected to after a Redirect. Mandated for the Redirect SCA Approach, specifically when TPP-Redirect-Preferred equals "true". It is recommended to always use this header field. **Remark for Future:** This field might be changed to mandatory in the next version of the specification. (format: uri)
+  --tpp-nok-redirect-uri: string # If this URI is contained, the TPP is asking to redirect the transaction flow to this address instead of the TPP-Redirect-URI in case of a negative result of the redirect SCA method. This might be ignored by the ASPSP. (format: uri)
   --tpp-notification-uri: string # URI for the Endpoint of the TPP-API to which the status of the payment initiation should be sent. This header field may by ignored by the ASPSP. For security reasons, it shall be ensured that the TPP-Notification-URI as introduced above is secured by the TPP eIDAS QWAC used for identification of the TPP. The following applies: URIs which are provided by TPPs in TPP-Notification-URI shall comply with the domain secured by the eIDAS QWAC certificate of the TPP in the field CN or SubjectAltName of the certificate. Please note that in case of example-TPP.com as certificate entry TPP- Notification-URI like www.example-TPP.com/xs2a-client/v1/ASPSPidentifcation/mytransaction- id/notifications or notifications.example-TPP.com/xs2a-client/v1/ASPSPidentifcation/mytransaction- id/notifications would be compliant. Wildcard definitions shall be taken into account for compliance checks by the ASPSP. ASPSPs may respond with ASPSP-Notification-Support set to false, if the provided URIs do not comply.
   --tpp-notification-content-preferred: string # The string has the form status=X1, ..., Xn where Xi is one of the constants SCA, PROCESS, LAST and where constants are not repeated. The usage of the constants supports the of following semantics: SCA: A notification on every change of the scaStatus attribute for all related authorisation processes is preferred by the TPP. PROCESS: A notification on all changes of consentStatus or transactionStatus attributes is preferred by the TPP. LAST: Only a notification on the last consentStatus or transactionStatus as available in the XS2A interface is preferred by the TPP. This header field may be ignored, if the ASPSP does not support resource notification services for the related TPP.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (e.g. 192.168.8.78)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -1201,11 +1235,12 @@ export def "start-signing-basket-authorisation" [
   --psu-data: record # PSU Data for Update PSU authentication. — shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
   --authentication-method-id: string # An identification provided by the ASPSP for the later identification of the authentication method selection. (e.g. myAuthenticationID)
   --sca-authentication-data: string # SCA authentication data, depending on the chosen authentication method. If the data is binary, then it is base64 encoded.
-]: any -> any {
+]: any -> record<_links: record<authoriseTransaction: record<href: string>, confirmation: record<href: string>, scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, selectAuthenticationMethod: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, updatePsuIdentification: record<href: string>>, authorisationId: string, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, scaStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}/authorisations") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1243,11 +1278,11 @@ export def "get-signing-basket-sca-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -1257,11 +1292,12 @@ export def "get-signing-basket-sca-status" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<psuMessage: string, scaStatus: string, trustedBeneficiaryFlag: bool> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/signing-baskets/{basket_id}/authorisations/{authorisation_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1298,15 +1334,15 @@ export def "update-signing-basket-psu-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
   --psu-id: string # Client ID of the PSU in the ASPSP client interface. Might be mandated in the ASPSP's documentation. It might be contained even if an OAuth2 based authentication was performed in a pre-step or an OAuth2 based SCA was performed in an preceding AIS service in the same session. In this case the ASPSP might check whether PSU-ID and token match, according to ASPSP documentation. (e.g. PSU-1234)
   --psu-id-type: string # Type of the PSU-ID, needed in scenarios where PSUs have several PSU-IDs as access possibility. In this case, the mean and use are then defined in the ASPSP's documentation.
   --psu-corporate-id: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --psu-corporate-id-type: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (e.g. 192.168.8.78)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -1326,6 +1362,7 @@ export def "update-signing-basket-psu-data" [
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/signing-baskets/{basket_id}/authorisations/{authorisation_id}") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data, "confirmationCode": $confirmation_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1362,15 +1399,15 @@ export def "get-signing-basket-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
   --psu-id: string # Client ID of the PSU in the ASPSP client interface. Might be mandated in the ASPSP's documentation. It might be contained even if an OAuth2 based authentication was performed in a pre-step or an OAuth2 based SCA was performed in an preceding AIS service in the same session. In this case the ASPSP might check whether PSU-ID and token match, according to ASPSP documentation. (e.g. PSU-1234)
   --psu-id-type: string # Type of the PSU-ID, needed in scenarios where PSUs have several PSU-IDs as access possibility. In this case, the mean and use are then defined in the ASPSP's documentation.
   --psu-corporate-id: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --psu-corporate-id-type: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (e.g. 192.168.8.78)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -1380,10 +1417,11 @@ export def "get-signing-basket-status" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<transactionStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}/status") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1418,8 +1456,8 @@ export def "get-signing-basket-status" [
 # --remittanceInformationStructured shape: {SCORorQRRorIPI?: "SCOR"|"QRR"|"IPI", additionalRemittanceInformation?: string, reference: string, referenceIssuer?: string, referenceType?: string}
 # --payments item shape: {chargeBearer?: "DEBT"|"CRED"|"SHAR"|"SLEV", creditorAccount: record, creditorAddress?: record, creditorAgent?: record, creditorAgentName?: string, creditorId?: string, creditorName: string, creditorNameAndAddress?: string, debtorId?: string, debtorName: string, endToEndIdentification: string, equivalentAmount?: record, exchangeRateInformation?: record, instructedAmount?: record, intermediaryAgent?: string, purposeCode?: "SALA"|"PENS", remittanceInformationStructured?: record, ... (5 more fields)}
 export def "initiate-payment" [
-  payment_service: string
-  payment_product: string
+  payment_service: string@payment-service-completer
+  payment_product: string@payment-product-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1429,19 +1467,19 @@ export def "initiate-payment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
   --psu-id: string # Client ID of the PSU in the ASPSP client interface. Might be mandated in the ASPSP's documentation. It might be contained even if an OAuth2 based authentication was performed in a pre-step or an OAuth2 based SCA was performed in an preceding AIS service in the same session. In this case the ASPSP might check whether PSU-ID and token match, according to ASPSP documentation. (e.g. PSU-1234)
   --psu-id-type: string # Type of the PSU-ID, needed in scenarios where PSUs have several PSU-IDs as access possibility. In this case, the mean and use are then defined in the ASPSP's documentation.
   --psu-corporate-id: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --psu-corporate-id-type: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --consent-id: string # This data element may be contained, if the payment initiation transaction is part of a session, i.e. combined AIS/PIS service. This then contains the consentId of the related AIS consent, which was performed prior to this payment initiation.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. If not available, the TPP shall use the IP Address used by the TPP when submitting this request. (e.g. 192.168.8.78)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. If not available, the TPP shall use the IP Address used by the TPP when submitting this request. (required, format: ipv4, e.g. 192.168.8.78)
   --tpp-redirect-preferred: oneof<nothing, bool> # If it equals "true", the TPP prefers a redirect over an embedded SCA approach. If it equals "false", the TPP prefers not to be redirected for SCA. The ASPSP will then choose between the Embedded or the Decoupled SCA approach, depending on the choice of the SCA procedure by the TPP/PSU. If the parameter is not used, the ASPSP will choose the SCA approach to be applied depending on the SCA method chosen by the TPP/PSU.
-  --tpp-redirect-uri: string # URI of the TPP, where the transaction flow shall be redirected to after a Redirect. Mandated for the Redirect SCA Approach, specifically when TPP-Redirect-Preferred equals "true". It is recommended to always use this header field. **Remark for Future:** This field might be changed to mandatory in the next version of the specification.
-  --tpp-nok-redirect-uri: string # If this URI is contained, the TPP is asking to redirect the transaction flow to this address instead of the TPP-Redirect-URI in case of a negative result of the redirect SCA method. This might be ignored by the ASPSP.
+  --tpp-redirect-uri: string # URI of the TPP, where the transaction flow shall be redirected to after a Redirect. Mandated for the Redirect SCA Approach, specifically when TPP-Redirect-Preferred equals "true". It is recommended to always use this header field. **Remark for Future:** This field might be changed to mandatory in the next version of the specification. (format: uri)
+  --tpp-nok-redirect-uri: string # If this URI is contained, the TPP is asking to redirect the transaction flow to this address instead of the TPP-Redirect-URI in case of a negative result of the redirect SCA method. This might be ignored by the ASPSP. (format: uri)
   --tpp-explicit-authorisation-preferred: oneof<nothing, bool> # If it equals "true", the TPP prefers to start the authorisation process separately, e.g. because of the usage of a signing basket. This preference might be ignored by the ASPSP, if a signing basket is not supported as functionality. If it equals "false" or if the parameter is not used, there is no preference of the TPP. This especially indicates that the TPP assumes a direct authorisation of the transaction in the next step, without using a signing basket.
   --tpp-rejection-no-funds-preferred: oneof<nothing, bool> # If it equals "true" then the TPP prefers a rejection of the payment initiation in case the ASPSP is providing an integrated confirmation of funds request an the result of this is that not sufficient funds are available. If it equals "false" then the TPP prefers that the ASPSP is dealing with the payment initiation like in the ASPSPs online channel, potentially waiting for a certain time period for funds to arrive to initiate the payment. This parameter might be ignored by the ASPSP.
   --tpp-brand-logging-information: string # This header might be used by TPPs to inform the ASPSP about the brand used by the TPP towards the PSU. This information is meant for logging entries to enhance communication between ASPSP and PSU or ASPSP and TPP. This header might be ignored by the ASPSP.
@@ -1489,12 +1527,14 @@ export def "initiate-payment" [
   --batch-booking-preferred: oneof<nothing, bool> # If this element equals 'true', the PSU prefers only one booking entry. If this element equals 'false', the PSU prefers individual booking of all contained individual transactions. The ASPSP will follow this preference according to contracts agreed on with the PSU. (e.g. false)
   --payments: list # A list of generic JSON bodies payment initations for bulk payments via JSON. Note: Some fields from single payments do not occcur in a bulk payment element — item shape: {chargeBearer?: "DEBT"|"CRED"|"SHAR"|"SLEV", creditorAccount: record, creditorAddress?: record, creditorAgent?: record, creditorAgentName?: string, creditorId?: string, creditorName: string, creditorNameAndAddress?: string, debtorId?: string, debtorName: string, endToEndIdentification: string, equivalentAmount?: record, exchangeRateInformation?: record, instructedAmount?: record, intermediaryAgent?: string, purposeCode?: "SALA"|"PENS", remittanceInformationStructured?: record, ... (5 more fields)}
   --requested-execution-time: string # format: date-time
-]: any -> any {
+]: any -> record<_links: record<confirmation: record<href: string>, scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, self: record<href: string>, startAuthorisation: record<href: string>, startAuthorisationWithAuthenticationMethodSelection: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, startAuthorisationWithPsuIdentification: record<href: string>, startAuthorisationWithTransactionAuthorisation: record<href: string>, status: record<href: string>>, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, currencyConversionFee: record<amount: string, currency: string>, estimatedInterbankSettlementAmount: record<amount: string, currency: string>, estimatedTotalAmount: record<amount: string, currency: string>, paymentId: string, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, tppMessages: table<category: string, code: string, path: string, text: string>, transactionFeeIndicator: bool, transactionFees: record<amount: string, currency: string>, transactionStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
+  if ($psu_ip_address == null) { error make --unspanned { msg: "required header parameter 'PSU-IP-Address' missing: pass --psu-ip-address" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product)} | format pattern "/v1/{payment_service}/{payment_product}") $auth.query)
   let req_body = {"chargeBearer": $charge_bearer, "creditorAccount": $creditor_account, "creditorAddress": $creditor_address, "creditorAgent": $creditor_agent, "creditorAgentName": $creditor_agent_name, "creditorId": $creditor_id, "creditorName": $creditor_name, "creditorNameAndAddress": $creditor_name_and_address, "debtorAccount": $debtor_account, "debtorAgent": $debtor_agent, "debtorId": $debtor_id, "debtorName": $debtor_name, "endToEndIdentification": $end_to_end_identification, "equivalentAmount": $equivalent_amount, "exchangeRateInformation": $exchange_rate_information, "instructedAmount": $instructed_amount, "intermediaryAgent": $intermediary_agent, "purposeCode": $purpose_code, "remittanceInformationStructured": $remittance_information_structured, "remittanceInformationUnstructured": $remittance_information_unstructured, "requestedExecutionDate": $requested_execution_date, "serviceLevel": $service_level, "transactionCurrency": $transaction_currency, "ultimateCreditor": $ultimate_creditor, "ultimateDebtor": $ultimate_debtor, "dayOfExecution": $day_of_execution, "endDate": $end_date, "executionRule": $execution_rule, "frequency": $frequency, "startDate": $start_date, "batchBookingPreferred": $batch_booking_preferred, "payments": $payments, "requestedExecutionTime": $requested_execution_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1521,8 +1561,8 @@ export def "initiate-payment" [
 # DELETE /v1/{payment-service}/{payment-product}/{paymentId}
 # operationId: cancelPayment
 export def "cancel-payment" [
-  payment_service: string
-  payment_product: string
+  payment_service: string@payment-service-completer
+  payment_product: string@payment-product-completer
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1533,15 +1573,15 @@ export def "cancel-payment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
   --tpp-redirect-preferred: oneof<nothing, bool> # If it equals "true", the TPP prefers a redirect over an embedded SCA approach. If it equals "false", the TPP prefers not to be redirected for SCA. The ASPSP will then choose between the Embedded or the Decoupled SCA approach, depending on the choice of the SCA procedure by the TPP/PSU. If the parameter is not used, the ASPSP will choose the SCA approach to be applied depending on the SCA method chosen by the TPP/PSU.
-  --tpp-nok-redirect-uri: string # If this URI is contained, the TPP is asking to redirect the transaction flow to this address instead of the TPP-Redirect-URI in case of a negative result of the redirect SCA method. This might be ignored by the ASPSP.
-  --tpp-redirect-uri: string # URI of the TPP, where the transaction flow shall be redirected to after a Redirect. Mandated for the Redirect SCA Approach, specifically when TPP-Redirect-Preferred equals "true". It is recommended to always use this header field. **Remark for Future:** This field might be changed to mandatory in the next version of the specification.
+  --tpp-nok-redirect-uri: string # If this URI is contained, the TPP is asking to redirect the transaction flow to this address instead of the TPP-Redirect-URI in case of a negative result of the redirect SCA method. This might be ignored by the ASPSP. (format: uri)
+  --tpp-redirect-uri: string # URI of the TPP, where the transaction flow shall be redirected to after a Redirect. Mandated for the Redirect SCA Approach, specifically when TPP-Redirect-Preferred equals "true". It is recommended to always use this header field. **Remark for Future:** This field might be changed to mandatory in the next version of the specification. (format: uri)
   --tpp-explicit-authorisation-preferred: oneof<nothing, bool> # If it equals "true", the TPP prefers to start the authorisation process separately, e.g. because of the usage of a signing basket. This preference might be ignored by the ASPSP, if a signing basket is not supported as functionality. If it equals "false" or if the parameter is not used, there is no preference of the TPP. This especially indicates that the TPP assumes a direct authorisation of the transaction in the next step, without using a signing basket.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (e.g. 192.168.8.78)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -1551,12 +1591,13 @@ export def "cancel-payment" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<_links: record<startAuthorisation: record<href: string>, startAuthorisationWithAuthenticationMethodSelection: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, startAuthorisationWithPsuIdentification: record<href: string>>, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, transactionStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1581,8 +1622,8 @@ export def "cancel-payment" [
 # GET /v1/{payment-service}/{payment-product}/{paymentId}
 # operationId: getPaymentInformation
 export def "get-payment-information" [
-  payment_service: string
-  payment_product: string
+  payment_service: string@payment-service-completer
+  payment_product: string@payment-product-completer
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1593,11 +1634,12 @@ export def "get-payment-information" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --accept: string@accept-completer-1 # Response content type
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -1613,8 +1655,9 @@ export def "get-payment-information" [
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1637,8 +1680,8 @@ export def "get-payment-information" [
 # GET /v1/{payment-service}/{payment-product}/{paymentId}/authorisations
 # operationId: getPaymentInitiationAuthorisation
 export def "get-payment-initiation-authorisation" [
-  payment_service: string
-  payment_product: string
+  payment_service: string@payment-service-completer
+  payment_product: string@payment-product-completer
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1649,11 +1692,11 @@ export def "get-payment-initiation-authorisation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -1663,12 +1706,13 @@ export def "get-payment-initiation-authorisation" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<authorisationIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/authorisations") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1694,8 +1738,8 @@ export def "get-payment-initiation-authorisation" [
 # operationId: startPaymentAuthorisation
 # --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
 export def "start-payment-authorisation" [
-  payment_service: string
-  payment_product: string
+  payment_service: string@payment-service-completer
+  payment_product: string@payment-product-completer
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1706,20 +1750,20 @@ export def "start-payment-authorisation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --psu-id: string # Client ID of the PSU in the ASPSP client interface. Might be mandated in the ASPSP's documentation. It might be contained even if an OAuth2 based authentication was performed in a pre-step or an OAuth2 based SCA was performed in an preceding AIS service in the same session. In this case the ASPSP might check whether PSU-ID and token match, according to ASPSP documentation. (e.g. PSU-1234)
   --psu-id-type: string # Type of the PSU-ID, needed in scenarios where PSUs have several PSU-IDs as access possibility. In this case, the mean and use are then defined in the ASPSP's documentation.
   --psu-corporate-id: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --psu-corporate-id-type: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --tpp-redirect-preferred: oneof<nothing, bool> # If it equals "true", the TPP prefers a redirect over an embedded SCA approach. If it equals "false", the TPP prefers not to be redirected for SCA. The ASPSP will then choose between the Embedded or the Decoupled SCA approach, depending on the choice of the SCA procedure by the TPP/PSU. If the parameter is not used, the ASPSP will choose the SCA approach to be applied depending on the SCA method chosen by the TPP/PSU.
-  --tpp-redirect-uri: string # URI of the TPP, where the transaction flow shall be redirected to after a Redirect. Mandated for the Redirect SCA Approach, specifically when TPP-Redirect-Preferred equals "true". It is recommended to always use this header field. **Remark for Future:** This field might be changed to mandatory in the next version of the specification.
-  --tpp-nok-redirect-uri: string # If this URI is contained, the TPP is asking to redirect the transaction flow to this address instead of the TPP-Redirect-URI in case of a negative result of the redirect SCA method. This might be ignored by the ASPSP.
+  --tpp-redirect-uri: string # URI of the TPP, where the transaction flow shall be redirected to after a Redirect. Mandated for the Redirect SCA Approach, specifically when TPP-Redirect-Preferred equals "true". It is recommended to always use this header field. **Remark for Future:** This field might be changed to mandatory in the next version of the specification. (format: uri)
+  --tpp-nok-redirect-uri: string # If this URI is contained, the TPP is asking to redirect the transaction flow to this address instead of the TPP-Redirect-URI in case of a negative result of the redirect SCA method. This might be ignored by the ASPSP. (format: uri)
   --tpp-notification-uri: string # URI for the Endpoint of the TPP-API to which the status of the payment initiation should be sent. This header field may by ignored by the ASPSP. For security reasons, it shall be ensured that the TPP-Notification-URI as introduced above is secured by the TPP eIDAS QWAC used for identification of the TPP. The following applies: URIs which are provided by TPPs in TPP-Notification-URI shall comply with the domain secured by the eIDAS QWAC certificate of the TPP in the field CN or SubjectAltName of the certificate. Please note that in case of example-TPP.com as certificate entry TPP- Notification-URI like www.example-TPP.com/xs2a-client/v1/ASPSPidentifcation/mytransaction- id/notifications or notifications.example-TPP.com/xs2a-client/v1/ASPSPidentifcation/mytransaction- id/notifications would be compliant. Wildcard definitions shall be taken into account for compliance checks by the ASPSP. ASPSPs may respond with ASPSP-Notification-Support set to false, if the provided URIs do not comply.
   --tpp-notification-content-preferred: string # The string has the form status=X1, ..., Xn where Xi is one of the constants SCA, PROCESS, LAST and where constants are not repeated. The usage of the constants supports the of following semantics: SCA: A notification on every change of the scaStatus attribute for all related authorisation processes is preferred by the TPP. PROCESS: A notification on all changes of consentStatus or transactionStatus attributes is preferred by the TPP. LAST: Only a notification on the last consentStatus or transactionStatus as available in the XS2A interface is preferred by the TPP. This header field may be ignored, if the ASPSP does not support resource notification services for the related TPP.
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -1732,13 +1776,14 @@ export def "start-payment-authorisation" [
   --psu-data: record # PSU Data for Update PSU authentication. — shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
   --authentication-method-id: string # An identification provided by the ASPSP for the later identification of the authentication method selection. (e.g. myAuthenticationID)
   --sca-authentication-data: string # SCA authentication data, depending on the chosen authentication method. If the data is binary, then it is base64 encoded.
-]: any -> any {
+]: any -> record<_links: record<authoriseTransaction: record<href: string>, confirmation: record<href: string>, scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, selectAuthenticationMethod: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, updatePsuIdentification: record<href: string>>, authorisationId: string, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, scaStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/authorisations") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1765,8 +1810,8 @@ export def "start-payment-authorisation" [
 # GET /v1/{payment-service}/{payment-product}/{paymentId}/authorisations/{authorisationId}
 # operationId: getPaymentInitiationScaStatus
 export def "get-payment-initiation-sca-status" [
-  payment_service: string
-  payment_product: string
+  payment_service: string@payment-service-completer
+  payment_product: string@payment-product-completer
   payment_id: string
   authorisation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1778,11 +1823,11 @@ export def "get-payment-initiation-sca-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -1792,13 +1837,14 @@ export def "get-payment-initiation-sca-status" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<psuMessage: string, scaStatus: string, trustedBeneficiaryFlag: bool> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/authorisations/{authorisation_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1824,8 +1870,8 @@ export def "get-payment-initiation-sca-status" [
 # operationId: updatePaymentPsuData
 # --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
 export def "update-payment-psu-data" [
-  payment_service: string
-  payment_product: string
+  payment_service: string@payment-service-completer
+  payment_product: string@payment-product-completer
   payment_id: string
   authorisation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1837,15 +1883,15 @@ export def "update-payment-psu-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
   --psu-id: string # Client ID of the PSU in the ASPSP client interface. Might be mandated in the ASPSP's documentation. It might be contained even if an OAuth2 based authentication was performed in a pre-step or an OAuth2 based SCA was performed in an preceding AIS service in the same session. In this case the ASPSP might check whether PSU-ID and token match, according to ASPSP documentation. (e.g. PSU-1234)
   --psu-id-type: string # Type of the PSU-ID, needed in scenarios where PSUs have several PSU-IDs as access possibility. In this case, the mean and use are then defined in the ASPSP's documentation.
   --psu-corporate-id: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --psu-corporate-id-type: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (e.g. 192.168.8.78)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -1867,6 +1913,7 @@ export def "update-payment-psu-data" [
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/authorisations/{authorisation_id}") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data, "confirmationCode": $confirmation_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1893,8 +1940,8 @@ export def "update-payment-psu-data" [
 # GET /v1/{payment-service}/{payment-product}/{paymentId}/cancellation-authorisations
 # operationId: getPaymentInitiationCancellationAuthorisationInformation
 export def "get-payment-initiation-cancellation-authorisation-information" [
-  payment_service: string
-  payment_product: string
+  payment_service: string@payment-service-completer
+  payment_product: string@payment-product-completer
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1905,11 +1952,11 @@ export def "get-payment-initiation-cancellation-authorisation-information" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -1919,12 +1966,13 @@ export def "get-payment-initiation-cancellation-authorisation-information" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<authorisationIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/cancellation-authorisations") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1950,8 +1998,8 @@ export def "get-payment-initiation-cancellation-authorisation-information" [
 # operationId: startPaymentInitiationCancellationAuthorisation
 # --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
 export def "start-payment-initiation-cancellation-authorisation" [
-  payment_service: string
-  payment_product: string
+  payment_service: string@payment-service-completer
+  payment_product: string@payment-product-completer
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1962,20 +2010,20 @@ export def "start-payment-initiation-cancellation-authorisation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
   --psu-id: string # Client ID of the PSU in the ASPSP client interface. Might be mandated in the ASPSP's documentation. It might be contained even if an OAuth2 based authentication was performed in a pre-step or an OAuth2 based SCA was performed in an preceding AIS service in the same session. In this case the ASPSP might check whether PSU-ID and token match, according to ASPSP documentation. (e.g. PSU-1234)
   --psu-id-type: string # Type of the PSU-ID, needed in scenarios where PSUs have several PSU-IDs as access possibility. In this case, the mean and use are then defined in the ASPSP's documentation.
   --psu-corporate-id: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --psu-corporate-id-type: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --tpp-redirect-preferred: oneof<nothing, bool> # If it equals "true", the TPP prefers a redirect over an embedded SCA approach. If it equals "false", the TPP prefers not to be redirected for SCA. The ASPSP will then choose between the Embedded or the Decoupled SCA approach, depending on the choice of the SCA procedure by the TPP/PSU. If the parameter is not used, the ASPSP will choose the SCA approach to be applied depending on the SCA method chosen by the TPP/PSU.
-  --tpp-redirect-uri: string # URI of the TPP, where the transaction flow shall be redirected to after a Redirect. Mandated for the Redirect SCA Approach, specifically when TPP-Redirect-Preferred equals "true". It is recommended to always use this header field. **Remark for Future:** This field might be changed to mandatory in the next version of the specification.
-  --tpp-nok-redirect-uri: string # If this URI is contained, the TPP is asking to redirect the transaction flow to this address instead of the TPP-Redirect-URI in case of a negative result of the redirect SCA method. This might be ignored by the ASPSP.
+  --tpp-redirect-uri: string # URI of the TPP, where the transaction flow shall be redirected to after a Redirect. Mandated for the Redirect SCA Approach, specifically when TPP-Redirect-Preferred equals "true". It is recommended to always use this header field. **Remark for Future:** This field might be changed to mandatory in the next version of the specification. (format: uri)
+  --tpp-nok-redirect-uri: string # If this URI is contained, the TPP is asking to redirect the transaction flow to this address instead of the TPP-Redirect-URI in case of a negative result of the redirect SCA method. This might be ignored by the ASPSP. (format: uri)
   --tpp-notification-uri: string # URI for the Endpoint of the TPP-API to which the status of the payment initiation should be sent. This header field may by ignored by the ASPSP. For security reasons, it shall be ensured that the TPP-Notification-URI as introduced above is secured by the TPP eIDAS QWAC used for identification of the TPP. The following applies: URIs which are provided by TPPs in TPP-Notification-URI shall comply with the domain secured by the eIDAS QWAC certificate of the TPP in the field CN or SubjectAltName of the certificate. Please note that in case of example-TPP.com as certificate entry TPP- Notification-URI like www.example-TPP.com/xs2a-client/v1/ASPSPidentifcation/mytransaction- id/notifications or notifications.example-TPP.com/xs2a-client/v1/ASPSPidentifcation/mytransaction- id/notifications would be compliant. Wildcard definitions shall be taken into account for compliance checks by the ASPSP. ASPSPs may respond with ASPSP-Notification-Support set to false, if the provided URIs do not comply.
   --tpp-notification-content-preferred: string # The string has the form status=X1, ..., Xn where Xi is one of the constants SCA, PROCESS, LAST and where constants are not repeated. The usage of the constants supports the of following semantics: SCA: A notification on every change of the scaStatus attribute for all related authorisation processes is preferred by the TPP. PROCESS: A notification on all changes of consentStatus or transactionStatus attributes is preferred by the TPP. LAST: Only a notification on the last consentStatus or transactionStatus as available in the XS2A interface is preferred by the TPP. This header field may be ignored, if the ASPSP does not support resource notification services for the related TPP.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (e.g. 192.168.8.78)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -1988,13 +2036,14 @@ export def "start-payment-initiation-cancellation-authorisation" [
   --psu-data: record # PSU Data for Update PSU authentication. — shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
   --authentication-method-id: string # An identification provided by the ASPSP for the later identification of the authentication method selection. (e.g. myAuthenticationID)
   --sca-authentication-data: string # SCA authentication data, depending on the chosen authentication method. If the data is binary, then it is base64 encoded.
-]: any -> any {
+]: any -> record<_links: record<authoriseTransaction: record<href: string>, confirmation: record<href: string>, scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, selectAuthenticationMethod: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, updatePsuIdentification: record<href: string>>, authorisationId: string, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, scaStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/cancellation-authorisations") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2021,8 +2070,8 @@ export def "start-payment-initiation-cancellation-authorisation" [
 # GET /v1/{payment-service}/{payment-product}/{paymentId}/cancellation-authorisations/{authorisationId}
 # operationId: getPaymentCancellationScaStatus
 export def "get-payment-cancellation-sca-status" [
-  payment_service: string
-  payment_product: string
+  payment_service: string@payment-service-completer
+  payment_product: string@payment-product-completer
   payment_id: string
   authorisation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2034,11 +2083,11 @@ export def "get-payment-cancellation-sca-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -2048,13 +2097,14 @@ export def "get-payment-cancellation-sca-status" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<psuMessage: string, scaStatus: string, trustedBeneficiaryFlag: bool> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/cancellation-authorisations/{authorisation_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2080,8 +2130,8 @@ export def "get-payment-cancellation-sca-status" [
 # operationId: updatePaymentCancellationPsuData
 # --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
 export def "update-payment-cancellation-psu-data" [
-  payment_service: string
-  payment_product: string
+  payment_service: string@payment-service-completer
+  payment_product: string@payment-product-completer
   payment_id: string
   authorisation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2093,15 +2143,15 @@ export def "update-payment-cancellation-psu-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
   --psu-id: string # Client ID of the PSU in the ASPSP client interface. Might be mandated in the ASPSP's documentation. It might be contained even if an OAuth2 based authentication was performed in a pre-step or an OAuth2 based SCA was performed in an preceding AIS service in the same session. In this case the ASPSP might check whether PSU-ID and token match, according to ASPSP documentation. (e.g. PSU-1234)
   --psu-id-type: string # Type of the PSU-ID, needed in scenarios where PSUs have several PSU-IDs as access possibility. In this case, the mean and use are then defined in the ASPSP's documentation.
   --psu-corporate-id: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
   --psu-corporate-id-type: string # Might be mandated in the ASPSP's documentation. Only used in a corporate context.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (e.g. 192.168.8.78)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -2123,6 +2173,7 @@ export def "update-payment-cancellation-psu-data" [
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/cancellation-authorisations/{authorisation_id}") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data, "confirmationCode": $confirmation_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2149,8 +2200,8 @@ export def "update-payment-cancellation-psu-data" [
 # GET /v1/{payment-service}/{payment-product}/{paymentId}/status
 # operationId: getPaymentInitiationStatus
 export def "get-payment-initiation-status" [
-  payment_service: string
-  payment_product: string
+  payment_service: string@payment-service-completer
+  payment_product: string@payment-product-completer
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2161,11 +2212,12 @@ export def "get-payment-initiation-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
+  --accept: string@accept-completer-2 # Response content type
+  --x-request-id: string # ID of the request, unique to the call, as determined by the initiating party. (required, e.g. 99391c7e-ad88-49ec-a2ad-99ddcb1f7721)
   --digest: string # Is contained if and only if the "Signature" element is contained in the header of the request. (e.g. SHA-256=hl1/Eps8BEQW58FJhDApwJXjGY4nr1ArGDHIT25vq6A=)
   --signature: string # A signature of the request by the TPP on application level. This might be mandated by ASPSP. (e.g. keyId="SN=9FA1,CA=CN=D-TRUST%20CA%202-1%202015,O=D-Trust%20GmbH,C=DE",algorithm="rsa-sha256", headers="Digest X-Request-ID PSU-ID TPP-Redirect-URI Date", signature="Base64(RSA-SHA256(signing string))" )
-  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained.
-  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (e.g. 192.168.8.78)
+  --tpp-signature-certificate: string # The certificate used for signing the request, in base64 encoding. Must be contained if a signature is contained. (format: byte)
+  --psu-ip-address: string # The forwarded IP Address header field consists of the corresponding http request IP Address field between PSU and TPP. (format: ipv4, e.g. 192.168.8.78)
   --psu-ip-port: string # The forwarded IP Port header field consists of the corresponding HTTP request IP Port field between PSU and TPP, if available. (e.g. 1234)
   --psu-accept: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
   --psu-accept-charset: string # The forwarded IP Accept header fields consist of the corresponding HTTP request Accept header fields between PSU and TPP, if available.
@@ -2175,14 +2227,15 @@ export def "get-payment-initiation-status" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> any {
+]: nothing -> record<fundsAvailable: bool, psuMessage: string, transactionStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
+  if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/status") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

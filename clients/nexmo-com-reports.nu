@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -151,13 +151,15 @@ export def "list-reports" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-id: string # The account for which the list of reports will be queried. (e.g. abcd1234)
-  --status: string # A comma-separated list of report status values. Reports with any of the statuses specified are returned. The values in the comma-seperated list specified for `status` can be any of `PENDING`, `PROCESSING`, `SUCCESS`, `ABORTED`, `FAILED`, `TRUNCATED`. (e.g. SUCCESS, FAILED)
+  --account-id: string # The account for which the list of reports will be queried. (required, e.g. abcd1234)
+  --status: string # A comma-separated list of report status values. Reports with any of the statuses specified are returned. The values in the comma-seperated list specified for `status` can be any of `PENDING`, `PROCESSING`, `SUCCESS`, `ABORTED`, `FAILED`, `TRUNCATED`. (required, e.g. SUCCESS, FAILED)
   --date-from: string # ISO-8601 extended time zone offset or ISO-8601 UTC zone offset formatted date from which the list of reports will be queried. Format `yyyy-mm-ddThh:mm:ss[.sss]±hh:mm` or `yyyy-mm-ddThh:mm:ss[.sss]Z`. (format: date, e.g. 2019-06-28T00:00:00-00:00)
   --date-to: string # ISO-8601 extended time zone offset or ISO-8601 UTC zone offset formatted date until which the list of reports will be queried. Format `yyyy-mm-ddThh:mm:ss[.sss]±hh:mm` or `yyyy-mm-ddThh:mm:ss[.sss]Z`. (format: date, e.g. 2019-06-28T23:59:59-00:00)
-]: nothing -> any {
+]: nothing -> record<items_count: int, reports: list<record>, self_link: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id == null) { error make --unspanned { msg: "required query parameter 'account_id' missing: pass --account-id" } }
+  if ($status == null) { error make --unspanned { msg: "required query parameter 'status' missing: pass --status" } }
   let qp = [(serialize-qp "account_id" $account_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/reports" $qp $auth.query)
   let accept_val = "application/json"
@@ -229,8 +231,8 @@ export def "get-records" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-id: string # The account for which the list of reports will be queried. (e.g. abcd1234)
-  --product: string@product-completer # The product to return records for (e.g. SMS)
+  --account-id: string # The account for which the list of reports will be queried. (required, e.g. abcd1234)
+  --product: string@product-completer # The product to return records for (required, e.g. SMS)
   --direction: string@direction-completer # Direction of the communication, either `inbound` (received by our services), or `outbound` (originated from our services). Required for products `SMS` and `MESSAGES`. Optional for `VOICE-CALL`. Invalid for `IN-APP-VOICE`, `CONVERSATIONS`, `NUMBER-INSIGHT`, `VERIFY-API`. (e.g. inbound)
   --id: string # The UUID of the message or call to be searched for. You can specify a comma-separated list of UUIDs. If UUIDs are not found they are listed in the response in the `ids_not_found` field. If you specify `id`, you must not specify `status`, `date_start` or `date_end`. (e.g. aaaaaaaa-bbbb-cccc-dddd-0123456789ab)
   --date-start: string # ISO-8601 extended time zone offset or ISO-8601 UTC zone offset formatted date (format `yyyy-mm-ddThh:mm:ss[.sss]±hh:mm` or `yyyy-mm-ddThh:mm:ss[.sss]Z`) for when reports should begin. It filters on the time the API call was received by Vonage and corresponds to the field `date_received` (`date_start` for Voice) in the report file. It is inclusive, i.e. the provided value is less than or equal to the value in the field `date_received` (`date_start` for Voice) in the CDR. If you provide this, you must provide `date_end` and must not provide `id`. (format: date, e.g. 2017-12-01T00:00:00+0000)
@@ -241,6 +243,8 @@ export def "get-records" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id == null) { error make --unspanned { msg: "required query parameter 'account_id' missing: pass --account-id" } }
+  if ($product == null) { error make --unspanned { msg: "required query parameter 'product' missing: pass --product" } }
   let qp = [(serialize-qp "account_id" $account_id "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "date_start" $date_start "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "include_message" $include_message "scalar") (serialize-qp "show_concatenated" $show_concatenated "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/reports/records" $qp $auth.query)
   let accept_val = "application/json"
@@ -346,12 +350,12 @@ export def "download-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<report: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v3/media/{file_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"

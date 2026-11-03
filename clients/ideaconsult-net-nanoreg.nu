@@ -100,8 +100,11 @@ def base-url-completer [] { ["https://api.ideaconsult.net/nanoreg1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def db-completer [] { ["calibrate" "enanomapper" "enpra" "marina" "nanogenotox" "nanoinformatix" "nanoreg1" "nanoreg2" "nanotest"] }
 def type-completer [] { ["byassay" "bycitation" "byinvestigation" "byprovider" "bystructure_inchikey" "bystructure_name" "bystructure_smiles" "bystudytype" "bysubstance" "bysubstance_name" "bysubstance_type"] }
 def accept-completer [] { ["application/json" "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" "application/x-javascript" "text/csv" "text/plain"] }
+def term-completer [] { ["inchikey" "search" "url"] }
+def representation-completer [] { ["all" "cas" "einecs" "iupac_name" "names" "reach" "smiles" "stdinchi" "stdinchikey" "synonym"] }
 def type-completer-1 [] { ["mol" "smiles" "url"] }
 def top-completer [] { ["ECOTOX" "ENV FATE" "EXPOSURE" "P-CHEM" "TOX"] }
 def type-completer-2 [] { ["CompTox" "DOI" "citation" "citationowner" "endpointcategory" "facet" "isRobustStudy" "like" "name" "owner_name" "owner_uuid" "params" "purposeFlag" "reference" "regexp" "related" "reliability" "studyResultType" "substancetype" "topcategory" "uuif"] }
@@ -136,7 +139,7 @@ export def commands []: nothing -> table {
 # GET /enm/{db}/investigation
 # operationId: getInvestigationResults
 export def "get-investigation-results" [
-  db: string
+  db: string@db-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,8 +150,8 @@ export def "get-investigation-results" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer # query type (e.g. bystudytype)
-  --search: string # Search parameter, UUID of the investigation or a substance (e.g. PC_GRANULOMETRY_SECTION)
+  --type: string@type-completer # query type (required, e.g. bystudytype)
+  --search: string # Search parameter, UUID of the investigation or a substance (required, e.g. PC_GRANULOMETRY_SECTION)
   --inchikey: string # Search parameter, InChI key(s) of the substance component(s), comma delimited (e.g. YUYCVXFAYWRXLS-UHFFFAOYSA-N)
   --id: string # Search parameter, chemical structure or substance identifier(s), comma delimited
   --page: int # Starting page (e.g. 0)
@@ -157,6 +160,8 @@ export def "get-investigation-results" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db | is-empty) { error make --unspanned { msg: "path parameter 'db' must be non-empty" } }
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
+  if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "inchikey" $inchikey "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({db: (encode-path-segment $db)} | format pattern "/enm/{db}/investigation") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -181,9 +186,9 @@ export def "get-investigation-results" [
 # Docs: http://ambit.sf.net — Learn more about operations provided by this API.
 # operationId: searchByIdentifier
 export def "search-by-identifier" [
-  db: string
-  term: string
-  representation: string
+  db: string@db-completer
+  term: string@term-completer
+  representation: string@representation-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +235,7 @@ export def "search-by-identifier" [
 # Docs: http://ambit.sf.net — Learn more about operations provided by this API.
 # operationId: searchBySimilarity
 export def "search-by-similarity" [
-  db: string
+  db: string@db-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +284,7 @@ export def "search-by-similarity" [
 # Docs: http://ambit.sf.net — Learn more about operations provided by this API.
 # operationId: searchBySmarts
 export def "search-by-smarts" [
-  db: string
+  db: string@db-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +331,7 @@ export def "search-by-smarts" [
 # GET /enm/{db}/query/study
 # operationId: getEndpointSummary
 export def "get-endpoint-summary" [
-  db: string
+  db: string@db-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,7 +370,7 @@ export def "get-endpoint-summary" [
 # GET /enm/{db}/substance
 # operationId: getSubstances
 export def "get-substances" [
-  db: string
+  db: string@db-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -410,7 +415,7 @@ export def "get-substances" [
 # GET /enm/{db}/substance/{uuid}
 # operationId: getSubstanceByUUID
 export def "get-substance-by-uuid" [
-  db: string
+  db: string@db-completer
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -452,7 +457,7 @@ export def "get-substance-by-uuid" [
 # GET /enm/{db}/substance/{uuid}/composition
 # operationId: getSubstanceComposition
 export def "get-substance-composition" [
-  db: string
+  db: string@db-completer
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -494,7 +499,7 @@ export def "get-substance-composition" [
 # GET /enm/{db}/substance/{uuid}/structures
 # operationId: getSubstanceStructures
 export def "get-substance-structures" [
-  db: string
+  db: string@db-completer
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -535,7 +540,7 @@ export def "get-substance-structures" [
 # GET /enm/{db}/substance/{uuid}/study
 # operationId: getSubstanceStudy
 export def "get-substance-study" [
-  db: string
+  db: string@db-completer
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -581,7 +586,7 @@ export def "get-substance-study" [
 # GET /enm/{db}/substance/{uuid}/studySummary
 # operationId: getSubstanceStudySummary
 export def "get-substance-study-summary" [
-  db: string
+  db: string@db-completer
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

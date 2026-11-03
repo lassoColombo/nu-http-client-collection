@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -138,10 +138,11 @@ export def "subscription-definitions-operation-metadata-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2015-06-01
+  --api-version: string # Version of the API to be used with the client request. Current version is 2015-06-01 (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Subscription/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -174,10 +175,11 @@ export def "subscription-definitions-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2015-06-01
+  --api-version: string # Version of the API to be used with the client request. Current version is 2015-06-01 (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Subscription/subscriptionDefinitions" $qp $auth.query)
   let accept_val = "application/json"
@@ -211,11 +213,12 @@ export def "subscription-definitions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2015-06-01
+  --api-version: string # Version of the API to be used with the client request. Current version is 2015-06-01 (required)
 ]: nothing -> record<id: string, name: string, properties: record<etag: string, offerType: string, subscriptionDisplayName: string, subscriptionId: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_definition_name: (encode-path-segment $subscription_definition_name)} | format pattern "/providers/Microsoft.Subscription/subscriptionDefinitions/{subscription_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -250,13 +253,14 @@ export def "subscription-definitions-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2015-06-01
+  --api-version: string # Version of the API to be used with the client request. Current version is 2015-06-01 (required)
   --properties: any # The subscription definition properties. — shape: {etag?: string, offerType?: string, subscriptionDisplayName?: string}
 ]: any -> record<id: string, name: string, properties: record<etag: string, offerType: string, subscriptionDisplayName: string, subscriptionId: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_definition_name: (encode-path-segment $subscription_definition_name)} | format pattern "/providers/Microsoft.Subscription/subscriptionDefinitions/{subscription_definition_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -292,11 +296,12 @@ export def "subscription-definitions-get-operation-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2015-06-01
+  --api-version: string # Version of the API to be used with the client request. Current version is 2015-06-01 (required)
 ]: nothing -> record<id: string, name: string, properties: record<etag: string, offerType: string, subscriptionDisplayName: string, subscriptionId: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({operation_id: (encode-path-segment $operation_id)} | format pattern "/providers/Microsoft.Subscription/subscriptionOperations/{operation_id}") $qp $auth.query)
   let accept_val = "application/json"

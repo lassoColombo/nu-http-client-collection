@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -464,19 +464,19 @@ export def "get-schools-for-district" [
   --limit: int
   --starting-after: string
   --ending-before: string
-  --qp-where: string
+  --where: string
 ]: nothing -> record<data: table<data: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $where "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/districts/{id}/schools") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $qp_where} | compact)
+    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $where} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -505,19 +505,19 @@ export def "get-sections-for-district" [
   --limit: int
   --starting-after: string
   --ending-before: string
-  --qp-where: string
+  --where: string
 ]: nothing -> record<data: table<data: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $where "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/districts/{id}/sections") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $qp_where} | compact)
+    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $where} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -582,19 +582,19 @@ export def "get-students-for-district" [
   --limit: int
   --starting-after: string
   --ending-before: string
-  --qp-where: string
+  --where: string
 ]: nothing -> record<data: table<data: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $where "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/districts/{id}/students") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $qp_where} | compact)
+    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $where} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -623,19 +623,19 @@ export def "get-teachers-for-district" [
   --limit: int
   --starting-after: string
   --ending-before: string
-  --qp-where: string
+  --where: string
 ]: nothing -> record<data: table<data: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $where "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/districts/{id}/teachers") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $qp_where} | compact)
+    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $where} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -663,18 +663,18 @@ export def "get-school-admins" [
   --limit: int
   --starting-after: string
   --ending-before: string
-  --qp-where: string
+  --where: string
 ]: nothing -> record<data: table<data: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $where "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/school_admins" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $qp_where} | compact)
+    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $where} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -780,18 +780,18 @@ export def "get-schools" [
   --limit: int
   --starting-after: string
   --ending-before: string
-  --qp-where: string
+  --where: string
 ]: nothing -> record<data: table<data: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $where "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/schools" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $qp_where} | compact)
+    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $where} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -892,19 +892,19 @@ export def "get-sections-for-school" [
   --limit: int
   --starting-after: string
   --ending-before: string
-  --qp-where: string
+  --where: string
 ]: nothing -> record<data: table<data: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $where "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/schools/{id}/sections") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $qp_where} | compact)
+    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $where} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -933,19 +933,19 @@ export def "get-students-for-school" [
   --limit: int
   --starting-after: string
   --ending-before: string
-  --qp-where: string
+  --where: string
 ]: nothing -> record<data: table<data: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $where "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/schools/{id}/students") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $qp_where} | compact)
+    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $where} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -974,19 +974,19 @@ export def "get-teachers-for-school" [
   --limit: int
   --starting-after: string
   --ending-before: string
-  --qp-where: string
+  --where: string
 ]: nothing -> record<data: table<data: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $where "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/schools/{id}/teachers") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $qp_where} | compact)
+    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $where} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1014,18 +1014,18 @@ export def "get-sections" [
   --limit: int
   --starting-after: string
   --ending-before: string
-  --qp-where: string
+  --where: string
 ]: nothing -> record<data: table<data: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $where "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sections" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $qp_where} | compact)
+    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $where} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1277,18 +1277,18 @@ export def "get-students" [
   --limit: int
   --starting-after: string
   --ending-before: string
-  --qp-where: string
+  --where: string
 ]: nothing -> record<data: table<data: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $where "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/students" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $qp_where} | compact)
+    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $where} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1544,18 +1544,18 @@ export def "get-teachers" [
   --limit: int
   --starting-after: string
   --ending-before: string
-  --qp-where: string
+  --where: string
 ]: nothing -> record<data: table<data: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $where "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teachers" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $qp_where} | compact)
+    query: ({"limit": $limit, "starting_after": $starting_after, "ending_before": $ending_before, "where": $where} | compact)
     headers: $auth.headers
     body: null
     content_type: null

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -712,12 +712,13 @@ export def "verify-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Email to verify the login.
-  --qp-token: string # The token returned when the login was requested.
+  --qp-token: string # The token returned when the login was requested. (required)
   --token-name: string # The desired name for the token. It will be displayed on the user account details.
   --sso-user-id: string # The SAML Profile ID, when connecting a SAML Profile to a Team member for the first time.
 ]: nothing -> record<email: string, teamId: string, token: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "tokenName" $token_name "scalar") (serialize-qp "ssoUserId" $sso_user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/registration/verify" $qp $auth.query)
   let accept_val = "application/json"
@@ -805,6 +806,7 @@ export def "create-check" [
   let full_url = (build-url $base ({deployment_id: (encode-path-segment $deployment_id)} | format pattern "/v1/deployments/{deployment_id}/checks") $qp $auth.query)
   let req_body = {"blocking": $blocking, "detailsUrl": $details_url, "externalId": $external_id, "name": $name, "path": $path, "rerequestable": $rerequestable} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "blocking") == null) { error make --unspanned { msg: "required body field 'blocking' missing: pass --blocking or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1090,11 +1092,12 @@ export def "get-configurations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --view: string@view-completer
+  --view: string@view-completer # required
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($view == null) { error make --unspanned { msg: "required query parameter 'view' missing: pass --view" } }
   let qp = [(serialize-qp "view" $view "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/integrations/configurations" $qp $auth.query)
   let accept_val = "application/json"
@@ -1202,7 +1205,7 @@ export def "get-v1-integrations-search-repo" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string
-  --namespace-id: string
+  --namespace-id: string # nullable
   --provider: string@provider-completer
   --installation-id: string
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
@@ -2715,6 +2718,7 @@ export def "rename-secret" [
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/secrets/{name}") $qp $auth.query)
   let req_body = {"name": $body_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "name") == null) { error make --unspanned { msg: "required body field 'name' missing: pass --body-name or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2761,6 +2765,7 @@ export def "create-secret" [
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/secrets/{name}") $qp $auth.query)
   let req_body = {"decryptable": $decryptable, "name": $body_name, "projectId": $project_id, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "name") == null) { error make --unspanned { msg: "required body field 'name' missing: pass --body-name or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3196,7 +3201,7 @@ export def "list-aliases" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # Get only aliases of the given domain name
-  --qp-from: float # Get only aliases created after the provided timestamp
+  --from: float # Get only aliases created after the provided timestamp
   --limit: float # Maximum number of aliases to list from a request
   --project-id: string # Filter aliases from the given `projectId`
   --since: float # Get aliases created after this JavaScript timestamp
@@ -3206,14 +3211,14 @@ export def "list-aliases" [
 ]: nothing -> record<aliases: table<alias: string, created: string, createdAt: float, creator: record, deletedAt: float, deployment: record, deploymentId: string, projectId: string, protectionBypass: record, redirect: string, redirectStatusCode: float, uid: string, updatedAt: float>, pagination: record<count: float, next: float, prev: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "rollbackDeploymentId" $rollback_deployment_id "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "rollbackDeploymentId" $rollback_deployment_id "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/aliases" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"domain": $domain, "from": $qp_from, "limit": $limit, "projectId": $project_id, "since": $since, "until": $until, "rollbackDeploymentId": $rollback_deployment_id, "teamId": $team_id} | compact)
+    query: ({"domain": $domain, "from": $from, "limit": $limit, "projectId": $project_id, "since": $since, "until": $until, "rollbackDeploymentId": $rollback_deployment_id, "teamId": $team_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3239,7 +3244,7 @@ export def "get-alias" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: float # Get the alias only if it was created after the provided timestamp
+  --from: float # Get the alias only if it was created after the provided timestamp
   --project-id: string # Get the alias only if it is assigned to the provided project ID
   --since: float # Get the alias only if it was created after this JavaScript timestamp
   --until: float # Get the alias only if it was created before this JavaScript timestamp
@@ -3248,14 +3253,14 @@ export def "get-alias" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_or_alias | is-empty) { error make --unspanned { msg: "path parameter 'idOrAlias' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_or_alias: (encode-path-segment $id_or_alias)} | format pattern "/v4/aliases/{id_or_alias}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "projectId": $project_id, "since": $since, "until": $until, "teamId": $team_id} | compact)
+    query: ({"from": $from, "projectId": $project_id, "since": $since, "until": $until, "teamId": $team_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3367,12 +3372,13 @@ export def "check-domain-price" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # The name of the domain for which the price needs to be checked.
+  --name: string # The name of the domain for which the price needs to be checked. (required)
   --type: string@type-completer-3 # In which status of the domain the price needs to be checked.
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> record<period: float, price: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/domains/price" $qp $auth.query)
   let accept_val = "application/json"
@@ -3405,11 +3411,12 @@ export def "check-domain-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # The name of the domain for which we would like to check the status.
+  --name: string # The name of the domain for which we would like to check the status. (required)
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> record<available: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/domains/status" $qp $auth.query)
   let accept_val = "application/json"
@@ -3631,11 +3638,11 @@ export def "get-deployments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --app: string # Name of the deployment.
-  --qp-from: float # Gets the deployment created after this Date timestamp. (default: current time)
+  --from: float # Gets the deployment created after this Date timestamp. (default: current time)
   --limit: float # Maximum number of deployments to list from a request.
   --project-id: string # Filter deployments from the given `projectId`.
   --target: string@target-completer-1 # Filter deployments based on the environment.
-  --qp-to: float # Gets the deployment created before this Date timestamp. (default: current time)
+  --to: float # Gets the deployment created before this Date timestamp. (default: current time)
   --users: string # Filter out deployments based on users who have created the deployment.
   --since: float # Get Deployments created after this JavaScript timestamp.
   --until: float # Get Deployments created before this JavaScript timestamp.
@@ -3645,14 +3652,14 @@ export def "get-deployments" [
 ]: nothing -> record<deployments: table<aliasAssigned: any, aliasError: record, buildingAt: float, checksConclusion: string, checksState: string, created: float, createdAt: float, creator: record, inspectorUrl: string, isRollbackCandidate: bool, meta: record, name: string, ready: float, source: string, state: string, target: string, type: string, uid: string, url: string>, pagination: record<count: float, next: float, prev: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "app" $app "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "users" $users "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "rollbackCandidate" $rollback_candidate "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "app" $app "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "users" $users "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "rollbackCandidate" $rollback_candidate "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v6/deployments" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"app": $app, "from": $qp_from, "limit": $limit, "projectId": $project_id, "target": $target, "to": $qp_to, "users": $users, "since": $since, "until": $until, "state": $state, "rollbackCandidate": $rollback_candidate, "teamId": $team_id} | compact)
+    query: ({"app": $app, "from": $from, "limit": $limit, "projectId": $project_id, "target": $target, "to": $to, "users": $users, "since": $since, "until": $until, "state": $state, "rollbackCandidate": $rollback_candidate, "teamId": $team_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4192,7 +4199,7 @@ export def "upload-artifact" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
-  --content-length: float # The artifact size in bytes
+  --content-length: float # The artifact size in bytes (required)
   --x-artifact-duration: float # The time taken to generate the uploaded artifact in milliseconds.
   --x-artifact-client-ci: string # The continuous integration or delivery environment where this artifact was generated.
   --x-artifact-client-interactive: int # 1 if the client is an interactive shell. Otherwise 0
@@ -4203,6 +4210,7 @@ export def "upload-artifact" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hash | is-empty) { error make --unspanned { msg: "path parameter 'hash' must be non-empty" } }
+  if ($content_length == null) { error make --unspanned { msg: "required header parameter 'Content-Length' missing: pass --content-length" } }
   let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({hash: (encode-path-segment $hash)} | format pattern "/v8/artifacts/{hash}") $qp $auth.query)
   let req_body = $body
@@ -4239,7 +4247,7 @@ export def "get-projects" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # Query only projects updated after the given timestamp
+  --from: string # Query only projects updated after the given timestamp
   --git-fork-protection: string@git-fork-protection-completer # Specifies whether PRs from Git forks should require a team member's authorization before it can be deployed
   --limit: string # Limit the number of projects returned
   --search: string # Search projects by the name field
@@ -4254,14 +4262,14 @@ export def "get-projects" [
 ]: nothing -> record<pagination: record<count: float, next: float, prev: float>, projects: table<accountId: string, analytics: record, autoExposeSystemEnvs: bool, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurationId: string, createdAt: float, devCommand: string, directoryListing: bool, enablePreviewFeedback: bool, env: list, framework: string, gitForkProtection: bool, hasFloatingAliases: bool, id: string, installCommand: string, lastRollbackTarget: record, latestDeployments: list, link: any, live: bool, name: string, nodeVersion: string, outputDirectory: string, passwordProtection: record, permissions: record, protectionBypass: record, publicSource: bool, rootDirectory: string, serverlessFunctionRegion: string, skipGitConnectDuringLink: bool, sourceFilesOutsideRootDirectory: bool, ssoProtection: record, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "gitForkProtection" $git_fork_protection "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "repo" $repo "scalar") (serialize-qp "repoId" $repo_id "scalar") (serialize-qp "repoUrl" $repo_url "scalar") (serialize-qp "excludeRepos" $exclude_repos "scalar") (serialize-qp "edgeConfigId" $edge_config_id "scalar") (serialize-qp "edgeConfigTokenId" $edge_config_token_id "scalar") (serialize-qp "connectConfigurationId" $connect_configuration_id "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "gitForkProtection" $git_fork_protection "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "repo" $repo "scalar") (serialize-qp "repoId" $repo_id "scalar") (serialize-qp "repoUrl" $repo_url "scalar") (serialize-qp "excludeRepos" $exclude_repos "scalar") (serialize-qp "edgeConfigId" $edge_config_id "scalar") (serialize-qp "edgeConfigTokenId" $edge_config_token_id "scalar") (serialize-qp "connectConfigurationId" $connect_configuration_id "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v9/projects" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "gitForkProtection": $git_fork_protection, "limit": $limit, "search": $search, "repo": $repo, "repoId": $repo_id, "repoUrl": $repo_url, "excludeRepos": $exclude_repos, "edgeConfigId": $edge_config_id, "edgeConfigTokenId": $edge_config_token_id, "connectConfigurationId": $connect_configuration_id, "teamId": $team_id} | compact)
+    query: ({"from": $from, "gitForkProtection": $git_fork_protection, "limit": $limit, "search": $search, "repo": $repo, "repoId": $repo_id, "repoUrl": $repo_url, "excludeRepos": $exclude_repos, "edgeConfigId": $edge_config_id, "edgeConfigTokenId": $edge_config_token_id, "connectConfigurationId": $connect_configuration_id, "teamId": $team_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4741,20 +4749,20 @@ export def "filter-project-envs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --git-branch: string # If defined, the git branch of the environment variable to filter the results
   --decrypt: string@decrypt-completer # If true, the environment variable value will be decrypted
-  --qp-source: string # The source that is calling the endpoint.
+  --source: string # The source that is calling the endpoint.
   --team-id: string # The Team identifier or slug to perform the request on behalf of.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
-  let qp = [(serialize-qp "gitBranch" $git_branch "scalar") (serialize-qp "decrypt" $decrypt "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "gitBranch" $git_branch "scalar") (serialize-qp "decrypt" $decrypt "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_or_name: (encode-path-segment $id_or_name)} | format pattern "/v9/projects/{id_or_name}/env") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"gitBranch": $git_branch, "decrypt": $decrypt, "source": $qp_source, "teamId": $team_id} | compact)
+    query: ({"gitBranch": $git_branch, "decrypt": $decrypt, "source": $source, "teamId": $team_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null

@@ -1,4 +1,4 @@
-# Auto-generated client for Advicent.FactFinderService vv1
+# Auto-generated client for Advicent.FactFinderService v1
 # Source: https://api.apis.guru/v2/specs/naviplancentral.com/factfinder/v1/swagger.json
 # Auth: --token flag or $env.ADVICENT_FACTFINDERSERVICE_TOKEN
 
@@ -176,10 +176,11 @@ export def "account-types-get-by-country" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --country: string@country-completer # The country used to filter Account Types
+  --country: string@country-completer # The country used to filter Account Types (required)
 ]: nothing -> record<accountTypes: table<allowedSavingsTypes: list, id: int, links: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/AccountTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -250,11 +251,12 @@ export def "accounts-get-accounts-by-fact-finder-id-by-factfinderid-externalsour
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Accounts (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Accounts (required, format: int32)
   --external-source-id: string # The external ID used to filter Accounts
 ]: nothing -> record<accounts: table<accountId: int, accountType: int, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, lastUpdated: string, links: list, marketValue: float, owner: string, ownerDependentId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar") (serialize-qp "externalSourceId" $external_source_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Accounts" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1012,10 +1014,11 @@ export def "critical-illness-insurance-policies-get-critical-illness-insurance-p
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Critical Illness Insurance Policies (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Critical Illness Insurance Policies (required, format: int32)
 ]: nothing -> record<criticalIllnessInsurancePolicies: table<benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, insurancePolicyId: int, insured: string, links: list, policyType: int, premium: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/CriticalIllnessInsurancePolicies" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1217,10 +1220,11 @@ export def "critical-illness-insurance-policy-types-get-by-country" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --country: string@country-completer # The country used to filter Critical Illness Insurance Policy Types
+  --country: string@country-completer # The country used to filter Critical Illness Insurance Policy Types (required)
 ]: nothing -> record<insurancePolicyTypes: table<id: int, links: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/CriticalIllnessInsurancePolicyTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1291,10 +1295,11 @@ export def "defined-benefit-pensions-get-defined-benefit-pensions-by-fact-finder
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Defined Benefit Pensions (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Defined Benefit Pensions (required, format: int32)
 ]: nothing -> record<definedBenefitPensions: table<definedBenefitPensionId: int, description: string, estimatedAmount: float, externalDestinationId: string, factFinderId: int, links: list, member: string, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/DefinedBenefitPensions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1492,10 +1497,11 @@ export def "demographics-get-demographics-by-fact-finder-id-by-factfinderid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Demographic information (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Demographic information (required, format: int32)
 ]: nothing -> record<city: string, created: string, demographicsId: int, externalDestinationId: string, externalSourceId: string, factFinderId: int, head1: record<alreadyRetired: bool, birthDate: string, externalDestinationId: string, firstName: string, gender: string, lastName: string, taxFilingStatus: int>, head2: record<alreadyRetired: bool, birthDate: string, externalDestinationId: string, firstName: string, gender: string, lastName: string, taxFilingStatus: int>, jointAnalysis: bool, links: table<href: string, rel: string>, lockRetirement: bool, state: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Demographics" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1546,6 +1552,7 @@ export def "demographics-post-by-model" [
   let full_url = (build-url $base "/api/Demographics" $auth.query)
   let req_body = {"city": $city, "externalDestinationId": $external_destination_id, "externalSourceId": $external_source_id, "factFinderId": $fact_finder_id, "head1": $head1, "head2": $head2, "jointAnalysis": $joint_analysis, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "jointAnalysis") == null) { error make --unspanned { msg: "required body field 'jointAnalysis' missing: pass --joint-analysis or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1842,6 +1849,7 @@ export def "demographics-put-by-id-model" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Demographics/{id}") $auth.query)
   let req_body = {"city": $city, "externalDestinationId": $external_destination_id, "externalSourceId": $external_source_id, "factFinderId": $fact_finder_id, "head1": $head1, "head2": $head2, "jointAnalysis": $joint_analysis, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "jointAnalysis") == null) { error make --unspanned { msg: "required body field 'jointAnalysis' missing: pass --joint-analysis or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1873,10 +1881,11 @@ export def "disability-insurance-policies-get-disability-insurance-policies-by-f
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Disability Insurance Policies (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Disability Insurance Policies (required, format: int32)
 ]: nothing -> record<disabilityInsurancePolicies: table<benefit: float, benefitFrequency: int, benefitType: string, description: string, externalDestinationId: string, factFinderId: int, insurancePolicyId: int, insured: string, links: list, policyType: int, premium: float, premiumFrequency: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/DisabilityInsurancePolicies" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2082,10 +2091,11 @@ export def "disability-insurance-policy-types-get-by-country" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --country: string@country-completer # The country used to filter Disability Insurance Policy Types
+  --country: string@country-completer # The country used to filter Disability Insurance Policy Types (required)
 ]: nothing -> record<insurancePolicyTypes: table<id: int, links: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/DisabilityInsurancePolicyTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2156,10 +2166,11 @@ export def "education-goals-get-education-goals-by-fact-finder-id-by-factfinderi
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Education Goals (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Education Goals (required, format: int32)
 ]: nothing -> record<educationGoals: table<description: string, educationGoalId: int, externalDestinationId: string, factFinderId: int, links: list, projectedCost: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/EducationGoals" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2562,10 +2573,11 @@ export def "expense-types-get-by-country" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --country: string@country-completer # The country used to filter Expense Types
+  --country: string@country-completer # The country used to filter Expense Types (required)
 ]: nothing -> record<expenseTypes: table<id: int, links: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/ExpenseTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2636,10 +2648,11 @@ export def "expenses-get-expenses-by-fact-finder-id-by-factfinderid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Expenses (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Expenses (required, format: int32)
 ]: nothing -> record<expenses: table<annualPeriod: int, description: string, endDate: string, expenseAmount: float, expenseId: int, expenseTypeId: int, externalDestinationId: string, factFinderId: int, frequency: int, links: list, member: string, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Expenses" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3316,10 +3329,11 @@ export def "filing-status-types-get-by-country" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --country: string@country-completer # The country used to filter Filing Status Types
+  --country: string@country-completer # The country used to filter Filing Status Types (required)
 ]: nothing -> record<filingStatusTypes: table<filingStatusTypeId: int, filingStatusTypeName: string, hasJointDependent: bool, links: list, partnerStatuses: list, validForSingleAnalysis: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/FilingStatusTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3390,11 +3404,13 @@ export def "frequency-types-get-by-entity-country" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --entity: string@entity-completer # The entity used to filter Frequency Types
-  --country: string@country-completer # The country used to filter Frequency Types
+  --entity: string@entity-completer # The entity used to filter Frequency Types (required)
+  --country: string@country-completer # The country used to filter Frequency Types (required)
 ]: nothing -> record<frequencyTypes: table<id: int, links: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($entity == null) { error make --unspanned { msg: "required query parameter 'entity' missing: pass --entity" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "entity" $entity "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/FrequencyTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3465,10 +3481,11 @@ export def "income-types-get-by-country" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --country: string@country-completer # The country used to filter Income Types
+  --country: string@country-completer # The country used to filter Income Types (required)
 ]: nothing -> record<incomeTypes: table<id: int, links: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/IncomeTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3539,10 +3556,11 @@ export def "incomes-get-incomes-by-fact-finder-id-by-factfinderid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Incomes (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Incomes (required, format: int32)
 ]: nothing -> record<incomes: table<annualAmount: float, description: string, endDate: string, externalDestinationId: string, factFinderId: int, incomeId: int, incomeTypeId: int, links: list, owner: string, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Incomes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3744,11 +3762,12 @@ export def "liabilities-get-liabilities-by-fact-finder-id-by-factfinderid-extern
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Liabilities (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Liabilities (required, format: int32)
   --external-source-id: string # The external source ID used to filter Liabilities
 ]: nothing -> record<liabilities: table<balance: float, balanceAsOfDate: string, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, frequency: int, interestRate: float, lastUpdated: string, liabilityId: int, liabilityType: int, links: list, loanDate: string, originalPrincipal: float, owner: string, payment: float, paymentType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar") (serialize-qp "externalSourceId" $external_source_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Liabilities" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3966,10 +3985,11 @@ export def "liability-types-get-by-country" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --country: string@country-completer # The country used to filter Liability Types
+  --country: string@country-completer # The country used to filter Liability Types (required)
 ]: nothing -> record<liabilityTypes: table<id: int, links: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LiabilityTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4040,10 +4060,11 @@ export def "life-insurance-policies-get-life-insurance-policies-by-fact-finder-i
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Life Insurance Policies (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Life Insurance Policies (required, format: int32)
 ]: nothing -> record<lifeInsurancePolicies: table<beneficiary: string, beneficiaryDependentId: int, benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, generalAccountMarketValue: float, insurancePolicyId: int, insured: string, links: list, payer: string, policyType: int, premium: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LifeInsurancePolicies" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4458,10 +4479,11 @@ export def "life-insurance-policy-types-get-by-country" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --country: string@country-completer # The country used to filter Life Insurance Policy Types
+  --country: string@country-completer # The country used to filter Life Insurance Policy Types (required)
 ]: nothing -> record<insurancePolicyTypes: table<id: int, links: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LifeInsurancePolicyTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4532,10 +4554,11 @@ export def "lifestyle-asset-types-get-by-country" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --country: string@country-completer # The country used to filter Lifestyle Asset Types
+  --country: string@country-completer # The country used to filter Lifestyle Asset Types (required)
 ]: nothing -> record<lifestyleAssetTypes: table<id: int, links: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LifestyleAssetTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4606,10 +4629,11 @@ export def "lifestyle-assets-get-lifestyle-assets-by-fact-finder-id-by-factfinde
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Lifestyle Assets (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Lifestyle Assets (required, format: int32)
 ]: nothing -> record<lifestyleAssets: table<description: string, externalDestinationId: string, factFinderId: int, lifestyleAssetId: int, links: list, marketValue: float, owner: string, purchaseAmount: float, purchaseDate: string, type: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LifestyleAssets" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4811,10 +4835,11 @@ export def "long-term-care-insurance-policies-get-long-term-care-insurance-polic
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Long Term Care Insurance Policies (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Long Term Care Insurance Policies (required, format: int32)
 ]: nothing -> record<longTermCareInsurancePolicies: table<benefit: float, benefitFrequency: int, description: string, externalDestinationId: string, factFinderId: int, insurancePolicyId: int, insured: string, links: list, premium: float, premiumFrequency: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LongTermCareInsurancePolicies" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -5016,10 +5041,11 @@ export def "major-purchase-goal-types-get-by-country" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --country: string@country-completer # The country used to filter Major Purchase Goal Types
+  --country: string@country-completer # The country used to filter Major Purchase Goal Types (required)
 ]: nothing -> record<majorPurchaseGoalTypes: table<description: string, links: list, majorPurchaseGoalTypeId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/MajorPurchaseGoalTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -5090,10 +5116,11 @@ export def "major-purchase-goals-get-major-purchase-goals-by-fact-finder-id-by-f
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Major Purchases (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Major Purchases (required, format: int32)
 ]: nothing -> record<majorPurchaseGoals: table<amount: float, description: string, externalDestinationId: string, factFinderId: int, links: list, majorPurchaseGoalId: int, majorPurchaseGoalTypeId: int, member: string, targetDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/MajorPurchaseGoals" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -5293,11 +5320,12 @@ export def "presentation-get-accounts-by-factfinderid-externalsourceid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Accounts (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Accounts (required, format: int32)
   --external-source-id: string # The external ID used to filter Accounts
 ]: nothing -> record<accounts: table<accountId: int, accountType: int, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, holdings: list, lastUpdated: string, links: list, marketValue: float, owner: string, ownerDependentId: int, savingsStrategies: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar") (serialize-qp "externalSourceId" $external_source_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Presentation/Accounts" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -5331,10 +5359,11 @@ export def "presentation-get-demographic-owners-by-factfinderid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve owners. (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve owners. (required, format: int32)
 ]: nothing -> record<owners: table<displayName: string, owner: string, ownerDependentId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Presentation/Demographics/Owners" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -5403,10 +5432,11 @@ export def "presentation-get-incomes-by-factfinderid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Incomes (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Incomes (required, format: int32)
 ]: nothing -> record<incomes: table<annualAmount: float, description: string, endDate: string, externalDestinationId: string, factFinderId: int, incomeId: int, incomeTypeId: int, links: list, owner: string, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Presentation/Incomes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -5440,10 +5470,11 @@ export def "presentation-get-liabilities-by-factfinderid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Liabilities (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Liabilities (required, format: int32)
 ]: nothing -> record<liabilities: table<balance: float, balanceAsOfDate: string, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, frequency: int, interestRate: float, lastUpdated: string, liabilityId: int, liabilityType: int, links: list, loanDate: string, originalPrincipal: float, owner: string, payment: float, paymentType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Presentation/Liabilities" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -5477,10 +5508,11 @@ export def "presentation-get-life-insurance-policies-by-factfinderid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Life Insurance Policies. (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Life Insurance Policies. (required, format: int32)
 ]: nothing -> record<lifeInsurancePolicies: table<beneficiary: string, beneficiaryDependentId: int, benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, generalAccountMarketValue: float, insurancePolicyId: int, insured: string, links: list, payer: string, policyType: int, premium: float, subaccounts: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Presentation/LifeInsurancePolicies" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -5514,10 +5546,11 @@ export def "presentation-get-pensions-by-factfinderid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Pensions. (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Pensions. (required, format: int32)
 ]: nothing -> record<definedBenefitPensions: table<definedBenefitPensionId: int, description: string, estimatedAmount: float, externalDestinationId: string, factFinderId: int, links: list, member: string, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Presentation/Pensions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -5551,10 +5584,11 @@ export def "real-estate-assets-get-real-estate-assets-by-fact-finder-id-by-factf
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Real Estate Assets (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Real Estate Assets (required, format: int32)
 ]: nothing -> record<realEstateAssets: table<description: string, externalDestinationId: string, factFinderId: int, frequency: int, links: list, marketValue: float, owner: string, purchaseAmount: float, purchaseDate: string, realEstateAssetId: int, rentalIncome: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/RealEstateAssets" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -5758,10 +5792,11 @@ export def "retirement-goals-get-retirement-goals-by-fact-finder-id-by-factfinde
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Retirement Goals (format: int32)
+  --fact-finder-id: int # The ID of the Fact Finder used to retrieve Retirement Goals (required, format: int32)
 ]: nothing -> record<retirementGoals: table<externalDestinationId: string, factFinderId: int, head1RetirementDate: string, head2RetirementDate: string, links: list, retirementGoalId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
   let qp = [(serialize-qp "factFinderId" $fact_finder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/RetirementGoals" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -6203,10 +6238,11 @@ export def "states-provinces-get-by-country" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --country: string@country-completer # The country used to filter States and Provinces
+  --country: string@country-completer # The country used to filter States and Provinces (required)
 ]: nothing -> record<statesProvinces: table<links: list, stateProvinceId: int, stateProvinceName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/StatesProvinces" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

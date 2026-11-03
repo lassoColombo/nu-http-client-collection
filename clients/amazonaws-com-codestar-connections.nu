@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -96,12 +96,14 @@ def base-url-completer [] { ["http://codestar-connections.us-east-1.amazonaws.co
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def provider-type-completer [] { ["Bitbucket" "GitHub" "GitHubEnterpriseServer"] }
 def x-amz-target-completer [] { ["com.amazonaws.codestar.connections.CodeStar_connections_20191201.CreateConnection"] }
 def x-amz-target-completer-1 [] { ["com.amazonaws.codestar.connections.CodeStar_connections_20191201.CreateHost"] }
 def x-amz-target-completer-2 [] { ["com.amazonaws.codestar.connections.CodeStar_connections_20191201.DeleteConnection"] }
 def x-amz-target-completer-3 [] { ["com.amazonaws.codestar.connections.CodeStar_connections_20191201.DeleteHost"] }
 def x-amz-target-completer-4 [] { ["com.amazonaws.codestar.connections.CodeStar_connections_20191201.GetConnection"] }
 def x-amz-target-completer-5 [] { ["com.amazonaws.codestar.connections.CodeStar_connections_20191201.GetHost"] }
+def provider-type-filter-completer [] { ["Bitbucket" "GitHub" "GitHubEnterpriseServer"] }
 def x-amz-target-completer-6 [] { ["com.amazonaws.codestar.connections.CodeStar_connections_20191201.ListConnections"] }
 def x-amz-target-completer-7 [] { ["com.amazonaws.codestar.connections.CodeStar_connections_20191201.ListHosts"] }
 def x-amz-target-completer-8 [] { ["com.amazonaws.codestar.connections.CodeStar_connections_20191201.ListTagsForResource"] }
@@ -136,6 +138,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateConnection
+# --Tags item shape: {Key: string, Value: string}
 export def "create-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -153,15 +156,16 @@ export def "create-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  --provider-type: any
-  connection_name: any
-  --tags: any
-  --host-arn: any
-]: any -> record<ConnectionArn: record, Tags: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  --provider-type: string@provider-type-completer # The name of the external provider where your third-party code repository is configured.
+  connection_name: string # The name of the connection to be created. The name must be unique in the calling AWS account.
+  --tags: list # The key-value pair to use when tagging the resource. — item shape: {Key: string, Value: string}
+  --host-arn: string # The Amazon Resource Name (ARN) of the host associated with the connection to be created.
+]: any -> record<ConnectionArn: string, Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.codestar.connections.CodeStar_connections_20191201.CreateConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProviderType": $provider_type, "ConnectionName": $connection_name, "Tags": $tags, "HostArn": $host_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -187,7 +191,8 @@ export def "create-connection" [
 #
 # POST /
 # operationId: CreateHost
-# --Tags item shape: {Key: any, Value: any}
+# --VpcConfiguration shape: {VpcId: string, SubnetIds: list<string>, SecurityGroupIds: list<string>, TlsCertificate?: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-host" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -205,16 +210,17 @@ export def "create-host" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  name: any
-  provider_type: any
-  provider_endpoint: any
-  --vpc-configuration: any
-  --tags: list # item shape: {Key: any, Value: any}
-]: any -> record<HostArn: record, Tags: table<Key: record, Value: record>> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  name: string # The name of the host to be created. The name must be unique in the calling AWS account.
+  provider_type: string@provider-type-completer # The name of the installed provider to be associated with your connection. The host resource represents the infrastructure where your provider type is installed. The valid provider type is GitHub Enterprise Server.
+  provider_endpoint: string # The endpoint of the infrastructure to be represented by the host after it is created.
+  --vpc-configuration: record # The VPC configuration provisioned for the host. — shape: {VpcId: string, SubnetIds: list<string>, SecurityGroupIds: list<string>, TlsCertificate?: string}
+  --tags: list # item shape: {Key: string, Value: string}
+]: any -> record<HostArn: string, Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.codestar.connections.CodeStar_connections_20191201.CreateHost")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "ProviderType": $provider_type, "ProviderEndpoint": $provider_endpoint, "VpcConfiguration": $vpc_configuration, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -257,12 +263,13 @@ export def "delete-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  connection_arn: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  connection_arn: string # The Amazon Resource Name (ARN) of the connection to be deleted. The ARN is never reused if the connection is deleted.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.codestar.connections.CodeStar_connections_20191201.DeleteConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConnectionArn": $connection_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -305,12 +312,13 @@ export def "delete-host" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  host_arn: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  host_arn: string # The Amazon Resource Name (ARN) of the host to be deleted.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.codestar.connections.CodeStar_connections_20191201.DeleteHost")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HostArn": $host_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -353,12 +361,13 @@ export def "get-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  connection_arn: any
-]: any -> record<Connection: record<ConnectionName: record, ConnectionArn: record, ProviderType: record, OwnerAccountId: record, ConnectionStatus: record, HostArn: record>> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  connection_arn: string # The Amazon Resource Name (ARN) of a connection.
+]: any -> record<Connection: record<ConnectionName: string, ConnectionArn: string, ProviderType: string, OwnerAccountId: string, ConnectionStatus: string, HostArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.codestar.connections.CodeStar_connections_20191201.GetConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConnectionArn": $connection_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -401,12 +410,13 @@ export def "get-host" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  host_arn: any
-]: any -> record<Name: record, Status: record, ProviderType: record, ProviderEndpoint: record, VpcConfiguration: record<VpcId: record, SubnetIds: record, SecurityGroupIds: record, TlsCertificate: record>> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  host_arn: string # The Amazon Resource Name (ARN) of the requested host.
+]: any -> record<Name: string, Status: string, ProviderType: string, ProviderEndpoint: string, VpcConfiguration: record<VpcId: string, SubnetIds: list<string>, SecurityGroupIds: list<string>, TlsCertificate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.codestar.connections.CodeStar_connections_20191201.GetHost")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HostArn": $host_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -451,15 +461,16 @@ export def "list-connections" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  --provider-type-filter: any
-  --host-arn-filter: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Connections: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  --provider-type-filter: string@provider-type-filter-completer # Filters the list of connections to those associated with a specified provider, such as Bitbucket.
+  --host-arn-filter: string # Filters the list of connections to those associated with a specified host.
+  --max-results-body: int # The maximum number of results to return in a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
+  --next-token-body: string # The token that was returned from the previous ListConnections call, which can be used to return the next set of connections in the list. (body field)
+]: any -> record<Connections: table<ConnectionName: string, ConnectionArn: string, ProviderType: string, OwnerAccountId: string, ConnectionStatus: string, HostArn: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.codestar.connections.CodeStar_connections_20191201.ListConnections")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ProviderTypeFilter": $provider_type_filter, "HostArnFilter": $host_arn_filter, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -505,13 +516,14 @@ export def "list-hosts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Hosts: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  --max-results-body: int # The maximum number of results to return in a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
+  --next-token-body: string # The token that was returned from the previous ListHosts call, which can be used to return the next set of hosts in the list. (body field)
+]: any -> record<Hosts: table<Name: string, HostArn: string, ProviderType: string, ProviderEndpoint: string, VpcConfiguration: record, Status: string, StatusMessage: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.codestar.connections.CodeStar_connections_20191201.ListHosts")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -555,12 +567,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  resource_arn: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource for which you want to get information about tags, if any.
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.codestar.connections.CodeStar_connections_20191201.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -586,6 +599,7 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -603,13 +617,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource to which you want to add or update tags.
+  tags: list # The tags you want to modify or add to the resource. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.codestar.connections.CodeStar_connections_20191201.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -652,13 +667,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource to remove tags from.
+  tag_keys: list<string> # The list of keys for the tags to be removed from the resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.codestar.connections.CodeStar_connections_20191201.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -684,6 +700,7 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateHost
+# --VpcConfiguration shape: {VpcId: string, SubnetIds: list<string>, SecurityGroupIds: list<string>, TlsCertificate?: string}
 export def "update-host" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -701,14 +718,15 @@ export def "update-host" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  host_arn: any
-  --provider-endpoint: any
-  --vpc-configuration: any
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  host_arn: string # The Amazon Resource Name (ARN) of the host to be updated.
+  --provider-endpoint: string # The URL or endpoint of the host to be updated.
+  --vpc-configuration: record # The VPC configuration provisioned for the host. — shape: {VpcId: string, SubnetIds: list<string>, SecurityGroupIds: list<string>, TlsCertificate?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.codestar.connections.CodeStar_connections_20191201.UpdateHost")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HostArn": $host_arn, "ProviderEndpoint": $provider_endpoint, "VpcConfiguration": $vpc_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

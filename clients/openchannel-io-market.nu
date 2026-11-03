@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -144,6 +144,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # Completers for enum parameters
 def status-completer [] { ["approved" "inReview" "rejected" "suspended"] }
 def modified-by-completer [] { ["administrator" "developer"] }
+def period-completer [] { ["day" "month"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -182,7 +183,7 @@ export def "get-apps" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'name':'MyApp'} matches all the apps that have the name 'MyApp'
-  --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
+  --sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
   --user-id: string # The unique id of the user requesting this resource
@@ -190,14 +191,14 @@ export def "get-apps" [
 ]: nothing -> record<count: int, list: table<access: list, allow: record, appId: string, attributes: record, created: int, customData: record, developerId: string, isLive: bool, lastUpdated: int, model: list, name: string, ownership: record, randomize: int, rating: int, restrict: record, reviewCount: int, safeName: list, statistics: record, status: record, submittedDate: int, type: string, version: int>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "isOwner" $is_owner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "isOwner" $is_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "sort": $qp_sort, "pageNumber": $page_number, "limit": $limit, "userId": $user_id, "isOwner": $is_owner} | compact)
+    query: ({"query": $query, "sort": $sort, "pageNumber": $page_number, "limit": $limit, "userId": $user_id, "isOwner": $is_owner} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -221,8 +222,8 @@ export def "post-apps" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developer-id: string # The unique id of the developer that is adding this app
-  --name: string # The name of the app
+  --developer-id: string # The unique id of the developer that is adding this app (required)
+  --name: string # The name of the app (required)
   --type: string # The type for this app
   --model: string # A JSON object representing the pricing model type for this app
   --custom-data: string # A custom JSON object that you can create and attach to this record
@@ -233,6 +234,8 @@ export def "post-apps" [
 ]: nothing -> record<access: list<string>, allow: record<own: record, view: record>, appId: string, attributes: record, created: int, customData: record, developerId: string, isLatestVersion: bool, isLive: bool, lastUpdated: int, model: table<billingPeriod: string, billingPeriodUnit: int, commission: int, currency: string, customData: record, feePayer: string, license: string, modelId: string, price: int, subtype: string, trial: int, type: string>, name: string, parent: record<status: record<profanity: list, reason: string, value: string>>, rating: int, restrict: record<own: record, view: record>, reviewCount: int, safeName: list<string>, status: record<profanity: list<record>, reason: string, value: string>, type: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($developer_id == null) { error make --unspanned { msg: "required query parameter 'developerId' missing: pass --developer-id" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "developerId" $developer_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "customData" $custom_data "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "restrict" $restrict "scalar") (serialize-qp "allow" $allow "scalar") (serialize-qp "access" $access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps" $qp $auth.query)
   let accept_val = "*/*"
@@ -303,8 +306,8 @@ export def "get-apps-text-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'name':'MyApp'} matches all the documents that have the name 'MyApp'
-  --text: string # The text to search for.
-  --fields: string # A JSON array containing all the fields to be searched through. Example: ['name', 'customData.description']
+  --text: string # The text to search for. (required)
+  --fields: string # A JSON array containing all the fields to be searched through. Example: ['name', 'customData.description'] (required)
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
   --user-id: string # The unique id of the user requesting this resource
@@ -312,6 +315,8 @@ export def "get-apps-text-search" [
 ]: nothing -> record<count: int, list: table<access: list, allow: record, appId: string, attributes: record, created: int, customData: record, developerId: string, isLive: bool, lastUpdated: int, model: list, name: string, ownership: record, randomize: int, rating: int, restrict: record, reviewCount: int, safeName: list, statistics: record, status: record, submittedDate: int, type: string, version: int>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
+  if ($fields == null) { error make --unspanned { msg: "required query parameter 'fields' missing: pass --fields" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "isOwned" $is_owned "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps/textSearch" $qp $auth.query)
   let accept_val = "*/*"
@@ -344,21 +349,21 @@ export def "get-apps-versions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'name':'MyApp'} matches all the apps that have the name 'MyApp'
-  --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
+  --sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
   --developer-id: string # The unique id of the developer requesting this resource
 ]: nothing -> record<count: int, list: table<access: list, allow: record, appId: string, attributes: record, created: int, customData: record, developerId: string, isLatestVersion: bool, isLive: bool, lastUpdated: int, model: list, name: string, parent: record, rating: int, restrict: record, reviewCount: int, safeName: list, status: record, type: string, version: int>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "developerId" $developer_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "developerId" $developer_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps/versions" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "sort": $qp_sort, "pageNumber": $page_number, "limit": $limit, "developerId": $developer_id} | compact)
+    query: ({"query": $query, "sort": $sort, "pageNumber": $page_number, "limit": $limit, "developerId": $developer_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -383,11 +388,12 @@ export def "delete-apps-app-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developer-id: string # The unique id of the developer that is removing this app
+  --developer-id: string # The unique id of the developer that is removing this app (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
+  if ($developer_id == null) { error make --unspanned { msg: "required query parameter 'developerId' missing: pass --developer-id" } }
   let qp = [(serialize-qp "developerId" $developer_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -458,12 +464,14 @@ export def "post-apps-app-id-live" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developer-id: string # The unique id of the developer that is changing this AppVersion
-  --version: string # The new version of the live App
+  --developer-id: string # The unique id of the developer that is changing this AppVersion (required)
+  --version: string # The new version of the live App (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
+  if ($developer_id == null) { error make --unspanned { msg: "required query parameter 'developerId' missing: pass --developer-id" } }
+  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
   let qp = [(serialize-qp "developerId" $developer_id "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/live") $qp $auth.query)
   let accept_val = "application/json"
@@ -496,13 +504,15 @@ export def "post-apps-app-id-publish" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developer-id: string # The unique id of the developer that is modifying this app
-  --version: int # The version of the app to be published
+  --developer-id: string # The unique id of the developer that is modifying this app (required)
+  --version: int # The version of the app to be published (required)
   --auto-approve: oneof<nothing, bool> # If true, this AppVersion is automatically approved and becomes immediately available to end users
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
+  if ($developer_id == null) { error make --unspanned { msg: "required query parameter 'developerId' missing: pass --developer-id" } }
+  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
   let qp = [(serialize-qp "developerId" $developer_id "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "autoApprove" $auto_approve "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/publish") $qp $auth.query)
   let accept_val = "application/json"
@@ -536,12 +546,13 @@ export def "delete-apps-app-id-versions-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developer-id: string # The unique id of the developer that is removing this app
+  --developer-id: string # The unique id of the developer that is removing this app (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
+  if ($developer_id == null) { error make --unspanned { msg: "required query parameter 'developerId' missing: pass --developer-id" } }
   let qp = [(serialize-qp "developerId" $developer_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version: (encode-path-segment $version)} | format pattern "/apps/{app_id}/versions/{version}") $qp $auth.query)
   let accept_val = "application/json"
@@ -614,7 +625,7 @@ export def "patch-apps-app-id-versions-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developer-id: string # The unique id of the developer that is updating this app
+  --developer-id: string # The unique id of the developer that is updating this app (required)
   --name: string # The name of the app
   --type: string # The type for this app
   --model: string # A JSON object representing the pricing model type for this app
@@ -629,6 +640,7 @@ export def "patch-apps-app-id-versions-version" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
+  if ($developer_id == null) { error make --unspanned { msg: "required query parameter 'developerId' missing: pass --developer-id" } }
   let qp = [(serialize-qp "developerId" $developer_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "customData" $custom_data "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "restrict" $restrict "scalar") (serialize-qp "allow" $allow "scalar") (serialize-qp "access" $access "scalar") (serialize-qp "approvalRequired" $approval_required "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version: (encode-path-segment $version)} | format pattern "/apps/{app_id}/versions/{version}") $qp $auth.query)
   let accept_val = "*/*"
@@ -662,7 +674,7 @@ export def "post-apps-app-id-versions-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developer-id: string # The unique id of the developer that is updating this app
+  --developer-id: string # The unique id of the developer that is updating this app (required)
   --name: string # The name of the app
   --type: string # The type for this app
   --model: string # A JSON object representing the pricing model type for this app
@@ -677,6 +689,7 @@ export def "post-apps-app-id-versions-version" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
+  if ($developer_id == null) { error make --unspanned { msg: "required query parameter 'developerId' missing: pass --developer-id" } }
   let qp = [(serialize-qp "developerId" $developer_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "customData" $custom_data "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "restrict" $restrict "scalar") (serialize-qp "allow" $allow "scalar") (serialize-qp "access" $access "scalar") (serialize-qp "approvalRequired" $approval_required "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version: (encode-path-segment $version)} | format pattern "/apps/{app_id}/versions/{version}") $qp $auth.query)
   let accept_val = "*/*"
@@ -751,7 +764,7 @@ export def "post-custom-gateway-payment-ownership-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --amount: int # The total amount paid in cents
+  --amount: int # The total amount paid in cents (required)
   --date: int # The date (in milliseconds) of when this payment was made (format: int64)
   --fee-amount: int # The fee (in cents) paid to a payment processors or third parties to process this payment. Default is 0.
   --marketplace-amount: int # The amount (in cents) paid to the marketplace owner as a commission for the purchase of this app. Defaults based on the commission amount configured for this marketplace.
@@ -761,6 +774,7 @@ export def "post-custom-gateway-payment-ownership-id" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($ownership_id | is-empty) { error make --unspanned { msg: "path parameter 'ownershipId' must be non-empty" } }
+  if ($amount == null) { error make --unspanned { msg: "required query parameter 'amount' missing: pass --amount" } }
   let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "feeAmount" $fee_amount "scalar") (serialize-qp "marketplaceAmount" $marketplace_amount "scalar") (serialize-qp "developerAmount" $developer_amount "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ownership_id: (encode-path-segment $ownership_id)} | format pattern "/custom-gateway/payment/{ownership_id}") $qp $auth.query)
   let accept_val = "*/*"
@@ -793,7 +807,7 @@ export def "post-custom-gateway-refund-ownership-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --amount: int # The total amount refunded in cents
+  --amount: int # The total amount refunded in cents (required)
   --date: int # The date (in milliseconds) of when this refund was made (format: int64)
   --fee-amount: int # The fee (in cents) recovered from a payment processor or third party to process this payment. The default value is 0
   --marketplace-amount: int # The amount (in cents) recovered from the marketplace owner as a commission refund for the purchase of this app
@@ -803,6 +817,7 @@ export def "post-custom-gateway-refund-ownership-id" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($ownership_id | is-empty) { error make --unspanned { msg: "path parameter 'ownershipId' must be non-empty" } }
+  if ($amount == null) { error make --unspanned { msg: "required query parameter 'amount' missing: pass --amount" } }
   let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "feeAmount" $fee_amount "scalar") (serialize-qp "marketplaceAmount" $marketplace_amount "scalar") (serialize-qp "developerAmount" $developer_amount "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ownership_id: (encode-path-segment $ownership_id)} | format pattern "/custom-gateway/refund/{ownership_id}") $qp $auth.query)
   let accept_val = "*/*"
@@ -835,20 +850,20 @@ export def "get-developer-accounts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'name':'NASA'} matches all the developerAccounts that have the name 'NASA'
-  --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
+  --sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> record<count: int, list: table<customData: record, developerAccountId: string, developerId: string, email: string, name: string>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/developerAccounts" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "sort": $qp_sort, "pageNumber": $page_number, "limit": $limit} | compact)
+    query: ({"query": $query, "sort": $sort, "pageNumber": $page_number, "limit": $limit} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -943,7 +958,7 @@ export def "patch-developer-accounts-developer-account-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developer-id: string # The id of the developer that this account belongs to
+  --developer-id: string # The id of the developer that this account belongs to (required)
   --email: string # The contact email address
   --name: string # The name for the account
   --custom-data: string # A custom JSON object that you can create and attach to this record
@@ -951,6 +966,7 @@ export def "patch-developer-accounts-developer-account-id" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($developer_account_id | is-empty) { error make --unspanned { msg: "path parameter 'developerAccountId' must be non-empty" } }
+  if ($developer_id == null) { error make --unspanned { msg: "required query parameter 'developerId' missing: pass --developer-id" } }
   let qp = [(serialize-qp "developerId" $developer_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({developer_account_id: (encode-path-segment $developer_account_id)} | format pattern "/developerAccounts/{developer_account_id}") $qp $auth.query)
   let accept_val = "*/*"
@@ -983,7 +999,7 @@ export def "post-developer-accounts-developer-account-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developer-id: string # The id of the developer that this account belongs to
+  --developer-id: string # The id of the developer that this account belongs to (required)
   --email: string # The contact email address
   --name: string # The name for the account
   --custom-data: string # A custom JSON object that you can create and attach to this record
@@ -991,6 +1007,7 @@ export def "post-developer-accounts-developer-account-id" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($developer_account_id | is-empty) { error make --unspanned { msg: "path parameter 'developerAccountId' must be non-empty" } }
+  if ($developer_id == null) { error make --unspanned { msg: "required query parameter 'developerId' missing: pass --developer-id" } }
   let qp = [(serialize-qp "developerId" $developer_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({developer_account_id: (encode-path-segment $developer_account_id)} | format pattern "/developerAccounts/{developer_account_id}") $qp $auth.query)
   let accept_val = "*/*"
@@ -1023,20 +1040,20 @@ export def "get-developers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'name':'John'} matches all the developers that have the name 'John'
-  --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
+  --sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> record<count: int, list: table<created: int, customData: record, developerId: string, email: string, name: string, type: string>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/developers" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "sort": $qp_sort, "pageNumber": $page_number, "limit": $limit} | compact)
+    query: ({"query": $query, "sort": $sort, "pageNumber": $page_number, "limit": $limit} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1248,20 +1265,20 @@ export def "get-files" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'name':'file.txt'} matches all the files that have the name 'file.txt'
-  --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
+  --sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> record<contentType: string, fileId: string, fileUrl: string, hash: record<MD5: string, SHA_1: string, SHA_256: string>, mimeCheck: string, name: string, size: int, uploadDate: int, virusScan: record<finished: int, foundViruses: list<record>, started: int, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "sort": $qp_sort, "pageNumber": $page_number, "limit": $limit} | compact)
+    query: ({"query": $query, "sort": $sort, "pageNumber": $page_number, "limit": $limit} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1298,8 +1315,8 @@ export def "post-files" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1327,10 +1344,11 @@ export def "get-files-by-id-or-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --file-id-or-url: string # The fileId or fileUrl of the file to be returned
+  --file-id-or-url: string # The fileId or fileUrl of the file to be returned (required)
 ]: nothing -> record<contentType: string, fileId: string, fileUrl: string, hash: record<MD5: string, SHA_1: string, SHA_256: string>, mimeCheck: string, name: string, size: int, uploadDate: int, virusScan: record<finished: int, foundViruses: list<record>, started: int, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($file_id_or_url == null) { error make --unspanned { msg: "required query parameter 'fileIdOrUrl' missing: pass --file-id-or-url" } }
   let qp = [(serialize-qp "fileIdOrUrl" $file_id_or_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files/byIdOrUrl" $qp $auth.query)
   let accept_val = "*/*"
@@ -1362,11 +1380,12 @@ export def "get-files-download" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --file-id: string # The URL of the file to be uploaded
+  --file-id: string # The URL of the file to be uploaded (required)
   --valid-seconds: int # The number of seconds that this signed URL should be valid for. The default is 60.
 ]: nothing -> record<url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($file_id == null) { error make --unspanned { msg: "required query parameter 'fileId' missing: pass --file-id" } }
   let qp = [(serialize-qp "fileId" $file_id "scalar") (serialize-qp "validSeconds" $valid_seconds "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files/download" $qp $auth.query)
   let accept_val = "*/*"
@@ -1398,11 +1417,12 @@ export def "post-files-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # The URL of the file to be uploaded
+  --url: string # The URL of the file to be uploaded (required)
   --is-private: oneof<nothing, bool> # If true, this file will be protected as a private file and require the generation of a signed URL in order to download using the Download File API. The default is false.
 ]: nothing -> record<contentType: string, fileId: string, fileUrl: string, hash: record<MD5: string, SHA_1: string, SHA_256: string>, mimeCheck: string, name: string, size: int, uploadDate: int, virusScan: record<finished: int, foundViruses: list<record>, started: int, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "isPrivate" $is_private "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files/url" $qp $auth.query)
   let accept_val = "*/*"
@@ -1468,20 +1488,20 @@ export def "get-ownership" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'userId':'12'} matches all the ownership records that have the userId '12'.
-  --qp-sort: string # A sort document. Example: {'date':1} sorts the results by date in ascending order
+  --sort: string # A sort document. Example: {'date':1} sorts the results by date in ascending order
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> record<count: int, list: table<appId: string, customData: record, date: int, developerId: string, expires: int, model: record, ownershipId: string, ownershipStatus: string, ownershipType: string, uninstallDate: int, userId: string>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ownership" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "sort": $qp_sort, "pageNumber": $page_number, "limit": $limit} | compact)
+    query: ({"query": $query, "sort": $sort, "pageNumber": $page_number, "limit": $limit} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1505,14 +1525,16 @@ export def "post-ownership-install" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # The id of the App being owned
-  --user-id: string # The id of the User requesting to own the App
+  --app-id: string # The id of the App being owned (required)
+  --user-id: string # The id of the User requesting to own the App (required)
   --model-id: string # The id of the model associated with this ownership request
   --model: string # A custom model that will override the app's default model for this install
   --custom-data: string # A custom JSON object to attach to this ownership record
 ]: nothing -> record<appId: string, customData: record, date: int, developerId: string, expires: int, model: record<billingPeriod: string, billingPeriodUnit: int, commission: int, currency: string, customData: record, feePayer: string, license: string, modelId: string, price: int, subtype: string, trial: int, type: string>, ownershipId: string, ownershipStatus: string, ownershipType: string, uninstallDate: int, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($app_id == null) { error make --unspanned { msg: "required query parameter 'appId' missing: pass --app-id" } }
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'userId' missing: pass --user-id" } }
   let qp = [(serialize-qp "appId" $app_id "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "modelId" $model_id "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ownership/install" $qp $auth.query)
   let accept_val = "*/*"
@@ -1545,13 +1567,14 @@ export def "post-ownership-uninstall-ownership-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-id: string # The id of the User requesting to uninstall the App
+  --user-id: string # The id of the User requesting to uninstall the App (required)
   --cancel-ownership: oneof<nothing, bool> # True if this app will require payment to be re-installed. Default is false
   --custom-data: string # A custom JSON object to attach to this ownership record
 ]: nothing -> record<appId: string, customData: record, date: int, developerId: string, expires: int, model: record<billingPeriod: string, billingPeriodUnit: int, commission: int, currency: string, customData: record, feePayer: string, license: string, modelId: string, price: int, subtype: string, trial: int, type: string>, ownershipId: string, ownershipStatus: string, ownershipType: string, uninstallDate: int, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($ownership_id | is-empty) { error make --unspanned { msg: "path parameter 'ownershipId' must be non-empty" } }
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'userId' missing: pass --user-id" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "cancelOwnership" $cancel_ownership "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ownership_id: (encode-path-segment $ownership_id)} | format pattern "/ownership/uninstall/{ownership_id}") $qp $auth.query)
   let accept_val = "*/*"
@@ -1695,11 +1718,12 @@ export def "delete-permission-apps-app-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-id: string # The id of the user
+  --user-id: string # The id of the user (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'userId' missing: pass --user-id" } }
   let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/permission/apps/{app_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1732,11 +1756,12 @@ export def "get-permission-apps-app-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-id: string # The id of the user
+  --user-id: string # The id of the user (required)
 ]: nothing -> record<access: list<string>, appId: string, date: int, ip: string, isValid: bool, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'userId' missing: pass --user-id" } }
   let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/permission/apps/{app_id}") $qp $auth.query)
   let accept_val = "*/*"
@@ -1769,13 +1794,14 @@ export def "post-permission-apps-app-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-id: string # The id of the user
+  --user-id: string # The id of the user (required)
   --date: int # The time (in milliseconds) of when the user agreed to the access request (format: int64)
   --ip: string # The ip address of the user agreeing to the access request
 ]: nothing -> record<access: list<string>, appId: string, date: int, ip: string, isValid: bool, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'userId' missing: pass --user-id" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/permission/apps/{app_id}") $qp $auth.query)
   let accept_val = "*/*"
@@ -1808,20 +1834,20 @@ export def "get-reviews" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'rating': 500} matches all the reviews that have a rating of 500.
-  --qp-sort: string # A sort document. Example: {'rating':1} sorts the results by rating in ascending order
+  --sort: string # A sort document. Example: {'rating':1} sorts the results by rating in ascending order
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> record<count: int, list: table<appId: string, customData: string, description: string, headline: string, rating: int, reportDate: int, reviewId: string, status: record, type: string, user: record, userAccount: record, userAccountId: string, userId: string>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reviews" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "sort": $qp_sort, "pageNumber": $page_number, "limit": $limit} | compact)
+    query: ({"query": $query, "sort": $sort, "pageNumber": $page_number, "limit": $limit} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1845,12 +1871,12 @@ export def "post-reviews" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # The id of the App that will own this review
-  --user-id: string # The id of the User that is posting this review
+  --app-id: string # The id of the App that will own this review (required)
+  --user-id: string # The id of the User that is posting this review (required)
   --user-account-id: string # The id of the User account that is posting this review
-  --headline: string # The review's headline. Limited to 50 characters.
-  --rating: int # The rating given within this review. The rating is represented as an integer between 0 and 500 (0 - 5 stars)
-  --description: string # The review's description. Limited to 2000 characters.
+  --headline: string # The review's headline. Limited to 50 characters. (required)
+  --rating: int # The rating given within this review. The rating is represented as an integer between 0 and 500 (0 - 5 stars) (required)
+  --description: string # The review's description. Limited to 2000 characters. (required)
   --type: string # The type for this review
   --must-own-app: oneof<nothing, bool> # True if a review can be created only by a user that has owned the app. The default is True.
   --auto-approve: oneof<nothing, bool> # True if the review should be automatically approved. The default is False.
@@ -1858,6 +1884,11 @@ export def "post-reviews" [
 ]: nothing -> record<appId: string, customData: string, description: string, headline: string, rating: int, reportDate: int, reviewId: string, status: record<profanity: list<record>, reason: string, value: string>, type: string, user: record<created: int, customData: record, email: string, name: string, type: string, userId: string>, userAccount: record<customData: record, email: string, name: string, userAccountId: string, userId: string>, userAccountId: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($app_id == null) { error make --unspanned { msg: "required query parameter 'appId' missing: pass --app-id" } }
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'userId' missing: pass --user-id" } }
+  if ($headline == null) { error make --unspanned { msg: "required query parameter 'headline' missing: pass --headline" } }
+  if ($rating == null) { error make --unspanned { msg: "required query parameter 'rating' missing: pass --rating" } }
+  if ($description == null) { error make --unspanned { msg: "required query parameter 'description' missing: pass --description" } }
   let qp = [(serialize-qp "appId" $app_id "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "userAccountId" $user_account_id "scalar") (serialize-qp "headline" $headline "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "mustOwnApp" $must_own_app "scalar") (serialize-qp "autoApprove" $auto_approve "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reviews" $qp $auth.query)
   let accept_val = "*/*"
@@ -1890,12 +1921,13 @@ export def "delete-reviews-review-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-id: string # The id of the User that is removing this review
+  --user-id: string # The id of the User that is removing this review (required)
   --user-account-id: string # The id of the User account that is emoving this review
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'userId' missing: pass --user-id" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "userAccountId" $user_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/reviews/{review_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1963,7 +1995,7 @@ export def "patch-reviews-review-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-id: string # The id of the User that is updating this review
+  --user-id: string # The id of the User that is updating this review (required)
   --user-account-id: string # The id of the User account that is posting this review
   --headline: string # The review's headline. Limited to 50 characters.
   --rating: int # The rating given within this review. The rating is represented as an integer between 0 and 500 (0 - 5 stars)
@@ -1973,6 +2005,7 @@ export def "patch-reviews-review-id" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'userId' missing: pass --user-id" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "userAccountId" $user_account_id "scalar") (serialize-qp "headline" $headline "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/reviews/{review_id}") $qp $auth.query)
   let accept_val = "*/*"
@@ -2005,16 +2038,21 @@ export def "post-reviews-review-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-id: string # The id of the User that is updating this review
-  --user-account-id: string # The id of the User account that is posting this review
-  --headline: string # The review's headline. Limited to 50 characters.
-  --rating: int # The rating given within this review. The rating is represented as an integer between 0 and 500 (0 - 5 stars)
-  --description: string # The review's description. Limited to 2000 characters.
+  --user-id: string # The id of the User that is updating this review (required)
+  --user-account-id: string # The id of the User account that is posting this review (required)
+  --headline: string # The review's headline. Limited to 50 characters. (required)
+  --rating: int # The rating given within this review. The rating is represented as an integer between 0 and 500 (0 - 5 stars) (required)
+  --description: string # The review's description. Limited to 2000 characters. (required)
   --custom-data: string # A custom JSON object that you can create and attach to this record
 ]: nothing -> record<appId: string, customData: string, description: string, headline: string, rating: int, reportDate: int, reviewId: string, status: record<profanity: list<record>, reason: string, value: string>, type: string, user: record<created: int, customData: record, email: string, name: string, type: string, userId: string>, userAccount: record<customData: record, email: string, name: string, userAccountId: string, userId: string>, userAccountId: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'userId' missing: pass --user-id" } }
+  if ($user_account_id == null) { error make --unspanned { msg: "required query parameter 'userAccountId' missing: pass --user-account-id" } }
+  if ($headline == null) { error make --unspanned { msg: "required query parameter 'headline' missing: pass --headline" } }
+  if ($rating == null) { error make --unspanned { msg: "required query parameter 'rating' missing: pass --rating" } }
+  if ($description == null) { error make --unspanned { msg: "required query parameter 'description' missing: pass --description" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "userAccountId" $user_account_id "scalar") (serialize-qp "headline" $headline "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/reviews/{review_id}") $qp $auth.query)
   let accept_val = "*/*"
@@ -2047,7 +2085,7 @@ export def "post-stats-increment-field" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # The id of the app associated with this statistic value
+  --app-id: string # The id of the app associated with this statistic value (required)
   --user-id: string # The id of the user that is performing the action
   --value: int # The increment amount. Default is 1 if no value is provided.
   --date: int # The date (in millis) for when this increment occurred. The default is the current date if no value is provided. (format: int64)
@@ -2055,6 +2093,7 @@ export def "post-stats-increment-field" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($field | is-empty) { error make --unspanned { msg: "path parameter 'field' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required query parameter 'appId' missing: pass --app-id" } }
   let qp = [(serialize-qp "appId" $app_id "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({field: (encode-path-segment $field)} | format pattern "/stats/increment/{field}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2077,7 +2116,7 @@ export def "post-stats-increment-field" [
 #
 # GET /stats/series/{period}/{fields}
 export def "get-stats-series-period-fields" [
-  period: string
+  period: string@period-completer
   fields: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2127,13 +2166,14 @@ export def "get-stats-total" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: string # A comma seperated list of all the fields to be returned in the total (available by default: dislikes, likes, reviews, totalSales, developerSales, marketplaceSales, downloads, ownerships, views)
+  --fields: string # A comma seperated list of all the fields to be returned in the total (available by default: dislikes, likes, reviews, totalSales, developerSales, marketplaceSales, downloads, ownerships, views) (required)
   --query: string # A query document. Example: {'developerId': '112'} matches all the apps that have the developer with id 112
   --start: int # The start date for this total (in millis) (format: int64)
   --end: int # The end date for this total (in millis) (format: int64)
 ]: nothing -> record<apps: record<_appId: record<_field: int>>, end: int, start: int, totals: record<_field: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($fields == null) { error make --unspanned { msg: "required query parameter 'fields' missing: pass --fields" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/total" $qp $auth.query)
   let accept_val = "*/*"
@@ -2201,11 +2241,12 @@ export def "post-stripe-gateway-developer-developer-id-accounts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --redirect-url: string # The URL to redirect this developer after they have connected their Stripe account
+  --redirect-url: string # The URL to redirect this developer after they have connected their Stripe account (required)
 ]: nothing -> record<developerId: string, expires: int, targetUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($developer_id | is-empty) { error make --unspanned { msg: "path parameter 'developerId' must be non-empty" } }
+  if ($redirect_url == null) { error make --unspanned { msg: "required query parameter 'redirectUrl' missing: pass --redirect-url" } }
   let qp = [(serialize-qp "redirectUrl" $redirect_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({developer_id: (encode-path-segment $developer_id)} | format pattern "/stripe-gateway/developer/{developer_id}/accounts") $qp $auth.query)
   let accept_val = "*/*"
@@ -2310,12 +2351,13 @@ export def "post-stripe-gateway-user-user-id-cards" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # The Stripe token returned by the Stripe.js Stripe.card.createToken call
+  --qp-token: string # The Stripe token returned by the Stripe.js Stripe.card.createToken call (required)
   --is-default: oneof<nothing, bool> # Set to true if this should be set to be the default credit card
 ]: nothing -> record<cards: table<address_city: string, address_country: string, address_line1: string, address_line2: string, address_state: string, address_zip: string, brand: string, cardId: string, exp_month: int, exp_year: int, isDefault: bool, last4: string, name: string>, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "isDefault" $is_default "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/stripe-gateway/user/{user_id}/cards") $qp $auth.query)
   let accept_val = "*/*"
@@ -2430,20 +2472,20 @@ export def "get-transactions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'userId':'1'} matches all the transactions that have the userId '1'.
-  --qp-sort: string # A sort document. Example: {'date':1} sorts the results by total in ascending order
+  --sort: string # A sort document. Example: {'date':1} sorts the results by total in ascending order
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> record<count: int, list: table<amount: int, appId: string, customData: record, date: int, developerAmount: int, developerId: string, feeAmount: int, marketplaceAmount: int, ownershipId: string, transactionId: string, type: string, userId: string>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/transactions" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "sort": $qp_sort, "pageNumber": $page_number, "limit": $limit} | compact)
+    query: ({"query": $query, "sort": $sort, "pageNumber": $page_number, "limit": $limit} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2575,20 +2617,20 @@ export def "get-user-accounts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'name':'NASA'} matches all the userAccounts that have the name 'NASA'
-  --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
+  --sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> record<count: int, list: table<customData: record, email: string, name: string, userAccountId: string, userId: string>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/userAccounts" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "sort": $qp_sort, "pageNumber": $page_number, "limit": $limit} | compact)
+    query: ({"query": $query, "sort": $sort, "pageNumber": $page_number, "limit": $limit} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2683,7 +2725,7 @@ export def "patch-user-accounts-user-account-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-id: string # The Id of the user that this account belongs to
+  --user-id: string # The Id of the user that this account belongs to (required)
   --email: string # The contact email address
   --name: string # The user account name
   --custom-data: string # A custom JSON object that you can create and attach to this record
@@ -2691,6 +2733,7 @@ export def "patch-user-accounts-user-account-id" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($user_account_id | is-empty) { error make --unspanned { msg: "path parameter 'userAccountId' must be non-empty" } }
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'userId' missing: pass --user-id" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_account_id: (encode-path-segment $user_account_id)} | format pattern "/userAccounts/{user_account_id}") $qp $auth.query)
   let accept_val = "*/*"
@@ -2723,7 +2766,7 @@ export def "post-user-accounts-user-account-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-id: string # The Id of the user that this account belongs to
+  --user-id: string # The Id of the user that this account belongs to (required)
   --email: string # The contact email address
   --name: string # The user account name
   --custom-data: string # A custom JSON object that you can create and attach to this record
@@ -2731,6 +2774,7 @@ export def "post-user-accounts-user-account-id" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($user_account_id | is-empty) { error make --unspanned { msg: "path parameter 'userAccountId' must be non-empty" } }
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'userId' missing: pass --user-id" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_account_id: (encode-path-segment $user_account_id)} | format pattern "/userAccounts/{user_account_id}") $qp $auth.query)
   let accept_val = "*/*"
@@ -2763,20 +2807,20 @@ export def "get-users" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'name':'John'} matches all the users that have the name 'John'
-  --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
+  --sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> record<count: int, list: table<created: int, customData: record, email: string, name: string, type: string, userId: string>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "sort": $qp_sort, "pageNumber": $page_number, "limit": $limit} | compact)
+    query: ({"query": $query, "sort": $sort, "pageNumber": $page_number, "limit": $limit} | compact)
     headers: $auth.headers
     body: null
     content_type: null

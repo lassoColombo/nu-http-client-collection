@@ -132,7 +132,7 @@ export def "clear-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   ethereumaddress: string
   newaddress: string
   password: string
@@ -140,6 +140,7 @@ export def "clear-address" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/clearAddress" $auth.query)
   let req_body = {"ethereumaddress": $ethereumaddress, "newaddress": $newaddress, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -175,13 +176,14 @@ export def "delete-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   ethereumaddress: string
   password: string
 ]: any -> record<deleted: bool, ethereumaddress: string, ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/deleteAddress" $auth.query)
   let req_body = {"ethereumaddress": $ethereumaddress, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -217,13 +219,14 @@ export def "export-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   ethaddress: string
   password: string
 ]: any -> record<content: string, filename: string, ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/exportAddress" $auth.query)
   let req_body = {"ethaddress": $ethaddress, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -259,12 +262,13 @@ export def "get-block" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   block: string
 ]: any -> record<block_number: string, difficulty: string, gas_limit: string, gas_used: string, hash: string, miner: string, ok: bool, parent_hash: string, size_in_bytes: string, time_stamp: string, transactions_count: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/getBlock" $auth.query)
   let req_body = {"block": $block} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -300,12 +304,13 @@ export def "get-ethereum-balance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   ethereumaddress: string
 ]: any -> record<balance: float, ethereumaddress: string, ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/getEthereumBalance" $auth.query)
   let req_body = {"ethereumaddress": $ethereumaddress} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -341,12 +346,13 @@ export def "get-exchange-rate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   currency: string
 ]: any -> record<currency: string, ok: bool, rate: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/getExchangeRate" $auth.query)
   let req_body = {"currency": $currency} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -382,11 +388,12 @@ export def "get-gas-price" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # e.g. application/json
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --content-type: string # required, e.g. application/json
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
 ]: nothing -> record<gasprice: int, ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/getGasPrice" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -420,11 +427,12 @@ export def "get-last-block-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # e.g. application/json
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --content-type: string # required, e.g. application/json
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
 ]: nothing -> record<blocknumber: int, ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/getLastBlockNumber" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -458,12 +466,13 @@ export def "get-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   contractaddress: string
 ]: any -> record<contractaddress: string, decimals: int, name: string, ok: bool, supply: int, symbol: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/getToken" $auth.query)
   let req_body = {"contractaddress": $contractaddress} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -499,13 +508,14 @@ export def "get-token-balance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   contractaddress: string
   ethereumaddress: string
 ]: any -> record<balance: int, contractaddress: string, ethereumaddress: string, ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/getTokenBalance" $auth.query)
   let req_body = {"contractaddress": $contractaddress, "ethereumaddress": $ethereumaddress} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -541,12 +551,13 @@ export def "get-transactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   txid: string
 ]: any -> record<ok: bool, transactions: table<amount: string, block_number: string, contract_address: string, from: string, gas: string, gas_price: string, to: string, token_decimals: string, token_name: string, token_supply: string, token_symbol: string, txid: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/getTransactions" $auth.query)
   let req_body = {"txid": $txid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -583,7 +594,7 @@ export def "import-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   content: record # e.g. {address: 71892889ed4d79d88ab6ea3783b571b8ece9bef4, crypto: {cipher: aes-128-ctr, cipherparams: {iv: 76e6f2497b9f2a8e024fc752a5418a6d}, ciphertext: 9d74262517b984f9b0560b8f23b5e3340f7be0f56b70cd91ff445dcaf5b1968f, kdf: scrypt, kdfparams: {dklen: 32, n: 131072, p: 1, r: 8, salt: d11d996a7cc4bfad730d4c9b9057eff2c0fb3940b5bfc59db62ae218c14a54f4}, mac: dcc342bbbbb8eea97c89b47bafc23de568fc1a48e0bd21ae8d776a95c4704ac9}, id: 85b790ff-408e-42b8-b123-bec9523964dc, version: 3} — shape: {address: string, crypto: record, id: string, version: int}
   filename: string
   password: string
@@ -591,6 +602,7 @@ export def "import-address" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/importAddress" $auth.query)
   let req_body = {"content": $content, "filename": $filename, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -626,11 +638,12 @@ export def "list-addresses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # e.g. application/json
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --content-type: string # required, e.g. application/json
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
 ]: nothing -> record<addresses: table<ethereumaddress: string>, ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/listAddresses" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -664,11 +677,12 @@ export def "list-failed-ip-ns" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # e.g. application/json
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --content-type: string # required, e.g. application/json
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
 ]: nothing -> record<failed_ipns: table<action: string, amount: string, contractaddress: string, ethereumaddress: string, id: string, timestamp: string, url: string>, ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/listFailedIPNs" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -702,11 +716,12 @@ export def "list-subscribed-addresses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # e.g. application/json
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --content-type: string # required, e.g. application/json
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
 ]: nothing -> record<ipns: table<contractaddress: string, ethereumaddress: string, url: string>, ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/listSubscribedAddresses" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -740,12 +755,13 @@ export def "new-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   password: string
 ]: any -> record<ethereumaddress: string, ok: bool, password: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/newAddress" $auth.query)
   let req_body = {"password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -781,12 +797,13 @@ export def "resend-failed-ipn" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   id: int # format: int32
 ]: any -> record<id: int, ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/resendFailedIPN" $auth.query)
   let req_body = {"id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -822,17 +839,18 @@ export def "send-ethereum" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   amount: float
-  --body-from: string
+  from: string
   password: string
-  --body-to: string
+  to: string
 ]: any -> record<amount: string, from: string, ok: bool, to: string, txid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/sendEthereum" $auth.query)
-  let req_body = {"amount": $amount, "from": $body_from, "password": $password, "to": $body_to} | compact
+  let req_body = {"amount": $amount, "from": $from, "password": $password, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -866,19 +884,20 @@ export def "send-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   amount: int # format: int32
   contractaddress: string
-  --body-from: string
+  from: string
   identifier: string
   password: string
-  --body-to: string
+  to: string
 ]: any -> record<amount: int, contractaddress: string, from: string, identifier: string, ok: bool, to: string, txid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/sendToken" $auth.query)
-  let req_body = {"amount": $amount, "contractaddress": $contractaddress, "from": $body_from, "identifier": $identifier, "password": $password, "to": $body_to} | compact
+  let req_body = {"amount": $amount, "contractaddress": $contractaddress, "from": $from, "identifier": $identifier, "password": $password, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -912,7 +931,7 @@ export def "subscribe-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   contractaddress: string
   ethereumaddress: string
   url: string
@@ -920,6 +939,7 @@ export def "subscribe-address" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/subscribeAddress" $auth.query)
   let req_body = {"contractaddress": $contractaddress, "ethereumaddress": $ethereumaddress, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -955,7 +975,7 @@ export def "unsubscribe-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
+  --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   contractaddress: string
   ethereumaddress: string
   url: string
@@ -963,6 +983,7 @@ export def "unsubscribe-address" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/unsubscribeAddress" $auth.query)
   let req_body = {"contractaddress": $contractaddress, "ethereumaddress": $ethereumaddress, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

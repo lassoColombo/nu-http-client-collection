@@ -172,7 +172,7 @@ export def "id-get-application-file-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<applications: table<application_file: string, created_at: string, id: list, location: record, name: string, updated_at: string, user_id: string>, page: int, page_size: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/application/" $auth.query)
@@ -206,7 +206,7 @@ export def "id-post-application-file-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<application_file: string, created_at: string, id: list<int>, location: record, name: string, updated_at: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/application/" $auth.query)
@@ -275,7 +275,7 @@ export def "id-post-deploy-application-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --upload-yaml-yml-file: string # format: binary
-]: any -> any {
+]: any -> record<application_file: string, created_at: string, id: list<int>, location: record, name: string, updated_at: string, user_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
@@ -284,8 +284,8 @@ export def "id-post-deploy-application-file" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["Upload Yaml/Yml File"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["Upload Yaml/Yml File"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -351,7 +351,7 @@ export def "id-get-meshery-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<application_file: string, created_at: string, id: list<int>, location: record, name: string, updated_at: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -386,7 +386,7 @@ export def "id-get-filter-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<filters: table<created_at: string, filter_file: string, id: list, location: record, name: string, updated_at: string, user_id: string>, page: int, page_size: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/filter" $auth.query)
@@ -420,7 +420,7 @@ export def "id-post-filter-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_at: string, filter_file: string, id: list<int>, location: record, name: string, updated_at: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/filter" $auth.query)
@@ -455,7 +455,7 @@ export def "id-get-filter-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_at: string, filter_file: string, id: list<int>, location: record, name: string, updated_at: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -527,7 +527,7 @@ export def "id-get-meshery-filter" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_at: string, filter_file: string, id: list<int>, location: record, name: string, updated_at: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -634,7 +634,7 @@ export def "id-get-pattern-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<page: int, page_size: int, patterns: table<created_at: string, id: list, location: record, name: string, pattern_file: string, updated_at: string, user_id: string>, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/pattern" $auth.query)
@@ -668,7 +668,7 @@ export def "id-post-pattern-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_at: string, id: list<int>, location: record, name: string, pattern_file: string, updated_at: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/pattern" $auth.query)
@@ -746,8 +746,8 @@ export def "id-post-deploy-pattern" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["Upload Yaml/Yml File"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["Upload Yaml/Yml File"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -813,7 +813,7 @@ export def "id-get-meshery-pattern" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_at: string, id: list<int>, location: record, name: string, pattern_file: string, updated_at: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -838,7 +838,6 @@ export def "id-get-meshery-pattern" [
 #
 # GET /api/perf/profile
 # operationId: idRunPerfTest
-# --clients item shape: {body?: string, connections?: int, content_type?: string, cookies?: record, endpoint_urls?: list<string>, headers?: record, internal?: bool, load_generator?: string, protocol?: int, rps?: int}
 export def "id-run-perf-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -883,7 +882,7 @@ export def "id-get-all-perf-results" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<page: int, page_size: int, results: table<mesh: string, meshery_id: list, name: string, performance_profile: list, runner_results: record, server_board_config: record, server_metrics: record, test_start_time: string, user_id: list>, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/perf/profile/result" $auth.query)
@@ -918,7 +917,7 @@ export def "id-get-single-perf-result" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<ActualQPS: float, DetailsURI: string, EndTime: string, EnvID: string, Latencies: record<Average: float, Max: float, Min: float, P50: float, P90: float, P99: float>, MeshConfigID: string, SMPVersion: string, StartTime: string, TestID: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1057,7 +1056,7 @@ export def "id-get-providers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/providers" $auth.query)
@@ -1128,7 +1127,7 @@ export def "id-post-adapter-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> any {
+]: any -> table<adapter_location: string, git_commit_sha: string, name: string, ops: list<record>, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1206,7 +1205,7 @@ export def "id-get-system-adapters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --adapter: string
-]: nothing -> any {
+]: nothing -> table<adapter_location: string, git_commit_sha: string, name: string, ops: list<record>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "adapter" $adapter "scalar")] | flatten | str join "&"
@@ -1275,7 +1274,7 @@ export def "id-post-k8s-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<clusterConfigured: bool, config: list<int>, configuredServer: string, contextName: string, inClusterConfig: bool, k8sfile: string, nodes: table<allocatable_cpu: string, allocatable_memory: string, architecture: string, capacity_cpu: string, capacity_memory: string, container_runtime_version: string, hostname: string, internal_ip: string, kubelet_version: string, kubeproxy_version: string, operating_system: string, os_image: string>, server_version: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/system/kubernetes" $auth.query)
@@ -1309,7 +1308,7 @@ export def "id-post-k8s-contexts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<clusterName: string, contextName: string, currentContext: bool> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/system/kubernetes/contexts" $auth.query)
@@ -1377,7 +1376,7 @@ export def "id-mesh-sync-grafana" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/system/meshsync/grafana" $auth.query)
@@ -1411,7 +1410,7 @@ export def "id-mesh-sync-prometheus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/system/meshsync/prometheus" $auth.query)
@@ -1445,7 +1444,7 @@ export def "id-system-sync" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<anonymousPerfResults: bool, anonymousUsageStats: bool, grafana: record<grafanaAPIKey: string, grafanaURL: string, selectedBoardsConfigs: list<record>>, k8sConfig: record<clusterConfigured: bool, config: list<int>, configuredServer: string, contextName: string, inClusterConfig: bool, k8sfile: string, nodes: list<record>, server_version: string>, loadTestPrefs: record<c: int, gen: string, qps: int, t: string>, meshAdapters: table<adapter_location: string, git_commit_sha: string, name: string, ops: list, version: string>, prometheus: record<prometheusURL: string, selectedPrometheusBoardsConfigs: list<record>>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/system/sync" $auth.query)
@@ -1479,7 +1478,7 @@ export def "id-get-system-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<build: string, commitsha: string, latest: string, outdated: bool, release_channel: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/system/version" $auth.query)
@@ -1513,7 +1512,7 @@ export def "id-post-prometheus-board-import" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<org_id: int, panels: table<alert: record, aliasColors: record, bars: bool, cards: record, collapsed: bool, color: record, colorBackground: bool, colorValue: bool, colors: list, columns: list, content: string, dashLength: int, dashboardTags: list, dashes: bool, dataFormat: string, datasource: string, decimals: int, description: string, editable: bool, error: bool, fieldConfig: record, fill: int, folderId: int, format: string, gauge: record, gridPos: record, headings: bool, height: record, hideTimeOverride: bool, hideZeroBuckets: bool, highlightCards: bool, id: int, isNew: bool, leftYAxisLabel: string, legend: record, limit: int, lines: bool, linewidth: int, links: list, mappingType: int, mappingTypes: list, maxDataPoints: record, minSpan: float, mode: string, nameFilter: string, nullPointMode: string, onlyAlertsOnDashboard: bool, options: record, pageSize: int, panels: list, percentage: bool, pointradius: float, points: bool, postfix: string, postfixFontSize: string, prefix: string, prefixFontSize: string, query: string, rangeMaps: list, recent: bool, renderer: string, repeat: string, repeatPanelId: int, reverseYBuckets: bool, rightYAxisLabel: string, scopedVars: record, scroll: bool, search: bool, seriesOverrides: list, show: string, showHeader: bool, sort: record, sortOrder: int, spaceLength: int, span: float, sparkline: record, stack: bool, starred: bool, stateFilter: list, steppedLine: bool, styles: list, tags: list, targets: list, thresholds: string, timeFrom: string, timeShift: string, title: string, tooltip: record, tooltipDecimals: int, transform: string, transparent: bool, type: string, valueFontSize: string, valueMaps: list, valueName: string, x_axis: bool, xAxis: record, xBucketNumber: float, xBucketSize: string, xaxis: record, y_axis: bool, yAxis: record, yBucketBound: string, yBucketNumber: float, yBucketSize: float, y_formats: list, yaxes: list>, slug: string, template_vars: table<datasource: record, hide: int, name: string, query: string, value: record>, title: string, uid: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/telemetry/metrics/board_import" $auth.query)
@@ -1619,7 +1618,7 @@ export def "id-get-prometheus-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<prometheusURL: string, selectedPrometheusBoardsConfigs: table<board: record, panels: list, templateVars: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/telemetry/metrics/config" $auth.query)
@@ -1692,7 +1691,7 @@ export def "id-get-grafana-boards" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --dashboard-search: string
-]: nothing -> any {
+]: nothing -> table<org_id: int, panels: list<record>, slug: string, template_vars: list<record>, title: string, uid: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dashboardSearch" $dashboard_search "scalar")] | flatten | str join "&"
@@ -1795,7 +1794,7 @@ export def "id-get-grafana-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<grafanaAPIKey: string, grafanaURL: string, selectedBoardsConfigs: table<board: record, panels: list, templateVars: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/telemetry/metrics/grafana/config" $auth.query)
@@ -1936,7 +1935,7 @@ export def "id-get-grafana" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/telemetry/metrics/grafana/scan" $auth.query)
@@ -2038,7 +2037,7 @@ export def "id-get-prometheus-static-board" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/telemetry/metrics/static-board" $auth.query)
@@ -2140,7 +2139,7 @@ export def "id-get-performance-profiles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<page: int, page_size: int, profiles: table<concurrent_request: int, content_type: string, created_at: record, duration: string, endpoints: list, id: list, last_run: record, load_generators: list, name: string, qps: int, request_body: string, request_cookies: string, request_headers: string, schedule: list, service_mesh: string, total_results: int, updated_at: record>, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/user/performance/profiles" $auth.query)
@@ -2181,7 +2180,7 @@ export def "id-save-performance-profile" [
   --name: string # name of performance profile
   --qps: int # qps in integer (format: int64)
   --service-mesh: string # service mesh for performance tests
-]: any -> any {
+]: any -> record<concurrent_request: int, content_type: string, created_at: record, duration: string, endpoints: list<string>, id: list<int>, last_run: record, load_generators: list<string>, name: string, qps: int, request_body: string, request_cookies: string, request_headers: string, schedule: list<int>, service_mesh: string, total_results: int, updated_at: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2218,7 +2217,7 @@ export def "id-get-all-performance-results" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<page: int, page_size: int, results: table<mesh: string, meshery_id: list, name: string, performance_profile: list, runner_results: record, server_board_config: record, server_metrics: record, test_start_time: string, user_id: list>, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/user/performance/profiles/results" $auth.query)
@@ -2289,7 +2288,7 @@ export def "id-get-single-performance-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<concurrent_request: int, content_type: string, created_at: record, duration: string, endpoints: list<string>, id: list<int>, last_run: record, load_generators: list<string>, name: string, qps: int, request_body: string, request_cookies: string, request_headers: string, schedule: list<int>, service_mesh: string, total_results: int, updated_at: record> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2325,7 +2324,7 @@ export def "id-get-profile-results" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<page: int, page_size: int, results: table<mesh: string, meshery_id: list, name: string, performance_profile: list, runner_results: record, server_board_config: record, server_metrics: record, test_start_time: string, user_id: list>, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2396,7 +2395,7 @@ export def "id-get-user-test-prefs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<anonymousPerfResults: bool, anonymousUsageStats: bool, grafana: record<grafanaAPIKey: string, grafanaURL: string, selectedBoardsConfigs: list<record>>, k8sConfig: record<clusterConfigured: bool, config: list<int>, configuredServer: string, contextName: string, inClusterConfig: bool, k8sfile: string, nodes: list<record>, server_version: string>, loadTestPrefs: record<c: int, gen: string, qps: int, t: string>, meshAdapters: table<adapter_location: string, git_commit_sha: string, name: string, ops: list, version: string>, prometheus: record<prometheusURL: string, selectedPrometheusBoardsConfigs: list<record>>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/user/prefs" $auth.query)
@@ -2430,7 +2429,7 @@ export def "id-post-user-test-prefs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<anonymousPerfResults: bool, anonymousUsageStats: bool, grafana: record<grafanaAPIKey: string, grafanaURL: string, selectedBoardsConfigs: list<record>>, k8sConfig: record<clusterConfigured: bool, config: list<int>, configuredServer: string, contextName: string, inClusterConfig: bool, k8sfile: string, nodes: list<record>, server_version: string>, loadTestPrefs: record<c: int, gen: string, qps: int, t: string>, meshAdapters: table<adapter_location: string, git_commit_sha: string, name: string, ops: list, version: string>, prometheus: record<prometheusURL: string, selectedPrometheusBoardsConfigs: list<record>>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/user/prefs" $auth.query)
@@ -2501,7 +2500,7 @@ export def "id-get-load-preferences" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --uuid: string # format: uuid
-]: nothing -> any {
+]: nothing -> record<clients: table<body: string, connections: int, content_type: string, cookies: record, endpoint_urls: list, headers: record, internal: bool, load_generator: string, protocol: int, rps: int>, duration: string, id: string, labels: record, name: string, smp_version: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "uuid" $uuid "scalar")] | flatten | str join "&"
@@ -2580,7 +2579,7 @@ export def "id-get-schedules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<page: int, page_size: int, schedules: table<cron_expression: string, id: list>, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/user/schedules" $auth.query)
@@ -2614,7 +2613,7 @@ export def "id-post-schedules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<cron_expression: string, id: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/user/schedules" $auth.query)
@@ -2649,7 +2648,7 @@ export def "id-delete-schedules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<page: int, page_size: int, schedules: table<cron_expression: string, id: list>, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2685,7 +2684,7 @@ export def "id-get-single-schedule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<cron_expression: string, id: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

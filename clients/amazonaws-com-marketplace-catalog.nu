@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -152,8 +152,8 @@ export def "cancel-change-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --catalog: string # Required. The catalog related to the request. Fixed value: AWSMarketplace.
-  --change-set-id: string # Required. The unique identifier of the StartChangeSet request that you want to cancel.
+  --catalog: string # Required. The catalog related to the request. Fixed value: AWSMarketplace. (required)
+  --change-set-id: string # Required. The unique identifier of the StartChangeSet request that you want to cancel. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -161,9 +161,11 @@ export def "cancel-change-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ChangeSetId: record, ChangeSetArn: record> {
+]: nothing -> record<ChangeSetId: string, ChangeSetArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($catalog == null) { error make --unspanned { msg: "required query parameter 'catalog' missing: pass --catalog" } }
+  if ($change_set_id == null) { error make --unspanned { msg: "required query parameter 'changeSetId' missing: pass --change-set-id" } }
   let qp = [(serialize-qp "catalog" $catalog "scalar") (serialize-qp "changeSetId" $change_set_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/CancelChangeSet" $qp $auth.query)
   let accept_val = "application/json"
@@ -198,7 +200,7 @@ export def "delete-resource-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The Amazon Resource Name (ARN) of the Entity resource that is associated with the resource policy.
+  --resource-arn: string # The Amazon Resource Name (ARN) of the Entity resource that is associated with the resource policy. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -209,6 +211,7 @@ export def "delete-resource-policy" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DeleteResourcePolicy" $qp $auth.query)
   let accept_val = "application/json"
@@ -243,8 +246,8 @@ export def "describe-change-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --catalog: string # Required. The catalog related to the request. Fixed value: AWSMarketplace
-  --change-set-id: string # Required. The unique identifier for the StartChangeSet request that you want to describe the details for.
+  --catalog: string # Required. The catalog related to the request. Fixed value: AWSMarketplace (required)
+  --change-set-id: string # Required. The unique identifier for the StartChangeSet request that you want to describe the details for. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -252,9 +255,11 @@ export def "describe-change-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ChangeSetId: record, ChangeSetArn: record, ChangeSetName: record, StartTime: record, EndTime: record, Status: record, FailureCode: record, FailureDescription: record, ChangeSet: record> {
+]: nothing -> record<ChangeSetId: string, ChangeSetArn: string, ChangeSetName: string, StartTime: string, EndTime: string, Status: string, FailureCode: string, FailureDescription: string, ChangeSet: table<ChangeType: string, Entity: record, Details: string, ErrorDetailList: list, ChangeName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($catalog == null) { error make --unspanned { msg: "required query parameter 'catalog' missing: pass --catalog" } }
+  if ($change_set_id == null) { error make --unspanned { msg: "required query parameter 'changeSetId' missing: pass --change-set-id" } }
   let qp = [(serialize-qp "catalog" $catalog "scalar") (serialize-qp "changeSetId" $change_set_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DescribeChangeSet" $qp $auth.query)
   let accept_val = "application/json"
@@ -289,8 +294,8 @@ export def "describe-entity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --catalog: string # Required. The catalog related to the request. Fixed value: AWSMarketplace
-  --entity-id: string # Required. The unique ID of the entity to describe.
+  --catalog: string # Required. The catalog related to the request. Fixed value: AWSMarketplace (required)
+  --entity-id: string # Required. The unique ID of the entity to describe. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -298,9 +303,11 @@ export def "describe-entity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EntityType: record, EntityIdentifier: record, EntityArn: record, LastModifiedDate: record, Details: record> {
+]: nothing -> record<EntityType: string, EntityIdentifier: string, EntityArn: string, LastModifiedDate: string, Details: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($catalog == null) { error make --unspanned { msg: "required query parameter 'catalog' missing: pass --catalog" } }
+  if ($entity_id == null) { error make --unspanned { msg: "required query parameter 'entityId' missing: pass --entity-id" } }
   let qp = [(serialize-qp "catalog" $catalog "scalar") (serialize-qp "entityId" $entity_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DescribeEntity" $qp $auth.query)
   let accept_val = "application/json"
@@ -335,7 +342,7 @@ export def "get-resource-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The Amazon Resource Name (ARN) of the Entity resource that is associated with the resource policy.
+  --resource-arn: string # The Amazon Resource Name (ARN) of the Entity resource that is associated with the resource policy. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -343,9 +350,10 @@ export def "get-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Policy: record> {
+]: nothing -> record<Policy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetResourcePolicy" $qp $auth.query)
   let accept_val = "application/json"
@@ -370,8 +378,8 @@ export def "get-resource-policy" [
 #
 # POST /ListChangeSets
 # operationId: ListChangeSets
-# --FilterList item shape: {Name?: any, ValueList?: any}
-# --Sort shape: {SortBy?: any, SortOrder?: any}
+# --FilterList item shape: {Name?: string, ValueList?: list<string>}
+# --Sort shape: {SortBy?: string, SortOrder?: "ASCENDING"|"DESCENDING"}
 export def "list-change-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -392,17 +400,17 @@ export def "list-change-sets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   catalog: string # The catalog related to the request. Fixed value: AWSMarketplace
-  --filter-list: list # An array of filter objects. — item shape: {Name?: any, ValueList?: any}
-  --body-sort: record # An object that contains two attributes, SortBy and SortOrder. — shape: {SortBy?: any, SortOrder?: any}
+  --filter-list: list # An array of filter objects. — item shape: {Name?: string, ValueList?: list<string>}
+  --sort: record # An object that contains two attributes, SortBy and SortOrder. — shape: {SortBy?: string, SortOrder?: "ASCENDING"|"DESCENDING"}
   --max-results-body: int # The maximum number of results returned by a single call. This value must be provided in the next call to retrieve the next set of results. By default, this value is 20. (body field)
   --next-token-body: string # The token value retrieved from a previous call to access the next page of results. (body field)
-]: any -> record<ChangeSetSummaryList: record, NextToken: record> {
+]: any -> record<ChangeSetSummaryList: table<ChangeSetId: string, ChangeSetArn: string, ChangeSetName: string, StartTime: string, EndTime: string, Status: string, EntityIdList: list, FailureCode: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListChangeSets" $qp $auth.query)
-  let req_body = {"Catalog": $catalog, "FilterList": $filter_list, "Sort": $body_sort, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
+  let req_body = {"Catalog": $catalog, "FilterList": $filter_list, "Sort": $sort, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -426,8 +434,8 @@ export def "list-change-sets" [
 #
 # POST /ListEntities
 # operationId: ListEntities
-# --FilterList item shape: {Name?: any, ValueList?: any}
-# --Sort shape: {SortBy?: any, SortOrder?: any}
+# --FilterList item shape: {Name?: string, ValueList?: list<string>}
+# --Sort shape: {SortBy?: string, SortOrder?: "ASCENDING"|"DESCENDING"}
 export def "list-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -449,18 +457,18 @@ export def "list-entities" [
   --x-amz-signed-headers: string
   catalog: string # The catalog related to the request. Fixed value: AWSMarketplace
   entity_type: string # The type of entities to retrieve.
-  --filter-list: list # An array of filter objects. Each filter object contains two attributes, filterName and filterValues. — item shape: {Name?: any, ValueList?: any}
-  --body-sort: record # An object that contains two attributes, SortBy and SortOrder. — shape: {SortBy?: any, SortOrder?: any}
+  --filter-list: list # An array of filter objects. Each filter object contains two attributes, filterName and filterValues. — item shape: {Name?: string, ValueList?: list<string>}
+  --sort: record # An object that contains two attributes, SortBy and SortOrder. — shape: {SortBy?: string, SortOrder?: "ASCENDING"|"DESCENDING"}
   --next-token-body: string # The value of the next token, if it exists. Null if there are no more results. (body field)
   --max-results-body: int # Specifies the upper limit of the elements on a single page. If a value isn't provided, the default value is 20. (body field)
   --ownership-type: string@ownership-type-completer
-]: any -> record<EntitySummaryList: record, NextToken: record> {
+]: any -> record<EntitySummaryList: table<Name: string, EntityType: string, EntityId: string, EntityArn: string, LastModifiedDate: string, Visibility: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListEntities" $qp $auth.query)
-  let req_body = {"Catalog": $catalog, "EntityType": $entity_type, "FilterList": $filter_list, "Sort": $body_sort, "NextToken": $next_token_body, "MaxResults": $max_results_body, "OwnershipType": $ownership_type} | compact
+  let req_body = {"Catalog": $catalog, "EntityType": $entity_type, "FilterList": $filter_list, "Sort": $sort, "NextToken": $next_token_body, "MaxResults": $max_results_body, "OwnershipType": $ownership_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -502,7 +510,7 @@ export def "list-tags-for-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   resource_arn: string # Required. The Amazon Resource Name (ARN) associated with the resource you want to list tags on.
-]: any -> record<ResourceArn: record, Tags: record> {
+]: any -> record<ResourceArn: string, Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -579,8 +587,8 @@ export def "put-resource-policy" [
 #
 # POST /StartChangeSet
 # operationId: StartChangeSet
-# --ChangeSet item shape: {ChangeType: any, Entity: any, EntityTags?: any, Details: any, ChangeName?: any}
-# --ChangeSetTags item shape: {Key: any, Value: any}
+# --ChangeSet item shape: {ChangeType: string, Entity: record, EntityTags?: list, Details: string, ChangeName?: string}
+# --ChangeSetTags item shape: {Key: string, Value: string}
 export def "start-change-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -599,11 +607,11 @@ export def "start-change-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   catalog: string # The catalog related to the request. Fixed value: AWSMarketplace
-  change_set: list # Array of change object. — item shape: {ChangeType: any, Entity: any, EntityTags?: any, Details: any, ChangeName?: any}
+  change_set: list # Array of change object. — item shape: {ChangeType: string, Entity: record, EntityTags?: list, Details: string, ChangeName?: string}
   --change-set-name: string # Optional case sensitive string of up to 100 ASCII characters. The change set name can be used to filter the list of change sets.
   --client-request-token: string # A unique token to identify the request to ensure idempotency.
-  --change-set-tags: list # A list of objects specifying each key name and value for the ChangeSetTags property. — item shape: {Key: any, Value: any}
-]: any -> record<ChangeSetId: record, ChangeSetArn: record> {
+  --change-set-tags: list # A list of objects specifying each key name and value for the ChangeSetTags property. — item shape: {Key: string, Value: string}
+]: any -> record<ChangeSetId: string, ChangeSetArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -632,7 +640,7 @@ export def "start-change-set" [
 #
 # POST /TagResource
 # operationId: TagResource
-# --Tags item shape: {Key: any, Value: any}
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -651,7 +659,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   resource_arn: string # Required. The Amazon Resource Name (ARN) associated with the resource you want to tag.
-  tags: list # Required. A list of objects specifying each key name and value. Number of objects allowed: 1-50. — item shape: {Key: any, Value: any}
+  tags: list # Required. A list of objects specifying each key name and value. Number of objects allowed: 1-50. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

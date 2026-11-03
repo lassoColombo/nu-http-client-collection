@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -132,12 +132,13 @@ export def "tenant-activity-logs-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --filter: string # Reduces the set of data collected. The **$filter** is very restricted and allows only the following patterns.- List events for a resource group: $filter=eventTimestamp ge '' and eventTimestamp le '' and eventChannels eq 'Admin, Operation' and resourceGroupName eq ''.- List events for resource: $filter=eventTimestamp ge '' and eventTimestamp le '' and eventChannels eq 'Admin, Operation' and resourceUri eq ''.- List events for a subscription: $filter=eventTimestamp ge '' and eventTimestamp le '' and eventChannels eq 'Admin, Operation'.- List events for a resource provider: $filter=eventTimestamp ge '' and eventTimestamp le '' and eventChannels eq 'Admin, Operation' and resourceProvider eq ''.- List events for a correlation Id: api-version=2014-04-01&$filter=eventTimestamp ge '2014-07-16T04:36:37.6407898Z' and eventTimestamp le '2014-07-20T04:36:37.6407898Z' and eventChannels eq 'Admin, Operation' and correlationId eq ''.**NOTE**: No other syntax is allowed.
   --select: string # Used to fetch events with only the given properties.The **$select** argument is a comma separated list of property names to be returned. Possible values are: *authorization*, *claims*, *correlationId*, *description*, *eventDataId*, *eventName*, *eventTimestamp*, *httpRequest*, *level*, *operationId*, *operationName*, *properties*, *resourceGroupName*, *resourceProviderName*, *resourceId*, *status*, *submissionTimestamp*, *subStatus*, *subscriptionId*
 ]: nothing -> record<nextLink: string, value: table<authorization: record, caller: string, category: record, claims: record, correlationId: string, description: string, eventDataId: string, eventName: record, eventTimestamp: string, httpRequest: record, id: string, level: string, operationId: string, operationName: record, properties: record, resourceGroupName: string, resourceId: string, resourceProviderName: record, resourceType: record, status: record, subStatus: record, submissionTimestamp: string, subscriptionId: string, tenantId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/microsoft.insights/eventtypes/management/values" $qp $auth.query)
   let accept_val = "application/json"

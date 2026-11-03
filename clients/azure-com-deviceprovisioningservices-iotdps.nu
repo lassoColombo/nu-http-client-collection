@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -158,10 +158,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API.
+  --api-version: string # The version of the API. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Devices/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -195,13 +196,14 @@ export def "iot-dps-resource-check-provisioning-service-name-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API.
+  --api-version: string # The version of the API. (required)
   name: string # The name of the Provisioning Service to check.
 ]: any -> record<message: string, nameAvailable: bool, reason: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Devices/checkProvisioningServiceNameAvailability") $qp $auth.query)
   let req_body = {"name": $name} | compact
@@ -237,11 +239,12 @@ export def "iot-dps-resource-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API.
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record>> {
+  --api-version: string # The version of the API. (required)
+]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Devices/provisioningServices") $qp $auth.query)
   let accept_val = "application/json"
@@ -276,12 +279,13 @@ export def "iot-dps-resource-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API.
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record>> {
+  --api-version: string # The version of the API. (required)
+]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices") $qp $auth.query)
   let accept_val = "application/json"
@@ -317,13 +321,14 @@ export def "iot-dps-resource-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API.
-]: nothing -> record<code: string, details: string, httpStatusCode: string, message: string> {
+  --api-version: string # The version of the API. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($provisioning_service_name | is-empty) { error make --unspanned { msg: "path parameter 'provisioningServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provisioning_service_name: (encode-path-segment $provisioning_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -359,13 +364,14 @@ export def "iot-dps-resource-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API.
-]: nothing -> record<etag: string, properties: record<allocationPolicy: string, authorizationPolicies: list<record>, deviceProvisioningHostName: string, idScope: string, iotHubs: list<record>, provisioningState: string, serviceOperationsHostName: string, state: string>, sku: record<capacity: int, name: string, tier: string>> {
+  --api-version: string # The version of the API. (required)
+]: nothing -> record<etag: string, properties: record<allocationPolicy: string, authorizationPolicies: list<record>, deviceProvisioningHostName: string, idScope: string, iotHubs: list<record>, provisioningState: string, serviceOperationsHostName: string, state: string>, sku: record<capacity: int, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($provisioning_service_name | is-empty) { error make --unspanned { msg: "path parameter 'provisioningServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provisioning_service_name: (encode-path-segment $provisioning_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -401,15 +407,16 @@ export def "iot-dps-resource-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API.
+  --api-version: string # The version of the API. (required)
   --tags: any # Resource tags
-]: any -> record<etag: string, properties: record<allocationPolicy: string, authorizationPolicies: list<record>, deviceProvisioningHostName: string, idScope: string, iotHubs: list<record>, provisioningState: string, serviceOperationsHostName: string, state: string>, sku: record<capacity: int, name: string, tier: string>> {
+]: any -> record<etag: string, properties: record<allocationPolicy: string, authorizationPolicies: list<record>, deviceProvisioningHostName: string, idScope: string, iotHubs: list<record>, provisioningState: string, serviceOperationsHostName: string, state: string>, sku: record<capacity: int, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($provisioning_service_name | is-empty) { error make --unspanned { msg: "path parameter 'provisioningServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provisioning_service_name: (encode-path-segment $provisioning_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -449,19 +456,20 @@ export def "iot-dps-resource-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API.
+  --api-version: string # The version of the API. (required)
   --etag: string # The Etag field is *not* required. If it is provided in the response body, it must also be provided as a header per the normal ETag convention.
   properties: record # the service specific properties of a provisioning service, including keys, linked iot hubs, current state, and system generated properties such as hostname and idScope — shape: {allocationPolicy?: "Hashed"|"GeoLatency"|"Static", authorizationPolicies?: list, iotHubs?: list, provisioningState?: string, state?: "Activating"|"Active"|"Deleting"|"Deleted"|"ActivationFailed"|"DeletionFailed"|"Transitioning"|"Suspending"|"Suspended"|"Resuming"|"FailingOver"|"FailoverFailed"}
   sku: record # List of possible provisioning service SKUs. — shape: {capacity?: int, name?: "S1"}
   location: string # The resource location.
   --tags: record # The resource tags.
-]: any -> record<etag: string, properties: record<allocationPolicy: string, authorizationPolicies: list<record>, deviceProvisioningHostName: string, idScope: string, iotHubs: list<record>, provisioningState: string, serviceOperationsHostName: string, state: string>, sku: record<capacity: int, name: string, tier: string>> {
+]: any -> record<etag: string, properties: record<allocationPolicy: string, authorizationPolicies: list<record>, deviceProvisioningHostName: string, idScope: string, iotHubs: list<record>, provisioningState: string, serviceOperationsHostName: string, state: string>, sku: record<capacity: int, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($provisioning_service_name | is-empty) { error make --unspanned { msg: "path parameter 'provisioningServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provisioning_service_name: (encode-path-segment $provisioning_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}") $qp $auth.query)
   let req_body = {"etag": $etag, "properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
@@ -499,13 +507,14 @@ export def "dps-certificate-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API.
+  --api-version: string # The version of the API. (required)
 ]: nothing -> record<value: table<etag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($provisioning_service_name | is-empty) { error make --unspanned { msg: "path parameter 'provisioningServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provisioning_service_name: (encode-path-segment $provisioning_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/certificates") $qp $auth.query)
   let accept_val = "application/json"
@@ -550,15 +559,17 @@ export def "dps-certificate-delete" [
   --certificate-last-updated: string # Time the certificate is last updated. (format: date-time)
   --certificate-has-private-key: oneof<nothing, bool> # Indicates if the certificate contains a private key.
   --certificate-nonce: string # Random number generated to indicate Proof of Possession.
-  --api-version: string # The version of the API.
-  --if-match: string # ETag of the certificate
-]: nothing -> record<code: string, details: string, httpStatusCode: string, message: string> {
+  --api-version: string # The version of the API. (required)
+  --if-match: string # ETag of the certificate (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($provisioning_service_name | is-empty) { error make --unspanned { msg: "path parameter 'provisioningServiceName' must be non-empty" } }
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($if_match == null) { error make --unspanned { msg: "required header parameter 'If-Match' missing: pass --if-match" } }
   let qp = [(serialize-qp "certificate.name" $qp_certificate_name "scalar") (serialize-qp "certificate.rawBytes" $certificate_raw_bytes "scalar") (serialize-qp "certificate.isVerified" $certificate_is_verified "scalar") (serialize-qp "certificate.purpose" $certificate_purpose "scalar") (serialize-qp "certificate.created" $certificate_created "scalar") (serialize-qp "certificate.lastUpdated" $certificate_last_updated "scalar") (serialize-qp "certificate.hasPrivateKey" $certificate_has_private_key "scalar") (serialize-qp "certificate.nonce" $certificate_nonce "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provisioning_service_name: (encode-path-segment $provisioning_service_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/certificates/{certificate_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -597,7 +608,7 @@ export def "dps-certificate-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API.
+  --api-version: string # The version of the API. (required)
   --if-match: string # ETag of the certificate.
 ]: nothing -> record<etag: string, id: string, name: string, properties: record<created: string, expiry: string, isVerified: bool, subject: string, thumbprint: string, updated: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -606,6 +617,7 @@ export def "dps-certificate-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($provisioning_service_name | is-empty) { error make --unspanned { msg: "path parameter 'provisioningServiceName' must be non-empty" } }
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provisioning_service_name: (encode-path-segment $provisioning_service_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/certificates/{certificate_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -644,7 +656,7 @@ export def "dps-certificate-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API.
+  --api-version: string # The version of the API. (required)
   --if-match: string # ETag of the certificate. This is required to update an existing certificate, and ignored while creating a brand new certificate.
   --certificate: string # Base-64 representation of the X509 leaf certificate .cer file or just .pem file content.
 ]: any -> record<etag: string, id: string, name: string, properties: record<created: string, expiry: string, isVerified: bool, subject: string, thumbprint: string, updated: string>, type: string> {
@@ -655,6 +667,7 @@ export def "dps-certificate-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($provisioning_service_name | is-empty) { error make --unspanned { msg: "path parameter 'provisioningServiceName' must be non-empty" } }
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provisioning_service_name: (encode-path-segment $provisioning_service_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/certificates/{certificate_name}") $qp $auth.query)
   let req_body = {"certificate": $certificate} | compact
@@ -703,8 +716,8 @@ export def "dps-certificate-generate-verification-code" [
   --certificate-last-updated: string # Certificate last updated time. (format: date-time)
   --certificate-has-private-key: oneof<nothing, bool> # Indicates if the certificate contains private key.
   --certificate-nonce: string # Random number generated to indicate Proof of Possession.
-  --api-version: string # The version of the API.
-  --if-match: string # ETag of the certificate. This is required to update an existing certificate, and ignored while creating a brand new certificate.
+  --api-version: string # The version of the API. (required)
+  --if-match: string # ETag of the certificate. This is required to update an existing certificate, and ignored while creating a brand new certificate. (required)
 ]: nothing -> record<etag: string, id: string, name: string, properties: record<created: string, expiry: string, isVerified: bool, subject: string, thumbprint: string, updated: string, verificationCode: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -712,6 +725,8 @@ export def "dps-certificate-generate-verification-code" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($provisioning_service_name | is-empty) { error make --unspanned { msg: "path parameter 'provisioningServiceName' must be non-empty" } }
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($if_match == null) { error make --unspanned { msg: "required header parameter 'If-Match' missing: pass --if-match" } }
   let qp = [(serialize-qp "certificate.name" $qp_certificate_name "scalar") (serialize-qp "certificate.rawBytes" $certificate_raw_bytes "scalar") (serialize-qp "certificate.isVerified" $certificate_is_verified "scalar") (serialize-qp "certificate.purpose" $certificate_purpose "scalar") (serialize-qp "certificate.created" $certificate_created "scalar") (serialize-qp "certificate.lastUpdated" $certificate_last_updated "scalar") (serialize-qp "certificate.hasPrivateKey" $certificate_has_private_key "scalar") (serialize-qp "certificate.nonce" $certificate_nonce "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provisioning_service_name: (encode-path-segment $provisioning_service_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/certificates/{certificate_name}/generateVerificationCode") $qp $auth.query)
   let accept_val = "application/json"
@@ -758,8 +773,8 @@ export def "dps-certificate-verify-certificate" [
   --certificate-last-updated: string # Certificate last updated time. (format: date-time)
   --certificate-has-private-key: oneof<nothing, bool> # Indicates if the certificate contains private key.
   --certificate-nonce: string # Random number generated to indicate Proof of Possession.
-  --api-version: string # The version of the API.
-  --if-match: string # ETag of the certificate.
+  --api-version: string # The version of the API. (required)
+  --if-match: string # ETag of the certificate. (required)
   --certificate: string # base-64 representation of X509 certificate .cer file or just .pem file content.
 ]: any -> record<etag: string, id: string, name: string, properties: record<created: string, expiry: string, isVerified: bool, subject: string, thumbprint: string, updated: string>, type: string> {
   let input = $in
@@ -769,6 +784,8 @@ export def "dps-certificate-verify-certificate" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($provisioning_service_name | is-empty) { error make --unspanned { msg: "path parameter 'provisioningServiceName' must be non-empty" } }
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($if_match == null) { error make --unspanned { msg: "required header parameter 'If-Match' missing: pass --if-match" } }
   let qp = [(serialize-qp "certificate.name" $qp_certificate_name "scalar") (serialize-qp "certificate.rawBytes" $certificate_raw_bytes "scalar") (serialize-qp "certificate.isVerified" $certificate_is_verified "scalar") (serialize-qp "certificate.purpose" $certificate_purpose "scalar") (serialize-qp "certificate.created" $certificate_created "scalar") (serialize-qp "certificate.lastUpdated" $certificate_last_updated "scalar") (serialize-qp "certificate.hasPrivateKey" $certificate_has_private_key "scalar") (serialize-qp "certificate.nonce" $certificate_nonce "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provisioning_service_name: (encode-path-segment $provisioning_service_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/certificates/{certificate_name}/verify") $qp $auth.query)
   let req_body = {"certificate": $certificate} | compact
@@ -809,7 +826,7 @@ export def "iot-dps-resource-list-keys-for-key-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API.
+  --api-version: string # The version of the API. (required)
 ]: nothing -> record<keyName: string, primaryKey: string, rights: string, secondaryKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -817,6 +834,7 @@ export def "iot-dps-resource-list-keys-for-key-name" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($provisioning_service_name | is-empty) { error make --unspanned { msg: "path parameter 'provisioningServiceName' must be non-empty" } }
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'keyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provisioning_service_name: (encode-path-segment $provisioning_service_name), key_name: (encode-path-segment $key_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/keys/{key_name}/listkeys") $qp $auth.query)
   let accept_val = "application/json"
@@ -852,13 +870,14 @@ export def "iot-dps-resource-list-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API.
+  --api-version: string # The version of the API. (required)
 ]: nothing -> record<nextLink: string, value: table<keyName: string, primaryKey: string, rights: string, secondaryKey: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($provisioning_service_name | is-empty) { error make --unspanned { msg: "path parameter 'provisioningServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provisioning_service_name: (encode-path-segment $provisioning_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/listkeys") $qp $auth.query)
   let accept_val = "application/json"
@@ -895,8 +914,8 @@ export def "iot-dps-resource-get-operation-result" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --asyncinfo: string # Async header used to poll on the status of the operation, obtained while creating the long running operation. (default: true)
-  --api-version: string # The version of the API.
+  --asyncinfo: string # Async header used to poll on the status of the operation, obtained while creating the long running operation. (required, default: true)
+  --api-version: string # The version of the API. (required)
 ]: nothing -> record<error: record<code: string, details: string, message: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -904,6 +923,8 @@ export def "iot-dps-resource-get-operation-result" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($provisioning_service_name | is-empty) { error make --unspanned { msg: "path parameter 'provisioningServiceName' must be non-empty" } }
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
+  let asyncinfo = ($asyncinfo | default "true")
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "asyncinfo" $asyncinfo "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provisioning_service_name: (encode-path-segment $provisioning_service_name), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/operationresults/{operation_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -939,13 +960,14 @@ export def "iot-dps-resource-list-valid-skus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API.
+  --api-version: string # The version of the API. (required)
 ]: nothing -> record<nextLink: string, value: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($provisioning_service_name | is-empty) { error make --unspanned { msg: "path parameter 'provisioningServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provisioning_service_name: (encode-path-segment $provisioning_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/skus") $qp $auth.query)
   let accept_val = "application/json"

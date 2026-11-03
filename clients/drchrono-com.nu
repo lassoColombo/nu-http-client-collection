@@ -1,4 +1,4 @@
-# Auto-generated client for  vv4 (Hunt Valley)
+# Auto-generated client for  v4 (Hunt Valley)
 # Source: https://api.apis.guru/v2/specs/drchrono.com/v4 (Hunt Valley)/openapi.json
 # Auth: --token flag or $env._TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -3783,11 +3783,12 @@ export def "insurances-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string
   --page-size: int
-  --payer-type: string # One of `"emdeon"`, `"gateway"`, `"ihcfa"`
+  --payer-type: string # One of `"emdeon"`, `"gateway"`, `"ihcfa"` (required)
   --term: string # Search term, which can be either a partial name, partial ID or the state.
 ]: nothing -> record<data: table<payer_id: string, payer_name: string, state: string>, next: string, previous: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payer_type == null) { error make --unspanned { msg: "required query parameter 'payer_type' missing: pass --payer-type" } }
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "payer_type" $payer_type "scalar") (serialize-qp "term" $term "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/insurances" $qp $auth.query)
   let accept_val = "application/json"
@@ -3820,12 +3821,13 @@ export def "insurances-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payer-type: string # One of `"emdeon"`, `"gateway"`, `"ihcfa"`
+  --payer-type: string # One of `"emdeon"`, `"gateway"`, `"ihcfa"` (required)
   --term: string # Search term, which can be either a partial name, partial ID or the state.
 ]: nothing -> record<payer_id: string, payer_name: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($payer_type == null) { error make --unspanned { msg: "required query parameter 'payer_type' missing: pass --payer-type" } }
   let qp = [(serialize-qp "payer_type" $payer_type "scalar") (serialize-qp "term" $term "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/insurances/{id}") $qp $auth.query)
   let accept_val = "application/json"

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -137,13 +137,14 @@ export def "network-interfaces-list-virtual-machine-scale-set-network-interfaces
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API version.
+  --api-version: string@api-version-completer # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: any, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_machine_scale_set_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineScaleSetName' must be non-empty" } }
+  let api_version = ($api_version | default "2017-03-30")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_scale_set_name: (encode-path-segment $virtual_machine_scale_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.Compute/virtualMachineScaleSets/{virtual_machine_scale_set_name}/networkInterfaces") $qp $auth.query)
   let accept_val = "application/json"
@@ -180,7 +181,7 @@ export def "network-interfaces-list-virtual-machine-scale-set-vm-network-interfa
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API version.
+  --api-version: string@api-version-completer # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: any, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -188,6 +189,7 @@ export def "network-interfaces-list-virtual-machine-scale-set-vm-network-interfa
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_machine_scale_set_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineScaleSetName' must be non-empty" } }
   if ($virtualmachine_index | is-empty) { error make --unspanned { msg: "path parameter 'virtualmachineIndex' must be non-empty" } }
+  let api_version = ($api_version | default "2017-03-30")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_scale_set_name: (encode-path-segment $virtual_machine_scale_set_name), virtualmachine_index: (encode-path-segment $virtualmachine_index)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.Compute/virtualMachineScaleSets/{virtual_machine_scale_set_name}/virtualMachines/{virtualmachine_index}/networkInterfaces") $qp $auth.query)
   let accept_val = "application/json"
@@ -225,7 +227,7 @@ export def "network-interfaces-get-virtual-machine-scale-set-network-interface" 
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API version.
+  --api-version: string@api-version-completer # Client API version. (required)
   --expand: string # Expands referenced resources.
 ]: nothing -> record<etag: string, properties: any, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -235,6 +237,7 @@ export def "network-interfaces-get-virtual-machine-scale-set-network-interface" 
   if ($virtual_machine_scale_set_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineScaleSetName' must be non-empty" } }
   if ($virtualmachine_index | is-empty) { error make --unspanned { msg: "path parameter 'virtualmachineIndex' must be non-empty" } }
   if ($network_interface_name | is-empty) { error make --unspanned { msg: "path parameter 'networkInterfaceName' must be non-empty" } }
+  let api_version = ($api_version | default "2017-03-30")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_scale_set_name: (encode-path-segment $virtual_machine_scale_set_name), virtualmachine_index: (encode-path-segment $virtualmachine_index), network_interface_name: (encode-path-segment $network_interface_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.Compute/virtualMachineScaleSets/{virtual_machine_scale_set_name}/virtualMachines/{virtualmachine_index}/networkInterfaces/{network_interface_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -272,7 +275,7 @@ export def "network-interfaces-list-virtual-machine-scale-set-ip-configurations"
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API version.
+  --api-version: string@api-version-completer # Client API version. (required)
   --expand: string # Expands referenced resources.
 ]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: any, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -282,6 +285,7 @@ export def "network-interfaces-list-virtual-machine-scale-set-ip-configurations"
   if ($virtual_machine_scale_set_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineScaleSetName' must be non-empty" } }
   if ($virtualmachine_index | is-empty) { error make --unspanned { msg: "path parameter 'virtualmachineIndex' must be non-empty" } }
   if ($network_interface_name | is-empty) { error make --unspanned { msg: "path parameter 'networkInterfaceName' must be non-empty" } }
+  let api_version = ($api_version | default "2017-03-30")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_scale_set_name: (encode-path-segment $virtual_machine_scale_set_name), virtualmachine_index: (encode-path-segment $virtualmachine_index), network_interface_name: (encode-path-segment $network_interface_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.Compute/virtualMachineScaleSets/{virtual_machine_scale_set_name}/virtualMachines/{virtualmachine_index}/networkInterfaces/{network_interface_name}/ipConfigurations") $qp $auth.query)
   let accept_val = "application/json"
@@ -320,7 +324,7 @@ export def "network-interfaces-get-virtual-machine-scale-set-ip-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API version.
+  --api-version: string@api-version-completer # Client API version. (required)
   --expand: string # Expands referenced resources.
 ]: nothing -> record<etag: string, name: string, properties: any, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -331,6 +335,7 @@ export def "network-interfaces-get-virtual-machine-scale-set-ip-configuration" [
   if ($virtualmachine_index | is-empty) { error make --unspanned { msg: "path parameter 'virtualmachineIndex' must be non-empty" } }
   if ($network_interface_name | is-empty) { error make --unspanned { msg: "path parameter 'networkInterfaceName' must be non-empty" } }
   if ($ip_configuration_name | is-empty) { error make --unspanned { msg: "path parameter 'ipConfigurationName' must be non-empty" } }
+  let api_version = ($api_version | default "2017-03-30")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_scale_set_name: (encode-path-segment $virtual_machine_scale_set_name), virtualmachine_index: (encode-path-segment $virtualmachine_index), network_interface_name: (encode-path-segment $network_interface_name), ip_configuration_name: (encode-path-segment $ip_configuration_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.Compute/virtualMachineScaleSets/{virtual_machine_scale_set_name}/virtualMachines/{virtualmachine_index}/networkInterfaces/{network_interface_name}/ipConfigurations/{ip_configuration_name}") $qp $auth.query)
   let accept_val = "application/json"

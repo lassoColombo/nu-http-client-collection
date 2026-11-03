@@ -1,4 +1,4 @@
-# Auto-generated client for Reisezentren-API vv1
+# Auto-generated client for Reisezentren-API v1
 # Source: https://api.apis.guru/v2/specs/deutschebahn.com/reisezentren/v1/openapi.json
 # Auth: --token flag or $env.REISEZENTREN_API_TOKEN
 

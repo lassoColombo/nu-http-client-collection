@@ -131,12 +131,13 @@ export def "get-recommended-location" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --city-codes: string # City used by the algorythm to recommend new destination. Several cities can be specified using comma. City codes follow [IATA standard](http://www.iata.org/publications/Pages/code-search.aspx) (e.g. PAR)
+  --city-codes: string # City used by the algorythm to recommend new destination. Several cities can be specified using comma. City codes follow [IATA standard](http://www.iata.org/publications/Pages/code-search.aspx) (required, e.g. PAR)
   --traveler-country-code: string # Origin country of the traveler following [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) code format (e.g. US) (default: FR, e.g. FR)
   --destination-country-codes: string # List of country the traveler want to visit, separated with comma. Country codes follow [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) code format (e.g. US)
 ]: nothing -> record<data: table<geoCode: record, iataCode: string, name: string, subtype: string, relevance: float, type: string>, meta: record<count: int, links: record<self: string>>, warnings: table<code: int, detail: string, source: record, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($city_codes == null) { error make --unspanned { msg: "required query parameter 'cityCodes' missing: pass --city-codes" } }
   let qp = [(serialize-qp "cityCodes" $city_codes "scalar") (serialize-qp "travelerCountryCode" $traveler_country_code "scalar") (serialize-qp "destinationCountryCodes" $destination_country_codes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reference-data/recommended-locations" $qp $auth.query)
   let accept_val = "application/vnd.amadeus+json"

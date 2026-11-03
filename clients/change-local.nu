@@ -1,4 +1,4 @@
-# Auto-generated client for API V1 vv1
+# Auto-generated client for API V1 v1
 # Source: https://api.apis.guru/v2/specs/change.local/v1/openapi.json
 # Auth: --token flag or $env.API_V1_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -145,11 +145,12 @@ export def "get-api-v1-donations-carbon-calculate" [
   --origin-address: float # The origin zip code (US only) of the shipment. If you send this parameter, also send `destination_address`.
   --destination-address: float # The destination zip code (US only) of the shipment. If you send this parameter, also send `origin_address`.
   --distance-mi: float # The total distance (in miles) of the shipment. You can use this parameter in place of `origin_address` and `destination_address`.
-  --weight-lb: float # The total weight (in pounds) of the shipment.
+  --weight-lb: float # The total weight (in pounds) of the shipment. (required)
   --transportation-method: string@transportation-method-completer # The primary transportation method of the shipment.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($weight_lb == null) { error make --unspanned { msg: "required query parameter 'weight_lb' missing: pass --weight-lb" } }
   let qp = [(serialize-qp "origin_address" $origin_address "scalar") (serialize-qp "destination_address" $destination_address "scalar") (serialize-qp "distance_mi" $distance_mi "scalar") (serialize-qp "weight_lb" $weight_lb "scalar") (serialize-qp "transportation_method" $transportation_method "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/donations/carbon_calculate" $qp $auth.query)
   let accept_val = "application/json"
@@ -216,13 +217,16 @@ export def "post-api-v1-donations-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --amount: string # The amount of the donation in cents.
-  --nonprofit-id: string # The id of a nonprofit from the CHANGE network.
-  --funding-source: string@funding-source-completer # Source of the donation funds. If you are collecting payment from your customer for the donation, use `customer`.
+  --amount: string # The amount of the donation in cents. (required)
+  --nonprofit-id: string # The id of a nonprofit from the CHANGE network. (required)
+  --funding-source: string@funding-source-completer # Source of the donation funds. If you are collecting payment from your customer for the donation, use `customer`. (required)
   --zip-code: string # The customer's zip code. Provide this to unlock geographic insights.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($amount == null) { error make --unspanned { msg: "required query parameter 'amount' missing: pass --amount" } }
+  if ($nonprofit_id == null) { error make --unspanned { msg: "required query parameter 'nonprofit_id' missing: pass --nonprofit-id" } }
+  if ($funding_source == null) { error make --unspanned { msg: "required query parameter 'funding_source' missing: pass --funding-source" } }
   let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "nonprofit_id" $nonprofit_id "scalar") (serialize-qp "funding_source" $funding_source "scalar") (serialize-qp "zip_code" $zip_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/donations/create" $qp $auth.query)
   let accept_val = "application/json"
@@ -255,10 +259,11 @@ export def "get-api-v1-donations-crypto-calculate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --count: float # The number of transactions to offset.
-  --currency: string@currency-completer # The currency of the transaction.
+  --currency: string@currency-completer # The currency of the transaction. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($currency == null) { error make --unspanned { msg: "required query parameter 'currency' missing: pass --currency" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "currency" $currency "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/donations/crypto_calculate" $qp $auth.query)
   let accept_val = "application/json"
@@ -325,10 +330,11 @@ export def "get-api-v1-donations-show" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The id of a donation. Ids are returned when a donation is created.
+  --id: string # The id of a donation. Ids are returned when a donation is created. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/donations/show" $qp $auth.query)
   let accept_val = "application/json"
@@ -396,10 +402,11 @@ export def "get-api-v1-nonprofits-show" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The id of a nonprofit from the CHANGE network.
+  --id: string # The id of a nonprofit from the CHANGE network. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/nonprofits/show" $qp $auth.query)
   let accept_val = "application/json"

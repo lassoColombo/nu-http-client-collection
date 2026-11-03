@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "email" => { {scheme: $scheme, headers: {email: $token_val}, query: "", location: "header"} }
-    "token" => { {scheme: $scheme, headers: {token: $token_val}, query: "", location: "header"} }
+    "email" => { {scheme: $scheme, headers: {"email": $token_val}, query: "", location: "header"} }
+    "token" => { {scheme: $scheme, headers: {"token": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -219,8 +219,8 @@ export def "get-statistics" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # date format: dd-MM-yyyy (format: date-time)
-  --qp-to: string # date format: dd-MM-yyyy (format: date-time)
+  --from: string # date format: dd-MM-yyyy (format: date-time)
+  --to: string # date format: dd-MM-yyyy (format: date-time)
   --user-email-address: string # optional email address of user to return statistics for a single user, default is to return statistics for all users if administrator, or statistics for your own account if not an administrator
   --campaign: string # optional campaign name
   --include-refunded-and-optout: oneof<nothing, bool> # optionally include refunded and optout counts, default is false
@@ -228,14 +228,14 @@ export def "get-statistics" [
 ]: nothing -> record<from: string, grandTotal: record<delivered: float, failed: float, failedOptout: float, failedRefunded: float, sent: float, total: float>, showingCreditValue: bool, to: string, users: table<campaigns: list, total: record, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "userEmailAddress" $user_email_address "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "includeRefundedAndOptout" $include_refunded_and_optout "scalar") (serialize-qp "calculateCreditValue" $calculate_credit_value "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "userEmailAddress" $user_email_address "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "includeRefundedAndOptout" $include_refunded_and_optout "scalar") (serialize-qp "calculateCreditValue" $calculate_credit_value "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/account/statistics" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "userEmailAddress": $user_email_address, "campaign": $campaign, "includeRefundedAndOptout": $include_refunded_and_optout, "calculateCreditValue": $calculate_credit_value} | compact)
+    query: ({"from": $from, "to": $to, "userEmailAddress": $user_email_address, "campaign": $campaign, "includeRefundedAndOptout": $include_refunded_and_optout, "calculateCreditValue": $calculate_credit_value} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -302,10 +302,11 @@ export def "search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --search-email: string # search by email address
+  --search-email: string # search by email address (required)
 ]: nothing -> record<webServiceUserList: table<company: string, contactNumber: string, creditBalance: float, emailAddress: string, firstName: string, lastName: string, password: string, userId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
+  if ($search_email == null) { error make --unspanned { msg: "required query parameter 'searchEmail' missing: pass --search-email" } }
   let qp = [(serialize-qp "searchEmail" $search_email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/account/user" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1815,14 +1816,16 @@ export def "get-api-rest-v1-sms-send-url-parameters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --recipient-number: string # the phone number of the recipient to send to
-  --message: string # the message to send
+  --recipient-number: string # the phone number of the recipient to send to (required)
+  --message: string # the message to send (required)
   --date-to-send: string # date format: yyyyMMddHHmm (format: date-time)
   --campaign: string # optional campaign name
   --data-field: string # optional extra data
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
+  if ($recipient_number == null) { error make --unspanned { msg: "required query parameter 'recipientNumber' missing: pass --recipient-number" } }
+  if ($message == null) { error make --unspanned { msg: "required query parameter 'message' missing: pass --message" } }
   let qp = [(serialize-qp "recipientNumber" $recipient_number "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "dateToSend" $date_to_send "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/sms/send-url-parameters" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1855,14 +1858,16 @@ export def "post-api-rest-v1-sms-send-url-parameters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --recipient-number: string # the phone number of the recipient to send to
-  --message: string # the message to send
+  --recipient-number: string # the phone number of the recipient to send to (required)
+  --message: string # the message to send (required)
   --date-to-send: string # date format: yyyyMMddHHmm (format: date-time)
   --campaign: string # optional campaign name
   --data-field: string # optional extra data
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
+  if ($recipient_number == null) { error make --unspanned { msg: "required query parameter 'recipientNumber' missing: pass --recipient-number" } }
+  if ($message == null) { error make --unspanned { msg: "required query parameter 'message' missing: pass --message" } }
   let qp = [(serialize-qp "recipientNumber" $recipient_number "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "dateToSend" $date_to_send "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/sms/send-url-parameters" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1896,8 +1901,8 @@ export def "get-api-rest-v1-sms-send-url-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --recipient-number: string # the phone number of the recipient to send to
-  --message: string # the message to send
+  --recipient-number: string # the phone number of the recipient to send to (required)
+  --message: string # the message to send (required)
   --date-to-send: string # date format: yyyyMMddHHmm (format: date-time)
   --campaign: string # optional campaign name
   --data-field: string # optional extra data
@@ -1905,6 +1910,8 @@ export def "get-api-rest-v1-sms-send-url-token" [
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
+  if ($recipient_number == null) { error make --unspanned { msg: "required query parameter 'recipientNumber' missing: pass --recipient-number" } }
+  if ($message == null) { error make --unspanned { msg: "required query parameter 'message' missing: pass --message" } }
   let qp = [(serialize-qp "recipientNumber" $recipient_number "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "dateToSend" $date_to_send "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/api/rest/v1/sms/send-url/{token_arg}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1938,8 +1945,8 @@ export def "post-api-rest-v1-sms-send-url-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --recipient-number: string # the phone number of the recipient to send to
-  --message: string # the message to send
+  --recipient-number: string # the phone number of the recipient to send to (required)
+  --message: string # the message to send (required)
   --date-to-send: string # date format: yyyyMMddHHmm (format: date-time)
   --campaign: string # optional campaign name
   --data-field: string # optional extra data
@@ -1947,6 +1954,8 @@ export def "post-api-rest-v1-sms-send-url-token" [
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
+  if ($recipient_number == null) { error make --unspanned { msg: "required query parameter 'recipientNumber' missing: pass --recipient-number" } }
+  if ($message == null) { error make --unspanned { msg: "required query parameter 'message' missing: pass --message" } }
   let qp = [(serialize-qp "recipientNumber" $recipient_number "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "dateToSend" $date_to_send "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/api/rest/v1/sms/send-url/{token_arg}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2131,7 +2140,7 @@ export def "single-audio" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --recipient-number: string # the phone number of the recipient to send to
+  --recipient-number: string # the phone number of the recipient to send to (required)
   --campaign: string # optional campaign name
   --data-field: string # optional extra data
   --retry-count: int # optional number of times to retry unanswered call (format: int32)
@@ -2142,14 +2151,15 @@ export def "single-audio" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
+  if ($recipient_number == null) { error make --unspanned { msg: "required query parameter 'recipientNumber' missing: pass --recipient-number" } }
   let qp = [(serialize-qp "recipientNumber" $recipient_number "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar") (serialize-qp "retryCount" $retry_count "scalar") (serialize-qp "retryMinimumInterval" $retry_minimum_interval "scalar") (serialize-qp "retryMaximumInterval" $retry_maximum_interval "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/voice/single-audio" $qp $auth.query)
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url

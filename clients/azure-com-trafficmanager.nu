@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -118,6 +118,8 @@ def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def heat-map-type-completer [] { ["default"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -156,13 +158,14 @@ export def "profiles-check-traffic-manager-relative-dns-name-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --name: string # The name of the resource.
   --type: string # The type of the resource.
 ]: any -> record<message: string, name: string, nameAvailable: bool, reason: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Network/checkTrafficManagerNameAvailability" $qp $auth.query)
   let req_body = {"name": $name, "type": $type} | compact
@@ -197,10 +200,11 @@ export def "geographic-hierarchies-get-default" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<geographicHierarchy: record<code: string, name: string, regions: list>>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<geographicHierarchy: record<code: string, name: string, regions: list>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Network/trafficManagerGeographicHierarchies/default" $qp $auth.query)
   let accept_val = "application/json"
@@ -234,11 +238,12 @@ export def "traffic-manager-user-metrics-keys-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<boolean: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/trafficManagerUserMetricsKeys/default") $qp $auth.query)
   let accept_val = "application/json"
@@ -272,11 +277,12 @@ export def "traffic-manager-user-metrics-keys-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<key: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<key: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/trafficManagerUserMetricsKeys/default") $qp $auth.query)
   let accept_val = "application/json"
@@ -310,11 +316,12 @@ export def "traffic-manager-user-metrics-keys-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<key: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<key: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/trafficManagerUserMetricsKeys/default") $qp $auth.query)
   let accept_val = "application/json"
@@ -348,11 +355,12 @@ export def "profiles-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<value: table<properties: record, location: string, tags: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/trafficmanagerprofiles") $qp $auth.query)
   let accept_val = "application/json"
@@ -387,12 +395,13 @@ export def "profiles-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<value: table<properties: record, location: string, tags: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles") $qp $auth.query)
   let accept_val = "application/json"
@@ -428,13 +437,14 @@ export def "profiles-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<boolean: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -470,13 +480,14 @@ export def "profiles-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<dnsConfig: record<fqdn: string, relativeName: string, ttl: int>, endpoints: list<record>, maxReturn: int, monitorConfig: record<customHeaders: list, expectedStatusCodeRanges: list, intervalInSeconds: int, path: string, port: int, profileMonitorStatus: string, protocol: string, timeoutInSeconds: int, toleratedNumberOfFailures: int>, profileStatus: string, trafficRoutingMethod: string, trafficViewEnrollmentStatus: string>, location: string, tags: record> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<dnsConfig: record<fqdn: string, relativeName: string, ttl: int>, endpoints: list<record>, maxReturn: int, monitorConfig: record<customHeaders: list, expectedStatusCodeRanges: list, intervalInSeconds: int, path: string, port: int, profileMonitorStatus: string, protocol: string, timeoutInSeconds: int, toleratedNumberOfFailures: int>, profileStatus: string, trafficRoutingMethod: string, trafficViewEnrollmentStatus: string>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -513,17 +524,18 @@ export def "profiles-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # Class representing the Traffic Manager profile properties. — shape: {dnsConfig?: any, endpoints?: list, maxReturn?: int, monitorConfig?: any, profileStatus?: "Enabled"|"Disabled", trafficRoutingMethod?: "Performance"|"Priority"|"Weighted"|"Geographic"|"MultiValue"|"Subnet", trafficViewEnrollmentStatus?: "Enabled"|"Disabled"}
   --location: string # The Azure Region where the resource lives
   --tags: record # Resource tags.
-]: any -> record<properties: record<dnsConfig: record<fqdn: string, relativeName: string, ttl: int>, endpoints: list<record>, maxReturn: int, monitorConfig: record<customHeaders: list, expectedStatusCodeRanges: list, intervalInSeconds: int, path: string, port: int, profileMonitorStatus: string, protocol: string, timeoutInSeconds: int, toleratedNumberOfFailures: int>, profileStatus: string, trafficRoutingMethod: string, trafficViewEnrollmentStatus: string>, location: string, tags: record> {
+]: any -> record<properties: record<dnsConfig: record<fqdn: string, relativeName: string, ttl: int>, endpoints: list<record>, maxReturn: int, monitorConfig: record<customHeaders: list, expectedStatusCodeRanges: list, intervalInSeconds: int, path: string, port: int, profileMonitorStatus: string, protocol: string, timeoutInSeconds: int, toleratedNumberOfFailures: int>, profileStatus: string, trafficRoutingMethod: string, trafficViewEnrollmentStatus: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -562,17 +574,18 @@ export def "profiles-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # Class representing the Traffic Manager profile properties. — shape: {dnsConfig?: any, endpoints?: list, maxReturn?: int, monitorConfig?: any, profileStatus?: "Enabled"|"Disabled", trafficRoutingMethod?: "Performance"|"Priority"|"Weighted"|"Geographic"|"MultiValue"|"Subnet", trafficViewEnrollmentStatus?: "Enabled"|"Disabled"}
   --location: string # The Azure Region where the resource lives
   --tags: record # Resource tags.
-]: any -> record<properties: record<dnsConfig: record<fqdn: string, relativeName: string, ttl: int>, endpoints: list<record>, maxReturn: int, monitorConfig: record<customHeaders: list, expectedStatusCodeRanges: list, intervalInSeconds: int, path: string, port: int, profileMonitorStatus: string, protocol: string, timeoutInSeconds: int, toleratedNumberOfFailures: int>, profileStatus: string, trafficRoutingMethod: string, trafficViewEnrollmentStatus: string>, location: string, tags: record> {
+]: any -> record<properties: record<dnsConfig: record<fqdn: string, relativeName: string, ttl: int>, endpoints: list<record>, maxReturn: int, monitorConfig: record<customHeaders: list, expectedStatusCodeRanges: list, intervalInSeconds: int, path: string, port: int, profileMonitorStatus: string, protocol: string, timeoutInSeconds: int, toleratedNumberOfFailures: int>, profileStatus: string, trafficRoutingMethod: string, trafficViewEnrollmentStatus: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -601,7 +614,7 @@ export def "heat-map-get" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
-  heat_map_type: string
+  heat_map_type: string@heat-map-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -613,14 +626,15 @@ export def "heat-map-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top-left: list<float> # The top left latitude,longitude pair of the rectangular viewport to query for. (allows empty value)
   --bot-right: list<float> # The bottom right latitude,longitude pair of the rectangular viewport to query for. (allows empty value)
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<endTime: string, endpoints: list<record>, startTime: string, trafficFlows: list<record>>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<endTime: string, endpoints: list<record>, startTime: string, trafficFlows: list<record>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($heat_map_type | is-empty) { error make --unspanned { msg: "path parameter 'heatMapType' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "topLeft" $top_left "csv") (serialize-qp "botRight" $bot_right "csv") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), heat_map_type: (encode-path-segment $heat_map_type)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}/heatMaps/{heat_map_type}") $qp $auth.query)
   let accept_val = "application/json"
@@ -658,7 +672,7 @@ export def "endpoints-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<boolean: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -667,6 +681,7 @@ export def "endpoints-delete" [
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_type | is-empty) { error make --unspanned { msg: "path parameter 'endpointType' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_type: (encode-path-segment $endpoint_type), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}/{endpoint_type}/{endpoint_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -704,8 +719,8 @@ export def "endpoints-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<customHeaders: list<record>, endpointLocation: string, endpointMonitorStatus: string, endpointStatus: string, geoMapping: list<string>, minChildEndpoints: int, priority: int, subnets: list<record>, target: string, targetResourceId: string, weight: int>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<customHeaders: list<record>, endpointLocation: string, endpointMonitorStatus: string, endpointStatus: string, geoMapping: list<string>, minChildEndpoints: int, priority: int, subnets: list<record>, target: string, targetResourceId: string, weight: int>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -713,6 +728,7 @@ export def "endpoints-get" [
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_type | is-empty) { error make --unspanned { msg: "path parameter 'endpointType' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_type: (encode-path-segment $endpoint_type), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}/{endpoint_type}/{endpoint_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -751,9 +767,9 @@ export def "endpoints-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # Class representing a Traffic Manager endpoint properties. — shape: {customHeaders?: list, endpointLocation?: string, endpointMonitorStatus?: "CheckingEndpoint"|"Online"|"Degraded"|"Disabled"|"Inactive"|"Stopped", endpointStatus?: "Enabled"|"Disabled", geoMapping?: list<string>, minChildEndpoints?: int, priority?: int, subnets?: list, target?: string, targetResourceId?: string, weight?: int}
-]: any -> record<properties: record<customHeaders: list<record>, endpointLocation: string, endpointMonitorStatus: string, endpointStatus: string, geoMapping: list<string>, minChildEndpoints: int, priority: int, subnets: list<record>, target: string, targetResourceId: string, weight: int>> {
+]: any -> record<properties: record<customHeaders: list<record>, endpointLocation: string, endpointMonitorStatus: string, endpointStatus: string, geoMapping: list<string>, minChildEndpoints: int, priority: int, subnets: list<record>, target: string, targetResourceId: string, weight: int>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -762,6 +778,7 @@ export def "endpoints-update" [
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_type | is-empty) { error make --unspanned { msg: "path parameter 'endpointType' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_type: (encode-path-segment $endpoint_type), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}/{endpoint_type}/{endpoint_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -802,9 +819,9 @@ export def "endpoints-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # Class representing a Traffic Manager endpoint properties. — shape: {customHeaders?: list, endpointLocation?: string, endpointMonitorStatus?: "CheckingEndpoint"|"Online"|"Degraded"|"Disabled"|"Inactive"|"Stopped", endpointStatus?: "Enabled"|"Disabled", geoMapping?: list<string>, minChildEndpoints?: int, priority?: int, subnets?: list, target?: string, targetResourceId?: string, weight?: int}
-]: any -> record<properties: record<customHeaders: list<record>, endpointLocation: string, endpointMonitorStatus: string, endpointStatus: string, geoMapping: list<string>, minChildEndpoints: int, priority: int, subnets: list<record>, target: string, targetResourceId: string, weight: int>> {
+]: any -> record<properties: record<customHeaders: list<record>, endpointLocation: string, endpointMonitorStatus: string, endpointStatus: string, geoMapping: list<string>, minChildEndpoints: int, priority: int, subnets: list<record>, target: string, targetResourceId: string, weight: int>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -813,6 +830,7 @@ export def "endpoints-create-or-update" [
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($endpoint_type | is-empty) { error make --unspanned { msg: "path parameter 'endpointType' must be non-empty" } }
   if ($endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'endpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_type: (encode-path-segment $endpoint_type), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}/{endpoint_type}/{endpoint_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -141,7 +141,7 @@ export def "batch-read-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   url: string # Publicly reachable URL of an image.
-]: any -> record<code: any, message: string, requestId: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -214,12 +214,13 @@ export def "recognize-text" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --mode: string@mode-completer # Type of text to recognize.
+  --mode: string@mode-completer # Type of text to recognize. (required)
   url: string # Publicly reachable URL of an image.
-]: any -> record<code: any, message: string, requestId: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($mode == null) { error make --unspanned { msg: "required query parameter 'mode' missing: pass --mode" } }
   let qp = [(serialize-qp "mode" $mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recognizeText" $qp $auth.query)
   let req_body = {"url": $url} | compact

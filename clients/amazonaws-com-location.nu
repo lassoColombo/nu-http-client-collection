@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -219,7 +219,7 @@ export def "batch-delete-device-position-history" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   device_ids: list<string> # Devices whose position history you want to delete. For example, for two devices: “DeviceIds” : [DeviceId1,DeviceId2]
-]: any -> record<Errors: record> {
+]: any -> record<Errors: table<DeviceId: string, Error: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -268,7 +268,7 @@ export def "batch-delete-geofence" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   geofence_ids: list<string> # The batch of geofences to be deleted.
-]: any -> record<Errors: record> {
+]: any -> record<Errors: table<Error: record, GeofenceId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -298,7 +298,7 @@ export def "batch-delete-geofence" [
 #
 # POST /geofencing/v0/collections/{CollectionName}/positions
 # operationId: BatchEvaluateGeofences
-# --DevicePositionUpdates item shape: {Accuracy?: any, DeviceId: any, Position: any, PositionProperties?: any, SampleTime: any}
+# --DevicePositionUpdates item shape: {Accuracy?: record, DeviceId: string, Position: list<float>, PositionProperties?: record, SampleTime: string}
 export def "batch-evaluate-geofences" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -317,8 +317,8 @@ export def "batch-evaluate-geofences" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  device_position_updates: list # Contains device details for each device to be evaluated against the given geofence collection. — item shape: {Accuracy?: any, DeviceId: any, Position: any, PositionProperties?: any, SampleTime: any}
-]: any -> record<Errors: record> {
+  device_position_updates: list # Contains device details for each device to be evaluated against the given geofence collection. — item shape: {Accuracy?: record, DeviceId: string, Position: list<float>, PositionProperties?: record, SampleTime: string}
+]: any -> record<Errors: table<DeviceId: string, Error: record, SampleTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -367,7 +367,7 @@ export def "batch-get-device-position" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   device_ids: list<string> # Devices whose position you want to retrieve. For example, for two devices: device-ids=DeviceId1&device-ids=DeviceId2
-]: any -> record<DevicePositions: record, Errors: record> {
+]: any -> record<DevicePositions: table<Accuracy: record, DeviceId: string, Position: list, PositionProperties: record, ReceivedTime: string, SampleTime: string>, Errors: table<DeviceId: string, Error: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -397,7 +397,7 @@ export def "batch-get-device-position" [
 #
 # POST /geofencing/v0/collections/{CollectionName}/put-geofences
 # operationId: BatchPutGeofence
-# --Entries item shape: {GeofenceId: any, Geometry: any}
+# --Entries item shape: {GeofenceId: string, Geometry: record}
 export def "batch-put-geofence" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -416,8 +416,8 @@ export def "batch-put-geofence" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  entries: list # The batch of geofences to be stored in a geofence collection. — item shape: {GeofenceId: any, Geometry: any}
-]: any -> record<Errors: record, Successes: record> {
+  entries: list # The batch of geofences to be stored in a geofence collection. — item shape: {GeofenceId: string, Geometry: record}
+]: any -> record<Errors: table<Error: record, GeofenceId: string>, Successes: table<CreateTime: string, GeofenceId: string, UpdateTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -447,7 +447,7 @@ export def "batch-put-geofence" [
 #
 # POST /tracking/v0/trackers/{TrackerName}/positions
 # operationId: BatchUpdateDevicePosition
-# --Updates item shape: {Accuracy?: any, DeviceId: any, Position: any, PositionProperties?: any, SampleTime: any}
+# --Updates item shape: {Accuracy?: record, DeviceId: string, Position: list<float>, PositionProperties?: record, SampleTime: string}
 export def "batch-update-device-position" [
   tracker_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -466,8 +466,8 @@ export def "batch-update-device-position" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  updates: list # Contains the position update details for each device. — item shape: {Accuracy?: any, DeviceId: any, Position: any, PositionProperties?: any, SampleTime: any}
-]: any -> record<Errors: record> {
+  updates: list # Contains the position update details for each device. — item shape: {Accuracy?: record, DeviceId: string, Position: list<float>, PositionProperties?: record, SampleTime: string}
+]: any -> record<Errors: table<DeviceId: string, Error: record, SampleTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -497,8 +497,8 @@ export def "batch-update-device-position" [
 #
 # POST /routes/v0/calculators/{CalculatorName}/calculate/route
 # operationId: CalculateRoute
-# --CarModeOptions shape: {AvoidFerries?: any, AvoidTolls?: any}
-# --TruckModeOptions shape: {AvoidFerries?: any, AvoidTolls?: any, Dimensions?: any, Weight?: any}
+# --CarModeOptions shape: {AvoidFerries?: bool, AvoidTolls?: bool}
+# --TruckModeOptions shape: {AvoidFerries?: bool, AvoidTolls?: bool, Dimensions?: record, Weight?: record}
 export def "calculate-route" [
   calculator_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -517,7 +517,7 @@ export def "calculate-route" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --car-mode-options: record # Contains details about additional route preferences for requests that specify TravelMode as Car. — shape: {AvoidFerries?: any, AvoidTolls?: any}
+  --car-mode-options: record # Contains details about additional route preferences for requests that specify TravelMode as Car. — shape: {AvoidFerries?: bool, AvoidTolls?: bool}
   --depart-now: oneof<nothing, bool> # Sets the time of departure as the current time. Uses the current time to calculate a route. Otherwise, the best time of day to travel with the best traffic conditions is used to calculate the route. Default Value: false Valid Values: false | true
   departure_position: list<float> # The start position for the route. Defined in World Geodetic System (WGS 84) (https://earth-info.nga.mil/index.php?dir=wgs84&action=wgs84) format: [longitude, latitude]. For example, [-123.115, 49.285] If you specify a departure that's not located on a road, Amazon Location moves the position to the nearest road (https://docs.aws.amazon.com/location/latest/developerguide/snap-to-nearby-road.html). If Esri is the provider for your route calculator, specifying a route that is longer than 400 km returns a 400 RoutesValidationException error. Valid Values: [-180 to 180,-90 to 90]
   --departure-time: string # Specifies the desired time of departure. Uses the given time to calculate the route. Otherwise, the best time of day to travel with the best traffic conditions is used to calculate the route. Setting a departure time in the past returns a 400 ValidationException error. In ISO 8601 (https://www.iso.org/iso-8601-date-and-time-format.html) format: YYYY-MM-DDThh:mm:ss.sssZ. For example, 2020–07-2T12:15:20.000Z+01:00 (format: date-time)
@@ -525,9 +525,9 @@ export def "calculate-route" [
   --distance-unit: string@distance-unit-completer # Set the unit system to specify the distance. Default Value: Kilometers
   --include-leg-geometry: oneof<nothing, bool> # Set to include the geometry details in the result for each path between a pair of positions. Default Value: false Valid Values: false | true
   --travel-mode: string@travel-mode-completer # Specifies the mode of transport when calculating a route. Used in estimating the speed of travel and road compatibility. You can choose Car, Truck, Walking, Bicycle or Motorcycle as options for the TravelMode. Bicycle and Motorcycle are only valid when using Grab as a data provider, and only within Southeast Asia. Truck is not available for Grab. For more details on the using Grab for routing, including areas of coverage, see GrabMaps (https://docs.aws.amazon.com/location/latest/developerguide/grab.html) in the Amazon Location Service Developer Guide. The TravelMode you specify also determines how you specify route preferences: If traveling by Car use the CarModeOptions parameter. If traveling by Truck use the TruckModeOptions parameter. Default Value: Car
-  --truck-mode-options: record # Contains details about additional route preferences for requests that specify TravelMode as Truck. — shape: {AvoidFerries?: any, AvoidTolls?: any, Dimensions?: any, Weight?: any}
+  --truck-mode-options: record # Contains details about additional route preferences for requests that specify TravelMode as Truck. — shape: {AvoidFerries?: bool, AvoidTolls?: bool, Dimensions?: record, Weight?: record}
   --waypoint-positions: list # Specifies an ordered list of up to 23 intermediate positions to include along a route between the departure position and destination position. For example, from the DeparturePosition [-123.115, 49.285], the route follows the order that the waypoint positions are given [[-122.757, 49.0021],[-122.349, 47.620]] If you specify a waypoint position that's not located on a road, Amazon Location moves the position to the nearest road (https://docs.aws.amazon.com/location/latest/developerguide/snap-to-nearby-road.html). Specifying more than 23 waypoints returns a 400 ValidationException error. If Esri is the provider for your route calculator, specifying a route that is longer than 400 km returns a 400 RoutesValidationException error. Valid Values: [-180 to 180,-90 to 90]
-]: any -> record<Legs: record, Summary: record<DataSource: record, Distance: record, DistanceUnit: record, DurationSeconds: record, RouteBBox: record>> {
+]: any -> record<Legs: table<Distance: float, DurationSeconds: float, EndPosition: list, Geometry: record, StartPosition: list, Steps: list>, Summary: record<DataSource: string, Distance: float, DistanceUnit: string, DurationSeconds: float, RouteBBox: list<float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -557,8 +557,8 @@ export def "calculate-route" [
 #
 # POST /routes/v0/calculators/{CalculatorName}/calculate/route-matrix
 # operationId: CalculateRouteMatrix
-# --CarModeOptions shape: {AvoidFerries?: any, AvoidTolls?: any}
-# --TruckModeOptions shape: {AvoidFerries?: any, AvoidTolls?: any, Dimensions?: any, Weight?: any}
+# --CarModeOptions shape: {AvoidFerries?: bool, AvoidTolls?: bool}
+# --TruckModeOptions shape: {AvoidFerries?: bool, AvoidTolls?: bool, Dimensions?: record, Weight?: record}
 export def "calculate-route-matrix" [
   calculator_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -577,15 +577,15 @@ export def "calculate-route-matrix" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --car-mode-options: record # Contains details about additional route preferences for requests that specify TravelMode as Car. — shape: {AvoidFerries?: any, AvoidTolls?: any}
+  --car-mode-options: record # Contains details about additional route preferences for requests that specify TravelMode as Car. — shape: {AvoidFerries?: bool, AvoidTolls?: bool}
   --depart-now: oneof<nothing, bool> # Sets the time of departure as the current time. Uses the current time to calculate the route matrix. You can't set both DepartureTime and DepartNow. If neither is set, the best time of day to travel with the best traffic conditions is used to calculate the route matrix. Default Value: false Valid Values: false | true
   departure_positions: list # The list of departure (origin) positions for the route matrix. An array of points, each of which is itself a 2-value array defined in WGS 84 (https://earth-info.nga.mil/GandG/wgs84/index.html) format: [longitude, latitude]. For example, [-123.115, 49.285]. Depending on the data provider selected in the route calculator resource there may be additional restrictions on the inputs you can choose. See Position restrictions (https://docs.aws.amazon.com/location/latest/developerguide/calculate-route-matrix.html#matrix-routing-position-limits) in the Amazon Location Service Developer Guide. For route calculators that use Esri as the data provider, if you specify a departure that's not located on a road, Amazon Location moves the position to the nearest road (https://docs.aws.amazon.com/location/latest/developerguide/snap-to-nearby-road.html). The snapped value is available in the result in SnappedDeparturePositions. Valid Values: [-180 to 180,-90 to 90]
   --departure-time: string # Specifies the desired time of departure. Uses the given time to calculate the route matrix. You can't set both DepartureTime and DepartNow. If neither is set, the best time of day to travel with the best traffic conditions is used to calculate the route matrix. Setting a departure time in the past returns a 400 ValidationException error. In ISO 8601 (https://www.iso.org/iso-8601-date-and-time-format.html) format: YYYY-MM-DDThh:mm:ss.sssZ. For example, 2020–07-2T12:15:20.000Z+01:00 (format: date-time)
   destination_positions: list # The list of destination positions for the route matrix. An array of points, each of which is itself a 2-value array defined in WGS 84 (https://earth-info.nga.mil/GandG/wgs84/index.html) format: [longitude, latitude]. For example, [-122.339, 47.615] Depending on the data provider selected in the route calculator resource there may be additional restrictions on the inputs you can choose. See Position restrictions (https://docs.aws.amazon.com/location/latest/developerguide/calculate-route-matrix.html#matrix-routing-position-limits) in the Amazon Location Service Developer Guide. For route calculators that use Esri as the data provider, if you specify a destination that's not located on a road, Amazon Location moves the position to the nearest road (https://docs.aws.amazon.com/location/latest/developerguide/snap-to-nearby-road.html). The snapped value is available in the result in SnappedDestinationPositions. Valid Values: [-180 to 180,-90 to 90]
   --distance-unit: string@distance-unit-completer # Set the unit system to specify the distance. Default Value: Kilometers
   --travel-mode: string@travel-mode-completer # Specifies the mode of transport when calculating a route. Used in estimating the speed of travel and road compatibility. The TravelMode you specify also determines how you specify route preferences: If traveling by Car use the CarModeOptions parameter. If traveling by Truck use the TruckModeOptions parameter. Bicycle or Motorcycle are only valid when using Grab as a data provider, and only within Southeast Asia. Truck is not available for Grab. For more information about using Grab as a data provider, see GrabMaps (https://docs.aws.amazon.com/location/latest/developerguide/grab.html) in the Amazon Location Service Developer Guide. Default Value: Car
-  --truck-mode-options: record # Contains details about additional route preferences for requests that specify TravelMode as Truck. — shape: {AvoidFerries?: any, AvoidTolls?: any, Dimensions?: any, Weight?: any}
-]: any -> record<RouteMatrix: record, SnappedDeparturePositions: record, SnappedDestinationPositions: record, Summary: record<DataSource: record, DistanceUnit: record, ErrorCount: record, RouteCount: record>> {
+  --truck-mode-options: record # Contains details about additional route preferences for requests that specify TravelMode as Truck. — shape: {AvoidFerries?: bool, AvoidTolls?: bool, Dimensions?: record, Weight?: record}
+]: any -> record<RouteMatrix: list<list<record>>, SnappedDeparturePositions: list<list<float>>, SnappedDestinationPositions: list<list<float>>, Summary: record<DataSource: string, DistanceUnit: string, ErrorCount: int, RouteCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -638,7 +638,7 @@ export def "create-geofence-collection" [
   --pricing-plan: string@pricing-plan-completer # No longer used. If included, the only allowed value is RequestBasedUsage.
   --pricing-plan-data-source: string # This parameter is no longer used.
   --tags: record # Applies one or more tags to the geofence collection. A tag is a key-value pair helps manage, identify, search, and filter your resources by labelling them. Format: "key" : "value" Restrictions: Maximum 50 tags per resource Each resource tag must be unique with a maximum of one value. Maximum key length: 128 Unicode characters in UTF-8 Maximum value length: 256 Unicode characters in UTF-8 Can use alphanumeric characters (A–Z, a–z, 0–9), and the following characters: + - = . _ : / @. Cannot use "aws:" as a prefix for a key.
-]: any -> record<CollectionArn: record, CollectionName: record, CreateTime: record> {
+]: any -> record<CollectionArn: string, CollectionName: string, CreateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -667,7 +667,7 @@ export def "create-geofence-collection" [
 #
 # POST /metadata/v0/keys
 # operationId: CreateKey
-# --Restrictions shape: {AllowActions?: any, AllowReferers?: any, AllowResources?: any}
+# --Restrictions shape: {AllowActions?: list<string>, AllowReferers?: list<string>, AllowResources?: list<string>}
 export def "create-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -689,9 +689,9 @@ export def "create-key" [
   --expire-time: string # The optional timestamp for when the API key resource will expire in ISO 8601 (https://www.iso.org/iso-8601-date-and-time-format.html) format: YYYY-MM-DDThh:mm:ss.sssZ. One of NoExpiry or ExpireTime must be set. (format: date-time)
   key_name: string # A custom name for the API key resource. Requirements: Contain only alphanumeric characters (A–Z, a–z, 0–9), hyphens (-), periods (.), and underscores (_). Must be a unique API key name. No spaces allowed. For example, ExampleAPIKey.
   --no-expiry: oneof<nothing, bool> # Optionally set to true to set no expiration time for the API key. One of NoExpiry or ExpireTime must be set.
-  restrictions: record # API Restrictions on the allowed actions, resources, and referers for an API key resource. — shape: {AllowActions?: any, AllowReferers?: any, AllowResources?: any}
+  restrictions: record # API Restrictions on the allowed actions, resources, and referers for an API key resource. — shape: {AllowActions?: list<string>, AllowReferers?: list<string>, AllowResources?: list<string>}
   --tags: record # Applies one or more tags to the map resource. A tag is a key-value pair that helps manage, identify, search, and filter your resources by labelling them. Format: "key" : "value" Restrictions: Maximum 50 tags per resource Each resource tag must be unique with a maximum of one value. Maximum key length: 128 Unicode characters in UTF-8 Maximum value length: 256 Unicode characters in UTF-8 Can use alphanumeric characters (A–Z, a–z, 0–9), and the following characters: + - = . _ : / @. Cannot use "aws:" as a prefix for a key.
-]: any -> record<CreateTime: record, Key: record, KeyArn: record, KeyName: record> {
+]: any -> record<CreateTime: string, Key: string, KeyArn: string, KeyName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -720,7 +720,7 @@ export def "create-key" [
 #
 # POST /maps/v0/maps
 # operationId: CreateMap
-# --Configuration shape: {Style?: any}
+# --Configuration shape: {Style?: string}
 export def "create-map" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -738,12 +738,12 @@ export def "create-map" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  configuration: record # Specifies the map tile style selected from an available provider. — shape: {Style?: any}
+  configuration: record # Specifies the map tile style selected from an available provider. — shape: {Style?: string}
   --description: string # An optional description for the map resource.
   map_name: string # The name for the map resource. Requirements: Must contain only alphanumeric characters (A–Z, a–z, 0–9), hyphens (-), periods (.), and underscores (_). Must be a unique map resource name. No spaces allowed. For example, ExampleMap.
   --pricing-plan: string@pricing-plan-completer # No longer used. If included, the only allowed value is RequestBasedUsage.
   --tags: record # Applies one or more tags to the map resource. A tag is a key-value pair helps manage, identify, search, and filter your resources by labelling them. Format: "key" : "value" Restrictions: Maximum 50 tags per resource Each resource tag must be unique with a maximum of one value. Maximum key length: 128 Unicode characters in UTF-8 Maximum value length: 256 Unicode characters in UTF-8 Can use alphanumeric characters (A–Z, a–z, 0–9), and the following characters: + - = . _ : / @. Cannot use "aws:" as a prefix for a key.
-]: any -> record<CreateTime: record, MapArn: record, MapName: record> {
+]: any -> record<CreateTime: string, MapArn: string, MapName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -772,7 +772,7 @@ export def "create-map" [
 #
 # POST /places/v0/indexes
 # operationId: CreatePlaceIndex
-# --DataSourceConfiguration shape: {IntendedUse?: any}
+# --DataSourceConfiguration shape: {IntendedUse?: "SingleUse"|"Storage"}
 export def "create-place-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -791,12 +791,12 @@ export def "create-place-index" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   data_source: string # Specifies the geospatial data provider for the new place index. This field is case-sensitive. Enter the valid values as shown. For example, entering HERE returns an error. Valid values include: Esri – For additional information about Esri (https://docs.aws.amazon.com/location/latest/developerguide/esri.html)'s coverage in your region of interest, see Esri details on geocoding coverage (https://developers.arcgis.com/rest/geocode/api-reference/geocode-coverage.htm). Grab – Grab provides place index functionality for Southeast Asia. For additional information about GrabMaps (https://docs.aws.amazon.com/location/latest/developerguide/grab.html)' coverage, see GrabMaps countries and areas covered (https://docs.aws.amazon.com/location/latest/developerguide/grab.html#grab-coverage-area). Here – For additional information about HERE Technologies (https://docs.aws.amazon.com/location/latest/developerguide/HERE.html)' coverage in your region of interest, see HERE details on goecoding coverage (https://developer.here.com/documentation/geocoder/dev_guide/topics/coverage-geocoder.html). If you specify HERE Technologies (Here) as the data provider, you may not store results (https://docs.aws.amazon.com/location-places/latest/APIReference/API_DataSourceConfiguration.html) for locations in Japan. For more information, see the Amazon Web Services Service Terms (http://aws.amazon.com/service-terms/) for Amazon Location Service. For additional information , see Data providers (https://docs.aws.amazon.com/location/latest/developerguide/what-is-data-provider.html) on the Amazon Location Service Developer Guide.
-  --data-source-configuration: record # Specifies the data storage option chosen for requesting Places. When using Amazon Location Places: If using HERE Technologies as a data provider, you can't store results for locations in Japan by setting IntendedUse to Storage. parameter. Under the MobileAssetTracking or MobilAssetManagement pricing plan, you can't store results from your place index resources by setting IntendedUse to Storage. This returns a validation exception error. For more information, see the AWS Service Terms (https://aws.amazon.com/service-terms/) for Amazon Location Service. — shape: {IntendedUse?: any}
+  --data-source-configuration: record # Specifies the data storage option chosen for requesting Places. When using Amazon Location Places: If using HERE Technologies as a data provider, you can't store results for locations in Japan by setting IntendedUse to Storage. parameter. Under the MobileAssetTracking or MobilAssetManagement pricing plan, you can't store results from your place index resources by setting IntendedUse to Storage. This returns a validation exception error. For more information, see the AWS Service Terms (https://aws.amazon.com/service-terms/) for Amazon Location Service. — shape: {IntendedUse?: "SingleUse"|"Storage"}
   --description: string # The optional description for the place index resource.
   index_name: string # The name of the place index resource. Requirements: Contain only alphanumeric characters (A–Z, a–z, 0–9), hyphens (-), periods (.), and underscores (_). Must be a unique place index resource name. No spaces allowed. For example, ExamplePlaceIndex.
   --pricing-plan: string@pricing-plan-completer # No longer used. If included, the only allowed value is RequestBasedUsage.
   --tags: record # Applies one or more tags to the place index resource. A tag is a key-value pair that helps you manage, identify, search, and filter your resources. Format: "key" : "value" Restrictions: Maximum 50 tags per resource. Each tag key must be unique and must have exactly one associated value. Maximum key length: 128 Unicode characters in UTF-8. Maximum value length: 256 Unicode characters in UTF-8. Can use alphanumeric characters (A–Z, a–z, 0–9), and the following characters: + - = . _ : / @ Cannot use "aws:" as a prefix for a key.
-]: any -> record<CreateTime: record, IndexArn: record, IndexName: record> {
+]: any -> record<CreateTime: string, IndexArn: string, IndexName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -847,7 +847,7 @@ export def "create-route-calculator" [
   --description: string # The optional description for the route calculator resource.
   --pricing-plan: string@pricing-plan-completer # No longer used. If included, the only allowed value is RequestBasedUsage.
   --tags: record # Applies one or more tags to the route calculator resource. A tag is a key-value pair helps manage, identify, search, and filter your resources by labelling them. For example: { "tag1" : "value1", "tag2" : "value2"} Format: "key" : "value" Restrictions: Maximum 50 tags per resource Each resource tag must be unique with a maximum of one value. Maximum key length: 128 Unicode characters in UTF-8 Maximum value length: 256 Unicode characters in UTF-8 Can use alphanumeric characters (A–Z, a–z, 0–9), and the following characters: + - = . _ : / @. Cannot use "aws:" as a prefix for a key.
-]: any -> record<CalculatorArn: record, CalculatorName: record, CreateTime: record> {
+]: any -> record<CalculatorArn: string, CalculatorName: string, CreateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -900,7 +900,7 @@ export def "create-tracker" [
   --pricing-plan-data-source: string # This parameter is no longer used.
   --tags: record # Applies one or more tags to the tracker resource. A tag is a key-value pair helps manage, identify, search, and filter your resources by labelling them. Format: "key" : "value" Restrictions: Maximum 50 tags per resource Each resource tag must be unique with a maximum of one value. Maximum key length: 128 Unicode characters in UTF-8 Maximum value length: 256 Unicode characters in UTF-8 Can use alphanumeric characters (A–Z, a–z, 0–9), and the following characters: + - = . _ : / @. Cannot use "aws:" as a prefix for a key.
   tracker_name: string # The name for the tracker resource. Requirements: Contain only alphanumeric characters (A-Z, a-z, 0-9) , hyphens (-), periods (.), and underscores (_). Must be a unique tracker resource name. No spaces allowed. For example, ExampleTracker.
-]: any -> record<CreateTime: record, TrackerArn: record, TrackerName: record> {
+]: any -> record<CreateTime: string, TrackerArn: string, TrackerName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -992,7 +992,7 @@ export def "describe-geofence-collection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CollectionArn: record, CollectionName: record, CreateTime: record, Description: record, KmsKeyId: record, PricingPlan: record, PricingPlanDataSource: record, Tags: record, UpdateTime: record> {
+]: nothing -> record<CollectionArn: string, CollectionName: string, CreateTime: string, Description: string, KmsKeyId: string, PricingPlan: string, PricingPlanDataSource: string, Tags: record, UpdateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_name | is-empty) { error make --unspanned { msg: "path parameter 'CollectionName' must be non-empty" } }
@@ -1040,7 +1040,7 @@ export def "update-geofence-collection" [
   --description: string # Updates the description for the geofence collection.
   --pricing-plan: string@pricing-plan-completer # No longer used. If included, the only allowed value is RequestBasedUsage.
   --pricing-plan-data-source: string # This parameter is no longer used.
-]: any -> record<CollectionArn: record, CollectionName: record, UpdateTime: record> {
+]: any -> record<CollectionArn: string, CollectionName: string, UpdateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1133,7 +1133,7 @@ export def "describe-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CreateTime: record, Description: record, ExpireTime: record, Key: record, KeyArn: record, KeyName: record, Restrictions: record<AllowActions: record, AllowReferers: record, AllowResources: record>, Tags: record, UpdateTime: record> {
+]: nothing -> record<CreateTime: string, Description: string, ExpireTime: string, Key: string, KeyArn: string, KeyName: string, Restrictions: record<AllowActions: list<string>, AllowReferers: list<string>, AllowResources: list<string>>, Tags: record, UpdateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'KeyName' must be non-empty" } }
@@ -1160,7 +1160,7 @@ export def "describe-key" [
 #
 # PATCH /metadata/v0/keys/{KeyName}
 # operationId: UpdateKey
-# --Restrictions shape: {AllowActions?: any, AllowReferers?: any, AllowResources?: any}
+# --Restrictions shape: {AllowActions?: list<string>, AllowReferers?: list<string>, AllowResources?: list<string>}
 export def "update-key" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1183,8 +1183,8 @@ export def "update-key" [
   --expire-time: string # Updates the timestamp for when the API key resource will expire in ISO 8601 (https://www.iso.org/iso-8601-date-and-time-format.html) format: YYYY-MM-DDThh:mm:ss.sssZ. (format: date-time)
   --force-update: oneof<nothing, bool> # The boolean flag to be included for updating ExpireTime or Restrictions details. Must be set to true to update an API key resource that has been used in the past 7 days. False if force update is not preferred Default value: False
   --no-expiry: oneof<nothing, bool> # Whether the API key should expire. Set to true to set the API key to have no expiration time.
-  --restrictions: record # API Restrictions on the allowed actions, resources, and referers for an API key resource. — shape: {AllowActions?: any, AllowReferers?: any, AllowResources?: any}
-]: any -> record<KeyArn: record, KeyName: record, UpdateTime: record> {
+  --restrictions: record # API Restrictions on the allowed actions, resources, and referers for an API key resource. — shape: {AllowActions?: list<string>, AllowReferers?: list<string>, AllowResources?: list<string>}
+]: any -> record<KeyArn: string, KeyName: string, UpdateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1277,7 +1277,7 @@ export def "describe-map" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Configuration: record<Style: record>, CreateTime: record, DataSource: record, Description: record, MapArn: record, MapName: record, PricingPlan: record, Tags: record, UpdateTime: record> {
+]: nothing -> record<Configuration: record<Style: string>, CreateTime: string, DataSource: string, Description: string, MapArn: string, MapName: string, PricingPlan: string, Tags: record, UpdateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($map_name | is-empty) { error make --unspanned { msg: "path parameter 'MapName' must be non-empty" } }
@@ -1324,7 +1324,7 @@ export def "update-map" [
   --x-amz-signed-headers: string
   --description: string # Updates the description for the map resource.
   --pricing-plan: string@pricing-plan-completer # No longer used. If included, the only allowed value is RequestBasedUsage.
-]: any -> record<MapArn: record, MapName: record, UpdateTime: record> {
+]: any -> record<MapArn: string, MapName: string, UpdateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1417,7 +1417,7 @@ export def "describe-place-index" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CreateTime: record, DataSource: record, DataSourceConfiguration: record<IntendedUse: record>, Description: record, IndexArn: record, IndexName: record, PricingPlan: record, Tags: record, UpdateTime: record> {
+]: nothing -> record<CreateTime: string, DataSource: string, DataSourceConfiguration: record<IntendedUse: string>, Description: string, IndexArn: string, IndexName: string, PricingPlan: string, Tags: record, UpdateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index_name | is-empty) { error make --unspanned { msg: "path parameter 'IndexName' must be non-empty" } }
@@ -1444,7 +1444,7 @@ export def "describe-place-index" [
 #
 # PATCH /places/v0/indexes/{IndexName}
 # operationId: UpdatePlaceIndex
-# --DataSourceConfiguration shape: {IntendedUse?: any}
+# --DataSourceConfiguration shape: {IntendedUse?: "SingleUse"|"Storage"}
 export def "update-place-index" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1463,10 +1463,10 @@ export def "update-place-index" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --data-source-configuration: record # Specifies the data storage option chosen for requesting Places. When using Amazon Location Places: If using HERE Technologies as a data provider, you can't store results for locations in Japan by setting IntendedUse to Storage. parameter. Under the MobileAssetTracking or MobilAssetManagement pricing plan, you can't store results from your place index resources by setting IntendedUse to Storage. This returns a validation exception error. For more information, see the AWS Service Terms (https://aws.amazon.com/service-terms/) for Amazon Location Service. — shape: {IntendedUse?: any}
+  --data-source-configuration: record # Specifies the data storage option chosen for requesting Places. When using Amazon Location Places: If using HERE Technologies as a data provider, you can't store results for locations in Japan by setting IntendedUse to Storage. parameter. Under the MobileAssetTracking or MobilAssetManagement pricing plan, you can't store results from your place index resources by setting IntendedUse to Storage. This returns a validation exception error. For more information, see the AWS Service Terms (https://aws.amazon.com/service-terms/) for Amazon Location Service. — shape: {IntendedUse?: "SingleUse"|"Storage"}
   --description: string # Updates the description for the place index resource.
   --pricing-plan: string@pricing-plan-completer # No longer used. If included, the only allowed value is RequestBasedUsage.
-]: any -> record<IndexArn: record, IndexName: record, UpdateTime: record> {
+]: any -> record<IndexArn: string, IndexName: string, UpdateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1559,7 +1559,7 @@ export def "describe-route-calculator" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CalculatorArn: record, CalculatorName: record, CreateTime: record, DataSource: record, Description: record, PricingPlan: record, Tags: record, UpdateTime: record> {
+]: nothing -> record<CalculatorArn: string, CalculatorName: string, CreateTime: string, DataSource: string, Description: string, PricingPlan: string, Tags: record, UpdateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($calculator_name | is-empty) { error make --unspanned { msg: "path parameter 'CalculatorName' must be non-empty" } }
@@ -1606,7 +1606,7 @@ export def "update-route-calculator" [
   --x-amz-signed-headers: string
   --description: string # Updates the description for the route calculator resource.
   --pricing-plan: string@pricing-plan-completer # No longer used. If included, the only allowed value is RequestBasedUsage.
-]: any -> record<CalculatorArn: record, CalculatorName: record, UpdateTime: record> {
+]: any -> record<CalculatorArn: string, CalculatorName: string, UpdateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1699,7 +1699,7 @@ export def "describe-tracker" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CreateTime: record, Description: record, KmsKeyId: record, PositionFiltering: record, PricingPlan: record, PricingPlanDataSource: record, Tags: record, TrackerArn: record, TrackerName: record, UpdateTime: record> {
+]: nothing -> record<CreateTime: string, Description: string, KmsKeyId: string, PositionFiltering: string, PricingPlan: string, PricingPlanDataSource: string, Tags: record, TrackerArn: string, TrackerName: string, UpdateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tracker_name | is-empty) { error make --unspanned { msg: "path parameter 'TrackerName' must be non-empty" } }
@@ -1748,7 +1748,7 @@ export def "update-tracker" [
   --position-filtering: string@position-filtering-completer # Updates the position filtering for the tracker resource. Valid values: TimeBased - Location updates are evaluated against linked geofence collections, but not every location update is stored. If your update frequency is more often than 30 seconds, only one update per 30 seconds is stored for each unique device ID. DistanceBased - If the device has moved less than 30 m (98.4 ft), location updates are ignored. Location updates within this distance are neither evaluated against linked geofence collections, nor stored. This helps control costs by reducing the number of geofence evaluations and historical device positions to paginate through. Distance-based filtering can also reduce the effects of GPS noise when displaying device trajectories on a map. AccuracyBased - If the device has moved less than the measured accuracy, location updates are ignored. For example, if two consecutive updates from a device have a horizontal accuracy of 5 m and 10 m, the second update is ignored if the device has moved less than 15 m. Ignored location updates are neither evaluated against linked geofence collections, nor stored. This helps educe the effects of GPS noise when displaying device trajectories on a map, and can help control costs by reducing the number of geofence evaluations.
   --pricing-plan: string@pricing-plan-completer # No longer used. If included, the only allowed value is RequestBasedUsage.
   --pricing-plan-data-source: string # This parameter is no longer used.
-]: any -> record<TrackerArn: record, TrackerName: record, UpdateTime: record> {
+]: any -> record<TrackerArn: string, TrackerName: string, UpdateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1844,7 +1844,7 @@ export def "get-device-position" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Accuracy: record<Horizontal: record>, DeviceId: record, Position: record, PositionProperties: record, ReceivedTime: record, SampleTime: record> {
+]: nothing -> record<Accuracy: record<Horizontal: float>, DeviceId: string, Position: list<float>, PositionProperties: record, ReceivedTime: string, SampleTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tracker_name | is-empty) { error make --unspanned { msg: "path parameter 'TrackerName' must be non-empty" } }
@@ -1897,7 +1897,7 @@ export def "get-device-position-history" [
   --max-results-body: int # An optional limit for the number of device positions returned in a single call. Default value: 100 (body field)
   --next-token-body: string # The pagination token specifying which page of results to return in the response. If no token is provided, the default page is the first page. Default value: null (body field)
   --start-time-inclusive: string # Specify the start time for the position history in ISO 8601 (https://www.iso.org/iso-8601-date-and-time-format.html) format: YYYY-MM-DDThh:mm:ss.sssZ. By default, the value will be 24 hours prior to the time that the request is made. Requirement: The time specified for StartTimeInclusive must be before EndTimeExclusive. (format: date-time)
-]: any -> record<DevicePositions: record, NextToken: record> {
+]: any -> record<DevicePositions: table<Accuracy: record, DeviceId: string, Position: list, PositionProperties: record, ReceivedTime: string, SampleTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1948,7 +1948,7 @@ export def "get-geofence" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CreateTime: record, GeofenceId: record, Geometry: record<Circle: record<Center: record, Radius: record>, Polygon: record>, Status: record, UpdateTime: record> {
+]: nothing -> record<CreateTime: string, GeofenceId: string, Geometry: record<Circle: record<Center: list, Radius: float>, Polygon: list<list>>, Status: string, UpdateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_name | is-empty) { error make --unspanned { msg: "path parameter 'CollectionName' must be non-empty" } }
@@ -1976,7 +1976,7 @@ export def "get-geofence" [
 #
 # PUT /geofencing/v0/collections/{CollectionName}/geofences/{GeofenceId}
 # operationId: PutGeofence
-# --Geometry shape: {Circle?: any, Polygon?: any}
+# --Geometry shape: {Circle?: record, Polygon?: list}
 export def "put-geofence" [
   collection_name: string
   geofence_id: string
@@ -1996,8 +1996,8 @@ export def "put-geofence" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  geometry: record # Contains the geofence geometry details. A geofence geometry is made up of either a polygon or a circle. Can be either a polygon or a circle. Including both will return a validation error. Amazon Location doesn't currently support polygons with holes, multipolygons, polygons that are wound clockwise, or that cross the antimeridian. — shape: {Circle?: any, Polygon?: any}
-]: any -> record<CreateTime: record, GeofenceId: record, UpdateTime: record> {
+  geometry: record # Contains the geofence geometry details. A geofence geometry is made up of either a polygon or a circle. Can be either a polygon or a circle. Including both will return a validation error. Amazon Location doesn't currently support polygons with holes, multipolygons, polygons that are wound clockwise, or that cross the antimeridian. — shape: {Circle?: record, Polygon?: list}
+]: any -> record<CreateTime: string, GeofenceId: string, UpdateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2049,7 +2049,7 @@ export def "get-map-glyphs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Blob: record> {
+]: nothing -> record<Blob: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($map_name | is-empty) { error make --unspanned { msg: "path parameter 'MapName' must be non-empty" } }
@@ -2099,7 +2099,7 @@ export def "get-map-sprites" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Blob: record> {
+]: nothing -> record<Blob: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($map_name | is-empty) { error make --unspanned { msg: "path parameter 'MapName' must be non-empty" } }
@@ -2147,7 +2147,7 @@ export def "get-map-style-descriptor" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Blob: record> {
+]: nothing -> record<Blob: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($map_name | is-empty) { error make --unspanned { msg: "path parameter 'MapName' must be non-empty" } }
@@ -2197,7 +2197,7 @@ export def "get-map-tile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Blob: record> {
+]: nothing -> record<Blob: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($map_name | is-empty) { error make --unspanned { msg: "path parameter 'MapName' must be non-empty" } }
@@ -2248,7 +2248,7 @@ export def "get-place" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Place: record<AddressNumber: record, Country: record, Geometry: record<Point: record>, Interpolated: record, Label: record, Municipality: record, Neighborhood: record, PostalCode: record, Region: record, Street: record, SubRegion: record, TimeZone: record<Name: record, Offset: record>, UnitNumber: record, UnitType: record>> {
+]: nothing -> record<Place: record<AddressNumber: string, Country: string, Geometry: record<Point: list>, Interpolated: bool, Label: string, Municipality: string, Neighborhood: string, PostalCode: string, Region: string, Street: string, SubRegion: string, TimeZone: record<Name: string, Offset: int>, UnitNumber: string, UnitType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index_name | is-empty) { error make --unspanned { msg: "path parameter 'IndexName' must be non-empty" } }
@@ -2299,7 +2299,7 @@ export def "list-device-positions" [
   --x-amz-signed-headers: string
   --max-results-body: int # An optional limit for the number of entries returned in a single call. Default value: 100 (body field)
   --next-token-body: string # The pagination token specifying which page of results to return in the response. If no token is provided, the default page is the first page. Default value: null (body field)
-]: any -> record<Entries: record, NextToken: record> {
+]: any -> record<Entries: table<Accuracy: record, DeviceId: string, Position: list, PositionProperties: record, SampleTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2351,7 +2351,7 @@ export def "list-geofence-collections" [
   --x-amz-signed-headers: string
   --max-results-body: int # An optional limit for the number of resources returned in a single call. Default value: 100 (body field)
   --next-token-body: string # The pagination token specifying which page of results to return in the response. If no token is provided, the default page is the first page. Default value: null (body field)
-]: any -> record<Entries: record, NextToken: record> {
+]: any -> record<Entries: table<CollectionName: string, CreateTime: string, Description: string, PricingPlan: string, PricingPlanDataSource: string, UpdateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2403,7 +2403,7 @@ export def "list-geofences" [
   --x-amz-signed-headers: string
   --max-results-body: int # An optional limit for the number of geofences returned in a single call. Default value: 100 (body field)
   --next-token-body: string # The pagination token specifying which page of results to return in the response. If no token is provided, the default page is the first page. Default value: null (body field)
-]: any -> record<Entries: record, NextToken: record> {
+]: any -> record<Entries: table<CreateTime: string, GeofenceId: string, Geometry: record, Status: string, UpdateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2434,7 +2434,7 @@ export def "list-geofences" [
 #
 # POST /metadata/v0/list-keys
 # operationId: ListKeys
-# --Filter shape: {KeyStatus?: any}
+# --Filter shape: {KeyStatus?: "Active"|"Expired"}
 export def "list-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2454,10 +2454,10 @@ export def "list-keys" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filter: record # Options for filtering API keys. — shape: {KeyStatus?: any}
+  --filter: record # Options for filtering API keys. — shape: {KeyStatus?: "Active"|"Expired"}
   --max-results-body: int # An optional limit for the number of resources returned in a single call. Default value: 100 (body field)
   --next-token-body: string # The pagination token specifying which page of results to return in the response. If no token is provided, the default page is the first page. Default value: null (body field)
-]: any -> record<Entries: record, NextToken: record> {
+]: any -> record<Entries: table<CreateTime: string, Description: string, ExpireTime: string, KeyName: string, Restrictions: record, UpdateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2508,7 +2508,7 @@ export def "list-maps" [
   --x-amz-signed-headers: string
   --max-results-body: int # An optional limit for the number of resources returned in a single call. Default value: 100 (body field)
   --next-token-body: string # The pagination token specifying which page of results to return in the response. If no token is provided, the default page is the first page. Default value: null (body field)
-]: any -> record<Entries: record, NextToken: record> {
+]: any -> record<Entries: table<CreateTime: string, DataSource: string, Description: string, MapName: string, PricingPlan: string, UpdateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2559,7 +2559,7 @@ export def "list-place-indexes" [
   --x-amz-signed-headers: string
   --max-results-body: int # An optional limit for the maximum number of results returned in a single call. Default value: 100 (body field)
   --next-token-body: string # The pagination token specifying which page of results to return in the response. If no token is provided, the default page is the first page. Default value: null (body field)
-]: any -> record<Entries: record, NextToken: record> {
+]: any -> record<Entries: table<CreateTime: string, DataSource: string, Description: string, IndexName: string, PricingPlan: string, UpdateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2610,7 +2610,7 @@ export def "list-route-calculators" [
   --x-amz-signed-headers: string
   --max-results-body: int # An optional maximum number of results returned in a single call. Default Value: 100 (body field)
   --next-token-body: string # The pagination token specifying which page of results to return in the response. If no token is provided, the default page is the first page. Default Value: null (body field)
-]: any -> record<Entries: record, NextToken: record> {
+]: any -> record<Entries: table<CalculatorName: string, CreateTime: string, DataSource: string, Description: string, PricingPlan: string, UpdateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2756,7 +2756,7 @@ export def "list-tracker-consumers" [
   --x-amz-signed-headers: string
   --max-results-body: int # An optional limit for the number of resources returned in a single call. Default value: 100 (body field)
   --next-token-body: string # The pagination token specifying which page of results to return in the response. If no token is provided, the default page is the first page. Default value: null (body field)
-]: any -> record<ConsumerArns: record, NextToken: record> {
+]: any -> record<ConsumerArns: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2808,7 +2808,7 @@ export def "list-trackers" [
   --x-amz-signed-headers: string
   --max-results-body: int # An optional limit for the number of resources returned in a single call. Default value: 100 (body field)
   --next-token-body: string # The pagination token specifying which page of results to return in the response. If no token is provided, the default page is the first page. Default value: null (body field)
-]: any -> record<Entries: record, NextToken: record> {
+]: any -> record<Entries: table<CreateTime: string, Description: string, PricingPlan: string, PricingPlanDataSource: string, TrackerName: string, UpdateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2859,7 +2859,7 @@ export def "search-place-index-for-position" [
   --language: string # The preferred language used to return results. The value must be a valid BCP 47 (https://tools.ietf.org/search/bcp47) language tag, for example, en for English. This setting affects the languages used in the results, but not the results themselves. If no language is specified, or not supported for a particular result, the partner automatically chooses a language for the result. For an example, we'll use the Greek language. You search for a location around Athens, Greece, with the language parameter set to en. The city in the results will most likely be returned as Athens. If you set the language parameter to el, for Greek, then the city in the results will more likely be returned as Αθήνα. If the data provider does not have a value for Greek, the result will be in a language that the provider does support.
   --max-results: int # An optional parameter. The maximum number of results returned per request. Default value: 50
   position: list<float> # Specifies the longitude and latitude of the position to query. This parameter must contain a pair of numbers. The first number represents the X coordinate, or longitude; the second number represents the Y coordinate, or latitude. For example, [-123.1174, 49.2847] represents a position with longitude -123.1174 and latitude 49.2847.
-]: any -> record<Results: record, Summary: record<DataSource: record, Language: record, MaxResults: record, Position: record>> {
+]: any -> record<Results: table<Distance: float, Place: record, PlaceId: string>, Summary: record<DataSource: string, Language: string, MaxResults: int, Position: list<float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2913,7 +2913,7 @@ export def "search-place-index-for-suggestions" [
   --language: string # The preferred language used to return results. The value must be a valid BCP 47 (https://tools.ietf.org/search/bcp47) language tag, for example, en for English. This setting affects the languages used in the results. If no language is specified, or not supported for a particular result, the partner automatically chooses a language for the result. For an example, we'll use the Greek language. You search for Athens, Gr to get suggestions with the language parameter set to en. The results found will most likely be returned as Athens, Greece. If you set the language parameter to el, for Greek, then the result found will more likely be returned as Αθήνα, Ελλάδα. If the data provider does not have a value for Greek, the result will be in a language that the provider does support.
   --max-results: int # An optional parameter. The maximum number of results returned per request. The default: 5
   text: string # The free-form partial text to use to generate place suggestions. For example, eiffel tow. (format: password)
-]: any -> record<Results: record, Summary: record<BiasPosition: record, DataSource: record, FilterBBox: record, FilterCountries: record, Language: record, MaxResults: record, Text: record>> {
+]: any -> record<Results: table<PlaceId: string, Text: string>, Summary: record<BiasPosition: list<float>, DataSource: string, FilterBBox: list<float>, FilterCountries: list<string>, Language: string, MaxResults: int, Text: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2967,7 +2967,7 @@ export def "search-place-index-for-text" [
   --language: string # The preferred language used to return results. The value must be a valid BCP 47 (https://tools.ietf.org/search/bcp47) language tag, for example, en for English. This setting affects the languages used in the results, but not the results themselves. If no language is specified, or not supported for a particular result, the partner automatically chooses a language for the result. For an example, we'll use the Greek language. You search for Athens, Greece, with the language parameter set to en. The result found will most likely be returned as Athens. If you set the language parameter to el, for Greek, then the result found will more likely be returned as Αθήνα. If the data provider does not have a value for Greek, the result will be in a language that the provider does support.
   --max-results: int # An optional parameter. The maximum number of results returned per request. The default: 50
   text: string # The address, name, city, or region to be used in the search in free-form text format. For example, 123 Any Street. (format: password)
-]: any -> record<Results: record, Summary: record<BiasPosition: record, DataSource: record, FilterBBox: record, FilterCountries: record, Language: record, MaxResults: record, ResultBBox: record, Text: record>> {
+]: any -> record<Results: table<Distance: float, Place: record, PlaceId: string, Relevance: float>, Summary: record<BiasPosition: list<float>, DataSource: string, FilterBBox: list<float>, FilterCountries: list<string>, Language: string, MaxResults: int, ResultBBox: list<float>, Text: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3008,7 +3008,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The list of tag keys to remove from the specified resource.
+  --tag-keys: list # The list of tag keys to remove from the specified resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3020,6 +3020,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'ResourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

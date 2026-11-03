@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -98,6 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def x-amz-target-completer [] { ["IotThingsGraphFrontEndService.AssociateEntityToThing"] }
 def x-amz-target-completer-1 [] { ["IotThingsGraphFrontEndService.CreateFlowTemplate"] }
+def target-completer [] { ["CLOUD" "GREENGRASS"] }
 def x-amz-target-completer-2 [] { ["IotThingsGraphFrontEndService.CreateSystemInstance"] }
 def x-amz-target-completer-3 [] { ["IotThingsGraphFrontEndService.CreateSystemTemplate"] }
 def x-amz-target-completer-4 [] { ["IotThingsGraphFrontEndService.DeleteFlowTemplate"] }
@@ -108,6 +109,7 @@ def x-amz-target-completer-8 [] { ["IotThingsGraphFrontEndService.DeploySystemIn
 def x-amz-target-completer-9 [] { ["IotThingsGraphFrontEndService.DeprecateFlowTemplate"] }
 def x-amz-target-completer-10 [] { ["IotThingsGraphFrontEndService.DeprecateSystemTemplate"] }
 def x-amz-target-completer-11 [] { ["IotThingsGraphFrontEndService.DescribeNamespace"] }
+def entity-type-completer [] { ["ACTION" "CAPABILITY" "DEVICE" "DEVICE_MODEL" "ENUM" "EVENT" "MAPPING" "PROPERTY" "SERVICE" "STATE"] }
 def x-amz-target-completer-12 [] { ["IotThingsGraphFrontEndService.DissociateEntityFromThing"] }
 def x-amz-target-completer-13 [] { ["IotThingsGraphFrontEndService.GetEntities"] }
 def x-amz-target-completer-14 [] { ["IotThingsGraphFrontEndService.GetFlowTemplate"] }
@@ -178,14 +180,15 @@ export def "associate-entity-to-thing" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  thing_name: any
-  entity_id: any
-  --namespace-version: any
+  --x-amz-target: string@x-amz-target-completer # required
+  thing_name: string # The name of the thing to which the entity is to be associated.
+  entity_id: string # The ID of the device to be associated with the thing. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:device:DEVICENAME
+  --namespace-version: int # The version of the user's namespace. Defaults to the latest version of the user's namespace.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.AssociateEntityToThing")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"thingName": $thing_name, "entityId": $entity_id, "namespaceVersion": $namespace_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -212,6 +215,7 @@ export def "associate-entity-to-thing" [
 # POST /
 # DEPRECATED
 # operationId: CreateFlowTemplate
+# --definition shape: {language: "GRAPHQL", text: string}
 @deprecated
 export def "create-flow-template" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -230,13 +234,14 @@ export def "create-flow-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  definition: any
-  --compatible-namespace-version: any
-]: any -> record<summary: record<id: record, arn: record, revisionNumber: record, createdAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  definition: record # A document that defines an entity. — shape: {language: "GRAPHQL", text: string}
+  --compatible-namespace-version: int # The namespace version in which the workflow is to be created. If no value is specified, the latest version is used by default.
+]: any -> record<summary: record<id: string, arn: string, revisionNumber: int, createdAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.CreateFlowTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"definition": $definition, "compatibleNamespaceVersion": $compatible_namespace_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -263,8 +268,9 @@ export def "create-flow-template" [
 # POST /
 # DEPRECATED
 # operationId: CreateSystemInstance
-# --definition shape: {language: any, text: any}
-# --metricsConfiguration shape: {cloudMetricEnabled?: any, metricRuleRoleArn?: any}
+# --tags item shape: {key: string, value: string}
+# --definition shape: {language: "GRAPHQL", text: string}
+# --metricsConfiguration shape: {cloudMetricEnabled?: bool, metricRuleRoleArn?: string}
 @deprecated
 export def "create-system-instance" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -283,18 +289,19 @@ export def "create-system-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  --tags: any
-  definition: record # A document that defines an entity. — shape: {language: any, text: any}
-  target: any
-  --greengrass-group-name: any
-  --s3-bucket-name: any
-  --metrics-configuration: record # An object that specifies whether cloud metrics are collected in a deployment and, if so, what role is used to collect metrics. — shape: {cloudMetricEnabled?: any, metricRuleRoleArn?: any}
-  --flow-actions-role-arn: any
-]: any -> record<summary: record<id: record, arn: record, status: record, target: record, greengrassGroupName: record, createdAt: record, updatedAt: record, greengrassGroupId: record, greengrassGroupVersionId: record>> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  --tags: list # Metadata, consisting of key-value pairs, that can be used to categorize your system instances. — item shape: {key: string, value: string}
+  definition: record # A document that defines an entity. — shape: {language: "GRAPHQL", text: string}
+  target: string@target-completer # The target type of the deployment. Valid values are GREENGRASS and CLOUD.
+  --greengrass-group-name: string # The name of the Greengrass group where the system instance will be deployed. This value is required if the value of the target parameter is GREENGRASS.
+  --s3-bucket-name: string # The name of the Amazon Simple Storage Service bucket that will be used to store and deploy the system instance's resource file. This value is required if the value of the target parameter is GREENGRASS.
+  --metrics-configuration: record # An object that specifies whether cloud metrics are collected in a deployment and, if so, what role is used to collect metrics. — shape: {cloudMetricEnabled?: bool, metricRuleRoleArn?: string}
+  --flow-actions-role-arn: string # The ARN of the IAM role that AWS IoT Things Graph will assume when it executes the flow. This role must have read and write access to AWS Lambda and AWS IoT and any other AWS services that the flow uses when it executes. This value is required if the value of the target parameter is CLOUD.
+]: any -> record<summary: record<id: string, arn: string, status: string, target: string, greengrassGroupName: string, createdAt: string, updatedAt: string, greengrassGroupId: string, greengrassGroupVersionId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.CreateSystemInstance")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"tags": $tags, "definition": $definition, "target": $target, "greengrassGroupName": $greengrass_group_name, "s3BucketName": $s3_bucket_name, "metricsConfiguration": $metrics_configuration, "flowActionsRoleArn": $flow_actions_role_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -321,6 +328,7 @@ export def "create-system-instance" [
 # POST /
 # DEPRECATED
 # operationId: CreateSystemTemplate
+# --definition shape: {language: "GRAPHQL", text: string}
 @deprecated
 export def "create-system-template" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -339,13 +347,14 @@ export def "create-system-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  definition: any
-  --compatible-namespace-version: any
-]: any -> record<summary: record<id: record, arn: record, revisionNumber: record, createdAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  definition: record # A document that defines an entity. — shape: {language: "GRAPHQL", text: string}
+  --compatible-namespace-version: int # The namespace version in which the system is to be created. If no value is specified, the latest version is used by default.
+]: any -> record<summary: record<id: string, arn: string, revisionNumber: int, createdAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.CreateSystemTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"definition": $definition, "compatibleNamespaceVersion": $compatible_namespace_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -390,12 +399,13 @@ export def "delete-flow-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  id: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  id: string # The ID of the workflow to be deleted. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:workflow:WORKFLOWNAME
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.DeleteFlowTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -440,12 +450,13 @@ export def "delete-namespace" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
+  --x-amz-target: string@x-amz-target-completer-5 # required
   --body: record
-]: any -> record<namespaceArn: record, namespaceName: record> {
+]: any -> record<namespaceArn: string, namespaceName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.DeleteNamespace")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -490,12 +501,13 @@ export def "delete-system-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  --id: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  --id: string # The ID of the system instance to be deleted.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.DeleteSystemInstance")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -540,12 +552,13 @@ export def "delete-system-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  id: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  id: string # The ID of the system to be deleted. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:system:SYSTEMNAME
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.DeleteSystemTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -590,12 +603,13 @@ export def "deploy-system-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  --id: any
-]: any -> record<summary: record<id: record, arn: record, status: record, target: record, greengrassGroupName: record, createdAt: record, updatedAt: record, greengrassGroupId: record, greengrassGroupVersionId: record>, greengrassDeploymentId: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  --id: string # The ID of the system instance. This value is returned by the CreateSystemInstance action. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:deployment:DEPLOYMENTNAME
+]: any -> record<summary: record<id: string, arn: string, status: string, target: string, greengrassGroupName: string, createdAt: string, updatedAt: string, greengrassGroupId: string, greengrassGroupVersionId: string>, greengrassDeploymentId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.DeploySystemInstance")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -640,12 +654,13 @@ export def "deprecate-flow-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  id: any
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  id: string # The ID of the workflow to be deleted. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:workflow:WORKFLOWNAME
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.DeprecateFlowTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -690,12 +705,13 @@ export def "deprecate-system-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  id: any
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  id: string # The ID of the system to delete. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:system:SYSTEMNAME
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.DeprecateSystemTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -740,12 +756,13 @@ export def "describe-namespace" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  --namespace-name: any
-]: any -> record<namespaceArn: record, namespaceName: record, trackingNamespaceName: record, trackingNamespaceVersion: record, namespaceVersion: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  --namespace-name: string # The name of the user's namespace. Set this to aws to get the public namespace.
+]: any -> record<namespaceArn: string, namespaceName: string, trackingNamespaceName: string, trackingNamespaceVersion: int, namespaceVersion: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.DescribeNamespace")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"namespaceName": $namespace_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -790,13 +807,14 @@ export def "dissociate-entity-from-thing" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  thing_name: any
-  entity_type: any
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  thing_name: string # The name of the thing to disassociate.
+  entity_type: string@entity-type-completer # The entity type from which to disassociate the thing.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.DissociateEntityFromThing")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"thingName": $thing_name, "entityType": $entity_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -841,13 +859,14 @@ export def "get-entities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  ids: any
-  --namespace-version: any
-]: any -> record<descriptions: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  ids: list<string> # An array of entity IDs. The IDs should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:device:DEVICENAME
+  --namespace-version: int # The version of the user's namespace. Defaults to the latest version of the user's namespace.
+]: any -> record<descriptions: table<id: string, arn: string, type: string, createdAt: string, definition: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.GetEntities")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ids": $ids, "namespaceVersion": $namespace_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -892,13 +911,14 @@ export def "get-flow-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  id: any
-  --revision-number: any
-]: any -> record<description: record<summary: record<id: record, arn: record, revisionNumber: record, createdAt: record>, definition: record<language: record, text: record>, validatedNamespaceVersion: record>> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  id: string # The ID of the workflow. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:workflow:WORKFLOWNAME
+  --revision-number: int # The number of the workflow revision to retrieve.
+]: any -> record<description: record<summary: record<id: string, arn: string, revisionNumber: int, createdAt: string>, definition: record<language: string, text: string>, validatedNamespaceVersion: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.GetFlowTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id, "revisionNumber": $revision_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -945,14 +965,15 @@ export def "get-flow-template-revisions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<summaries: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  id: string # The ID of the workflow. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:workflow:WORKFLOWNAME
+  --next-token-body: string # The string that specifies the next page of results. Use this when you're paginating results. (body field)
+  --max-results-body: int # The maximum number of results to return in the response. (body field)
+]: any -> record<summaries: table<id: string, arn: string, revisionNumber: int, createdAt: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.GetFlowTemplateRevisions")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"id": $id, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -998,12 +1019,13 @@ export def "get-namespace-deletion-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
+  --x-amz-target: string@x-amz-target-completer-16 # required
   --body: record
-]: any -> record<namespaceArn: record, namespaceName: record, status: record, errorCode: record, errorMessage: record> {
+]: any -> record<namespaceArn: string, namespaceName: string, status: string, errorCode: string, errorMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.GetNamespaceDeletionStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1048,12 +1070,13 @@ export def "get-system-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  id: any
-]: any -> record<description: record<summary: record<id: record, arn: record, status: record, target: record, greengrassGroupName: record, createdAt: record, updatedAt: record, greengrassGroupId: record, greengrassGroupVersionId: record>, definition: record<language: record, text: record>, s3BucketName: record, metricsConfiguration: record<cloudMetricEnabled: record, metricRuleRoleArn: record>, validatedNamespaceVersion: record, validatedDependencyRevisions: record, flowActionsRoleArn: record>> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  id: string # The ID of the system deployment instance. This value is returned by CreateSystemInstance. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:deployment:DEPLOYMENTNAME
+]: any -> record<description: record<summary: record<id: string, arn: string, status: string, target: string, greengrassGroupName: string, createdAt: string, updatedAt: string, greengrassGroupId: string, greengrassGroupVersionId: string>, definition: record<language: string, text: string>, s3BucketName: string, metricsConfiguration: record<cloudMetricEnabled: bool, metricRuleRoleArn: string>, validatedNamespaceVersion: int, validatedDependencyRevisions: list<record>, flowActionsRoleArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.GetSystemInstance")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1098,13 +1121,14 @@ export def "get-system-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  id: any
-  --revision-number: any
-]: any -> record<description: record<summary: record<id: record, arn: record, revisionNumber: record, createdAt: record>, definition: record<language: record, text: record>, validatedNamespaceVersion: record>> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  id: string # The ID of the system to get. This ID must be in the user's namespace. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:system:SYSTEMNAME
+  --revision-number: int # The number that specifies the revision of the system to get.
+]: any -> record<description: record<summary: record<id: string, arn: string, revisionNumber: int, createdAt: string>, definition: record<language: string, text: string>, validatedNamespaceVersion: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.GetSystemTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id, "revisionNumber": $revision_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1151,14 +1175,15 @@ export def "get-system-template-revisions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<summaries: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  id: string # The ID of the system template. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:system:SYSTEMNAME
+  --next-token-body: string # The string that specifies the next page of results. Use this when you're paginating results. (body field)
+  --max-results-body: int # The maximum number of results to return in the response. (body field)
+]: any -> record<summaries: table<id: string, arn: string, revisionNumber: int, createdAt: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.GetSystemTemplateRevisions")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"id": $id, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1204,12 +1229,13 @@ export def "get-upload-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  upload_id: any
-]: any -> record<uploadId: record, uploadStatus: record, namespaceArn: record, namespaceName: record, namespaceVersion: record, failureReason: record, createdDate: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  upload_id: string # The ID of the upload. This value is returned by the UploadEntityDefinitions action.
+]: any -> record<uploadId: string, uploadStatus: string, namespaceArn: string, namespaceName: string, namespaceVersion: int, failureReason: list<string>, createdDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.GetUploadStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"uploadId": $upload_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1256,14 +1282,15 @@ export def "list-flow-execution-messages" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  flow_execution_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<messages: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  flow_execution_id: string # The ID of the flow execution.
+  --next-token-body: string # The string that specifies the next page of results. Use this when you're paginating results. (body field)
+  --max-results-body: int # The maximum number of results to return in the response. (body field)
+]: any -> record<messages: table<messageId: string, eventType: string, timestamp: string, payload: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.ListFlowExecutionMessages")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"flowExecutionId": $flow_execution_id, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1311,14 +1338,15 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  --max-results-body: any #  (body field)
-  resource_arn: any
-  --next-token-body: any #  (body field)
-]: any -> record<tags: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  --max-results-body: int # The maximum number of tags to return. (body field)
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource whose tags are to be returned.
+  --next-token-body: string # The token that specifies the next page of results to return. (body field)
+]: any -> record<tags: table<key: string, value: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.ListTagsForResource")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"maxResults": $max_results_body, "resourceArn": $resource_arn, "nextToken": $next_token_body} | compact
@@ -1346,6 +1374,7 @@ export def "list-tags-for-resource" [
 # POST /
 # DEPRECATED
 # operationId: SearchEntities
+# --filters item shape: {name?: "NAME"|"NAMESPACE"|"SEMANTIC_TYPE_PATH"|"REFERENCED_ENTITY_ID", value?: list<string>}
 @deprecated
 export def "search-entities" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1366,16 +1395,17 @@ export def "search-entities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  entity_types: any
-  --filters: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --namespace-version: any
-]: any -> record<descriptions: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  entity_types: list<string> # The entity types for which to search.
+  --filters: list # Optional filter to apply to the search. Valid filters are NAME NAMESPACE, SEMANTIC_TYPE_PATH and REFERENCED_ENTITY_ID. REFERENCED_ENTITY_ID filters on entities that are used by the entity in the result set. For example, you can filter on the ID of a property that is used in a state. Multiple filters function as OR criteria in the query. Multiple values passed inside the filter function as AND criteria. — item shape: {name?: "NAME"|"NAMESPACE"|"SEMANTIC_TYPE_PATH"|"REFERENCED_ENTITY_ID", value?: list<string>}
+  --next-token-body: string # The string that specifies the next page of results. Use this when you're paginating results. (body field)
+  --max-results-body: int # The maximum number of results to return in the response. (body field)
+  --namespace-version: int # The version of the user's namespace. Defaults to the latest version of the user's namespace.
+]: any -> record<descriptions: table<id: string, arn: string, type: string, createdAt: string, definition: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.SearchEntities")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"entityTypes": $entity_types, "filters": $filters, "nextToken": $next_token_body, "maxResults": $max_results_body, "namespaceVersion": $namespace_version} | compact
@@ -1423,17 +1453,18 @@ export def "search-flow-executions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  system_instance_id: any
-  --flow-execution-id: any
-  --start-time: any
-  --end-time: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<summaries: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  system_instance_id: string # The ID of the system instance that contains the flow.
+  --flow-execution-id: string # The ID of a flow execution.
+  --start-time: string # The date and time of the earliest flow execution to return. (format: date-time)
+  --end-time: string # The date and time of the latest flow execution to return. (format: date-time)
+  --next-token-body: string # The string that specifies the next page of results. Use this when you're paginating results. (body field)
+  --max-results-body: int # The maximum number of results to return in the response. (body field)
+]: any -> record<summaries: table<flowExecutionId: string, status: string, systemInstanceId: string, flowTemplateId: string, createdAt: string, updatedAt: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.SearchFlowExecutions")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"systemInstanceId": $system_instance_id, "flowExecutionId": $flow_execution_id, "startTime": $start_time, "endTime": $end_time, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1461,6 +1492,7 @@ export def "search-flow-executions" [
 # POST /
 # DEPRECATED
 # operationId: SearchFlowTemplates
+# --filters item shape: {name: "DEVICE_MODEL_ID", value: list<string>}
 @deprecated
 export def "search-flow-templates" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1481,14 +1513,15 @@ export def "search-flow-templates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  --filters: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<summaries: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  --filters: list # An array of objects that limit the result set. The only valid filter is DEVICE_MODEL_ID. — item shape: {name: "DEVICE_MODEL_ID", value: list<string>}
+  --next-token-body: string # The string that specifies the next page of results. Use this when you're paginating results. (body field)
+  --max-results-body: int # The maximum number of results to return in the response. (body field)
+]: any -> record<summaries: table<id: string, arn: string, revisionNumber: int, createdAt: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.SearchFlowTemplates")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"filters": $filters, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1516,6 +1549,7 @@ export def "search-flow-templates" [
 # POST /
 # DEPRECATED
 # operationId: SearchSystemInstances
+# --filters item shape: {name?: "SYSTEM_TEMPLATE_ID"|"STATUS"|"GREENGRASS_GROUP_NAME", value?: list<string>}
 @deprecated
 export def "search-system-instances" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1536,14 +1570,15 @@ export def "search-system-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  --filters: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<summaries: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  --filters: list # Optional filter to apply to the search. Valid filters are SYSTEM_TEMPLATE_ID, STATUS, and GREENGRASS_GROUP_NAME. Multiple filters function as OR criteria in the query. Multiple values passed inside the filter function as AND criteria. — item shape: {name?: "SYSTEM_TEMPLATE_ID"|"STATUS"|"GREENGRASS_GROUP_NAME", value?: list<string>}
+  --next-token-body: string # The string that specifies the next page of results. Use this when you're paginating results. (body field)
+  --max-results-body: int # The maximum number of results to return in the response. (body field)
+]: any -> record<summaries: table<id: string, arn: string, status: string, target: string, greengrassGroupName: string, createdAt: string, updatedAt: string, greengrassGroupId: string, greengrassGroupVersionId: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.SearchSystemInstances")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"filters": $filters, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1571,6 +1606,7 @@ export def "search-system-instances" [
 # POST /
 # DEPRECATED
 # operationId: SearchSystemTemplates
+# --filters item shape: {name: "FLOW_TEMPLATE_ID", value: list<string>}
 @deprecated
 export def "search-system-templates" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1591,14 +1627,15 @@ export def "search-system-templates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  --filters: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<summaries: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  --filters: list # An array of filters that limit the result set. The only valid filter is FLOW_TEMPLATE_ID. — item shape: {name: "FLOW_TEMPLATE_ID", value: list<string>}
+  --next-token-body: string # The string that specifies the next page of results. Use this when you're paginating results. (body field)
+  --max-results-body: int # The maximum number of results to return in the response. (body field)
+]: any -> record<summaries: table<id: string, arn: string, revisionNumber: int, createdAt: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.SearchSystemTemplates")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"filters": $filters, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1646,15 +1683,16 @@ export def "search-things" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  entity_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --namespace-version: any
-]: any -> record<things: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  entity_id: string # The ID of the entity to which the things are associated. The IDs should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:device:DEVICENAME
+  --next-token-body: string # The string that specifies the next page of results. Use this when you're paginating results. (body field)
+  --max-results-body: int # The maximum number of results to return in the response. (body field)
+  --namespace-version: int # The version of the user's namespace. Defaults to the latest version of the user's namespace.
+]: any -> record<things: table<thingArn: string, thingName: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.SearchThings")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"entityId": $entity_id, "nextToken": $next_token_body, "maxResults": $max_results_body, "namespaceVersion": $namespace_version} | compact
@@ -1682,6 +1720,7 @@ export def "search-things" [
 # POST /
 # DEPRECATED
 # operationId: TagResource
+# --tags item shape: {key: string, value: string}
 @deprecated
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1700,13 +1739,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource whose tags are returned.
+  tags: list # A list of tags to add to the resource.> — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1751,12 +1791,13 @@ export def "undeploy-system-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  --id: any
-]: any -> record<summary: record<id: record, arn: record, status: record, target: record, greengrassGroupName: record, createdAt: record, updatedAt: record, greengrassGroupId: record, greengrassGroupVersionId: record>> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  --id: string # The ID of the system instance to remove from its target.
+]: any -> record<summary: record<id: string, arn: string, status: string, target: string, greengrassGroupName: string, createdAt: string, updatedAt: string, greengrassGroupId: string, greengrassGroupVersionId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.UndeploySystemInstance")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1801,13 +1842,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource whose tags are to be removed.
+  tag_keys: list<string> # A list of tag key names to remove from the resource. You don't specify the value. Both the key and its associated value are removed. This parameter to the API requires a JSON text string argument. For information on how to format a JSON parameter for the various command line tool environments, see Using JSON for Parameters (https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters.html#cli-using-param-json) in the AWS CLI User Guide.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1834,6 +1876,7 @@ export def "untag-resource" [
 # POST /
 # DEPRECATED
 # operationId: UpdateFlowTemplate
+# --definition shape: {language: "GRAPHQL", text: string}
 @deprecated
 export def "update-flow-template" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1852,14 +1895,15 @@ export def "update-flow-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  id: any
-  definition: any
-  --compatible-namespace-version: any
-]: any -> record<summary: record<id: record, arn: record, revisionNumber: record, createdAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  id: string # The ID of the workflow to be updated. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:workflow:WORKFLOWNAME
+  definition: record # A document that defines an entity. — shape: {language: "GRAPHQL", text: string}
+  --compatible-namespace-version: int # The version of the user's namespace. If no value is specified, the latest version is used by default. Use the GetFlowTemplateRevisions if you want to find earlier revisions of the flow to update.
+]: any -> record<summary: record<id: string, arn: string, revisionNumber: int, createdAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.UpdateFlowTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id, "definition": $definition, "compatibleNamespaceVersion": $compatible_namespace_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1886,6 +1930,7 @@ export def "update-flow-template" [
 # POST /
 # DEPRECATED
 # operationId: UpdateSystemTemplate
+# --definition shape: {language: "GRAPHQL", text: string}
 @deprecated
 export def "update-system-template" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1904,14 +1949,15 @@ export def "update-system-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  id: any
-  definition: any
-  --compatible-namespace-version: any
-]: any -> record<summary: record<id: record, arn: record, revisionNumber: record, createdAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  id: string # The ID of the system to be updated. The ID should be in the following format. urn:tdm:REGION/ACCOUNT ID/default:system:SYSTEMNAME
+  definition: record # A document that defines an entity. — shape: {language: "GRAPHQL", text: string}
+  --compatible-namespace-version: int # The version of the user's namespace. Defaults to the latest version of the user's namespace. If no value is specified, the latest version is used by default.
+]: any -> record<summary: record<id: string, arn: string, revisionNumber: int, createdAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.UpdateSystemTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id, "definition": $definition, "compatibleNamespaceVersion": $compatible_namespace_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1938,6 +1984,7 @@ export def "update-system-template" [
 # POST /
 # DEPRECATED
 # operationId: UploadEntityDefinitions
+# --document shape: {language: "GRAPHQL", text: string}
 @deprecated
 export def "upload-entity-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1956,14 +2003,15 @@ export def "upload-entity-definitions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  --document: any
-  --sync-with-public-namespace: any
-  --deprecate-existing-entities: any
-]: any -> record<uploadId: record> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  --document: record # A document that defines an entity. — shape: {language: "GRAPHQL", text: string}
+  --sync-with-public-namespace: oneof<nothing, bool> # A Boolean that specifies whether to synchronize with the latest version of the public namespace. If set to true, the upload will create a new namespace version.
+  --deprecate-existing-entities: oneof<nothing, bool> # A Boolean that specifies whether to deprecate all entities in the latest version before uploading the new DefinitionDocument. If set to true, the upload will create a new namespace version.
+]: any -> record<uploadId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IotThingsGraphFrontEndService.UploadEntityDefinitions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"document": $document, "syncWithPublicNamespace": $sync_with_public_namespace, "deprecateExistingEntities": $deprecate_existing_entities} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

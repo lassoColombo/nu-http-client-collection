@@ -174,13 +174,14 @@ export def "discord-get-discord-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --channel: string
+  --channel: string # required
   --message: string
   --base64-message: string
   --authorization: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel == null) { error make --unspanned { msg: "required query parameter 'channel' missing: pass --channel" } }
   let qp = [(serialize-qp "channel" $channel "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "base64_message" $base64_message "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/discord" $qp $auth.query)
   let accept_val = "application/json"
@@ -258,13 +259,14 @@ export def "slack-get-slack-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --channel: string
+  --channel: string # required
   --message: string
   --base64-message: string
   --authorization: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel == null) { error make --unspanned { msg: "required query parameter 'channel' missing: pass --channel" } }
   let qp = [(serialize-qp "channel" $channel "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "base64_message" $base64_message "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/slack" $qp $auth.query)
   let accept_val = "application/json"
@@ -466,14 +468,15 @@ export def "twilio-message-get-twilio-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-to: string
+  --to: string # required
   --message: string
   --base64-message: string
   --authorization: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "to" $qp_to "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "base64_message" $base64_message "scalar")] | flatten | str join "&"
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "to" $to "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "base64_message" $base64_message "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/twilio" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -482,7 +485,7 @@ export def "twilio-message-get-twilio-get" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"to": $qp_to, "message": $message, "base64_message": $base64_message} | compact)
+    query: ({"to": $to, "message": $message, "base64_message": $base64_message} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -510,13 +513,13 @@ export def "twilio-message-post-twilio-post" [
   --authorization: string
   --base64-message: string
   --message: string
-  --body-to: string
+  to: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/twilio" $auth.query)
-  let req_body = {"base64_message": $base64_message, "message": $message, "to": $body_to} | compact
+  let req_body = {"base64_message": $base64_message, "message": $message, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

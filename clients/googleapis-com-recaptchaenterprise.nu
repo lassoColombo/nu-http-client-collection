@@ -1,4 +1,4 @@
-# Auto-generated client for reCAPTCHA Enterprise API vv1
+# Auto-generated client for reCAPTCHA Enterprise API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/recaptchaenterprise/v1/openapi.json
 # Auth: --token flag or $env.RECAPTCHA_ENTERPRISE_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -157,8 +147,8 @@ export def commands []: nothing -> table {
 export def "recaptchaenterprise-projects-keys-retrieve-legacy-secret-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -177,7 +167,7 @@ export def "recaptchaenterprise-projects-keys-retrieve-legacy-secret-key" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<legacySecretKey: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $qp_key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -205,8 +195,8 @@ export def "recaptchaenterprise-projects-keys-retrieve-legacy-secret-key" [
 export def "recaptchaenterprise-projects-keys-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -225,7 +215,7 @@ export def "recaptchaenterprise-projects-keys-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -253,8 +243,8 @@ export def "recaptchaenterprise-projects-keys-delete" [
 export def "recaptchaenterprise-projects-keys-get-metrics" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -273,7 +263,7 @@ export def "recaptchaenterprise-projects-keys-get-metrics" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<challengeMetrics: table<failedCount: string, nocaptchaCount: string, pageloadCount: string, passedCount: string>, name: string, scoreMetrics: table<actionMetrics: record, overallMetrics: record>, startTime: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -306,8 +296,8 @@ export def "recaptchaenterprise-projects-keys-get-metrics" [
 export def "recaptchaenterprise-projects-keys-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -336,7 +326,7 @@ export def "recaptchaenterprise-projects-keys-patch" [
   --web-settings: record # Settings specific to keys that can be used by websites. — shape: {allowAllDomains?: bool, allowAmpTraffic?: bool, allowedDomains?: list<string>, challengeSecurityPreference?: "CHALLENGE_SECURITY_PREFERENCE_UNSPECIFIED"|"USABILITY"|"BALANCE"|"SECURITY", integrationType?: "INTEGRATION_TYPE_UNSPECIFIED"|"SCORE"|"CHECKBOX"|"INVISIBLE"}
 ]: any -> record<androidSettings: record<allowAllPackageNames: bool, allowedPackageNames: list<string>, supportNonGoogleAppStoreDistribution: bool>, createTime: string, displayName: string, iosSettings: record<allowAllBundleIds: bool, allowedBundleIds: list<string>>, labels: record, name: string, testingOptions: record<testingChallenge: string, testingScore: float>, wafSettings: record<wafFeature: string, wafService: string>, webSettings: record<allowAllDomains: bool, allowAmpTraffic: bool, allowedDomains: list<string>, challengeSecurityPreference: string, integrationType: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
@@ -367,8 +357,8 @@ export def "recaptchaenterprise-projects-keys-patch" [
 export def "recaptchaenterprise-projects-assessments-annotate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -392,7 +382,7 @@ export def "recaptchaenterprise-projects-assessments-annotate" [
   --transaction-event: record # Describes an event in the lifecycle of a payment transaction. — shape: {eventTime?: string, eventType?: "TRANSACTION_EVENT_TYPE_UNSPECIFIED"|"MERCHANT_APPROVE"|"MERCHANT_DENY"|"MANUAL_REVIEW"|"AUTHORIZATION"|"AUTHORIZATION_DECLINE"|"PAYMENT_CAPTURE"|"PAYMENT_CAPTURE_DECLINE"|"CANCEL"|"CHARGEBACK_INQUIRY"|"CHARGEBACK_ALERT"|"FRAUD_NOTIFICATION"|"CHARGEBACK"|"CHARGEBACK_REPRESENTMENT"|"CHARGEBACK_REVERSE"|"REFUND_REQUEST"|"REFUND_DECLINE"|"REFUND"|"REFUND_REVERSE", reason?: string, value?: float}
 ]: any -> record {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -422,8 +412,8 @@ export def "recaptchaenterprise-projects-assessments-annotate" [
 export def "recaptchaenterprise-projects-keys-migrate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -444,7 +434,7 @@ export def "recaptchaenterprise-projects-keys-migrate" [
   --skip-billing-check: oneof<nothing, bool> # Optional. If true, skips the billing check. A reCAPTCHA Enterprise key or migrated key behaves differently than a reCAPTCHA (non-Enterprise version) key when you reach a quota limit (see https://cloud.google.com/recaptcha-enterprise/quotas#quota_limit). To avoid any disruption of your usage, we check that a billing account is present. If your usage of reCAPTCHA is under the free quota, you can safely skip the billing check and proceed with the migration. See https://cloud.google.com/recaptcha-enterprise/docs/billing-information.
 ]: any -> record<androidSettings: record<allowAllPackageNames: bool, allowedPackageNames: list<string>, supportNonGoogleAppStoreDistribution: bool>, createTime: string, displayName: string, iosSettings: record<allowAllBundleIds: bool, allowedBundleIds: list<string>>, labels: record, name: string, testingOptions: record<testingChallenge: string, testingScore: float>, wafSettings: record<wafFeature: string, wafService: string>, webSettings: record<allowAllDomains: bool, allowAmpTraffic: bool, allowedDomains: list<string>, challengeSecurityPreference: string, integrationType: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -482,8 +472,8 @@ export def "recaptchaenterprise-projects-keys-migrate" [
 export def "recaptchaenterprise-projects-assessments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -511,7 +501,7 @@ export def "recaptchaenterprise-projects-assessments-create" [
   --token-properties: record # Properties of the provided event token. — shape: {action?: string, androidPackageName?: string, createTime?: string, hostname?: string, invalidReason?: "INVALID_REASON_UNSPECIFIED"|"UNKNOWN_INVALID_REASON"|"MALFORMED"|"EXPIRED"|"DUPE"|"MISSING"|"BROWSER_ERROR", iosBundleId?: string, valid?: bool}
 ]: any -> record<accountDefenderAssessment: record<labels: list<string>>, accountVerification: record<endpoints: list<record>, languageCode: string, latestVerificationResult: string, username: string>, event: record<expectedAction: string, express: bool, firewallPolicyEvaluation: bool, hashedAccountId: string, headers: list<string>, ja3: string, requestedUri: string, siteKey: string, token: string, transactionData: record<billingAddress: record, cardBin: string, cardLastFour: string, currencyCode: string, gatewayInfo: record, items: list, merchants: list, paymentMethod: string, shippingAddress: record, shippingValue: float, transactionId: string, user: record, value: float>, userAgent: string, userIpAddress: string, wafTokenAssessment: bool>, firewallPolicyAssessment: record<error: record<code: int, details: list, message: string>, firewallPolicy: record<actions: list, condition: string, description: string, name: string, path: string>>, fraudPreventionAssessment: record<behavioralTrustVerdict: record<trust: float>, cardTestingVerdict: record<risk: float>, stolenInstrumentVerdict: record<risk: float>, transactionRisk: float>, name: string, privatePasswordLeakVerification: record<encryptedLeakMatchPrefixes: list<string>, encryptedUserCredentialsHash: string, lookupHashPrefix: string, reencryptedUserCredentialsHash: string>, riskAnalysis: record<extendedVerdictReasons: list<string>, reasons: list<string>, score: float>, tokenProperties: record<action: string, androidPackageName: string, createTime: string, hostname: string, invalidReason: string, iosBundleId: string, valid: bool>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -541,8 +531,8 @@ export def "recaptchaenterprise-projects-assessments-create" [
 export def "recaptchaenterprise-projects-firewallpolicies-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -563,7 +553,7 @@ export def "recaptchaenterprise-projects-firewallpolicies-list" [
   --page-size: int # Optional. The maximum number of policies to return. Default is 10. Max limit is 1000.
   --page-token: string # Optional. The next_page_token value returned from a previous. ListFirewallPoliciesRequest, if any.
 ]: nothing -> record<firewallPolicies: table<actions: list, condition: string, description: string, name: string, path: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -592,8 +582,8 @@ export def "recaptchaenterprise-projects-firewallpolicies-list" [
 export def "recaptchaenterprise-projects-firewallpolicies-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -618,7 +608,7 @@ export def "recaptchaenterprise-projects-firewallpolicies-create" [
   --path: string # The path for which this policy applies, specified as a glob pattern. For more information on glob, see the [manual page](https://man7.org/linux/man-pages/man7/glob.7.html). A path has a max length of 200 characters.
 ]: any -> record<actions: table<allow: record, block: record, redirect: record, setHeader: record, substitute: record>, condition: string, description: string, name: string, path: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -648,8 +638,8 @@ export def "recaptchaenterprise-projects-firewallpolicies-create" [
 export def "recaptchaenterprise-projects-keys-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -670,7 +660,7 @@ export def "recaptchaenterprise-projects-keys-list" [
   --page-size: int # Optional. The maximum number of keys to return. Default is 10. Max limit is 1000.
   --page-token: string # Optional. The next_page_token value returned from a previous. ListKeysRequest, if any.
 ]: nothing -> record<keys: table<androidSettings: record, createTime: string, displayName: string, iosSettings: record, labels: record, name: string, testingOptions: record, wafSettings: record, webSettings: record>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -703,8 +693,8 @@ export def "recaptchaenterprise-projects-keys-list" [
 export def "recaptchaenterprise-projects-keys-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -732,7 +722,7 @@ export def "recaptchaenterprise-projects-keys-create" [
   --web-settings: record # Settings specific to keys that can be used by websites. — shape: {allowAllDomains?: bool, allowAmpTraffic?: bool, allowedDomains?: list<string>, challengeSecurityPreference?: "CHALLENGE_SECURITY_PREFERENCE_UNSPECIFIED"|"USABILITY"|"BALANCE"|"SECURITY", integrationType?: "INTEGRATION_TYPE_UNSPECIFIED"|"SCORE"|"CHECKBOX"|"INVISIBLE"}
 ]: any -> record<androidSettings: record<allowAllPackageNames: bool, allowedPackageNames: list<string>, supportNonGoogleAppStoreDistribution: bool>, createTime: string, displayName: string, iosSettings: record<allowAllBundleIds: bool, allowedBundleIds: list<string>>, labels: record, name: string, testingOptions: record<testingChallenge: string, testingScore: float>, wafSettings: record<wafFeature: string, wafService: string>, webSettings: record<allowAllDomains: bool, allowAmpTraffic: bool, allowedDomains: list<string>, challengeSecurityPreference: string, integrationType: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -762,8 +752,8 @@ export def "recaptchaenterprise-projects-keys-create" [
 export def "recaptchaenterprise-projects-relatedaccountgroups-memberships-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -784,7 +774,7 @@ export def "recaptchaenterprise-projects-relatedaccountgroups-memberships-list" 
   --page-size: int # Optional. The maximum number of accounts to return. The service might return fewer than this value. If unspecified, at most 50 accounts are returned. The maximum value is 1000; values above 1000 are coerced to 1000.
   --page-token: string # Optional. A page token, received from a previous `ListRelatedAccountGroupMemberships` call. When paginating, all other parameters provided to `ListRelatedAccountGroupMemberships` must match the call that provided the page token.
 ]: nothing -> record<nextPageToken: string, relatedAccountGroupMemberships: table<hashedAccountId: string, name: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -812,8 +802,8 @@ export def "recaptchaenterprise-projects-relatedaccountgroups-memberships-list" 
 export def "recaptchaenterprise-projects-relatedaccountgroups-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -834,7 +824,7 @@ export def "recaptchaenterprise-projects-relatedaccountgroups-list" [
   --page-size: int # Optional. The maximum number of groups to return. The service might return fewer than this value. If unspecified, at most 50 groups are returned. The maximum value is 1000; values above 1000 are coerced to 1000.
   --page-token: string # Optional. A page token, received from a previous `ListRelatedAccountGroups` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListRelatedAccountGroups` must match the call that provided the page token.
 ]: nothing -> record<nextPageToken: string, relatedAccountGroups: table<name: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -862,8 +852,8 @@ export def "recaptchaenterprise-projects-relatedaccountgroups-list" [
 export def "recaptchaenterprise-projects-relatedaccountgroupmemberships-search" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -886,7 +876,7 @@ export def "recaptchaenterprise-projects-relatedaccountgroupmemberships-search" 
   --page-token: string # Optional. A page token, received from a previous `SearchRelatedAccountGroupMemberships` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `SearchRelatedAccountGroupMemberships` must match the call that provided the page token.
 ]: any -> record<nextPageToken: string, relatedAccountGroupMemberships: table<hashedAccountId: string, name: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o RECAPTCHA_ENTERPRISE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"

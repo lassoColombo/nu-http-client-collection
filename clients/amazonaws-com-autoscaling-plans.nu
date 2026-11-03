@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -100,6 +100,9 @@ def x-amz-target-completer [] { ["AnyScaleScalingPlannerFrontendService.CreateSc
 def x-amz-target-completer-1 [] { ["AnyScaleScalingPlannerFrontendService.DeleteScalingPlan"] }
 def x-amz-target-completer-2 [] { ["AnyScaleScalingPlannerFrontendService.DescribeScalingPlanResources"] }
 def x-amz-target-completer-3 [] { ["AnyScaleScalingPlannerFrontendService.DescribeScalingPlans"] }
+def service-namespace-completer [] { ["autoscaling" "dynamodb" "ec2" "ecs" "rds"] }
+def scalable-dimension-completer [] { ["autoscaling:autoScalingGroup:DesiredCapacity" "dynamodb:index:ReadCapacityUnits" "dynamodb:index:WriteCapacityUnits" "dynamodb:table:ReadCapacityUnits" "dynamodb:table:WriteCapacityUnits" "ec2:spot-fleet-request:TargetCapacity" "ecs:service:DesiredCount" "rds:cluster:ReadReplicaCount"] }
+def forecast-data-type-completer [] { ["CapacityForecast" "LoadForecast" "ScheduledActionMaxCapacity" "ScheduledActionMinCapacity"] }
 def x-amz-target-completer-4 [] { ["AnyScaleScalingPlannerFrontendService.GetScalingPlanResourceForecastData"] }
 def x-amz-target-completer-5 [] { ["AnyScaleScalingPlannerFrontendService.UpdateScalingPlan"] }
 
@@ -130,6 +133,8 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateScalingPlan
+# --ApplicationSource shape: {CloudFormationStackARN?: string, TagFilters?: list}
+# --ScalingInstructions item shape: {ServiceNamespace: "autoscaling"|"ecs"|"ec2"|"rds"|"dynamodb", ResourceId: string, ScalableDimension: "autoscaling:autoScalingGroup:DesiredCapacity"|"ecs:service:DesiredCount"|"ec2:spot-fleet-request:TargetCapacity"|"rds:cluster:ReadReplicaCount"|"dynamodb:table:ReadCapacityUnits"|"dynamodb:table:WriteCapacityUnits"|"dynamodb:index:ReadCapacityUnits"|"dynamodb:index:WriteCapacityUnits", MinCapacity: int, MaxCapacity: int, TargetTrackingConfigurations: list, ... (8 more fields)}
 export def "create-scaling-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -147,14 +152,15 @@ export def "create-scaling-plan" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  scaling_plan_name: any
-  application_source: any
-  scaling_instructions: any
-]: any -> record<ScalingPlanVersion: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  scaling_plan_name: string # The name of the scaling plan. Names cannot contain vertical bars, colons, or forward slashes.
+  application_source: record # Represents an application source. — shape: {CloudFormationStackARN?: string, TagFilters?: list}
+  scaling_instructions: list # The scaling instructions. For more information, see ScalingInstruction (https://docs.aws.amazon.com/autoscaling/plans/APIReference/API_ScalingInstruction.html) in the AWS Auto Scaling API Reference. — item shape: {ServiceNamespace: "autoscaling"|"ecs"|"ec2"|"rds"|"dynamodb", ResourceId: string, ScalableDimension: "autoscaling:autoScalingGroup:DesiredCapacity"|"ecs:service:DesiredCount"|"ec2:spot-fleet-request:TargetCapacity"|"rds:cluster:ReadReplicaCount"|"dynamodb:table:ReadCapacityUnits"|"dynamodb:table:WriteCapacityUnits"|"dynamodb:index:ReadCapacityUnits"|"dynamodb:index:WriteCapacityUnits", MinCapacity: int, MaxCapacity: int, TargetTrackingConfigurations: list, ... (8 more fields)}
+]: any -> record<ScalingPlanVersion: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AnyScaleScalingPlannerFrontendService.CreateScalingPlan")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScalingPlanName": $scaling_plan_name, "ApplicationSource": $application_source, "ScalingInstructions": $scaling_instructions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -197,13 +203,14 @@ export def "delete-scaling-plan" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  scaling_plan_name: any
-  scaling_plan_version: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  scaling_plan_name: string # The name of the scaling plan.
+  scaling_plan_version: int # The version number of the scaling plan. Currently, the only valid value is 1.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AnyScaleScalingPlannerFrontendService.DeleteScalingPlan")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScalingPlanName": $scaling_plan_name, "ScalingPlanVersion": $scaling_plan_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -246,15 +253,16 @@ export def "describe-scaling-plan-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  scaling_plan_name: any
-  scaling_plan_version: any
-  --max-results: any
-  --next-token: any
-]: any -> record<ScalingPlanResources: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  scaling_plan_name: string # The name of the scaling plan.
+  scaling_plan_version: int # The version number of the scaling plan. Currently, the only valid value is 1.
+  --max-results: int # The maximum number of scalable resources to return. The value must be between 1 and 50. The default value is 50.
+  --next-token: string # The token for the next set of results.
+]: any -> record<ScalingPlanResources: table<ScalingPlanName: string, ScalingPlanVersion: int, ServiceNamespace: string, ResourceId: string, ScalableDimension: string, ScalingPolicies: list, ScalingStatusCode: string, ScalingStatusMessage: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AnyScaleScalingPlannerFrontendService.DescribeScalingPlanResources")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScalingPlanName": $scaling_plan_name, "ScalingPlanVersion": $scaling_plan_version, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -280,6 +288,7 @@ export def "describe-scaling-plan-resources" [
 #
 # POST /
 # operationId: DescribeScalingPlans
+# --ApplicationSources item shape: {CloudFormationStackARN?: string, TagFilters?: list}
 export def "describe-scaling-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,16 +306,17 @@ export def "describe-scaling-plans" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  --scaling-plan-names: any
-  --scaling-plan-version: any
-  --application-sources: any
-  --max-results: any
-  --next-token: any
-]: any -> record<ScalingPlans: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  --scaling-plan-names: list<string> # The names of the scaling plans (up to 10). If you specify application sources, you cannot specify scaling plan names.
+  --scaling-plan-version: int # The version number of the scaling plan. Currently, the only valid value is 1. If you specify a scaling plan version, you must also specify a scaling plan name.
+  --application-sources: list # The sources for the applications (up to 10). If you specify scaling plan names, you cannot specify application sources. — item shape: {CloudFormationStackARN?: string, TagFilters?: list}
+  --max-results: int # The maximum number of scalable resources to return. This value can be between 1 and 50. The default value is 50.
+  --next-token: string # The token for the next set of results.
+]: any -> record<ScalingPlans: table<ScalingPlanName: string, ScalingPlanVersion: int, ApplicationSource: record, ScalingInstructions: list, StatusCode: string, StatusMessage: string, StatusStartTime: string, CreationTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AnyScaleScalingPlannerFrontendService.DescribeScalingPlans")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScalingPlanNames": $scaling_plan_names, "ScalingPlanVersion": $scaling_plan_version, "ApplicationSources": $application_sources, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -349,19 +359,20 @@ export def "get-scaling-plan-resource-forecast-data" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  scaling_plan_name: any
-  scaling_plan_version: any
-  service_namespace: any
-  resource_id: any
-  scalable_dimension: any
-  forecast_data_type: any
-  start_time: any
-  end_time: any
-]: any -> record<Datapoints: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  scaling_plan_name: string # The name of the scaling plan.
+  scaling_plan_version: int # The version number of the scaling plan. Currently, the only valid value is 1.
+  service_namespace: string@service-namespace-completer # The namespace of the AWS service. The only valid value is autoscaling.
+  resource_id: string # The ID of the resource. This string consists of a prefix (autoScalingGroup) followed by the name of a specified Auto Scaling group (my-asg). Example: autoScalingGroup/my-asg.
+  scalable_dimension: string@scalable-dimension-completer # The scalable dimension for the resource. The only valid value is autoscaling:autoScalingGroup:DesiredCapacity.
+  forecast_data_type: string@forecast-data-type-completer # The type of forecast data to get. LoadForecast: The load metric forecast. CapacityForecast: The capacity forecast. ScheduledActionMinCapacity: The minimum capacity for each scheduled scaling action. This data is calculated as the larger of two values: the capacity forecast or the minimum capacity in the scaling instruction. ScheduledActionMaxCapacity: The maximum capacity for each scheduled scaling action. The calculation used is determined by the predictive scaling maximum capacity behavior setting in the scaling instruction.
+  start_time: string # The inclusive start time of the time range for the forecast data to get. The date and time can be at most 56 days before the current date and time. (format: date-time)
+  end_time: string # The exclusive end time of the time range for the forecast data to get. The maximum time duration between the start and end time is seven days. Although this parameter can accept a date and time that is more than two days in the future, the availability of forecast data has limits. AWS Auto Scaling only issues forecasts for periods of two days in advance. (format: date-time)
+]: any -> record<Datapoints: table<Timestamp: string, Value: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AnyScaleScalingPlannerFrontendService.GetScalingPlanResourceForecastData")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScalingPlanName": $scaling_plan_name, "ScalingPlanVersion": $scaling_plan_version, "ServiceNamespace": $service_namespace, "ResourceId": $resource_id, "ScalableDimension": $scalable_dimension, "ForecastDataType": $forecast_data_type, "StartTime": $start_time, "EndTime": $end_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -387,6 +398,8 @@ export def "get-scaling-plan-resource-forecast-data" [
 #
 # POST /
 # operationId: UpdateScalingPlan
+# --ApplicationSource shape: {CloudFormationStackARN?: string, TagFilters?: list}
+# --ScalingInstructions item shape: {ServiceNamespace: "autoscaling"|"ecs"|"ec2"|"rds"|"dynamodb", ResourceId: string, ScalableDimension: "autoscaling:autoScalingGroup:DesiredCapacity"|"ecs:service:DesiredCount"|"ec2:spot-fleet-request:TargetCapacity"|"rds:cluster:ReadReplicaCount"|"dynamodb:table:ReadCapacityUnits"|"dynamodb:table:WriteCapacityUnits"|"dynamodb:index:ReadCapacityUnits"|"dynamodb:index:WriteCapacityUnits", MinCapacity: int, MaxCapacity: int, TargetTrackingConfigurations: list, ... (8 more fields)}
 export def "update-scaling-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -404,15 +417,16 @@ export def "update-scaling-plan" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  scaling_plan_name: any
-  scaling_plan_version: any
-  --application-source: any
-  --scaling-instructions: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  scaling_plan_name: string # The name of the scaling plan.
+  scaling_plan_version: int # The version number of the scaling plan. The only valid value is 1. Currently, you cannot have multiple scaling plan versions.
+  --application-source: record # Represents an application source. — shape: {CloudFormationStackARN?: string, TagFilters?: list}
+  --scaling-instructions: list # The scaling instructions. For more information, see ScalingInstruction (https://docs.aws.amazon.com/autoscaling/plans/APIReference/API_ScalingInstruction.html) in the AWS Auto Scaling API Reference. — item shape: {ServiceNamespace: "autoscaling"|"ecs"|"ec2"|"rds"|"dynamodb", ResourceId: string, ScalableDimension: "autoscaling:autoScalingGroup:DesiredCapacity"|"ecs:service:DesiredCount"|"ec2:spot-fleet-request:TargetCapacity"|"rds:cluster:ReadReplicaCount"|"dynamodb:table:ReadCapacityUnits"|"dynamodb:table:WriteCapacityUnits"|"dynamodb:index:ReadCapacityUnits"|"dynamodb:index:WriteCapacityUnits", MinCapacity: int, MaxCapacity: int, TargetTrackingConfigurations: list, ... (8 more fields)}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AnyScaleScalingPlannerFrontendService.UpdateScalingPlan")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScalingPlanName": $scaling_plan_name, "ScalingPlanVersion": $scaling_plan_version, "ApplicationSource": $application_source, "ScalingInstructions": $scaling_instructions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

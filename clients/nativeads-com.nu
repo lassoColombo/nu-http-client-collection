@@ -175,14 +175,19 @@ export def "get-publisher-reports-daily" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Native Ads Publisher API authentication token
-  --start-date: string # start date in format YYYY-MM-DD (format: date)
-  --end-date: string # end date in format YYYY-MM-DD (format: date)
-  --limit: int # maximum number of results per page (format: int32, default: 100)
-  --page: int # page number (format: int32, default: 1)
+  --qp-token: string # Native Ads Publisher API authentication token (required)
+  --start-date: string # start date in format YYYY-MM-DD (required, format: date)
+  --end-date: string # end date in format YYYY-MM-DD (required, format: date)
+  --limit: int # maximum number of results per page (required, format: int32, default: 100)
+  --page: int # page number (required, format: int32, default: 1)
 ]: nothing -> record<items: table<clicks: string, cpc: string, ctr: string, date: string, earnings: string, impressions: string, net_ecpm: string, rpm: string>, success: bool, total_count: int, totals: record<total_clicks: string, total_cpc: string, total_ctr: string, total_earnings: string, total_impressions: string, total_net_ecpm: string, total_rpm: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
+  let limit = ($limit | default 100)
+  let page = ($page | default 1)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/publisher/reports/daily" $qp $auth.query)
   let accept_val = "application/json"
@@ -214,14 +219,19 @@ export def "get-publisher-reports-website" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Native Ads Publisher API authentication token
-  --start-date: string # start date in format YYYY-MM-DD (format: date)
-  --end-date: string # end date in format YYYY-MM-DD (format: date)
-  --limit: int # maximum number of results per page (format: int32, default: 100)
-  --page: int # page number (format: int32, default: 1)
+  --qp-token: string # Native Ads Publisher API authentication token (required)
+  --start-date: string # start date in format YYYY-MM-DD (required, format: date)
+  --end-date: string # end date in format YYYY-MM-DD (required, format: date)
+  --limit: int # maximum number of results per page (required, format: int32, default: 100)
+  --page: int # page number (required, format: int32, default: 1)
 ]: nothing -> record<items: table<clicks: string, cpc: string, ctr: string, date: string, earnings: string, impressions: string, net_ecpm: string, rpm: string>, success: bool, total_count: int, totals: record<total_clicks: string, total_cpc: string, total_ctr: string, total_earnings: string, total_impressions: string, total_net_ecpm: string, total_rpm: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
+  let limit = ($limit | default 100)
+  let page = ($page | default 1)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/publisher/reports/website" $qp $auth.query)
   let accept_val = "application/json"
@@ -253,14 +263,19 @@ export def "get-publisher-reports-widget" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Native Ads Publisher API authentication token
-  --start-date: string # start date in format YYYY-MM-DD (format: date)
-  --end-date: string # end date in format YYYY-MM-DD (format: date)
-  --limit: int # maximum number of results per page (format: int32, default: 100)
-  --page: int # page number (format: int32, default: 1)
+  --qp-token: string # Native Ads Publisher API authentication token (required)
+  --start-date: string # start date in format YYYY-MM-DD (required, format: date)
+  --end-date: string # end date in format YYYY-MM-DD (required, format: date)
+  --limit: int # maximum number of results per page (required, format: int32, default: 100)
+  --page: int # page number (required, format: int32, default: 1)
 ]: nothing -> record<items: table<campaign: string, campaign_id: string, clicks: string, cpc: string, ctr: string, earnings: string, impressions: string, net_ecpm: string, rpm: string>, success: bool, total_count: int, totals: record<total_clicks: string, total_cpc: string, total_ctr: string, total_earnings: string, total_impressions: string, total_net_ecpm: string, total_rpm: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
+  let limit = ($limit | default 100)
+  let page = ($page | default 1)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/publisher/reports/widget" $qp $auth.query)
   let accept_val = "application/json"

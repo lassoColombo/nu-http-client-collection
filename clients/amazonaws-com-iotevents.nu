@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -142,11 +142,11 @@ export def commands []: nothing -> table {
 #
 # POST /alarm-models
 # operationId: CreateAlarmModel
-# --tags item shape: {key: any, value: any}
-# --alarmRule shape: {simpleRule?: any}
-# --alarmNotification shape: {notificationActions?: any}
-# --alarmEventActions shape: {alarmActions?: any}
-# --alarmCapabilities shape: {initializationConfiguration?: any, acknowledgeFlow?: any}
+# --tags item shape: {key: string, value: string}
+# --alarmRule shape: {simpleRule?: record}
+# --alarmNotification shape: {notificationActions?: list}
+# --alarmEventActions shape: {alarmActions?: list}
+# --alarmCapabilities shape: {initializationConfiguration?: record, acknowledgeFlow?: record}
 export def "create-alarm-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -167,14 +167,14 @@ export def "create-alarm-model" [
   alarm_model_name: string # A unique name that helps you identify the alarm model. You can't change this name after you create the alarm model.
   --alarm-model-description: string # A description that tells you what the alarm model detects.
   role_arn: string # The ARN of the IAM role that allows the alarm to perform actions and access AWS resources. For more information, see Amazon Resource Names (ARNs) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
-  --tags: list # A list of key-value pairs that contain metadata for the alarm model. The tags help you manage the alarm model. For more information, see Tagging your AWS IoT Events resources (https://docs.aws.amazon.com/iotevents/latest/developerguide/tagging-iotevents.html) in the AWS IoT Events Developer Guide. You can create up to 50 tags for one alarm model. — item shape: {key: any, value: any}
+  --tags: list # A list of key-value pairs that contain metadata for the alarm model. The tags help you manage the alarm model. For more information, see Tagging your AWS IoT Events resources (https://docs.aws.amazon.com/iotevents/latest/developerguide/tagging-iotevents.html) in the AWS IoT Events Developer Guide. You can create up to 50 tags for one alarm model. — item shape: {key: string, value: string}
   --key: string # An input attribute used as a key to create an alarm. AWS IoT Events routes inputs (https://docs.aws.amazon.com/iotevents/latest/apireference/API_Input.html) associated with this key to the alarm.
   --severity: int # A non-negative integer that reflects the severity level of the alarm.
-  alarm_rule: record # Defines when your alarm is invoked. — shape: {simpleRule?: any}
-  --alarm-notification: record # Contains information about one or more notification actions. — shape: {notificationActions?: any}
-  --alarm-event-actions: record # Contains information about one or more alarm actions. — shape: {alarmActions?: any}
-  --alarm-capabilities: record # Contains the configuration information of alarm state changes. — shape: {initializationConfiguration?: any, acknowledgeFlow?: any}
-]: any -> record<creationTime: record, alarmModelArn: record, alarmModelVersion: record, lastUpdateTime: record, status: record> {
+  alarm_rule: record # Defines when your alarm is invoked. — shape: {simpleRule?: record}
+  --alarm-notification: record # Contains information about one or more notification actions. — shape: {notificationActions?: list}
+  --alarm-event-actions: record # Contains information about one or more alarm actions. — shape: {alarmActions?: list}
+  --alarm-capabilities: record # Contains the configuration information of alarm state changes. — shape: {initializationConfiguration?: record, acknowledgeFlow?: record}
+]: any -> record<creationTime: string, alarmModelArn: string, alarmModelVersion: string, lastUpdateTime: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -222,7 +222,7 @@ export def "list-alarm-models" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<alarmModelSummaries: record, nextToken: record> {
+]: nothing -> record<alarmModelSummaries: table<creationTime: string, alarmModelDescription: string, alarmModelName: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -249,8 +249,8 @@ export def "list-alarm-models" [
 #
 # POST /detector-models
 # operationId: CreateDetectorModel
-# --detectorModelDefinition shape: {states?: any, initialStateName?: any}
-# --tags item shape: {key: any, value: any}
+# --detectorModelDefinition shape: {states?: list, initialStateName?: string}
+# --tags item shape: {key: string, value: string}
 export def "create-detector-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,13 +269,13 @@ export def "create-detector-model" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   detector_model_name: string # The name of the detector model.
-  detector_model_definition: record # Information that defines how a detector operates. — shape: {states?: any, initialStateName?: any}
+  detector_model_definition: record # Information that defines how a detector operates. — shape: {states?: list, initialStateName?: string}
   --detector-model-description: string # A brief description of the detector model.
   --key: string # The input attribute key used to identify a device or system to create a detector (an instance of the detector model) and then to route each input received to the appropriate detector (instance). This parameter uses a JSON-path expression in the message payload of each input to specify the attribute-value pair that is used to identify the device associated with the input.
   role_arn: string # The ARN of the role that grants permission to AWS IoT Events to perform its operations.
-  --tags: list # Metadata that can be used to manage the detector model. — item shape: {key: any, value: any}
+  --tags: list # Metadata that can be used to manage the detector model. — item shape: {key: string, value: string}
   --evaluation-method: string@evaluation-method-completer # Information about the order in which events are evaluated and how actions are executed.
-]: any -> record<detectorModelConfiguration: record<detectorModelName: record, detectorModelVersion: record, detectorModelDescription: record, detectorModelArn: record, roleArn: record, creationTime: record, lastUpdateTime: record, status: record, key: record, evaluationMethod: record>> {
+]: any -> record<detectorModelConfiguration: record<detectorModelName: string, detectorModelVersion: string, detectorModelDescription: string, detectorModelArn: string, roleArn: string, creationTime: string, lastUpdateTime: string, status: string, key: string, evaluationMethod: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -323,7 +323,7 @@ export def "list-detector-models" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<detectorModelSummaries: record, nextToken: record> {
+]: nothing -> record<detectorModelSummaries: table<detectorModelName: string, detectorModelDescription: string, creationTime: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -350,8 +350,8 @@ export def "list-detector-models" [
 #
 # POST /inputs
 # operationId: CreateInput
-# --inputDefinition shape: {attributes?: any}
-# --tags item shape: {key: any, value: any}
+# --inputDefinition shape: {attributes?: list}
+# --tags item shape: {key: string, value: string}
 export def "create-input" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -371,9 +371,9 @@ export def "create-input" [
   --x-amz-signed-headers: string
   input_name: string # The name you want to give to the input.
   --input-description: string # A brief description of the input.
-  input_definition: record # The definition of the input. — shape: {attributes?: any}
-  --tags: list # Metadata that can be used to manage the input. — item shape: {key: any, value: any}
-]: any -> record<inputConfiguration: record<inputName: record, inputDescription: record, inputArn: record, creationTime: record, lastUpdateTime: record, status: record>> {
+  input_definition: record # The definition of the input. — shape: {attributes?: list}
+  --tags: list # Metadata that can be used to manage the input. — item shape: {key: string, value: string}
+]: any -> record<inputConfiguration: record<inputName: string, inputDescription: string, inputArn: string, creationTime: string, lastUpdateTime: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -421,7 +421,7 @@ export def "list-inputs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<inputSummaries: record, nextToken: record> {
+]: nothing -> record<inputSummaries: table<inputName: string, inputDescription: string, inputArn: string, creationTime: string, lastUpdateTime: string, status: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -512,7 +512,7 @@ export def "describe-alarm-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<creationTime: record, alarmModelArn: record, alarmModelVersion: record, lastUpdateTime: record, status: record, statusMessage: record, alarmModelName: record, alarmModelDescription: record, roleArn: record, key: record, severity: record, alarmRule: record<simpleRule: record<inputProperty: record, comparisonOperator: record, threshold: record>>, alarmNotification: record<notificationActions: record>, alarmEventActions: record<alarmActions: record>, alarmCapabilities: record<initializationConfiguration: record<disabledOnInitialization: record>, acknowledgeFlow: record<enabled: record>>> {
+]: nothing -> record<creationTime: string, alarmModelArn: string, alarmModelVersion: string, lastUpdateTime: string, status: string, statusMessage: string, alarmModelName: string, alarmModelDescription: string, roleArn: string, key: string, severity: int, alarmRule: record<simpleRule: record<inputProperty: string, comparisonOperator: string, threshold: string>>, alarmNotification: record<notificationActions: list<record>>, alarmEventActions: record<alarmActions: list<record>>, alarmCapabilities: record<initializationConfiguration: record<disabledOnInitialization: bool>, acknowledgeFlow: record<enabled: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($alarm_model_name | is-empty) { error make --unspanned { msg: "path parameter 'alarmModelName' must be non-empty" } }
@@ -540,10 +540,10 @@ export def "describe-alarm-model" [
 #
 # POST /alarm-models/{alarmModelName}
 # operationId: UpdateAlarmModel
-# --alarmRule shape: {simpleRule?: any}
-# --alarmNotification shape: {notificationActions?: any}
-# --alarmEventActions shape: {alarmActions?: any}
-# --alarmCapabilities shape: {initializationConfiguration?: any, acknowledgeFlow?: any}
+# --alarmRule shape: {simpleRule?: record}
+# --alarmNotification shape: {notificationActions?: list}
+# --alarmEventActions shape: {alarmActions?: list}
+# --alarmCapabilities shape: {initializationConfiguration?: record, acknowledgeFlow?: record}
 export def "update-alarm-model" [
   alarm_model_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -565,11 +565,11 @@ export def "update-alarm-model" [
   --alarm-model-description: string # The description of the alarm model.
   role_arn: string # The ARN of the IAM role that allows the alarm to perform actions and access AWS resources. For more information, see Amazon Resource Names (ARNs) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) in the AWS General Reference.
   --severity: int # A non-negative integer that reflects the severity level of the alarm.
-  alarm_rule: record # Defines when your alarm is invoked. — shape: {simpleRule?: any}
-  --alarm-notification: record # Contains information about one or more notification actions. — shape: {notificationActions?: any}
-  --alarm-event-actions: record # Contains information about one or more alarm actions. — shape: {alarmActions?: any}
-  --alarm-capabilities: record # Contains the configuration information of alarm state changes. — shape: {initializationConfiguration?: any, acknowledgeFlow?: any}
-]: any -> record<creationTime: record, alarmModelArn: record, alarmModelVersion: record, lastUpdateTime: record, status: record> {
+  alarm_rule: record # Defines when your alarm is invoked. — shape: {simpleRule?: record}
+  --alarm-notification: record # Contains information about one or more notification actions. — shape: {notificationActions?: list}
+  --alarm-event-actions: record # Contains information about one or more alarm actions. — shape: {alarmActions?: list}
+  --alarm-capabilities: record # Contains the configuration information of alarm state changes. — shape: {initializationConfiguration?: record, acknowledgeFlow?: record}
+]: any -> record<creationTime: string, alarmModelArn: string, alarmModelVersion: string, lastUpdateTime: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -663,7 +663,7 @@ export def "describe-detector-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<detectorModel: record<detectorModelDefinition: record<states: record, initialStateName: record>, detectorModelConfiguration: record<detectorModelName: record, detectorModelVersion: record, detectorModelDescription: record, detectorModelArn: record, roleArn: record, creationTime: record, lastUpdateTime: record, status: record, key: record, evaluationMethod: record>>> {
+]: nothing -> record<detectorModel: record<detectorModelDefinition: record<states: list, initialStateName: string>, detectorModelConfiguration: record<detectorModelName: string, detectorModelVersion: string, detectorModelDescription: string, detectorModelArn: string, roleArn: string, creationTime: string, lastUpdateTime: string, status: string, key: string, evaluationMethod: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_model_name | is-empty) { error make --unspanned { msg: "path parameter 'detectorModelName' must be non-empty" } }
@@ -691,7 +691,7 @@ export def "describe-detector-model" [
 #
 # POST /detector-models/{detectorModelName}
 # operationId: UpdateDetectorModel
-# --detectorModelDefinition shape: {states?: any, initialStateName?: any}
+# --detectorModelDefinition shape: {states?: list, initialStateName?: string}
 export def "update-detector-model" [
   detector_model_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -710,11 +710,11 @@ export def "update-detector-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  detector_model_definition: record # Information that defines how a detector operates. — shape: {states?: any, initialStateName?: any}
+  detector_model_definition: record # Information that defines how a detector operates. — shape: {states?: list, initialStateName?: string}
   --detector-model-description: string # A brief description of the detector model.
   role_arn: string # The ARN of the role that grants permission to AWS IoT Events to perform its operations.
   --evaluation-method: string@evaluation-method-completer # Information about the order in which events are evaluated and how actions are executed.
-]: any -> record<detectorModelConfiguration: record<detectorModelName: record, detectorModelVersion: record, detectorModelDescription: record, detectorModelArn: record, roleArn: record, creationTime: record, lastUpdateTime: record, status: record, key: record, evaluationMethod: record>> {
+]: any -> record<detectorModelConfiguration: record<detectorModelName: string, detectorModelVersion: string, detectorModelDescription: string, detectorModelArn: string, roleArn: string, creationTime: string, lastUpdateTime: string, status: string, key: string, evaluationMethod: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -807,7 +807,7 @@ export def "describe-input" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<input: record<inputConfiguration: record<inputName: record, inputDescription: record, inputArn: record, creationTime: record, lastUpdateTime: record, status: record>, inputDefinition: record<attributes: record>>> {
+]: nothing -> record<input: record<inputConfiguration: record<inputName: string, inputDescription: string, inputArn: string, creationTime: string, lastUpdateTime: string, status: string>, inputDefinition: record<attributes: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($input_name | is-empty) { error make --unspanned { msg: "path parameter 'inputName' must be non-empty" } }
@@ -834,7 +834,7 @@ export def "describe-input" [
 #
 # PUT /inputs/{inputName}
 # operationId: UpdateInput
-# --inputDefinition shape: {attributes?: any}
+# --inputDefinition shape: {attributes?: list}
 export def "update-input" [
   input_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -854,8 +854,8 @@ export def "update-input" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --input-description: string # A brief description of the input.
-  input_definition: record # The definition of the input. — shape: {attributes?: any}
-]: any -> record<inputConfiguration: record<inputName: record, inputDescription: record, inputArn: record, creationTime: record, lastUpdateTime: record, status: record>> {
+  input_definition: record # The definition of the input. — shape: {attributes?: list}
+]: any -> record<inputConfiguration: record<inputName: string, inputDescription: string, inputArn: string, creationTime: string, lastUpdateTime: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -903,7 +903,7 @@ export def "describe-detector-model-analysis" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<status: record> {
+]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($analysis_id | is-empty) { error make --unspanned { msg: "path parameter 'analysisId' must be non-empty" } }
@@ -947,7 +947,7 @@ export def "describe-logging-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<loggingOptions: record<roleArn: record, level: record, enabled: record, detectorDebugOptions: record>> {
+]: nothing -> record<loggingOptions: record<roleArn: string, level: string, enabled: bool, detectorDebugOptions: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/logging" $auth.query)
@@ -973,7 +973,7 @@ export def "describe-logging-options" [
 #
 # PUT /logging
 # operationId: PutLoggingOptions
-# --loggingOptions shape: {roleArn?: any, level?: any, enabled?: any, detectorDebugOptions?: any}
+# --loggingOptions shape: {roleArn?: string, level?: "ERROR"|"INFO"|"DEBUG", enabled?: bool, detectorDebugOptions?: list}
 export def "put-logging-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -991,7 +991,7 @@ export def "put-logging-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  logging_options: record # The values of the AWS IoT Events logging options. — shape: {roleArn?: any, level?: any, enabled?: any, detectorDebugOptions?: any}
+  logging_options: record # The values of the AWS IoT Events logging options. — shape: {roleArn?: string, level?: "ERROR"|"INFO"|"DEBUG", enabled?: bool, detectorDebugOptions?: list}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1041,7 +1041,7 @@ export def "get-detector-model-analysis-results" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<analysisResults: record, nextToken: record> {
+]: nothing -> record<analysisResults: table<type: string, level: string, message: string, locations: list>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($analysis_id | is-empty) { error make --unspanned { msg: "path parameter 'analysisId' must be non-empty" } }
@@ -1089,7 +1089,7 @@ export def "list-alarm-model-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<alarmModelVersionSummaries: record, nextToken: record> {
+]: nothing -> record<alarmModelVersionSummaries: table<alarmModelName: string, alarmModelArn: string, alarmModelVersion: string, roleArn: string, creationTime: string, lastUpdateTime: string, status: string, statusMessage: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($alarm_model_name | is-empty) { error make --unspanned { msg: "path parameter 'alarmModelName' must be non-empty" } }
@@ -1137,7 +1137,7 @@ export def "list-detector-model-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<detectorModelVersionSummaries: record, nextToken: record> {
+]: nothing -> record<detectorModelVersionSummaries: table<detectorModelName: string, detectorModelVersion: string, detectorModelArn: string, roleArn: string, creationTime: string, lastUpdateTime: string, status: string, evaluationMethod: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_model_name | is-empty) { error make --unspanned { msg: "path parameter 'detectorModelName' must be non-empty" } }
@@ -1165,7 +1165,7 @@ export def "list-detector-model-versions" [
 #
 # POST /input-routings
 # operationId: ListInputRoutings
-# --inputIdentifier shape: {iotEventsInputIdentifier?: any, iotSiteWiseInputIdentifier?: any}
+# --inputIdentifier shape: {iotEventsInputIdentifier?: record, iotSiteWiseInputIdentifier?: record}
 export def "list-input-routings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1183,10 +1183,10 @@ export def "list-input-routings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  input_identifier: record # The identifer of the input. — shape: {iotEventsInputIdentifier?: any, iotSiteWiseInputIdentifier?: any}
+  input_identifier: record # The identifer of the input. — shape: {iotEventsInputIdentifier?: record, iotSiteWiseInputIdentifier?: record}
   --max-results: int # The maximum number of results to be returned per request.
   --next-token: string # The token that you can use to return the next set of results.
-]: any -> record<routedResources: record, nextToken: record> {
+]: any -> record<routedResources: table<name: string, arn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1225,7 +1225,7 @@ export def "list-tags-for-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The ARN of the resource.
+  --resource-arn: string # The ARN of the resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1233,9 +1233,10 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: record> {
+]: nothing -> record<tags: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tags" $qp $auth.query)
   let accept_val = "application/json"
@@ -1260,7 +1261,7 @@ export def "list-tags-for-resource" [
 #
 # POST /tags
 # operationId: TagResource
-# --tags item shape: {key: any, value: any}
+# --tags item shape: {key: string, value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1271,7 +1272,7 @@ export def "tag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The ARN of the resource.
+  --resource-arn: string # The ARN of the resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1279,11 +1280,12 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  tags: list # The new or modified tags for the resource. — item shape: {key: any, value: any}
+  tags: list # The new or modified tags for the resource. — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tags" $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -1310,7 +1312,7 @@ export def "tag-resource" [
 #
 # POST /analysis/detector-models/
 # operationId: StartDetectorModelAnalysis
-# --detectorModelDefinition shape: {states?: any, initialStateName?: any}
+# --detectorModelDefinition shape: {states?: list, initialStateName?: string}
 export def "start-detector-model-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1328,8 +1330,8 @@ export def "start-detector-model-analysis" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  detector_model_definition: record # Information that defines how a detector operates. — shape: {states?: any, initialStateName?: any}
-]: any -> record<analysisId: record> {
+  detector_model_definition: record # Information that defines how a detector operates. — shape: {states?: list, initialStateName?: string}
+]: any -> record<analysisId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1368,8 +1370,8 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The ARN of the resource.
-  --tag-keys: list # A list of the keys of the tags to be removed from the resource.
+  --resource-arn: string # The ARN of the resource. (required)
+  --tag-keys: list # A list of the keys of the tags to be removed from the resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1380,6 +1382,8 @@ export def "untag-resource" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar") (serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/tags" $qp $auth.query)
   let accept_val = "application/json"

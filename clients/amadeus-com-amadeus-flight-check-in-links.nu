@@ -131,11 +131,12 @@ export def "get-checkin-ur-ls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --airline-code: string # Airline code following IATA or ICAO standard - e.g. 1X; AF or ESY [IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx) [ICAO airlines table codes](https://en.wikipedia.org/wiki/List_of_airline_codes) (e.g. BA)
+  --airline-code: string # Airline code following IATA or ICAO standard - e.g. 1X; AF or ESY [IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx) [ICAO airlines table codes](https://en.wikipedia.org/wiki/List_of_airline_codes) (required, e.g. BA)
   --language: string # Check-in page language with one of the following patterns 'languageCode' (e.g. EN) or 'languageCode-IATAcountryCode' (e.g. en-GB). Default value is **en-GB** (used when required language is not available or when no value is specified).
-]: nothing -> any {
+]: nothing -> record<data: table<channel: string, href: string, id: string, parameters: any, type: string>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>, warnings: table<code: int, detail: string, source: record, status: int, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($airline_code == null) { error make --unspanned { msg: "required query parameter 'airlineCode' missing: pass --airline-code" } }
   let qp = [(serialize-qp "airlineCode" $airline_code "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reference-data/urls/checkin-links" $qp $auth.query)
   let accept_val = "application/vnd.amadeus+json"

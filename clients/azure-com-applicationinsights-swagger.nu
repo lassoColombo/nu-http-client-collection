@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -100,6 +100,9 @@ def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: 
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def event-type-completer [] { ["$all" "availabilityResults" "browserTimings" "customEvents" "customMetrics" "dependencies" "exceptions" "pageViews" "performanceCounters" "requests" "traces"] }
+def metric-id-completer [] { ["availabilityResults/availabilityPercentage" "availabilityResults/duration" "billing/telemetryCount" "client/networkDuration" "client/processingDuration" "client/receiveDuration" "client/sendDuration" "client/totalDuration" "customEvents/count" "dependencies/count" "dependencies/duration" "dependencies/failed" "exceptions/browser" "exceptions/count" "exceptions/server" "pageViews/count" "pageViews/duration" "performanceCounters/exceptionsPerSecond" "performanceCounters/memoryAvailableBytes" "performanceCounters/processCpuPercentage" "performanceCounters/processIOBytesPerSecond" "performanceCounters/processPrivateBytes" "performanceCounters/processorCpuPercentage" "performanceCounters/requestExecutionTime" "performanceCounters/requestsInQueue" "performanceCounters/requestsPerSecond" "requests/count" "requests/duration" "requests/failed" "sessions/count" "users/authenticated" "users/count"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -141,13 +144,14 @@ export def "events-get-odata-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'apiVersion' missing: pass --api-version" } }
   let qp = [(serialize-qp "apiVersion" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Insights/components/{application_name}/events/$metadata") $qp $auth.query)
   let accept_val = "application/xml;charset=utf-8"
@@ -174,7 +178,7 @@ export def "events-get-by-type" [
   subscription_id: string
   resource_group_name: string
   application_name: string
-  event_type: string
+  event_type: string@event-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +198,7 @@ export def "events-get-by-type" [
   --format: string # Format for the returned events
   --count: oneof<nothing, bool> # Request a count of matching items included with the returned events
   --apply: string # An expression used for aggregation over returned events
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<_ai_messages: table<additionalProperties: record, code: string, details: list, innererror: any, message: string>, _odata_context: string, value: table<ai: record, application: record, client: record, cloud: record, count: int, customDimensions: record, customMeasurements: record, id: string, operation: record, session: record, timestamp: string, type: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -202,6 +206,7 @@ export def "events-get-by-type" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
   if ($event_type | is-empty) { error make --unspanned { msg: "path parameter 'eventType' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'apiVersion' missing: pass --api-version" } }
   let qp = [(serialize-qp "timespan" $timespan "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$search" $search "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$format" $format "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "$apply" $apply "scalar") (serialize-qp "apiVersion" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_name: (encode-path-segment $application_name), event_type: (encode-path-segment $event_type)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Insights/components/{application_name}/events/{event_type}") $qp $auth.query)
   let accept_val = "application/json"
@@ -228,7 +233,7 @@ export def "events-get" [
   subscription_id: string
   resource_group_name: string
   application_name: string
-  event_type: string
+  event_type: string@event-type-completer
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +245,7 @@ export def "events-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timespan: string # Optional. The timespan over which to retrieve events. This is an ISO8601 time period value. This timespan is applied in addition to any that are specified in the Odata expression.
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<_ai_messages: table<additionalProperties: record, code: string, details: list, innererror: any, message: string>, _odata_context: string, value: table<ai: record, application: record, client: record, cloud: record, count: int, customDimensions: record, customMeasurements: record, id: string, operation: record, session: record, timestamp: string, type: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -249,6 +254,7 @@ export def "events-get" [
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
   if ($event_type | is-empty) { error make --unspanned { msg: "path parameter 'eventType' must be non-empty" } }
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'apiVersion' missing: pass --api-version" } }
   let qp = [(serialize-qp "timespan" $timespan "scalar") (serialize-qp "apiVersion" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_name: (encode-path-segment $application_name), event_type: (encode-path-segment $event_type), event_id: (encode-path-segment $event_id)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Insights/components/{application_name}/events/{event_type}/{event_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -284,13 +290,14 @@ export def "metrics-get-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'apiVersion' missing: pass --api-version" } }
   let qp = [(serialize-qp "apiVersion" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Insights/components/{application_name}/metrics/metadata") $qp $auth.query)
   let accept_val = "application/json"
@@ -317,7 +324,7 @@ export def "metrics-get" [
   subscription_id: string
   resource_group_name: string
   application_name: string
-  metric_id: string
+  metric_id: string@metric-id-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +341,7 @@ export def "metrics-get" [
   --top: int # The number of segments to return. This value is only valid when segment is specified. (format: int32)
   --orderby: string # The aggregation function and direction to sort the segments by. This value is only valid when segment is specified.
   --filter: string # An expression used to filter the results. This value should be a valid OData filter expression where the keys of each clause should be applicable dimensions for the metric you are retrieving.
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<value: record<end: string, interval: string, segments: list<record>, start: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -342,6 +349,7 @@ export def "metrics-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
   if ($metric_id | is-empty) { error make --unspanned { msg: "path parameter 'metricId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'apiVersion' missing: pass --api-version" } }
   let qp = [(serialize-qp "timespan" $timespan "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "aggregation" $aggregation "csv") (serialize-qp "segment" $segment "csv") (serialize-qp "top" $top "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "apiVersion" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_name: (encode-path-segment $application_name), metric_id: (encode-path-segment $metric_id)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Insights/components/{application_name}/metrics/{metric_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -377,15 +385,17 @@ export def "query-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # The Analytics query. Learn more about the [Analytics query syntax](https://azure.microsoft.com/documentation/articles/app-insights-analytics-reference/)
+  --query: string # The Analytics query. Learn more about the [Analytics query syntax](https://azure.microsoft.com/documentation/articles/app-insights-analytics-reference/) (required)
   --timespan: string # Optional. The timespan over which to query data. This is an ISO8601 time period value. This timespan is applied in addition to any that are specified in the query expression.
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<tables: table<columns: list, name: string, rows: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'apiVersion' missing: pass --api-version" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "apiVersion" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Insights/components/{application_name}/query") $qp $auth.query)
   let accept_val = "application/json"
@@ -421,7 +431,7 @@ export def "query-execute" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --applications: list<string> # Application IDs to include in cross-application queries.
   query: string # The Analytics query. Learn more about the [Analytics query syntax](https://azure.microsoft.com/documentation/articles/app-insights-analytics-reference/)
   --timespan: string # Optional. The timespan over which to query data. This is an ISO8601 time period value. This timespan is applied in addition to any that are specified in the query expression.
@@ -432,6 +442,7 @@ export def "query-execute" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'apiVersion' missing: pass --api-version" } }
   let qp = [(serialize-qp "apiVersion" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Insights/components/{application_name}/query") $qp $auth.query)
   let req_body = {"applications": $applications, "query": $query, "timespan": $timespan} | compact

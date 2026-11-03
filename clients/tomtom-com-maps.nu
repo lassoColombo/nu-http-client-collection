@@ -95,21 +95,27 @@ def base-url-completer [] { ["https://api.tomtom.com"] }
 def auth-scheme-completer [] { ["query-key" "none"] }
 
 # Completers for enum parameters
+def version-number-completer [] { ["1"] }
+def format-completer [] { ["json" "jsonp" "xml"] }
+def zoom-completer [] { ["0" "1" "10" "11" "12" "13" "14" "15" "16" "17" "18" "2" "3" "4" "5" "6" "7" "8" "9"] }
 def layer-completer [] { ["basic" "hybrid" "labels"] }
 def style-completer [] { ["main" "night"] }
-def format-completer [] { ["jpeg" "jpg" "png"] }
-def zoom-completer [] { ["0" "1" "10" "11" "12" "13" "14" "15" "16" "17" "18" "19" "2" "20" "21" "22" "3" "4" "5" "6" "7" "8" "9"] }
+def format-completer-1 [] { ["jpeg" "jpg" "png"] }
+def zoom-completer-1 [] { ["0" "1" "10" "11" "12" "13" "14" "15" "16" "17" "18" "19" "2" "20" "21" "22" "3" "4" "5" "6" "7" "8" "9"] }
 def view-completer [] { ["IN" "Unified"] }
+def style-completer-1 [] { ["main"] }
 def view-completer-1 [] { ["IL" "IN" "Unified"] }
+def format-completer-2 [] { ["jpg" "png"] }
 def tile-size-completer [] { ["256" "512"] }
 def request-completer [] { ["GetMap"] }
 def srs-completer [] { ["EPSG:3857" "EPSG:4326"] }
-def format-completer-1 [] { ["image/jpeg" "image/png"] }
+def format-completer-3 [] { ["image/jpeg" "image/png"] }
 def layers-completer [] { ["basic"] }
 def styles-completer [] { [""] }
 def service-completer [] { ["WMS"] }
 def version-completer [] { ["1.1.1"] }
 def request-completer-1 [] { ["GetCapabilities"] }
+def wmts-version-completer [] { ["1.0.0"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -138,8 +144,8 @@ export def commands []: nothing -> table {
 #
 # GET /map/{versionNumber}/copyrights.{format}
 export def "get-map-version-number-copyrights-format" [
-  version_number: int
-  format: string
+  version_number: int@version-number-completer
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,8 +183,8 @@ export def "get-map-version-number-copyrights-format" [
 #
 # GET /map/{versionNumber}/copyrights/caption.{format}
 export def "get-map-version-number-copyrights-caption-format" [
-  version_number: int
-  format: string
+  version_number: int@version-number-completer
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,12 +222,12 @@ export def "get-map-version-number-copyrights-caption-format" [
 #
 # GET /map/{versionNumber}/copyrights/{minLon}/{minLat}/{maxLon}/{maxLat}.{format}
 export def "get-map-version-number-copyrights-min-lon-min-lat-max-lon-max-lat-format" [
-  version_number: int
+  version_number: int@version-number-completer
   min_lon: float
   min_lat: float
   max_lon: float
   max_lat: float
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,11 +269,11 @@ export def "get-map-version-number-copyrights-min-lon-min-lat-max-lon-max-lat-fo
 #
 # GET /map/{versionNumber}/copyrights/{zoom}/{X}/{Y}.{format}
 export def "get-map-version-number-copyrights-zoom-x-y-format" [
-  version_number: int
-  zoom: int
+  version_number: int@version-number-completer
+  zoom: int@zoom-completer
   x: int
   y: int
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +314,7 @@ export def "get-map-version-number-copyrights-zoom-x-y-format" [
 #
 # GET /map/{versionNumber}/staticimage
 export def "get-map-version-number-staticimage" [
-  version_number: int
+  version_number: int@version-number-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,8 +326,8 @@ export def "get-map-version-number-staticimage" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --layer: string@layer-completer # Layer of image to be rendered. Hybrid and labels are intended for layering with other data and are only available in png format. (default: basic, e.g. basic)
   --style: string@style-completer # Map style to be returned (default: main, e.g. main)
-  --format: string@format-completer # Image format to be returned (default: png, e.g. png)
-  --zoom: int@zoom-completer # Zoom level of map image to be returned. (default: 12)
+  --format: string@format-completer-1 # Image format to be returned (default: png, e.g. png)
+  --zoom: int@zoom-completer-1 # Zoom level of map image to be returned. (default: 12)
   --center: string # Coordinates for the center point of the image. Must be used with the width and height parameters; cannot be used with bbox. Uses EPSG:3857 projection (functionally equivalent to EPSG:900910). (e.g. 4.899886, 52.379031)
   --width: int # Width of the resulting image in pixels. Width must be a positive integer between 1 and 8192. (default: 512, e.g. 512)
   --height: int # Height of the resulting image in pixels. Height must be a positive integer between 1 and 8192. (default: 512, e.g. 512)
@@ -353,10 +359,10 @@ export def "get-map-version-number-staticimage" [
 #
 # GET /map/{versionNumber}/tile/{layer}/{style}/{zoom}/{X}/{Y}.pbf
 export def "get-map-version-number-tile-layer-style-zoom-x-y-pbf" [
-  version_number: int
-  layer: string
-  style: string
-  zoom: int
+  version_number: int@version-number-completer
+  layer: string@layer-completer
+  style: string@style-completer-1
+  zoom: int@zoom-completer-1
   x: int
   y: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -401,13 +407,13 @@ export def "get-map-version-number-tile-layer-style-zoom-x-y-pbf" [
 #
 # GET /map/{versionNumber}/tile/{layer}/{style}/{zoom}/{X}/{Y}.{format}
 export def "get-map-version-number-tile-layer-style-zoom-x-y-format" [
-  version_number: int
-  layer: string
-  style: string
-  zoom: int
+  version_number: int@version-number-completer
+  layer: string@layer-completer
+  style: string@style-completer
+  zoom: int@zoom-completer-1
   x: int
   y: int
-  format: string
+  format: string@format-completer-2
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +458,7 @@ export def "get-map-version-number-tile-layer-style-zoom-x-y-format" [
 # GET /map/{versionNumber}/wms/
 # operationId: GetMap
 export def "get-map" [
-  version_number: int
+  version_number: int@version-number-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -462,20 +468,28 @@ export def "get-map" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --request: string@request-completer # Request type
-  --srs: string@srs-completer # Projection used in describing the bbox EPSG:3857 is recommended, particularly at higher zoom levels. (Note that EPSG:3857 is functionally equivalent to EPSG:900913/EPSG:3785) (e.g. EPSG:4326)
-  --bbox: string # Bounding box in the projection stated in srs (minLon,minLat,maxLon,maxLat) (e.g. -0.489,51.28,0.236,51.686)
-  --width: int # Width of the resulting image, in pixels Maximum value is 2048 (e.g. 512)
-  --height: int # Height of the resulting image, in pixels Maximum value is 2048 (e.g. 512)
-  --format: string@format-completer-1 # Image format to be returned (e.g. image/png)
-  --layers: string@layers-completer # Map layers requested Currently only the basic layer is available
+  --request: string@request-completer # Request type (required)
+  --srs: string@srs-completer # Projection used in describing the bbox EPSG:3857 is recommended, particularly at higher zoom levels. (Note that EPSG:3857 is functionally equivalent to EPSG:900913/EPSG:3785) (required, e.g. EPSG:4326)
+  --bbox: string # Bounding box in the projection stated in srs (minLon,minLat,maxLon,maxLat) (required, e.g. -0.489,51.28,0.236,51.686)
+  --width: int # Width of the resulting image, in pixels Maximum value is 2048 (required, e.g. 512)
+  --height: int # Height of the resulting image, in pixels Maximum value is 2048 (required, e.g. 512)
+  --format: string@format-completer-3 # Image format to be returned (required, e.g. image/png)
+  --layers: string@layers-completer # Map layers requested Currently only the basic layer is available (required)
   --styles: string@styles-completer # Map styles to be returned. Currently, no styles are available. This parameter is present for forward compatibility; it must be used and left blank. (allows empty value)
   --service: string@service-completer # Service type
-  --version: string@version-completer # WMS service version
+  --version: string@version-completer # WMS service version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'versionNumber' must be non-empty" } }
+  let request = ($request | default "GetMap")
+  if ($srs == null) { error make --unspanned { msg: "required query parameter 'srs' missing: pass --srs" } }
+  if ($bbox == null) { error make --unspanned { msg: "required query parameter 'bbox' missing: pass --bbox" } }
+  if ($width == null) { error make --unspanned { msg: "required query parameter 'width' missing: pass --width" } }
+  if ($height == null) { error make --unspanned { msg: "required query parameter 'height' missing: pass --height" } }
+  if ($format == null) { error make --unspanned { msg: "required query parameter 'format' missing: pass --format" } }
+  let layers = ($layers | default "basic")
+  let version = ($version | default "1.1.1")
   let qp = [(serialize-qp "request" $request "scalar") (serialize-qp "srs" $srs "scalar") (serialize-qp "bbox" $bbox "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "layers" $layers "scalar") (serialize-qp "styles" $styles "scalar") (serialize-qp "service" $service "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number)} | format pattern "/map/{version_number}/wms/") $qp $auth.query)
   let accept_val = "application/json"
@@ -499,7 +513,7 @@ export def "get-map" [
 # GET /map/{versionNumber}/wms//
 # operationId: GetCapabilities
 export def "get-capabilities" [
-  version_number: int
+  version_number: int@version-number-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,13 +523,15 @@ export def "get-capabilities" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --service: string@service-completer
-  --request: string@request-completer-1
+  --service: string@service-completer # required
+  --request: string@request-completer-1 # required
   --version: string@version-completer # WMS service version
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'versionNumber' must be non-empty" } }
+  let service = ($service | default "WMS")
+  let request = ($request | default "GetCapabilities")
   let qp = [(serialize-qp "service" $service "scalar") (serialize-qp "request" $request "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number)} | format pattern "/map/{version_number}/wms//") $qp $auth.query)
   let accept_val = "application/json"
@@ -538,9 +554,9 @@ export def "get-capabilities" [
 #
 # GET /map/{versionNumber}/wmts/{key}/{wmtsVersion}/WMTSCapabilities.xml
 export def "get-map-version-number-wmts-key-wmts-version-wmts-capabilities-xml" [
-  version_number: int
+  version_number: int@version-number-completer
   key: string
-  wmts_version: string
+  wmts_version: string@wmts-version-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

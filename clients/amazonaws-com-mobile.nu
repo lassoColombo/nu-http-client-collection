@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -157,7 +157,7 @@ export def "create-project" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --contents: string # Binary file data.
-]: any -> record<details: record<name: string, projectId: string, region: string, state: string, createdDate: record, lastUpdatedDate: record, consoleUrl: record, resources: list<record>>> {
+]: any -> record<details: record<name: string, projectId: string, region: string, state: string, createdDate: string, lastUpdatedDate: string, consoleUrl: string, resources: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -206,7 +206,7 @@ export def "list-projects" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<projects: table<name: record, projectId: record>, nextToken: string> {
+]: nothing -> record<projects: table<name: string, projectId: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -251,7 +251,7 @@ export def "delete-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<deletedResources: record, orphanedResources: record> {
+]: nothing -> record<deletedResources: table<type: string, name: string, arn: string, feature: string, attributes: record>, orphanedResources: table<type: string, name: string, arn: string, feature: string, attributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -343,7 +343,7 @@ export def "export-bundle" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<downloadUrl: record> {
+]: nothing -> record<downloadUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bundle_id | is-empty) { error make --unspanned { msg: "path parameter 'bundleId' must be non-empty" } }
@@ -381,7 +381,7 @@ export def "describe-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --project-id: string # Unique project identifier.
+  --project-id: string # Unique project identifier. (required)
   --sync-from-resources: oneof<nothing, bool> # If set to true, causes AWS Mobile Hub to synchronize information from other services, e.g., update state of AWS CloudFormation stacks in the AWS Mobile Hub project.
   --x-amz-content-sha256: string
   --x-amz-date: string
@@ -390,9 +390,10 @@ export def "describe-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<details: record<name: string, projectId: string, region: string, state: string, createdDate: record, lastUpdatedDate: record, consoleUrl: record, resources: list<record>>> {
+]: nothing -> record<details: record<name: string, projectId: string, region: string, state: string, createdDate: string, lastUpdatedDate: string, consoleUrl: string, resources: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "syncFromResources" $sync_from_resources "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/project" $qp $auth.query)
   let accept_val = "application/json"
@@ -435,7 +436,7 @@ export def "export-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<downloadUrl: record, shareUrl: record, snapshotId: record> {
+]: nothing -> record<downloadUrl: string, shareUrl: string, snapshotId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -481,7 +482,7 @@ export def "list-bundles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<bundleList: record, nextToken: record> {
+]: nothing -> record<bundleList: table<bundleId: string, title: string, version: string, description: string, iconUrl: string, availablePlatforms: list>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -518,7 +519,7 @@ export def "update-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --project-id: string # Unique project identifier.
+  --project-id: string # Unique project identifier. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -527,10 +528,11 @@ export def "update-project" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --contents: string # Binary file data.
-]: any -> record<details: record<name: string, projectId: string, region: string, state: string, createdDate: record, lastUpdatedDate: record, consoleUrl: record, resources: list<record>>> {
+]: any -> record<details: record<name: string, projectId: string, region: string, state: string, createdDate: string, lastUpdatedDate: string, consoleUrl: string, resources: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
   let qp = [(serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/update" $qp $auth.query)
   let req_body = {"contents": $contents} | compact

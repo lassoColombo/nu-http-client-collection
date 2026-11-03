@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -153,7 +153,7 @@ export def "queries-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --top: int # Maximum items returned in page.
   --include-body: oneof<nothing, bool> # Flag indicating whether or not to return the body of each applicable query. If false, only return the query information.
   --skip-token: string # Base64 encoded token used to fetch the next page of items. Default is null.
@@ -163,6 +163,7 @@ export def "queries-list" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($query_pack_name | is-empty) { error make --unspanned { msg: "path parameter 'queryPackName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "includeBody" $include_body "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), query_pack_name: (encode-path-segment $query_pack_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/queryPacks/{query_pack_name}/queries") $qp $auth.query)
   let accept_val = "application/json"
@@ -198,7 +199,7 @@ export def "queries-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --top: int # Maximum items returned in page.
   --include-body: oneof<nothing, bool> # Flag indicating whether or not to return the body of each applicable query. If false, only return the query information.
   --skip-token: string # Base64 encoded token used to fetch the next page of items. Default is null.
@@ -212,6 +213,7 @@ export def "queries-search" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($query_pack_name | is-empty) { error make --unspanned { msg: "path parameter 'queryPackName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "includeBody" $include_body "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), query_pack_name: (encode-path-segment $query_pack_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/queryPacks/{query_pack_name}/queries/search") $qp $auth.query)
   let req_body = {"categories": $categories, "labels": $labels, "resourceTypes": $resource_types} | compact
@@ -250,14 +252,15 @@ export def "queries-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($query_pack_name | is-empty) { error make --unspanned { msg: "path parameter 'queryPackName' must be non-empty" } }
   if ($query_id | is-empty) { error make --unspanned { msg: "path parameter 'queryId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), query_pack_name: (encode-path-segment $query_pack_name), query_id: (encode-path-segment $query_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/queryPacks/{query_pack_name}/queries/{query_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -294,7 +297,7 @@ export def "queries-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<properties: record<author: string, body: string, categories: list<string>, description: string, displayName: string, labels: list<string>, linkedResourceId: string, queryId: string, resourceTypes: list<string>, timeCreated: string, timeModified: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -302,6 +305,7 @@ export def "queries-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($query_pack_name | is-empty) { error make --unspanned { msg: "path parameter 'queryPackName' must be non-empty" } }
   if ($query_id | is-empty) { error make --unspanned { msg: "path parameter 'queryId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), query_pack_name: (encode-path-segment $query_pack_name), query_id: (encode-path-segment $query_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/queryPacks/{query_pack_name}/queries/{query_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -339,7 +343,7 @@ export def "queries-put" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --properties: any # Properties that define an Log Analytics QueryPack-Query resource. — shape: {body: string, categories?: list<string>, description?: string, displayName: string, labels?: list<string>, linkedResourceId?: string, resourceTypes?: list<string>}
 ]: any -> record<properties: record<author: string, body: string, categories: list<string>, description: string, displayName: string, labels: list<string>, linkedResourceId: string, queryId: string, resourceTypes: list<string>, timeCreated: string, timeModified: string>, id: string, name: string, type: string> {
   let input = $in
@@ -349,6 +353,7 @@ export def "queries-put" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($query_pack_name | is-empty) { error make --unspanned { msg: "path parameter 'queryPackName' must be non-empty" } }
   if ($query_id | is-empty) { error make --unspanned { msg: "path parameter 'queryId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), query_pack_name: (encode-path-segment $query_pack_name), query_id: (encode-path-segment $query_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/queryPacks/{query_pack_name}/queries/{query_id}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

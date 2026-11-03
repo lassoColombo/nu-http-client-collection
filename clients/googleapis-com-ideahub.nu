@@ -1,4 +1,4 @@
-# Auto-generated client for Idea Hub API vv1alpha
+# Auto-generated client for Idea Hub API v1alpha
 # Source: https://api.apis.guru/v2/specs/googleapis.com/ideahub/v1alpha/openapi.json
 # Auth: --token flag or $env.IDEA_HUB_API_TOKEN
 

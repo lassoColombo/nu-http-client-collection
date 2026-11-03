@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # POST /policies
 # operationId: CreateLifecyclePolicy
-# --PolicyDetails shape: {PolicyType?: any, ResourceTypes?: any, ResourceLocations?: any, TargetTags?: any, Schedules?: any, Parameters?: any, EventSource?: any, Actions?: any}
+# --PolicyDetails shape: {PolicyType?: "EBS_SNAPSHOT_MANAGEMENT"|"IMAGE_MANAGEMENT"|"EVENT_BASED_POLICY", ResourceTypes?: list<string>, ResourceLocations?: list<string>, TargetTags?: list, Schedules?: list, Parameters?: record, EventSource?: record, Actions?: list}
 export def "create-lifecycle-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -164,9 +164,9 @@ export def "create-lifecycle-policy" [
   execution_role_arn: string # The Amazon Resource Name (ARN) of the IAM role used to run the operations specified by the lifecycle policy.
   description: string # A description of the lifecycle policy. The characters ^[0-9A-Za-z _-]+$ are supported.
   state: string@state-completer # The desired activation state of the lifecycle policy after creation.
-  policy_details: record # [All policy types] Specifies the configuration of a lifecycle policy. — shape: {PolicyType?: any, ResourceTypes?: any, ResourceLocations?: any, TargetTags?: any, Schedules?: any, Parameters?: any, EventSource?: any, Actions?: any}
+  policy_details: record # [All policy types] Specifies the configuration of a lifecycle policy. — shape: {PolicyType?: "EBS_SNAPSHOT_MANAGEMENT"|"IMAGE_MANAGEMENT"|"EVENT_BASED_POLICY", ResourceTypes?: list<string>, ResourceLocations?: list<string>, TargetTags?: list, Schedules?: list, Parameters?: record, EventSource?: record, Actions?: list}
   --tags: record # The tags to apply to the lifecycle policy during creation.
-]: any -> record<PolicyId: record> {
+]: any -> record<PolicyId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -217,7 +217,7 @@ export def "get-lifecycle-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Policies: record> {
+]: nothing -> record<Policies: table<PolicyId: string, Description: string, State: string, Tags: record, PolicyType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "policyIds" $policy_ids "multi") (serialize-qp "state" $state "scalar") (serialize-qp "resourceTypes" $resource_types "multi") (serialize-qp "targetTags" $target_tags "multi") (serialize-qp "tagsToAdd" $tags_to_add "multi")] | flatten | str join "&"
@@ -307,7 +307,7 @@ export def "get-lifecycle-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Policy: record<PolicyId: record, Description: record, State: record, StatusMessage: record, ExecutionRoleArn: record, DateCreated: record, DateModified: record, PolicyDetails: record<PolicyType: record, ResourceTypes: record, ResourceLocations: record, TargetTags: record, Schedules: record, Parameters: record, EventSource: record, Actions: record>, Tags: record, PolicyArn: record>> {
+]: nothing -> record<Policy: record<PolicyId: string, Description: string, State: string, StatusMessage: string, ExecutionRoleArn: string, DateCreated: string, DateModified: string, PolicyDetails: record<PolicyType: string, ResourceTypes: list, ResourceLocations: list, TargetTags: list, Schedules: list, Parameters: record, EventSource: record, Actions: list>, Tags: record, PolicyArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($policy_id | is-empty) { error make --unspanned { msg: "path parameter 'policyId' must be non-empty" } }
@@ -439,7 +439,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The tag keys.
+  --tag-keys: list # The tag keys. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -451,6 +451,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -475,7 +476,7 @@ export def "untag-resource" [
 #
 # PATCH /policies/{policyId}
 # operationId: UpdateLifecyclePolicy
-# --PolicyDetails shape: {PolicyType?: any, ResourceTypes?: any, ResourceLocations?: any, TargetTags?: any, Schedules?: any, Parameters?: any, EventSource?: any, Actions?: any}
+# --PolicyDetails shape: {PolicyType?: "EBS_SNAPSHOT_MANAGEMENT"|"IMAGE_MANAGEMENT"|"EVENT_BASED_POLICY", ResourceTypes?: list<string>, ResourceLocations?: list<string>, TargetTags?: list, Schedules?: list, Parameters?: record, EventSource?: record, Actions?: list}
 export def "update-lifecycle-policy" [
   policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -497,7 +498,7 @@ export def "update-lifecycle-policy" [
   --execution-role-arn: string # The Amazon Resource Name (ARN) of the IAM role used to run the operations specified by the lifecycle policy.
   --state: string@state-completer # The desired activation state of the lifecycle policy after creation.
   --description: string # A description of the lifecycle policy.
-  --policy-details: record # [All policy types] Specifies the configuration of a lifecycle policy. — shape: {PolicyType?: any, ResourceTypes?: any, ResourceLocations?: any, TargetTags?: any, Schedules?: any, Parameters?: any, EventSource?: any, Actions?: any}
+  --policy-details: record # [All policy types] Specifies the configuration of a lifecycle policy. — shape: {PolicyType?: "EBS_SNAPSHOT_MANAGEMENT"|"IMAGE_MANAGEMENT"|"EVENT_BASED_POLICY", ResourceTypes?: list<string>, ResourceLocations?: list<string>, TargetTags?: list, Schedules?: list, Parameters?: record, EventSource?: record, Actions?: list}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

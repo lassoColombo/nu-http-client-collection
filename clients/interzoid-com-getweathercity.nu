@@ -131,12 +131,15 @@ export def "getweather" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register
-  --city: string # City for weather information
-  --state: string # State for weather information
+  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register (required)
+  --city: string # City for weather information (required)
+  --state: string # State for weather information (required)
 ]: nothing -> record<City: string, Code: string, Credits: string, RelativeHumidity: string, State: string, TempC: string, TempF: string, VisibilityMiles: string, Weather: string, WindDir: string, WindMPH: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($license == null) { error make --unspanned { msg: "required query parameter 'license' missing: pass --license" } }
+  if ($city == null) { error make --unspanned { msg: "required query parameter 'city' missing: pass --city" } }
+  if ($state == null) { error make --unspanned { msg: "required query parameter 'state' missing: pass --state" } }
   let qp = [(serialize-qp "license" $license "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getweather" $qp $auth.query)
   let accept_val = "application/json"

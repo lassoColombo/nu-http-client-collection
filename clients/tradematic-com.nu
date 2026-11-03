@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {X-API-Key: $token_val}, query: "", location: "header"} }
+    "x-api-key" => { {scheme: $scheme, headers: {"X-API-Key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -371,11 +371,12 @@ export def "get-autofollow-strategies-strategyid-signals" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --count: int # format: int64
+  --count: int # required, format: int64
 ]: nothing -> table<position: string, price: string, shares: string, signalid: string, size: string, symbol: string, timestamp: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($strategyid | is-empty) { error make --unspanned { msg: "path parameter 'strategyid' must be non-empty" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({strategyid: (encode-path-segment $strategyid)} | format pattern "/autofollow/strategies/{strategyid}/signals") $qp $auth.query)
   let accept_val = "application/json"
@@ -1669,11 +1670,13 @@ export def "get-marketdata-symbols" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --marketid: int # format: int64
-  --filter: int # format: int64
+  --marketid: int # required, format: int64
+  --filter: int # required, format: int64
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($marketid == null) { error make --unspanned { msg: "required query parameter 'marketid' missing: pass --marketid" } }
+  if ($filter == null) { error make --unspanned { msg: "required query parameter 'filter' missing: pass --filter" } }
   let qp = [(serialize-qp "marketid" $marketid "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/marketdata/symbols" $qp $auth.query)
   let accept_val = "application/json"
@@ -1741,21 +1744,24 @@ export def "get-marketdata-symbols-symbolid-histdata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tf: int # format: int64
-  --qp-from: int # format: int64
-  --qp-to: int # format: int64
+  --tf: int # required, format: int64
+  --from: int # required, format: int64
+  --to: int # required, format: int64
 ]: nothing -> record<adjusted: bool, queryCount: int, results: table<c: float, h: float, l: float, n: int, o: float, t: int, v: int>, resultsCount: int, status: string, ticker: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($symbolid | is-empty) { error make --unspanned { msg: "path parameter 'symbolid' must be non-empty" } }
-  let qp = [(serialize-qp "tf" $tf "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($tf == null) { error make --unspanned { msg: "required query parameter 'tf' missing: pass --tf" } }
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "tf" $tf "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({symbolid: (encode-path-segment $symbolid)} | format pattern "/marketdata/symbols/{symbolid}/histdata") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"tf": $tf, "from": $qp_from, "to": $qp_to} | compact)
+    query: ({"tf": $tf, "from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null

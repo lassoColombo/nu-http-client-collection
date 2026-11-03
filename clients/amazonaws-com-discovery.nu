@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -112,6 +112,7 @@ def x-amz-target-completer-12 [] { ["AWSPoseidonService_V2015_11_01.DescribeTags
 def x-amz-target-completer-13 [] { ["AWSPoseidonService_V2015_11_01.DisassociateConfigurationItemsFromApplication"] }
 def x-amz-target-completer-14 [] { ["AWSPoseidonService_V2015_11_01.ExportConfigurations"] }
 def x-amz-target-completer-15 [] { ["AWSPoseidonService_V2015_11_01.GetDiscoverySummary"] }
+def configuration-type-completer [] { ["APPLICATION" "CONNECTION" "PROCESS" "SERVER"] }
 def x-amz-target-completer-16 [] { ["AWSPoseidonService_V2015_11_01.ListConfigurations"] }
 def x-amz-target-completer-17 [] { ["AWSPoseidonService_V2015_11_01.ListServerNeighbors"] }
 def x-amz-target-completer-18 [] { ["AWSPoseidonService_V2015_11_01.StartContinuousExport"] }
@@ -166,13 +167,14 @@ export def "associate-configuration-items-to-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  application_configuration_id: any
-  configuration_ids: any
+  --x-amz-target: string@x-amz-target-completer # required
+  application_configuration_id: string # The configuration ID of an application with which items are to be associated.
+  configuration_ids: list<string> # The ID of each configuration item to be associated with an application.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.AssociateConfigurationItemsToApplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"applicationConfigurationId": $application_configuration_id, "configurationIds": $configuration_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -215,12 +217,13 @@ export def "batch-delete-import-data" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  import_task_ids: any
-]: any -> record<errors: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  import_task_ids: list<string> # The IDs for the import tasks that you want to delete.
+]: any -> record<errors: table<importTaskId: string, errorCode: string, errorDescription: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.BatchDeleteImportData")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"importTaskIds": $import_task_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -263,13 +266,14 @@ export def "create-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  name: any
-  --description: any
-]: any -> record<configurationId: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  name: string # Name of the application to be created.
+  --description: string # Description of the application to be created.
+]: any -> record<configurationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.CreateApplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -295,6 +299,7 @@ export def "create-application" [
 #
 # POST /
 # operationId: CreateTags
+# --tags item shape: {key: string, value: string}
 export def "create-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -312,13 +317,14 @@ export def "create-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  configuration_ids: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  configuration_ids: list<string> # A list of configuration items that you want to tag.
+  tags: list # Tags that you want to associate with one or more configuration items. Specify the tags that you want to create in a key-value format. For example: {"key": "serverType", "value": "webServer"} — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.CreateTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"configurationIds": $configuration_ids, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -361,12 +367,13 @@ export def "delete-applications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  configuration_ids: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  configuration_ids: list<string> # Configuration ID of an application to be deleted.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.DeleteApplications")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"configurationIds": $configuration_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -392,6 +399,7 @@ export def "delete-applications" [
 #
 # POST /
 # operationId: DeleteTags
+# --tags item shape: {key: string, value: string}
 export def "delete-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -409,13 +417,14 @@ export def "delete-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  configuration_ids: any
-  --tags: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  configuration_ids: list<string> # A list of configuration items with tags that you want to delete.
+  --tags: list # Tags that you want to delete from one or more configuration items. Specify the tags that you want to delete in a key-value format. For example: {"key": "serverType", "value": "webServer"} — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.DeleteTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"configurationIds": $configuration_ids, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -441,6 +450,7 @@ export def "delete-tags" [
 #
 # POST /
 # operationId: DescribeAgents
+# --filters item shape: {name: string, values: list<string>, condition: string}
 export def "describe-agents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,15 +468,16 @@ export def "describe-agents" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  --agent-ids: any
-  --filters: any
-  --max-results: any
-  --next-token: any
-]: any -> record<agentsInfo: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  --agent-ids: list<string> # The agent or the Connector IDs for which you want information. If you specify no IDs, the system returns information about all agents/Connectors associated with your Amazon Web Services user account.
+  --filters: list # You can filter the request using various logical operators and a key-value format. For example: {"key": "collectionStatus", "value": "STARTED"} — item shape: {name: string, values: list<string>, condition: string}
+  --max-results: int # The total number of agents/Connectors to return in a single page of output. The maximum value is 100.
+  --next-token: string # Token to retrieve the next set of results. For example, if you previously specified 100 IDs for DescribeAgentsRequest$agentIds but set DescribeAgentsRequest$maxResults to 10, you received a set of 10 results along with a token. Use that token in this query to get the next set of 10.
+]: any -> record<agentsInfo: table<agentId: string, hostName: string, agentNetworkInfoList: list, connectorId: string, version: string, health: string, lastHealthPingTime: string, collectionStatus: string, agentType: string, registeredTime: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.DescribeAgents")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"agentIds": $agent_ids, "filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -509,12 +520,13 @@ export def "describe-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  configuration_ids: any
-]: any -> record<configurations: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  configuration_ids: list<string> # One or more configuration IDs.
+]: any -> record<configurations: list<record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.DescribeConfigurations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"configurationIds": $configuration_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -559,14 +571,15 @@ export def "describe-continuous-exports" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  --export-ids: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<descriptions: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  --export-ids: list<string> # The unique IDs assigned to the exports.
+  --max-results-body: int # A number between 1 and 100 specifying the maximum number of continuous export descriptions returned. (body field)
+  --next-token-body: string # The token from the previous call to DescribeExportTasks. (body field)
+]: any -> record<descriptions: table<exportId: string, status: string, statusDetail: string, s3Bucket: string, startTime: string, stopTime: string, dataSource: string, schemaStorageConfig: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.DescribeContinuousExports")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"exportIds": $export_ids, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
@@ -612,14 +625,15 @@ export def "describe-export-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  --export-ids: any
-  --max-results: any
-  --next-token: any
-]: any -> record<exportsInfo: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  --export-ids: list<string> # A list of continuous export IDs to search for.
+  --max-results: int # A number between 1 and 100 specifying the maximum number of continuous export descriptions returned.
+  --next-token: string # The token from the previous call to describe-export-tasks.
+]: any -> record<exportsInfo: table<exportId: string, exportStatus: string, statusMessage: string, configurationsDownloadUrl: string, exportRequestTime: string, isTruncated: bool, requestedStartTime: string, requestedEndTime: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.DescribeExportConfigurations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"exportIds": $export_ids, "maxResults": $max_results, "nextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -645,6 +659,7 @@ export def "describe-export-configurations" [
 #
 # POST /
 # operationId: DescribeExportTasks
+# --filters item shape: {name: string, values: list<string>, condition: string}
 export def "describe-export-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -662,15 +677,16 @@ export def "describe-export-tasks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  --export-ids: any
-  --filters: any
-  --max-results: any
-  --next-token: any
-]: any -> record<exportsInfo: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  --export-ids: list<string> # One or more unique identifiers used to query the status of an export request.
+  --filters: list # One or more filters. AgentId - ID of the agent whose collected data will be exported — item shape: {name: string, values: list<string>, condition: string}
+  --max-results: int # The maximum number of volume results returned by DescribeExportTasks in paginated output. When this parameter is used, DescribeExportTasks only returns maxResults results in a single page along with a nextToken response element.
+  --next-token: string # The nextToken value returned from a previous paginated DescribeExportTasks request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return.
+]: any -> record<exportsInfo: table<exportId: string, exportStatus: string, statusMessage: string, configurationsDownloadUrl: string, exportRequestTime: string, isTruncated: bool, requestedStartTime: string, requestedEndTime: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.DescribeExportTasks")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"exportIds": $export_ids, "filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -696,6 +712,7 @@ export def "describe-export-tasks" [
 #
 # POST /
 # operationId: DescribeImportTasks
+# --filters item shape: {name?: "IMPORT_TASK_ID"|"STATUS"|"NAME", values?: list<string>}
 export def "describe-import-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -715,14 +732,15 @@ export def "describe-import-tasks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  --filters: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<nextToken: record, tasks: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  --filters: list # An array of name-value pairs that you provide to filter the results for the DescribeImportTask request to a specific subset of results. Currently, wildcard values aren't supported for filters. — item shape: {name?: "IMPORT_TASK_ID"|"STATUS"|"NAME", values?: list<string>}
+  --max-results-body: int # The maximum number of results that you want this request to return, up to 100. (body field)
+  --next-token-body: string # The token to request a specific page of results. (body field)
+]: any -> record<nextToken: string, tasks: table<importTaskId: string, clientRequestToken: string, name: string, importUrl: string, status: string, importRequestTime: string, importCompletionTime: string, importDeletedTime: string, serverImportSuccess: int, serverImportFailure: int, applicationImportSuccess: int, applicationImportFailure: int, errorsAndFailedEntriesZip: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.DescribeImportTasks")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"filters": $filters, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
@@ -749,6 +767,7 @@ export def "describe-import-tasks" [
 #
 # POST /
 # operationId: DescribeTags
+# --filters item shape: {name: string, values: list<string>}
 export def "describe-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -766,14 +785,15 @@ export def "describe-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  --filters: any
-  --max-results: any
-  --next-token: any
-]: any -> record<tags: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  --filters: list # You can filter the list using a key-value format. You can separate these items by using logical operators. Allowed filters include tagKey, tagValue, and configurationId. — item shape: {name: string, values: list<string>}
+  --max-results: int # The total number of items to return in a single page of output. The maximum value is 100.
+  --next-token: string # A token to start the list. Use this token to get the next set of results.
+]: any -> record<tags: table<configurationType: string, configurationId: string, key: string, value: string, timeOfCreation: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.DescribeTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -816,13 +836,14 @@ export def "disassociate-configuration-items-from-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  application_configuration_id: any
-  configuration_ids: any
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  application_configuration_id: string # Configuration ID of an application from which each item is disassociated.
+  configuration_ids: list<string> # Configuration ID of each item to be disassociated from an application.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.DisassociateConfigurationItemsFromApplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"applicationConfigurationId": $application_configuration_id, "configurationIds": $configuration_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -867,10 +888,11 @@ export def "export-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-]: nothing -> record<exportId: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+]: nothing -> record<exportId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.ExportConfigurations")
   let full_url = (build-url $base "/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -911,12 +933,13 @@ export def "get-discovery-summary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
+  --x-amz-target: string@x-amz-target-completer-15 # required
   --body: record
-]: any -> record<servers: record, applications: record, serversMappedToApplications: record, serversMappedtoTags: record, agentSummary: record<activeAgents: record, healthyAgents: record, blackListedAgents: record, shutdownAgents: record, unhealthyAgents: record, totalAgents: record, unknownAgents: record>, connectorSummary: record<activeConnectors: record, healthyConnectors: record, blackListedConnectors: record, shutdownConnectors: record, unhealthyConnectors: record, totalConnectors: record, unknownConnectors: record>, meCollectorSummary: record<activeMeCollectors: record, healthyMeCollectors: record, denyListedMeCollectors: record, shutdownMeCollectors: record, unhealthyMeCollectors: record, totalMeCollectors: record, unknownMeCollectors: record>, agentlessCollectorSummary: record<activeAgentlessCollectors: int, healthyAgentlessCollectors: int, denyListedAgentlessCollectors: int, shutdownAgentlessCollectors: int, unhealthyAgentlessCollectors: int, totalAgentlessCollectors: int, unknownAgentlessCollectors: int>> {
+]: any -> record<servers: int, applications: int, serversMappedToApplications: int, serversMappedtoTags: int, agentSummary: record<activeAgents: int, healthyAgents: int, blackListedAgents: int, shutdownAgents: int, unhealthyAgents: int, totalAgents: int, unknownAgents: int>, connectorSummary: record<activeConnectors: int, healthyConnectors: int, blackListedConnectors: int, shutdownConnectors: int, unhealthyConnectors: int, totalConnectors: int, unknownConnectors: int>, meCollectorSummary: record<activeMeCollectors: int, healthyMeCollectors: int, denyListedMeCollectors: int, shutdownMeCollectors: int, unhealthyMeCollectors: int, totalMeCollectors: int, unknownMeCollectors: int>, agentlessCollectorSummary: record<activeAgentlessCollectors: int, healthyAgentlessCollectors: int, denyListedAgentlessCollectors: int, shutdownAgentlessCollectors: int, unhealthyAgentlessCollectors: int, totalAgentlessCollectors: int, unknownAgentlessCollectors: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.GetDiscoverySummary")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -942,6 +965,8 @@ export def "get-discovery-summary" [
 #
 # POST /
 # operationId: ListConfigurations
+# --filters item shape: {name: string, values: list<string>, condition: string}
+# --orderBy item shape: {fieldName: string, sortOrder?: "ASC"|"DESC"}
 export def "list-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -959,16 +984,17 @@ export def "list-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  configuration_type: any
-  --filters: any
-  --max-results: any
-  --next-token: any
-  --order-by: any
-]: any -> record<configurations: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  configuration_type: string@configuration-type-completer # A valid configuration identified by Application Discovery Service.
+  --filters: list # You can filter the request using various logical operators and a key-value format. For example: {"key": "serverType", "value": "webServer"} For a complete list of filter options and guidance about using them with this action, see Using the ListConfigurations Action (https://docs.aws.amazon.com/application-discovery/latest/userguide/discovery-api-queries.html#ListConfigurations) in the Amazon Web Services Application Discovery Service User Guide. — item shape: {name: string, values: list<string>, condition: string}
+  --max-results: int # The total number of items to return. The maximum value is 100.
+  --next-token: string # Token to retrieve the next set of results. For example, if a previous call to ListConfigurations returned 100 items, but you set ListConfigurationsRequest$maxResults to 10, you received a set of 10 results along with a token. Use that token in this query to get the next set of 10.
+  --order-by: list # Certain filter criteria return output that can be sorted in ascending or descending order. For a list of output characteristics for each filter, see Using the ListConfigurations Action (https://docs.aws.amazon.com/application-discovery/latest/userguide/discovery-api-queries.html#ListConfigurations) in the Amazon Web Services Application Discovery Service User Guide. — item shape: {fieldName: string, sortOrder?: "ASC"|"DESC"}
+]: any -> record<configurations: list<record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.ListConfigurations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"configurationType": $configuration_type, "filters": $filters, "maxResults": $max_results, "nextToken": $next_token, "orderBy": $order_by} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1011,16 +1037,17 @@ export def "list-server-neighbors" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  configuration_id: any
-  --port-information-needed: any
-  --neighbor-configuration-ids: any
-  --max-results: any
-  --next-token: any
-]: any -> record<neighbors: record, nextToken: record, knownDependencyCount: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  configuration_id: string # Configuration ID of the server for which neighbors are being listed.
+  --port-information-needed: oneof<nothing, bool> # Flag to indicate if port and protocol information is needed as part of the response.
+  --neighbor-configuration-ids: list<string> # List of configuration IDs to test for one-hop-away.
+  --max-results: int # Maximum number of results to return in a single page of output.
+  --next-token: string # Token to retrieve the next set of results. For example, if you previously specified 100 IDs for ListServerNeighborsRequest$neighborConfigurationIds but set ListServerNeighborsRequest$maxResults to 10, you received a set of 10 results along with a token. Use that token in this query to get the next set of 10.
+]: any -> record<neighbors: table<sourceServerId: string, destinationServerId: string, destinationPort: int, transportProtocol: string, connectionsCount: int>, nextToken: string, knownDependencyCount: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.ListServerNeighbors")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"configurationId": $configuration_id, "portInformationNeeded": $port_information_needed, "neighborConfigurationIds": $neighbor_configuration_ids, "maxResults": $max_results, "nextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1063,12 +1090,13 @@ export def "start-continuous-export" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
+  --x-amz-target: string@x-amz-target-completer-18 # required
   --body: record
-]: any -> record<exportId: record, s3Bucket: record, startTime: record, dataSource: record, schemaStorageConfig: record> {
+]: any -> record<exportId: string, s3Bucket: string, startTime: string, dataSource: string, schemaStorageConfig: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.StartContinuousExport")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1111,12 +1139,13 @@ export def "start-data-collection-by-agent-ids" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  agent_ids: any
-]: any -> record<agentsConfigurationStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  agent_ids: list<string> # The IDs of the agents or connectors from which to start collecting data. If you send a request to an agent/connector ID that you do not have permission to contact, according to your Amazon Web Services account, the service does not throw an exception. Instead, it returns the error in the Description field. If you send a request to multiple agents/connectors and you do not have permission to contact some of those agents/connectors, the system does not throw an exception. Instead, the system shows Failed in the Description field.
+]: any -> record<agentsConfigurationStatus: table<agentId: string, operationSucceeded: bool, description: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.StartDataCollectionByAgentIds")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"agentIds": $agent_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1142,6 +1171,7 @@ export def "start-data-collection-by-agent-ids" [
 #
 # POST /
 # operationId: StartExportTask
+# --filters item shape: {name: string, values: list<string>, condition: string}
 export def "start-export-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1159,15 +1189,16 @@ export def "start-export-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  --export-data-format: any
-  --filters: any
-  --start-time: any
-  --end-time: any
-]: any -> record<exportId: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  --export-data-format: list<string> # The file format for the returned export data. Default value is CSV. Note: The GRAPHML option has been deprecated.
+  --filters: list # If a filter is present, it selects the single agentId of the Application Discovery Agent for which data is exported. The agentId can be found in the results of the DescribeAgents API or CLI. If no filter is present, startTime and endTime are ignored and exported data includes both Agentless Discovery Connector data and summary data from Application Discovery agents. — item shape: {name: string, values: list<string>, condition: string}
+  --start-time: string # The start timestamp for exported data from the single Application Discovery Agent selected in the filters. If no value is specified, data is exported starting from the first data collected by the agent. (format: date-time)
+  --end-time: string # The end timestamp for exported data from the single Application Discovery Agent selected in the filters. If no value is specified, exported data includes the most recent data collected by the agent. (format: date-time)
+]: any -> record<exportId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.StartExportTask")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"exportDataFormat": $export_data_format, "filters": $filters, "startTime": $start_time, "endTime": $end_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1210,14 +1241,15 @@ export def "start-import-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  --client-request-token: any
-  name: any
-  import_url: any
-]: any -> record<task: record<importTaskId: record, clientRequestToken: record, name: record, importUrl: record, status: record, importRequestTime: record, importCompletionTime: record, importDeletedTime: record, serverImportSuccess: record, serverImportFailure: record, applicationImportSuccess: record, applicationImportFailure: record, errorsAndFailedEntriesZip: record>> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  --client-request-token: string # Optional. A unique token that you can provide to prevent the same import request from occurring more than once. If you don't provide a token, a token is automatically generated. Sending more than one StartImportTask request with the same client request token will return information about the original import task with that client request token.
+  name: string # A descriptive name for this request. You can use this name to filter future requests related to this import task, such as identifying applications and servers that were included in this import task. We recommend that you use a meaningful name for each import task.
+  import_url: string # The URL for your import file that you've uploaded to Amazon S3. If you're using the Amazon Web Services CLI, this URL is structured as follows: s3://BucketName/ImportFileName.CSV
+]: any -> record<task: record<importTaskId: string, clientRequestToken: string, name: string, importUrl: string, status: string, importRequestTime: string, importCompletionTime: string, importDeletedTime: string, serverImportSuccess: int, serverImportFailure: int, applicationImportSuccess: int, applicationImportFailure: int, errorsAndFailedEntriesZip: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.StartImportTask")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"clientRequestToken": $client_request_token, "name": $name, "importUrl": $import_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1260,12 +1292,13 @@ export def "stop-continuous-export" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  export_id: any
-]: any -> record<startTime: record, stopTime: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  export_id: string # The unique ID assigned to this export.
+]: any -> record<startTime: string, stopTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.StopContinuousExport")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"exportId": $export_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1308,12 +1341,13 @@ export def "stop-data-collection-by-agent-ids" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  agent_ids: any
-]: any -> record<agentsConfigurationStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  agent_ids: list<string> # The IDs of the agents or connectors from which to stop collecting data.
+]: any -> record<agentsConfigurationStatus: table<agentId: string, operationSucceeded: bool, description: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.StopDataCollectionByAgentIds")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"agentIds": $agent_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1356,14 +1390,15 @@ export def "update-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  configuration_id: any
-  --name: any
-  --description: any
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  configuration_id: string # Configuration ID of the application to be updated.
+  --name: string # New name of the application to be updated.
+  --description: string # New description of the application to be updated.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSPoseidonService_V2015_11_01.UpdateApplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"configurationId": $configuration_id, "name": $name, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

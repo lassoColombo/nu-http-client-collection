@@ -131,11 +131,13 @@ export def "getglobaltime" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register
-  --locale: string # Geographic locale to get the current time for
+  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register (required)
+  --locale: string # Geographic locale to get the current time for (required)
 ]: nothing -> record<ClockTime: string, Code: string, Credits: string, CurrentDate: string, CurrentTime: string, Day: string, Hour: string, Locale: string, Minute: string, Month: string, MonthNumber: string, Second: string, TimeStamp: string, Weekday: string, Year: string, Zone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($license == null) { error make --unspanned { msg: "required query parameter 'license' missing: pass --license" } }
+  if ($locale == null) { error make --unspanned { msg: "required query parameter 'locale' missing: pass --locale" } }
   let qp = [(serialize-qp "license" $license "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getglobaltime" $qp $auth.query)
   let accept_val = "application/json"

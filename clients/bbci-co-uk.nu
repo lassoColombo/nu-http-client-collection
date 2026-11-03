@@ -13,7 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "query-api_key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)", location: "query"} }
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -143,25 +143,32 @@ export def "get-programmes-ato-z-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --page: int # The page index. (format: int64)
-  --per-page: int # The number of results to return. (format: int64)
-  --initial-child-count: int # The depth to return child entities. (default: 4)
-  --qp-sort: string@sort-completer # The sort order of the results.
-  --sort-direction: string@sort-direction-completer # Whether to sort ascending or descending
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --page: int # The page index. (required, format: int64)
+  --per-page: int # The number of results to return. (required, format: int64)
+  --initial-child-count: int # The depth to return child entities. (required, default: 4)
+  --sort: string@sort-completer # The sort order of the results. (required)
+  --sort-direction: string@sort-direction-completer # Whether to sort ascending or descending (required)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($letter | is-empty) { error make --unspanned { msg: "path parameter 'letter' must be non-empty" } }
-  let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
+  let rights = ($rights | default "web")
+  if ($page == null) { error make --unspanned { msg: "required query parameter 'page' missing: pass --page" } }
+  if ($per_page == null) { error make --unspanned { msg: "required query parameter 'per_page' missing: pass --per-page" } }
+  let initial_child_count = ($initial_child_count | default 4)
+  let sort = ($sort | default "title")
+  if ($sort_direction == null) { error make --unspanned { msg: "required query parameter 'sort_direction' missing: pass --sort-direction" } }
+  let availability = ($availability | default "available")
+  let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({letter: (encode-path-segment $letter)} | format pattern "/atoz/{letter}/programmes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rights": $rights, "page": $page, "per_page": $per_page, "initial_child_count": $initial_child_count, "sort": $qp_sort, "sort_direction": $sort_direction, "availability": $availability} | compact)
+    query: ({"rights": $rights, "page": $page, "per_page": $per_page, "initial_child_count": $initial_child_count, "sort": $sort, "sort_direction": $sort_direction, "availability": $availability} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -186,10 +193,11 @@ export def "get-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lang: string@lang-completer # The language for any applicable localised strings.
+  --lang: string@lang-completer # The language for any applicable localised strings. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories" $qp $auth.query)
   let accept_val = "application/json"
@@ -223,11 +231,12 @@ export def "get-sub-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lang: string@lang-completer # The language for any applicable localised strings.
+  --lang: string@lang-completer # The language for any applicable localised strings. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}") $qp $auth.query)
   let accept_val = "application/json"
@@ -261,24 +270,29 @@ export def "get-episodes-by-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lang: string@lang-completer # The language for any applicable localised strings.
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
-  --page: int # The page index. (format: int64)
-  --per-page: int # The number of results to return. (format: int64)
-  --qp-sort: string@sort-completer-1 # The sort order of the results.
+  --lang: string@lang-completer # The language for any applicable localised strings. (required)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
+  --page: int # The page index. (required, format: int64)
+  --per-page: int # The number of results to return. (required, format: int64)
+  --sort: string@sort-completer-1 # The sort order of the results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
-  let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
+  let rights = ($rights | default "web")
+  let availability = ($availability | default "available")
+  if ($page == null) { error make --unspanned { msg: "required query parameter 'page' missing: pass --page" } }
+  if ($per_page == null) { error make --unspanned { msg: "required query parameter 'per_page' missing: pass --per-page" } }
+  let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/episodes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"lang": $lang, "rights": $rights, "availability": $availability, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact)
+    query: ({"lang": $lang, "rights": $rights, "availability": $availability, "page": $page, "per_page": $per_page, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -304,14 +318,17 @@ export def "get-highlights-by-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lang: string@lang-completer # The language for any applicable localised strings.
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
+  --lang: string@lang-completer # The language for any applicable localised strings. (required)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
   --mixin: list<string>@mixin-completer # Request additional data in the output
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
+  let rights = ($rights | default "web")
+  let availability = ($availability | default "available")
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/highlights") $qp $auth.query)
   let accept_val = "application/json"
@@ -345,15 +362,20 @@ export def "get-programmes-by-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lang: string@lang-completer # The language for any applicable localised strings.
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
-  --page: int # The page index. (format: int64)
-  --per-page: int # The number of results to return. (format: int64)
+  --lang: string@lang-completer # The language for any applicable localised strings. (required)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
+  --page: int # The page index. (required, format: int64)
+  --per-page: int # The number of results to return. (required, format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
+  let rights = ($rights | default "web")
+  let availability = ($availability | default "available")
+  if ($page == null) { error make --unspanned { msg: "required query parameter 'page' missing: pass --page" } }
+  if ($per_page == null) { error make --unspanned { msg: "required query parameter 'per_page' missing: pass --per-page" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/programmes") $qp $auth.query)
   let accept_val = "application/json"
@@ -387,10 +409,11 @@ export def "get-channels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # The region to get the channels for.
-  --lang: string@lang-completer # The language for any applicable localised strings.
+  --lang: string@lang-completer # The language for any applicable localised strings. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
   let qp = [(serialize-qp "region" $region "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels" $qp $auth.query)
   let accept_val = "application/json"
@@ -424,24 +447,28 @@ export def "get-broadcasts-by-channel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lang: string@lang-completer # The language for any applicable localised strings.
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
+  --lang: string@lang-completer # The language for any applicable localised strings. (required)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
   --mixin: list<string>@mixin-completer # Request additional data in the output
-  --per-page: int # The number of results to return. (format: int64)
-  --qp-from: string # Time to return results from, e.g. -3h
+  --per-page: int # The number of results to return. (required, format: int64)
+  --from: string # Time to return results from, e.g. -3h
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
-  let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
+  let rights = ($rights | default "web")
+  let availability = ($availability | default "available")
+  if ($per_page == null) { error make --unspanned { msg: "required query parameter 'per_page' missing: pass --per-page" } }
+  let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "from" $from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel: (encode-path-segment $channel)} | format pattern "/channels/{channel}/broadcasts") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"lang": $lang, "rights": $rights, "availability": $availability, "mixin": $mixin, "per_page": $per_page, "from": $qp_from} | compact)
+    query: ({"lang": $lang, "rights": $rights, "availability": $availability, "mixin": $mixin, "per_page": $per_page, "from": $from} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -467,15 +494,18 @@ export def "get-highlights-by-channel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lang: string@lang-completer # The language for any applicable localised strings.
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
+  --lang: string@lang-completer # The language for any applicable localised strings. (required)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
   --live: oneof<nothing, bool> # Whether to include live programmes
   --mixin: list<string>@mixin-completer # Request additional data in the output
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
+  let rights = ($rights | default "web")
+  let availability = ($availability | default "available")
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "live" $live "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({channel: (encode-path-segment $channel)} | format pattern "/channels/{channel}/highlights") $qp $auth.query)
   let accept_val = "application/json"
@@ -509,15 +539,20 @@ export def "get-programmes-by-channel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lang: string@lang-completer # The language for any applicable localised strings.
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
-  --page: int # The page index. (format: int64)
-  --per-page: int # The number of results to return. (format: int64)
+  --lang: string@lang-completer # The language for any applicable localised strings. (required)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
+  --page: int # The page index. (required, format: int64)
+  --per-page: int # The number of results to return. (required, format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
+  let rights = ($rights | default "web")
+  let availability = ($availability | default "available")
+  if ($page == null) { error make --unspanned { msg: "required query parameter 'page' missing: pass --page" } }
+  if ($per_page == null) { error make --unspanned { msg: "required query parameter 'per_page' missing: pass --per-page" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel: (encode-path-segment $channel)} | format pattern "/channels/{channel}/programmes") $qp $auth.query)
   let accept_val = "application/json"
@@ -552,14 +587,17 @@ export def "get-schedule-by-channel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lang: string@lang-completer # The language for any applicable localised strings.
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
+  --lang: string@lang-completer # The language for any applicable localised strings. (required)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
   if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
+  let rights = ($rights | default "web")
+  let availability = ($availability | default "available")
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel: (encode-path-segment $channel), date: (encode-path-segment $date)} | format pattern "/channels/{channel}/schedule/{date}") $qp $auth.query)
   let accept_val = "application/json"
@@ -593,12 +631,14 @@ export def "get-clips" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  let rights = ($rights | default "web")
+  let availability = ($availability | default "available")
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/clips/{pid}") $qp $auth.query)
   let accept_val = "application/json"
@@ -632,13 +672,15 @@ export def "get-programme-by-pid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
   --mixin: list<string>@mixin-completer # Request additional data in the output
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  let rights = ($rights | default "web")
+  let availability = ($availability | default "available")
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/episodes/{pid}") $qp $auth.query)
   let accept_val = "application/json"
@@ -672,12 +714,14 @@ export def "get-onward-journey" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  let rights = ($rights | default "web")
+  let availability = ($availability | default "available")
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/episodes/{pid}/next") $qp $auth.query)
   let accept_val = "application/json"
@@ -711,12 +755,14 @@ export def "get-post-rolls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  let rights = ($rights | default "web")
+  let availability = ($availability | default "available")
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/episodes/{pid}/postrolls") $qp $auth.query)
   let accept_val = "application/json"
@@ -750,12 +796,14 @@ export def "get-trailers-pre-rolls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  let rights = ($rights | default "web")
+  let availability = ($availability | default "available")
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/episodes/{pid}/prerolls") $qp $auth.query)
   let accept_val = "application/json"
@@ -789,14 +837,18 @@ export def "get-programme-recommendations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
-  --page: int # The page index. (format: int64)
-  --per-page: int # The number of results to return. (format: int64)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
+  --page: int # The page index. (required, format: int64)
+  --per-page: int # The number of results to return. (required, format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  let rights = ($rights | default "web")
+  let availability = ($availability | default "available")
+  if ($page == null) { error make --unspanned { msg: "required query parameter 'page' missing: pass --page" } }
+  if ($per_page == null) { error make --unspanned { msg: "required query parameter 'per_page' missing: pass --per-page" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/episodes/{pid}/recommendations") $qp $auth.query)
   let accept_val = "application/json"
@@ -829,25 +881,32 @@ export def "get-programmes-popular" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --page: int # The page index. (format: int64)
-  --per-page: int # The number of results to return. (format: int64)
-  --initial-child-count: int # The depth to return child entities. (default: 4)
-  --qp-sort: string # The sort order of the results.
-  --sort-direction: string@sort-direction-completer # Whether to sort ascending or descending
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --page: int # The page index. (required, format: int64)
+  --per-page: int # The number of results to return. (required, format: int64)
+  --initial-child-count: int # The depth to return child entities. (required, default: 4)
+  --sort: string # The sort order of the results. (required)
+  --sort-direction: string@sort-direction-completer # Whether to sort ascending or descending (required)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
   --mixin: list<string>@mixin-completer # Request additional data in the output
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
+  let rights = ($rights | default "web")
+  if ($page == null) { error make --unspanned { msg: "required query parameter 'page' missing: pass --page" } }
+  if ($per_page == null) { error make --unspanned { msg: "required query parameter 'per_page' missing: pass --per-page" } }
+  let initial_child_count = ($initial_child_count | default 4)
+  if ($sort == null) { error make --unspanned { msg: "required query parameter 'sort' missing: pass --sort" } }
+  if ($sort_direction == null) { error make --unspanned { msg: "required query parameter 'sort_direction' missing: pass --sort-direction" } }
+  let availability = ($availability | default "available")
+  let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/groups/popular/episodes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rights": $rights, "page": $page, "per_page": $per_page, "initial_child_count": $initial_child_count, "sort": $qp_sort, "sort_direction": $sort_direction, "availability": $availability, "mixin": $mixin} | compact)
+    query: ({"rights": $rights, "page": $page, "per_page": $per_page, "initial_child_count": $initial_child_count, "sort": $sort, "sort_direction": $sort_direction, "availability": $availability, "mixin": $mixin} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -873,26 +932,33 @@ export def "get-episodes-by-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --page: int # The page index. (format: int64)
-  --per-page: int # The number of results to return. (format: int64)
-  --initial-child-count: int # The depth to return child entities. (default: 4)
-  --qp-sort: string # The sort order of the results.
-  --sort-direction: string@sort-direction-completer # Whether to sort ascending or descending
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --page: int # The page index. (required, format: int64)
+  --per-page: int # The number of results to return. (required, format: int64)
+  --initial-child-count: int # The depth to return child entities. (required, default: 4)
+  --sort: string # The sort order of the results. (required)
+  --sort-direction: string@sort-direction-completer # Whether to sort ascending or descending (required)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
   --mixin: list<string>@mixin-completer # Request additional data in the output
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
-  let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
+  let rights = ($rights | default "web")
+  if ($page == null) { error make --unspanned { msg: "required query parameter 'page' missing: pass --page" } }
+  if ($per_page == null) { error make --unspanned { msg: "required query parameter 'per_page' missing: pass --per-page" } }
+  let initial_child_count = ($initial_child_count | default 4)
+  if ($sort == null) { error make --unspanned { msg: "required query parameter 'sort' missing: pass --sort" } }
+  if ($sort_direction == null) { error make --unspanned { msg: "required query parameter 'sort_direction' missing: pass --sort-direction" } }
+  let availability = ($availability | default "available")
+  let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/groups/{pid}/episodes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"rights": $rights, "page": $page, "per_page": $per_page, "initial_child_count": $initial_child_count, "sort": $qp_sort, "sort_direction": $sort_direction, "availability": $availability, "mixin": $mixin} | compact)
+    query: ({"rights": $rights, "page": $page, "per_page": $per_page, "initial_child_count": $initial_child_count, "sort": $sort, "sort_direction": $sort_direction, "availability": $availability, "mixin": $mixin} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -917,13 +983,16 @@ export def "get-programme-highlights" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lang: string@lang-completer # The language for any applicable localised strings.
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
+  --lang: string@lang-completer # The language for any applicable localised strings. (required)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
   --mixin: list<string>@mixin-completer # Request additional data in the output
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
+  let rights = ($rights | default "web")
+  let availability = ($availability | default "available")
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/home/highlights" $qp $auth.query)
   let accept_val = "application/json"
@@ -957,13 +1026,16 @@ export def "get-programmes-by-parent-pid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
-  --initial-child-count: int # The depth to return child entities. (default: 4)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
+  --initial-child-count: int # The depth to return child entities. (required, default: 4)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  let rights = ($rights | default "web")
+  let availability = ($availability | default "available")
+  let initial_child_count = ($initial_child_count | default 4)
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/programmes/{pid}") $qp $auth.query)
   let accept_val = "application/json"
@@ -997,13 +1069,16 @@ export def "get-episodes-by-parent-pid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
-  --initial-child-count: int # The depth to return child entities. (default: 4)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
+  --initial-child-count: int # The depth to return child entities. (required, default: 4)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  let rights = ($rights | default "web")
+  let availability = ($availability | default "available")
+  let initial_child_count = ($initial_child_count | default 4)
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/programmes/{pid}/episodes") $qp $auth.query)
   let accept_val = "application/json"
@@ -1036,10 +1111,11 @@ export def "get-regions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lang: string@lang-completer # The language for any applicable localised strings.
+  --lang: string@lang-completer # The language for any applicable localised strings. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/regions" $qp $auth.query)
   let accept_val = "application/json"
@@ -1106,13 +1182,17 @@ export def "search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The term to search for.
-  --lang: string@lang-completer # The language for any applicable localised strings.
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
+  --q: string # The term to search for. (required)
+  --lang: string@lang-completer # The language for any applicable localised strings. (required)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
+  let rights = ($rights | default "web")
+  let availability = ($availability | default "available")
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -1145,13 +1225,17 @@ export def "search-suggest" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The term to search for.
-  --lang: string@lang-completer # The language for any applicable localised strings.
-  --rights: string@rights-completer # The rights group to limit results to. (default: web)
-  --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
+  --q: string # The term to search for. (required)
+  --lang: string@lang-completer # The language for any applicable localised strings. (required)
+  --rights: string@rights-completer # The rights group to limit results to. (required, default: web)
+  --availability: string@availability-completer # Whether to return all, or available programmes (required, default: available)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
+  let rights = ($rights | default "web")
+  let availability = ($availability | default "available")
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search-suggest" $qp $auth.query)
   let accept_val = "application/json"
@@ -1218,10 +1302,11 @@ export def "get-user-store-purchases" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --identity-cookie: float # The BBC-id cookie value (format: double)
+  --identity-cookie: float # The BBC-id cookie value (required, format: double)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($identity_cookie == null) { error make --unspanned { msg: "required query parameter 'identity_cookie' missing: pass --identity-cookie" } }
   let qp = [(serialize-qp "identity_cookie" $identity_cookie "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/purchases" $qp $auth.query)
   let accept_val = "application/json"
@@ -1254,10 +1339,11 @@ export def "get-user-store-recommendations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --identity-cookie: float # The BBC-id cookie value (format: double)
+  --identity-cookie: float # The BBC-id cookie value (required, format: double)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($identity_cookie == null) { error make --unspanned { msg: "required query parameter 'identity_cookie' missing: pass --identity-cookie" } }
   let qp = [(serialize-qp "identity_cookie" $identity_cookie "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/recommendations" $qp $auth.query)
   let accept_val = "application/json"
@@ -1290,10 +1376,11 @@ export def "get-user-watching" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --identity-cookie: float # The BBC-id cookie value (format: double)
+  --identity-cookie: float # The BBC-id cookie value (required, format: double)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($identity_cookie == null) { error make --unspanned { msg: "required query parameter 'identity_cookie' missing: pass --identity-cookie" } }
   let qp = [(serialize-qp "identity_cookie" $identity_cookie "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/watching" $qp $auth.query)
   let accept_val = "application/json"

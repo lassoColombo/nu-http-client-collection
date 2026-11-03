@@ -1,6 +1,7 @@
 # Auto-generated client for License Manager API v1.0
 # Source: https://api.apis.guru/v2/specs/vtex.local/License-Manager-API/1.0/openapi.json
-# Auth: --token flag or $env.LICENSE_MANAGER_API_TOKEN
+# Auth (appKey): --token-appkey flag or $env.LICENSE_MANAGER_API_APPKEY_TOKEN
+# Auth (appToken): --token-apptoken flag or $env.LICENSE_MANAGER_API_APPTOKEN_TOKEN
 
 const BASE_URL = "https://vtex.local"
 
@@ -12,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {X-VTEX-API-AppKey: $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {X-VTEX-API-AppToken: $token_val}, query: "", location: "header"} }
+    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
+    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -126,7 +127,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-list-users" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -163,13 +164,14 @@ export def "get-list-users" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --num-items: int # Number of items in the returned page (default: 10)
   --page-number: int # Which page from the whole list will be returned (default: 1)
-  --qp-sort: string # Chooses the field that the list will be sorted by (default: name)
+  --sort: string # Chooses the field that the list will be sorted by (default: name)
   --sort-type: string # Defines the sorting order. `ASC` is used for ascendant order. `DSC` is used for descendant order (default: ASC)
-  --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json
+  --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json (required, default: application/json)
 ]: nothing -> record<items: table<accountNames: list, email: string, id: string, isAdmin: bool, isBlocked: bool, isReliable: bool, name: string, roles: list>, paging: record<page: int, pages: int, perPage: int, total: int>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LICENSE_MANAGER_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LICENSE_MANAGER_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "numItems" $num_items "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortType" $sort_type "scalar")] | flatten | str join "&"
+  let content_type = ($content_type | default "application/json")
+  let qp = [(serialize-qp "numItems" $num_items "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sortType" $sort_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/license-manager/site/pvt/logins/list/paged" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -178,7 +180,7 @@ export def "get-list-users" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"numItems": $num_items, "pageNumber": $page_number, "sort": $qp_sort, "sortType": $sort_type} | compact)
+    query: ({"numItems": $num_items, "pageNumber": $page_number, "sort": $sort, "sortType": $sort_type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -205,13 +207,14 @@ export def "get-list-roles" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --num-items: int # Number of items in the returned page (default: 10)
   --page-number: int # Which page from the whole list will be returned (default: 1)
-  --qp-sort: string # Chooses the field that the list will be sorted by (default: id)
+  --sort: string # Chooses the field that the list will be sorted by (default: id)
   --sort-type: string # Defines the sorting order. ASC is used for ascendant order. DSC is used for descendant order (default: ASC)
-  --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json
+  --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json (required, default: application/json)
 ]: nothing -> record<items: table<id: int, isAdmin: bool, logins: string, name: string, products: list, resources: string, roleType: int>, paging: record<page: int, pages: int, perPage: int, total: int>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LICENSE_MANAGER_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LICENSE_MANAGER_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "numItems" $num_items "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortType" $sort_type "scalar")] | flatten | str join "&"
+  let content_type = ($content_type | default "application/json")
+  let qp = [(serialize-qp "numItems" $num_items "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sortType" $sort_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/license-manager/site/pvt/roles/list/paged" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -220,7 +223,7 @@ export def "get-list-roles" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"numItems": $num_items, "pageNumber": $page_number, "sort": $qp_sort, "sortType": $sort_type} | compact)
+    query: ({"numItems": $num_items, "pageNumber": $page_number, "sort": $sort, "sortType": $sort_type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -285,7 +288,7 @@ export def "get-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json (e.g. application/json)
+  --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json (required, e.g. application/json)
 ]: nothing -> record<email: string, id: string, name: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LICENSE_MANAGER_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LICENSE_MANAGER_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -324,7 +327,7 @@ export def "get-rolesby-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json (e.g. application/json)
+  --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json (required, e.g. application/json)
 ]: nothing -> table<id: int, name: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LICENSE_MANAGER_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LICENSE_MANAGER_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -404,7 +407,7 @@ export def "remove-rolefrom-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json (e.g. application/json)
+  --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LICENSE_MANAGER_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LICENSE_MANAGER_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -511,7 +514,7 @@ export def "getappkeysfromaccount" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json (e.g. application/json)
+  --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json (required, e.g. application/json)
 ]: nothing -> table<appKey: string, createdIn: string, id: string, isActive: bool, label: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LICENSE_MANAGER_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LICENSE_MANAGER_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -596,6 +599,7 @@ export def "updateappkey" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/vlm/appkeys/{id}") $auth.query)
   let req_body = {"isActive": $is_active} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "isActive") == null) { error make --unspanned { msg: "required body field 'isActive' missing: pass --is-active or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

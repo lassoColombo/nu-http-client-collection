@@ -1,4 +1,4 @@
-# Auto-generated client for Asynchronous Speech-To-Text API Documentation vv1
+# Auto-generated client for Asynchronous Speech-To-Text API Documentation v1
 # Source: https://api.apis.guru/v2/specs/rev.ai/v1/openapi.json
 # Auth: --token flag or $env.ASYNCHRONOUS_SPEECH_TO_TEXT_API_DOCUMENTATION_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -183,7 +183,7 @@ export def "get-list-of-jobs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limits the number of jobs returned, default is 100, max is 1000
   --starting-after: string # If specified, returns transcription jobs submitted before the job with this id, exclusive (job with this id is not included)
-]: nothing -> table<callback_url: any, completed_on: string, created_on: string, custom_vocabulary_id: any, delete_after_seconds: any, duration_seconds: float, failure: string, failure_detail: string, filter_profanity: any, id: string, language: any, media_url: any, metadata: any, name: string, remove_disfluencies: any, skip_diarization: any, skip_punctuation: any, speaker_channels_count: any, status: string, type: string> {
+]: nothing -> table<callback_url: string, completed_on: string, created_on: string, custom_vocabulary_id: string, delete_after_seconds: int, duration_seconds: float, failure: string, failure_detail: string, filter_profanity: bool, id: string, language: string, media_url: string, metadata: string, name: string, remove_disfluencies: bool, skip_diarization: bool, skip_punctuation: bool, speaker_channels_count: int, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar")] | flatten | str join "&"
@@ -219,7 +219,7 @@ export def "submit-transcription-job" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   media_url: string # Direct download media url. Ignored if submitting job from file. **Note:** Media files longer than 17 hours are not supported for English transcription, and media files longer than 12 hours are not supported for non-English transcription. For non-English jobs, expected turnaround time can be up to 6 hours. (e.g. https://www.rev.ai/FTC_Sample_1.mp3)
-]: any -> record<callback_url: any, completed_on: string, created_on: string, custom_vocabulary_id: any, delete_after_seconds: any, duration_seconds: float, failure: string, failure_detail: string, filter_profanity: any, id: string, language: any, media_url: any, metadata: any, name: string, remove_disfluencies: any, skip_diarization: any, skip_punctuation: any, speaker_channels_count: any, status: string, type: string> {
+]: any -> record<callback_url: string, completed_on: string, created_on: string, custom_vocabulary_id: string, delete_after_seconds: int, duration_seconds: float, failure: string, failure_detail: string, filter_profanity: bool, id: string, language: string, media_url: string, metadata: string, name: string, remove_disfluencies: bool, skip_diarization: bool, skip_punctuation: bool, speaker_channels_count: int, status: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -293,7 +293,7 @@ export def "get-job-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<callback_url: any, completed_on: string, created_on: string, custom_vocabulary_id: any, delete_after_seconds: any, duration_seconds: float, failure: string, failure_detail: string, filter_profanity: any, id: string, language: any, media_url: any, metadata: any, name: string, remove_disfluencies: any, skip_diarization: any, skip_punctuation: any, speaker_channels_count: any, status: string, type: string> {
+]: nothing -> record<callback_url: string, completed_on: string, created_on: string, custom_vocabulary_id: string, delete_after_seconds: int, duration_seconds: float, failure: string, failure_detail: string, filter_profanity: bool, id: string, language: string, media_url: string, metadata: string, name: string, remove_disfluencies: bool, skip_diarization: bool, skip_punctuation: bool, speaker_channels_count: int, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -319,7 +319,7 @@ export def "get-job-by-id" [
 # GET /jobs/{id}/captions
 # operationId: GetCaptions
 export def "get-captions" [
-  id: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,7 +361,7 @@ export def "get-captions" [
 # GET /jobs/{id}/transcript
 # operationId: GetTranscriptById
 export def "get-transcript-by-id" [
-  id: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

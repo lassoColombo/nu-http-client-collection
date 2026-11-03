@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
-    "client_id" => { {scheme: $scheme, headers: {client_id: $token_val}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
+    "client_id" => { {scheme: $scheme, headers: {"client_id": $token_val}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -136,10 +136,11 @@ export def "get-code-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locale-geo-id: string@locale-geo-id-completer # Locale and Geo code used to get localised data.
+  --locale-geo-id: string@locale-geo-id-completer # Locale and Geo code used to get localised data. (required)
 ]: nothing -> record<result: table<CodeNameId: string, CodeNameText: string, CodeNameType: string, UrlText: string>, status: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($locale_geo_id == null) { error make --unspanned { msg: "required query parameter 'locale_geo_id' missing: pass --locale-geo-id" } }
   let qp = [(serialize-qp "locale_geo_id" $locale_geo_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/products/get-codename" $qp $auth.query)
   let accept_val = "application/json"
@@ -172,11 +173,13 @@ export def "getorderinginfo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-id: string # Filter ordering info details based on one or multiple product id's. Values must be enclosed in [ square brackets ] and each value must be in "double quotes". Use comma to add multiple values. Example: ["123003"]
-  --locale-geo-id: string@locale-geo-id-completer # Locale and Geo code used to get localised data.
+  --product-id: string # Filter ordering info details based on one or multiple product id's. Values must be enclosed in [ square brackets ] and each value must be in "double quotes". Use comma to add multiple values. Example: ["123003"] (required)
+  --locale-geo-id: string@locale-geo-id-completer # Locale and Geo code used to get localised data. (required)
 ]: nothing -> record<result: table<attributes: list, product_id: string>, status: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
+  if ($locale_geo_id == null) { error make --unspanned { msg: "required query parameter 'locale_geo_id' missing: pass --locale-geo-id" } }
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "locale_geo_id" $locale_geo_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/products/get-ordering-info" $qp $auth.query)
   let accept_val = "application/json"
@@ -209,25 +212,26 @@ export def "get-product-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locale-geo-id: string@locale-geo-id-completer # Locale and Geo code used to get localised data.
+  --locale-geo-id: string@locale-geo-id-completer # Locale and Geo code used to get localised data. (required)
   --category-id: string # Filter products based on one or multiple category id. Either category id or product id is mandatory for any request. Values must be enclosed in [ square brackets ] and each value must be in "double quotes". Use comma to add multiple values. Example: ["873"]Categories Available: Processors = 873, Server Products = 1201, Mini PC's = 98414, Wireless Networking = 59485, Ethernet Products = 36773, Fabric products = 70021, Memory and Storage = 35125, Chipsets = 53, Graphics Drivers = 80939
   --product-id: string # Filter products based on one or multiple product id. Either category id or product id is mandatory for any request. Values must be enclosed in [ square brackets ] and each value must be in "double quotes". Use comma to add multiple values. Example: ["123003"]
   --highlights: string # Specification values which needs to be pulled from product data. Values must be enclosed in [ square brackets ] and each value must be in "double quotes". Use comma to add multiple values. Example: ["CoreCount", "StatusCodeText"]
-  --qp-sort: string # Indicates sorting fields. Accepts array of objects in format like: [{"field":"name","order":"ASC"}].Any specification that we get from get-product-info can be used to sort result. Other generic sort field is "name".
+  --sort: string # Indicates sorting fields. Accepts array of objects in format like: [{"field":"name","order":"ASC"}].Any specification that we get from get-product-info can be used to sort result. Other generic sort field is "name".
   --filters: string # Allows to filter data.Format of filter: [{"type":"specvalue","name":"ThreadCount","gteq":"4"}]Available operators are: "eq": equal to, "neq": not equal to, "lteq": less than or equal to, "gteq": greater than or equal to, "swc": starts with characters, "nswc": not starting with characters, "cts": contains, "ncts": not containsConditions: By default all objects works on an AND condition. But inside an object we have the capability to put an "OR" or "AND" condition.Example conditions: [{"type":"specvalue","name":"ThreadCount","ncts":"4,5","cond":"AND"}]
   --per-page: int # Filter number of products in response to desired size.
   --page-no: int # Indicates page number for pagination of results.
 ]: nothing -> record<page_no: string, per_page: int, result: table<created_date: string, highlights_info: list, mktg_prd_type: string, product_category: list, product_description: string, product_id: string, product_manufacturer: string, product_name: string, product_name_raw: string, product_on_market_date: string, updated_date: string>, status: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locale_geo_id" $locale_geo_id "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "highlights" $highlights "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "filters" $filters "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page_no" $page_no "scalar")] | flatten | str join "&"
+  if ($locale_geo_id == null) { error make --unspanned { msg: "required query parameter 'locale_geo_id' missing: pass --locale-geo-id" } }
+  let qp = [(serialize-qp "locale_geo_id" $locale_geo_id "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "highlights" $highlights "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "filters" $filters "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page_no" $page_no "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/products/get-products" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"locale_geo_id": $locale_geo_id, "category_id": $category_id, "product_id": $product_id, "highlights": $highlights, "sort": $qp_sort, "filters": $filters, "per_page": $per_page, "page_no": $page_no} | compact)
+    query: ({"locale_geo_id": $locale_geo_id, "category_id": $category_id, "product_id": $product_id, "highlights": $highlights, "sort": $sort, "filters": $filters, "per_page": $per_page, "page_no": $page_no} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -252,12 +256,14 @@ export def "get-product-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locale-geo-id: string@locale-geo-id-completer # Locale and Geo code used to get localised data.
-  --product-id: string # Product id's that needs to be filtered. Only max of 40 products are supported now. Values must be enclosed in [ square brackets ] and each value must be in "double quotes". Use comma to add multiple values.Example: ["223","224"]
+  --locale-geo-id: string@locale-geo-id-completer # Locale and Geo code used to get localised data. (required)
+  --product-id: string # Product id's that needs to be filtered. Only max of 40 products are supported now. Values must be enclosed in [ square brackets ] and each value must be in "double quotes". Use comma to add multiple values.Example: ["223","224"] (required)
   --include-reference: string # If send "true", this will fetch variant/compatible info into result set. Default is false.
 ]: nothing -> record<result: table<created_date: string, media_asset: record, mktg_prd_type: string, product_category: list, product_description: string, product_id: string, product_manufacturer: string, product_name: string, product_name_raw: string, product_on_market_date: string, product_picture: string, reference: list, tech_spec: list, updated_date: string>, status: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($locale_geo_id == null) { error make --unspanned { msg: "required query parameter 'locale_geo_id' missing: pass --locale-geo-id" } }
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
   let qp = [(serialize-qp "locale_geo_id" $locale_geo_id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "include_reference" $include_reference "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/products/get-products-info" $qp $auth.query)
   let accept_val = "application/json"

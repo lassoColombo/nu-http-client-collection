@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -158,7 +158,7 @@ export def "create-replication-set" [
   --client-token: string # A token that ensures that the operation is called only once with the specified details.
   regions: record # The Regions that Incident Manager replicates your data to. You can have up to three Regions in your replication set.
   --tags: record # A list of tags to add to the replication set.
-]: any -> record<arn: record> {
+]: any -> record<arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -187,10 +187,10 @@ export def "create-replication-set" [
 #
 # POST /createResponsePlan
 # operationId: CreateResponsePlan
-# --actions item shape: {ssmAutomation?: any}
-# --chatChannel shape: {chatbotSns?: any, empty?: any}
-# --incidentTemplate shape: {dedupeString?: any, impact?: any, incidentTags?: any, notificationTargets?: any, summary?: any, title?: any}
-# --integrations item shape: {pagerDutyConfiguration?: any}
+# --actions item shape: {ssmAutomation?: record}
+# --chatChannel shape: {chatbotSns?: list<string>, empty?: record}
+# --incidentTemplate shape: {dedupeString?: string, impact?: int, incidentTags?: record, notificationTargets?: list, summary?: string, title?: string}
+# --integrations item shape: {pagerDutyConfiguration?: record}
 export def "create-response-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,16 +208,16 @@ export def "create-response-plan" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --actions: list # The actions that the response plan starts at the beginning of an incident. — item shape: {ssmAutomation?: any}
-  --chat-channel: record # The Chatbot chat channel used for collaboration during an incident. — shape: {chatbotSns?: any, empty?: any}
+  --actions: list # The actions that the response plan starts at the beginning of an incident. — item shape: {ssmAutomation?: record}
+  --chat-channel: record # The Chatbot chat channel used for collaboration during an incident. — shape: {chatbotSns?: list<string>, empty?: record}
   --client-token: string # A token ensuring that the operation is called only once with the specified details.
   --display-name: string # The long format of the response plan name. This field can contain spaces.
   --engagements: list<string> # The Amazon Resource Name (ARN) for the contacts and escalation plans that the response plan engages during an incident.
-  incident_template: record # Basic details used in creating a response plan. The response plan is then used to create an incident record. — shape: {dedupeString?: any, impact?: any, incidentTags?: any, notificationTargets?: any, summary?: any, title?: any}
-  --integrations: list # Information about third-party services integrated into the response plan. — item shape: {pagerDutyConfiguration?: any}
+  incident_template: record # Basic details used in creating a response plan. The response plan is then used to create an incident record. — shape: {dedupeString?: string, impact?: int, incidentTags?: record, notificationTargets?: list, summary?: string, title?: string}
+  --integrations: list # Information about third-party services integrated into the response plan. — item shape: {pagerDutyConfiguration?: record}
   name: string # The short format name of the response plan. Can't include spaces.
   --tags: record # A list of tags that you are adding to the response plan.
-]: any -> record<arn: record> {
+]: any -> record<arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -246,7 +246,7 @@ export def "create-response-plan" [
 #
 # POST /createTimelineEvent
 # operationId: CreateTimelineEvent
-# --eventReferences item shape: {relatedItemId?: any, resource?: any}
+# --eventReferences item shape: {relatedItemId?: string, resource?: string}
 export def "create-timeline-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,11 +266,11 @@ export def "create-timeline-event" [
   --x-amz-signed-headers: string
   --client-token: string # A token that ensures that a client calls the action only once with the specified details.
   event_data: string # A short description of the event.
-  --event-references: list # Adds one or more references to the TimelineEvent. A reference is an Amazon Web Services resource involved or associated with the incident. To specify a reference, enter its Amazon Resource Name (ARN). You can also specify a related item associated with a resource. For example, to specify an Amazon DynamoDB (DynamoDB) table as a resource, use the table's ARN. You can also specify an Amazon CloudWatch metric associated with the DynamoDB table as a related item. — item shape: {relatedItemId?: any, resource?: any}
+  --event-references: list # Adds one or more references to the TimelineEvent. A reference is an Amazon Web Services resource involved or associated with the incident. To specify a reference, enter its Amazon Resource Name (ARN). You can also specify a related item associated with a resource. For example, to specify an Amazon DynamoDB (DynamoDB) table as a resource, use the table's ARN. You can also specify an Amazon CloudWatch metric associated with the DynamoDB table as a related item. — item shape: {relatedItemId?: string, resource?: string}
   event_time: string # The time that the event occurred. (format: date-time)
   event_type: string # The type of event. You can create timeline events of type Custom Event.
   incident_record_arn: string # The Amazon Resource Name (ARN) of the incident record that the action adds the incident to.
-]: any -> record<eventId: record, incidentRecordArn: record> {
+]: any -> record<eventId: string, incidentRecordArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -356,7 +356,7 @@ export def "delete-replication-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --arn: string # The Amazon Resource Name (ARN) of the replication set you're deleting.
+  --arn: string # The Amazon Resource Name (ARN) of the replication set you're deleting. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -367,6 +367,7 @@ export def "delete-replication-set" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($arn == null) { error make --unspanned { msg: "required query parameter 'arn' missing: pass --arn" } }
   let qp = [(serialize-qp "arn" $arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deleteReplicationSet" $qp $auth.query)
   let accept_val = "application/json"
@@ -544,7 +545,7 @@ export def "get-incident-record" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --arn: string # The Amazon Resource Name (ARN) of the incident record.
+  --arn: string # The Amazon Resource Name (ARN) of the incident record. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -552,9 +553,10 @@ export def "get-incident-record" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<incidentRecord: record<arn: record, automationExecutions: record, chatChannel: record<chatbotSns: record, empty: record>, creationTime: record, dedupeString: record, impact: record, incidentRecordSource: record<createdBy: record, invokedBy: record, resourceArn: record, source: record>, lastModifiedBy: record, lastModifiedTime: record, notificationTargets: record, resolvedTime: record, status: record, summary: record, title: record>> {
+]: nothing -> record<incidentRecord: record<arn: string, automationExecutions: list<record>, chatChannel: record<chatbotSns: list, empty: record>, creationTime: string, dedupeString: string, impact: int, incidentRecordSource: record<createdBy: string, invokedBy: string, resourceArn: string, source: string>, lastModifiedBy: string, lastModifiedTime: string, notificationTargets: list<record>, resolvedTime: string, status: string, summary: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($arn == null) { error make --unspanned { msg: "required query parameter 'arn' missing: pass --arn" } }
   let qp = [(serialize-qp "arn" $arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getIncidentRecord" $qp $auth.query)
   let accept_val = "application/json"
@@ -589,7 +591,7 @@ export def "get-replication-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --arn: string # The Amazon Resource Name (ARN) of the replication set you want to retrieve.
+  --arn: string # The Amazon Resource Name (ARN) of the replication set you want to retrieve. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -597,9 +599,10 @@ export def "get-replication-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<replicationSet: record<arn: record, createdBy: record, createdTime: record, deletionProtected: record, lastModifiedBy: record, lastModifiedTime: record, regionMap: record, status: record>> {
+]: nothing -> record<replicationSet: record<arn: string, createdBy: string, createdTime: string, deletionProtected: bool, lastModifiedBy: string, lastModifiedTime: string, regionMap: record, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($arn == null) { error make --unspanned { msg: "required query parameter 'arn' missing: pass --arn" } }
   let qp = [(serialize-qp "arn" $arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getReplicationSet" $qp $auth.query)
   let accept_val = "application/json"
@@ -634,7 +637,7 @@ export def "get-resource-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The Amazon Resource Name (ARN) of the response plan with the attached resource policy.
+  --resource-arn: string # The Amazon Resource Name (ARN) of the response plan with the attached resource policy. (required)
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
   --x-amz-content-sha256: string
@@ -646,10 +649,11 @@ export def "get-resource-policies" [
   --x-amz-signed-headers: string
   --max-results-body: int # The maximum number of resource policies to display for each page of results. (body field)
   --next-token-body: string # The pagination token to continue to the next page of results. (body field)
-]: any -> record<nextToken: record, resourcePolicies: record> {
+]: any -> record<nextToken: string, resourcePolicies: table<policyDocument: string, policyId: string, ramResourceShareRegion: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getResourcePolicies" $qp $auth.query)
   let req_body = {"maxResults": $max_results_body, "nextToken": $next_token_body} | compact
@@ -686,7 +690,7 @@ export def "get-response-plan" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --arn: string # The Amazon Resource Name (ARN) of the response plan.
+  --arn: string # The Amazon Resource Name (ARN) of the response plan. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -694,9 +698,10 @@ export def "get-response-plan" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<actions: record, arn: record, chatChannel: record<chatbotSns: record, empty: record>, displayName: record, engagements: record, incidentTemplate: record<dedupeString: record, impact: record, incidentTags: record, notificationTargets: record, summary: record, title: record>, integrations: record, name: record> {
+]: nothing -> record<actions: table<ssmAutomation: record>, arn: string, chatChannel: record<chatbotSns: list<string>, empty: record>, displayName: string, engagements: list<string>, incidentTemplate: record<dedupeString: string, impact: int, incidentTags: record, notificationTargets: list<record>, summary: string, title: string>, integrations: table<pagerDutyConfiguration: record>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($arn == null) { error make --unspanned { msg: "required query parameter 'arn' missing: pass --arn" } }
   let qp = [(serialize-qp "arn" $arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getResponsePlan" $qp $auth.query)
   let accept_val = "application/json"
@@ -731,8 +736,8 @@ export def "get-timeline-event" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --event-id: string # The ID of the event. You can get an event's ID when you create it, or by using ListTimelineEvents.
-  --incident-record-arn: string # The Amazon Resource Name (ARN) of the incident that includes the timeline event.
+  --event-id: string # The ID of the event. You can get an event's ID when you create it, or by using ListTimelineEvents. (required)
+  --incident-record-arn: string # The Amazon Resource Name (ARN) of the incident that includes the timeline event. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -740,9 +745,11 @@ export def "get-timeline-event" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<event: record<eventData: record, eventId: record, eventReferences: record, eventTime: record, eventType: record, eventUpdatedTime: record, incidentRecordArn: record>> {
+]: nothing -> record<event: record<eventData: string, eventId: string, eventReferences: list<record>, eventTime: string, eventType: string, eventUpdatedTime: string, incidentRecordArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($event_id == null) { error make --unspanned { msg: "required query parameter 'eventId' missing: pass --event-id" } }
+  if ($incident_record_arn == null) { error make --unspanned { msg: "required query parameter 'incidentRecordArn' missing: pass --incident-record-arn" } }
   let qp = [(serialize-qp "eventId" $event_id "scalar") (serialize-qp "incidentRecordArn" $incident_record_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getTimelineEvent" $qp $auth.query)
   let accept_val = "application/json"
@@ -767,7 +774,7 @@ export def "get-timeline-event" [
 #
 # POST /listIncidentRecords
 # operationId: ListIncidentRecords
-# --filters item shape: {condition: any, key: any}
+# --filters item shape: {condition: record, key: string}
 export def "list-incident-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -787,10 +794,10 @@ export def "list-incident-records" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filters: list # Filters the list of incident records you want to search through. You can filter on the following keys: creationTime impact status createdBy Note the following when when you use Filters: If you don't specify a Filter, the response includes all incident records. If you specify more than one filter in a single request, the response returns incident records that match all filters. If you specify a filter with more than one value, the response returns incident records that match any of the values provided. — item shape: {condition: any, key: any}
+  --filters: list # Filters the list of incident records you want to search through. You can filter on the following keys: creationTime impact status createdBy Note the following when when you use Filters: If you don't specify a Filter, the response includes all incident records. If you specify more than one filter in a single request, the response returns incident records that match all filters. If you specify a filter with more than one value, the response returns incident records that match any of the values provided. — item shape: {condition: record, key: string}
   --max-results-body: int # The maximum number of results per page. (body field)
   --next-token-body: string # The pagination token to continue to the next page of results. (body field)
-]: any -> record<incidentRecordSummaries: record, nextToken: record> {
+]: any -> record<incidentRecordSummaries: table<arn: string, creationTime: string, impact: int, incidentRecordSource: record, resolvedTime: string, status: string, title: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -842,7 +849,7 @@ export def "list-related-items" [
   incident_record_arn: string # The Amazon Resource Name (ARN) of the incident record containing the listed related items.
   --max-results-body: int # The maximum number of related items per page. (body field)
   --next-token-body: string # The pagination token to continue to the next page of results. (body field)
-]: any -> record<nextToken: record, relatedItems: record> {
+]: any -> record<nextToken: string, relatedItems: table<generatedId: string, identifier: record, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -893,7 +900,7 @@ export def "list-replication-sets" [
   --x-amz-signed-headers: string
   --max-results-body: int # The maximum number of results per page. (body field)
   --next-token-body: string # The pagination token to continue to the next page of results. (body field)
-]: any -> record<nextToken: record, replicationSetArns: record> {
+]: any -> record<nextToken: string, replicationSetArns: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -944,7 +951,7 @@ export def "list-response-plans" [
   --x-amz-signed-headers: string
   --max-results-body: int # The maximum number of response plans per page. (body field)
   --next-token-body: string # The pagination token to continue to the next page of results. (body field)
-]: any -> record<nextToken: record, responsePlanSummaries: record> {
+]: any -> record<nextToken: string, responsePlanSummaries: table<arn: string, displayName: string, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1068,7 +1075,7 @@ export def "tag-resource" [
 #
 # POST /listTimelineEvents
 # operationId: ListTimelineEvents
-# --filters item shape: {condition: any, key: any}
+# --filters item shape: {condition: record, key: string}
 export def "list-timeline-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1088,13 +1095,13 @@ export def "list-timeline-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filters: list # Filters the timeline events based on the provided conditional values. You can filter timeline events with the following keys: eventTime eventType Note the following when deciding how to use Filters: If you don't specify a Filter, the response includes all timeline events. If you specify more than one filter in a single request, the response returns timeline events that match all filters. If you specify a filter with more than one value, the response returns timeline events that match any of the values provided. — item shape: {condition: any, key: any}
+  --filters: list # Filters the timeline events based on the provided conditional values. You can filter timeline events with the following keys: eventTime eventType Note the following when deciding how to use Filters: If you don't specify a Filter, the response includes all timeline events. If you specify more than one filter in a single request, the response returns timeline events that match all filters. If you specify a filter with more than one value, the response returns timeline events that match any of the values provided. — item shape: {condition: record, key: string}
   incident_record_arn: string # The Amazon Resource Name (ARN) of the incident that includes the timeline event.
   --max-results-body: int # The maximum number of results per page. (body field)
   --next-token-body: string # The pagination token to continue to the next page of results. (body field)
   --sort-by: string@sort-by-completer # Sort timeline events by the specified key value pair.
   --sort-order: string@sort-order-completer # Sorts the order of timeline events by the value specified in the sortBy field.
-]: any -> record<eventSummaries: record, nextToken: record> {
+]: any -> record<eventSummaries: table<eventId: string, eventReferences: list, eventTime: string, eventType: string, eventUpdatedTime: string, incidentRecordArn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1143,7 +1150,7 @@ export def "put-resource-policy" [
   --x-amz-signed-headers: string
   policy: string # Details of the resource policy.
   resource_arn: string # The Amazon Resource Name (ARN) of the response plan to add the resource policy to.
-]: any -> record<policyId: record> {
+]: any -> record<policyId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1172,8 +1179,8 @@ export def "put-resource-policy" [
 #
 # POST /startIncident
 # operationId: StartIncident
-# --relatedItems item shape: {generatedId?: any, identifier: any, title?: any}
-# --triggerDetails shape: {rawData?: any, source?: any, timestamp?: any, triggerArn?: any}
+# --relatedItems item shape: {generatedId?: string, identifier: record, title?: string}
+# --triggerDetails shape: {rawData?: string, source?: string, timestamp?: string, triggerArn?: string}
 export def "start-incident" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1193,11 +1200,11 @@ export def "start-incident" [
   --x-amz-signed-headers: string
   --client-token: string # A token ensuring that the operation is called only once with the specified details.
   --impact: int # Defines the impact to the customers. Providing an impact overwrites the impact provided by a response plan. Possible impacts: 1 - Critical impact, this typically relates to full application failure that impacts many to all customers. 2 - High impact, partial application failure with impact to many customers. 3 - Medium impact, the application is providing reduced service to customers. 4 - Low impact, customer might aren't impacted by the problem yet. 5 - No impact, customers aren't currently impacted but urgent action is needed to avoid impact.
-  --related-items: list # Add related items to the incident for other responders to use. Related items are Amazon Web Services resources, external links, or files uploaded to an Amazon S3 bucket. — item shape: {generatedId?: any, identifier: any, title?: any}
+  --related-items: list # Add related items to the incident for other responders to use. Related items are Amazon Web Services resources, external links, or files uploaded to an Amazon S3 bucket. — item shape: {generatedId?: string, identifier: record, title?: string}
   response_plan_arn: string # The Amazon Resource Name (ARN) of the response plan that pre-defines summary, chat channels, Amazon SNS topics, runbooks, title, and impact of the incident.
   --title: string # Provide a title for the incident. Providing a title overwrites the title provided by the response plan.
-  --trigger-details: record # Details about what caused the incident to be created in Incident Manager. — shape: {rawData?: any, source?: any, timestamp?: any, triggerArn?: any}
-]: any -> record<incidentRecordArn: record> {
+  --trigger-details: record # Details about what caused the incident to be created in Incident Manager. — shape: {rawData?: string, source?: string, timestamp?: string, triggerArn?: string}
+]: any -> record<incidentRecordArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1237,7 +1244,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The name of the tag to remove from the response plan.
+  --tag-keys: list # The name of the tag to remove from the response plan. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1249,6 +1256,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1300,6 +1308,7 @@ export def "update-deletion-protection" [
   let full_url = (build-url $base "/updateDeletionProtection" $auth.query)
   let req_body = {"arn": $arn, "clientToken": $client_token, "deletionProtected": $deletion_protected} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "deletionProtected") == null) { error make --unspanned { msg: "required body field 'deletionProtected' missing: pass --deletion-protected or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
@@ -1322,8 +1331,8 @@ export def "update-deletion-protection" [
 #
 # POST /updateIncidentRecord
 # operationId: UpdateIncidentRecord
-# --chatChannel shape: {chatbotSns?: any, empty?: any}
-# --notificationTargets item shape: {snsTopicArn?: any}
+# --chatChannel shape: {chatbotSns?: list<string>, empty?: record}
+# --notificationTargets item shape: {snsTopicArn?: string}
 export def "update-incident-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1342,10 +1351,10 @@ export def "update-incident-record" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arn: string # The Amazon Resource Name (ARN) of the incident record you are updating.
-  --chat-channel: record # The Chatbot chat channel used for collaboration during an incident. — shape: {chatbotSns?: any, empty?: any}
+  --chat-channel: record # The Chatbot chat channel used for collaboration during an incident. — shape: {chatbotSns?: list<string>, empty?: record}
   --client-token: string # A token that ensures that a client calls the operation only once with the specified details.
   --impact: int # Defines the impact of the incident to customers and applications. If you provide an impact for an incident, it overwrites the impact provided by the response plan. Possible impacts: 1 - Critical impact, full application failure that impacts many to all customers. 2 - High impact, partial application failure with impact to many customers. 3 - Medium impact, the application is providing reduced service to customers. 4 - Low impact, customer aren't impacted by the problem yet. 5 - No impact, customers aren't currently impacted but urgent action is needed to avoid impact.
-  --notification-targets: list # The Amazon SNS targets that Incident Manager notifies when a client updates an incident. Using multiple SNS topics creates redundancy in the event that a Region is down during the incident. — item shape: {snsTopicArn?: any}
+  --notification-targets: list # The Amazon SNS targets that Incident Manager notifies when a client updates an incident. Using multiple SNS topics creates redundancy in the event that a Region is down during the incident. — item shape: {snsTopicArn?: string}
   --status: string@status-completer # The status of the incident. Possible statuses are Open or Resolved.
   --summary: string # A longer description of what occurred during the incident.
   --title: string # A brief description of the incident.
@@ -1378,7 +1387,7 @@ export def "update-incident-record" [
 #
 # POST /updateRelatedItems
 # operationId: UpdateRelatedItems
-# --relatedItemsUpdate shape: {itemToAdd?: any, itemToRemove?: any}
+# --relatedItemsUpdate shape: {itemToAdd?: record, itemToRemove?: record}
 export def "update-related-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1398,7 +1407,7 @@ export def "update-related-items" [
   --x-amz-signed-headers: string
   --client-token: string # A token that ensures that a client calls the operation only once with the specified details.
   incident_record_arn: string # The Amazon Resource Name (ARN) of the incident record that contains the related items that you update.
-  related_items_update: record # Details about the related item you're adding. — shape: {itemToAdd?: any, itemToRemove?: any}
+  related_items_update: record # Details about the related item you're adding. — shape: {itemToAdd?: record, itemToRemove?: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1428,7 +1437,7 @@ export def "update-related-items" [
 #
 # POST /updateReplicationSet
 # operationId: UpdateReplicationSet
-# --actions item shape: {addRegionAction?: any, deleteRegionAction?: any}
+# --actions item shape: {addRegionAction?: record, deleteRegionAction?: record}
 export def "update-replication-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1446,7 +1455,7 @@ export def "update-replication-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  actions: list # An action to add or delete a Region. — item shape: {addRegionAction?: any, deleteRegionAction?: any}
+  actions: list # An action to add or delete a Region. — item shape: {addRegionAction?: record, deleteRegionAction?: record}
   arn: string # The Amazon Resource Name (ARN) of the replication set you're updating.
   --client-token: string # A token that ensures that the operation is called only once with the specified details.
 ]: any -> any {
@@ -1478,10 +1487,10 @@ export def "update-replication-set" [
 #
 # POST /updateResponsePlan
 # operationId: UpdateResponsePlan
-# --actions item shape: {ssmAutomation?: any}
-# --chatChannel shape: {chatbotSns?: any, empty?: any}
-# --incidentTemplateNotificationTargets item shape: {snsTopicArn?: any}
-# --integrations item shape: {pagerDutyConfiguration?: any}
+# --actions item shape: {ssmAutomation?: record}
+# --chatChannel shape: {chatbotSns?: list<string>, empty?: record}
+# --incidentTemplateNotificationTargets item shape: {snsTopicArn?: string}
+# --integrations item shape: {pagerDutyConfiguration?: record}
 export def "update-response-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1499,19 +1508,19 @@ export def "update-response-plan" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --actions: list # The actions that this response plan takes at the beginning of an incident. — item shape: {ssmAutomation?: any}
+  --actions: list # The actions that this response plan takes at the beginning of an incident. — item shape: {ssmAutomation?: record}
   arn: string # The Amazon Resource Name (ARN) of the response plan.
-  --chat-channel: record # The Chatbot chat channel used for collaboration during an incident. — shape: {chatbotSns?: any, empty?: any}
+  --chat-channel: record # The Chatbot chat channel used for collaboration during an incident. — shape: {chatbotSns?: list<string>, empty?: record}
   --client-token: string # A token ensuring that the operation is called only once with the specified details.
   --display-name: string # The long format name of the response plan. The display name can't contain spaces.
   --engagements: list<string> # The Amazon Resource Name (ARN) for the contacts and escalation plans that the response plan engages during an incident.
   --incident-template-dedupe-string: string # The string Incident Manager uses to prevent duplicate incidents from being created by the same incident in the same account.
   --incident-template-impact: int # Defines the impact to the customers. Providing an impact overwrites the impact provided by a response plan. Possible impacts: 5 - Severe impact 4 - High impact 3 - Medium impact 2 - Low impact 1 - No impact
-  --incident-template-notification-targets: list # The Amazon SNS targets that are notified when updates are made to an incident. — item shape: {snsTopicArn?: any}
+  --incident-template-notification-targets: list # The Amazon SNS targets that are notified when updates are made to an incident. — item shape: {snsTopicArn?: string}
   --incident-template-summary: string # A brief summary of the incident. This typically contains what has happened, what's currently happening, and next steps.
   --incident-template-tags: record # Tags to assign to the template. When the StartIncident API action is called, Incident Manager assigns the tags specified in the template to the incident. To call this action, you must also have permission to call the TagResource API action for the incident record resource.
   --incident-template-title: string # The short format name of the incident. The title can't contain spaces.
-  --integrations: list # Information about third-party services integrated into the response plan. — item shape: {pagerDutyConfiguration?: any}
+  --integrations: list # Information about third-party services integrated into the response plan. — item shape: {pagerDutyConfiguration?: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1541,7 +1550,7 @@ export def "update-response-plan" [
 #
 # POST /updateTimelineEvent
 # operationId: UpdateTimelineEvent
-# --eventReferences item shape: {relatedItemId?: any, resource?: any}
+# --eventReferences item shape: {relatedItemId?: string, resource?: string}
 export def "update-timeline-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1562,7 +1571,7 @@ export def "update-timeline-event" [
   --client-token: string # A token that ensures that a client calls the operation only once with the specified details.
   --event-data: string # A short description of the event.
   event_id: string # The ID of the event to update. You can use ListTimelineEvents to find an event's ID.
-  --event-references: list # Updates all existing references in a TimelineEvent. A reference is an Amazon Web Services resource involved or associated with the incident. To specify a reference, enter its Amazon Resource Name (ARN). You can also specify a related item associated with that resource. For example, to specify an Amazon DynamoDB (DynamoDB) table as a resource, use its ARN. You can also specify an Amazon CloudWatch metric associated with the DynamoDB table as a related item. This update action overrides all existing references. If you want to keep existing references, you must specify them in the call. If you don't, this action removes any existing references and enters only new references. — item shape: {relatedItemId?: any, resource?: any}
+  --event-references: list # Updates all existing references in a TimelineEvent. A reference is an Amazon Web Services resource involved or associated with the incident. To specify a reference, enter its Amazon Resource Name (ARN). You can also specify a related item associated with that resource. For example, to specify an Amazon DynamoDB (DynamoDB) table as a resource, use its ARN. You can also specify an Amazon CloudWatch metric associated with the DynamoDB table as a related item. This update action overrides all existing references. If you want to keep existing references, you must specify them in the call. If you don't, this action removes any existing references and enters only new references. — item shape: {relatedItemId?: string, resource?: string}
   --event-time: string # The time that the event occurred. (format: date-time)
   --event-type: string # The type of event. You can update events of type Custom Event.
   incident_record_arn: string # The Amazon Resource Name (ARN) of the incident that includes the timeline event.

@@ -155,10 +155,11 @@ export def "get-locations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
 ]: nothing -> record<nextlink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Intune/locations" $qp $auth.query)
   let accept_val = "application/json"
@@ -191,10 +192,11 @@ export def "get-location-by-host-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
 ]: nothing -> record<properties: record<hostName: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Intune/locations/hostName" $qp $auth.query)
   let accept_val = "application/json"
@@ -229,7 +231,7 @@ export def "android-get-app-for-mam-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --filter: string # The filter to apply on the operation.
   --top: int # format: int32
   --select: string # select specific fields in entity.
@@ -238,6 +240,7 @@ export def "android-get-app-for-mam-policy" [
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/AndroidPolicies/{policy_name}/apps") $qp $auth.query)
   let accept_val = "application/json"
@@ -271,7 +274,7 @@ export def "android-get-mam-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --filter: string # The filter to apply on the operation.
   --top: int # format: int32
   --select: string # select specific fields in entity.
@@ -279,6 +282,7 @@ export def "android-get-mam-policies" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies") $qp $auth.query)
   let accept_val = "application/json"
@@ -313,12 +317,13 @@ export def "android-delete-mam-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # Service Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies/{policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -353,13 +358,14 @@ export def "android-get-mam-policy-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --select: string # select specific fields in entity.
 ]: nothing -> record<properties: record<fileEncryption: string, screenCapture: string, accessRecheckOfflineTimeout: string, accessRecheckOnlineTimeout: string, appSharingFromLevel: string, appSharingToLevel: string, authentication: string, clipboardSharingLevel: string, dataBackup: string, description: string, deviceCompliance: string, fileSharingSaveAs: string, friendlyName: string, groupStatus: string, lastModifiedTime: string, managedBrowser: string, numOfApps: int, offlineWipeTimeout: string, pin: string, pinNumRetry: int>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies/{policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -395,7 +401,7 @@ export def "android-patch-mam-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --properties: any # Intune MAM iOS Policy Properties. — shape: {fileEncryption?: "required"|"notRequired", screenCapture?: "allow"|"block", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", description?: string, deviceCompliance?: "enable"|"disable", ... (6 more fields)}
   --location: string # Resource Location
   --tags: record # Resource Tags
@@ -405,6 +411,7 @@ export def "android-patch-mam-policy" [
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies/{policy_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -442,7 +449,7 @@ export def "android-create-or-update-mam-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --properties: any # Intune MAM iOS Policy Properties. — shape: {fileEncryption?: "required"|"notRequired", screenCapture?: "allow"|"block", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", description?: string, deviceCompliance?: "enable"|"disable", ... (6 more fields)}
   --location: string # Resource Location
   --tags: record # Resource Tags
@@ -452,6 +459,7 @@ export def "android-create-or-update-mam-policy" [
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies/{policy_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -489,13 +497,14 @@ export def "android-delete-app-for-mam-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # Service Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name), app_name: (encode-path-segment $app_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies/{policy_name}/apps/{app_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -532,15 +541,16 @@ export def "android-add-app-for-mam-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --properties: any # Android Policy request body for Intune MAM. — shape: {url: string}
-]: any -> record<code: string, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name), app_name: (encode-path-segment $app_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies/{policy_name}/apps/{app_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -577,12 +587,13 @@ export def "android-get-groups-for-mam-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
 ]: nothing -> record<nextlink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies/{policy_name}/groups") $qp $auth.query)
   let accept_val = "application/json"
@@ -618,13 +629,14 @@ export def "android-delete-group-for-mam-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # Service Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name), group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies/{policy_name}/groups/{group_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -661,15 +673,16 @@ export def "android-add-group-for-mam-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --properties: any # Android Policy request body for Intune MAM. — shape: {url: string}
-]: any -> record<code: string, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name), group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/androidPolicies/{policy_name}/groups/{group_id}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -705,7 +718,7 @@ export def "get-apps" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --filter: string # The filter to apply on the operation.
   --top: int # format: int32
   --select: string # select specific fields in entity.
@@ -713,6 +726,7 @@ export def "get-apps" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/apps") $qp $auth.query)
   let accept_val = "application/json"
@@ -746,7 +760,7 @@ export def "get-mam-flagged-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --filter: string # The filter to apply on the operation.
   --top: int # format: int32
   --select: string # select specific fields in entity.
@@ -754,6 +768,7 @@ export def "get-mam-flagged-users" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/flaggedUsers") $qp $auth.query)
   let accept_val = "application/json"
@@ -788,13 +803,14 @@ export def "get-mam-flagged-user-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --select: string # select specific fields in entity.
 ]: nothing -> record<properties: record<errorCount: int, friendlyName: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), user_name: (encode-path-segment $user_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/flaggedUsers/{user_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -829,7 +845,7 @@ export def "get-mam-user-flagged-enrolled-apps" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --filter: string # The filter to apply on the operation.
   --top: int # format: int32
   --select: string # select specific fields in entity.
@@ -838,6 +854,7 @@ export def "get-mam-user-flagged-enrolled-apps" [
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), user_name: (encode-path-segment $user_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/flaggedUsers/{user_name}/flaggedEnrolledApps") $qp $auth.query)
   let accept_val = "application/json"
@@ -871,7 +888,7 @@ export def "ios-get-mam-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --filter: string # The filter to apply on the operation.
   --top: int # format: int32
   --select: string # select specific fields in entity.
@@ -879,6 +896,7 @@ export def "ios-get-mam-policies" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies") $qp $auth.query)
   let accept_val = "application/json"
@@ -913,12 +931,13 @@ export def "ios-delete-mam-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # Service Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -953,13 +972,14 @@ export def "ios-get-mam-policy-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --select: string # select specific fields in entity.
 ]: nothing -> record<properties: record<fileEncryptionLevel: string, touchId: string, accessRecheckOfflineTimeout: string, accessRecheckOnlineTimeout: string, appSharingFromLevel: string, appSharingToLevel: string, authentication: string, clipboardSharingLevel: string, dataBackup: string, description: string, deviceCompliance: string, fileSharingSaveAs: string, friendlyName: string, groupStatus: string, lastModifiedTime: string, managedBrowser: string, numOfApps: int, offlineWipeTimeout: string, pin: string, pinNumRetry: int>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -995,7 +1015,7 @@ export def "ios-patch-mam-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --properties: any # Intune MAM iOS Policy Properties. — shape: {fileEncryptionLevel?: "deviceLocked"|"deviceLockedExceptFilesOpen"|"afterDeviceRestart"|"useDeviceSettings", touchId?: "enable"|"disable", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", ... (8 more fields)}
   --location: string # Resource Location
   --tags: record # Resource Tags
@@ -1005,6 +1025,7 @@ export def "ios-patch-mam-policy" [
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -1042,7 +1063,7 @@ export def "ios-create-or-update-mam-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --properties: any # Intune MAM iOS Policy Properties. — shape: {fileEncryptionLevel?: "deviceLocked"|"deviceLockedExceptFilesOpen"|"afterDeviceRestart"|"useDeviceSettings", touchId?: "enable"|"disable", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", ... (8 more fields)}
   --location: string # Resource Location
   --tags: record # Resource Tags
@@ -1052,6 +1073,7 @@ export def "ios-create-or-update-mam-policy" [
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -1088,7 +1110,7 @@ export def "ios-get-app-for-mam-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --filter: string # The filter to apply on the operation.
   --top: int # format: int32
   --select: string # select specific fields in entity.
@@ -1097,6 +1119,7 @@ export def "ios-get-app-for-mam-policy" [
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}/apps") $qp $auth.query)
   let accept_val = "application/json"
@@ -1132,13 +1155,14 @@ export def "ios-delete-app-for-mam-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # Service Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name), app_name: (encode-path-segment $app_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}/apps/{app_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1175,15 +1199,16 @@ export def "ios-add-app-for-mam-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --properties: any # Android Policy request body for Intune MAM. — shape: {url: string}
-]: any -> record<code: string, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name), app_name: (encode-path-segment $app_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}/apps/{app_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1220,12 +1245,13 @@ export def "ios-get-groups-for-mam-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
 ]: nothing -> record<nextlink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}/groups") $qp $auth.query)
   let accept_val = "application/json"
@@ -1261,13 +1287,14 @@ export def "ios-delete-group-for-mam-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # Service Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name), group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}/groups/{group_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1304,15 +1331,16 @@ export def "ios-add-group-for-mam-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --properties: any # Android Policy request body for Intune MAM. — shape: {url: string}
-]: any -> record<code: string, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), policy_name: (encode-path-segment $policy_name), group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/iosPolicies/{policy_name}/groups/{group_id}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1348,7 +1376,7 @@ export def "get-operation-results" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --filter: string # The filter to apply on the operation.
   --top: int # format: int32
   --select: string # select specific fields in entity.
@@ -1356,6 +1384,7 @@ export def "get-operation-results" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/operationResults") $qp $auth.query)
   let accept_val = "application/json"
@@ -1389,11 +1418,12 @@ export def "get-mam-statuses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
 ]: nothing -> record<properties: record<deployedPolicies: int, enrolledUsers: int, flaggedUsers: int, lastModifiedTime: string, policyAppliedUsers: int, status: string, wipeFailedApps: int, wipePendingApps: int, wipeSucceededApps: int>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/statuses/default") $qp $auth.query)
   let accept_val = "application/json"
@@ -1428,7 +1458,7 @@ export def "get-mam-user-devices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --filter: string # The filter to apply on the operation.
   --top: int # format: int32
   --select: string # select specific fields in entity.
@@ -1437,6 +1467,7 @@ export def "get-mam-user-devices" [
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), user_name: (encode-path-segment $user_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/users/{user_name}/devices") $qp $auth.query)
   let accept_val = "application/json"
@@ -1472,7 +1503,7 @@ export def "get-mam-user-device-by-device-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
   --select: string # select specific fields in entity.
 ]: nothing -> record<properties: record<deviceType: string, friendlyName: string, platform: string, platformVersion: string, userId: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1480,6 +1511,7 @@ export def "get-mam-user-device-by-device-name" [
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($device_name | is-empty) { error make --unspanned { msg: "path parameter 'deviceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$select" $select "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), user_name: (encode-path-segment $user_name), device_name: (encode-path-segment $device_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/users/{user_name}/devices/{device_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1515,13 +1547,14 @@ export def "wipe-mam-user-device" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Service Api Version.
+  --api-version: string # Service Api Version. (required)
 ]: nothing -> record<properties: record<value: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($device_name | is-empty) { error make --unspanned { msg: "path parameter 'deviceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({host_name: (encode-path-segment $host_name), user_name: (encode-path-segment $user_name), device_name: (encode-path-segment $device_name)} | format pattern "/providers/Microsoft.Intune/locations/{host_name}/users/{user_name}/devices/{device_name}/wipe") $qp $auth.query)
   let accept_val = "application/json"

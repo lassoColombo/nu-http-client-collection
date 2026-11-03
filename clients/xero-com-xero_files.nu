@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -183,11 +183,12 @@ export def "get-associations-by-object" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> table<FileId: string, ObjectGroup: string, ObjectId: string, ObjectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'ObjectId' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({object_id: (encode-path-segment $object_id)} | format pattern "/Associations/{object_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -223,12 +224,13 @@ export def "get-files" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pagesize: int # pass an optional page size value (e.g. 50)
   --page: int # number of records to skip for pagination (e.g. 2)
-  --qp-sort: string@sort-completer # values to sort by (e.g. CreatedDateUTC DESC)
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --sort: string@sort-completer # values to sort by (e.g. CreatedDateUTC DESC)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> record<Items: table<CreatedDateUtc: string, FolderId: string, Id: string, MimeType: string, Name: string, Size: int, UpdatedDateUtc: string, User: record>, Page: int, PerPage: int, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
+  let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Files" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -237,7 +239,7 @@ export def "get-files" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"pagesize": $pagesize, "page": $page, "sort": $qp_sort} | compact)
+    query: ({"pagesize": $pagesize, "page": $page, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -263,7 +265,7 @@ export def "upload-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --folder-id: string # pass an optional folder id to save file to specific folder (format: uuid, e.g. 4ff1e5cc-9835-40d5-bb18-09fdb118db9c)
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
   --body: string # format: byte
   --filename: string
   --mime-type: string
@@ -272,6 +274,7 @@ export def "upload-file" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let qp = [(serialize-qp "FolderId" $folder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Files" $qp $auth.query)
   let req_body = {"body": $body, "filename": $filename, "mimeType": $mime_type, "name": $name} | compact
@@ -280,8 +283,8 @@ export def "upload-file" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -311,11 +314,12 @@ export def "delete-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'FileId' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/Files/{file_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -350,11 +354,12 @@ export def "get-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> record<CreatedDateUtc: string, FolderId: string, Id: string, MimeType: string, Name: string, Size: int, UpdatedDateUtc: string, User: record<FirstName: string, FullName: string, Id: string, LastName: string, Name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'FileId' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/Files/{file_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -390,7 +395,7 @@ export def "update-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
   --created-date-utc: string # Created date in UTC (e.g. 2020-12-03T19:04:58.6970000)
   --folder-id: string # Folder relation object's UUID (format: uuid, e.g. 0f8ccf21-7267-4268-9167-a1e2c40c84c8)
   --id: string # File object's UUID (format: uuid, e.g. d290f1ee-6c54-4b01-90e6-d701748f0851)
@@ -404,6 +409,7 @@ export def "update-file" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'FileId' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/Files/{file_id}") $auth.query)
   let req_body = {"CreatedDateUtc": $created_date_utc, "FolderId": $folder_id, "Id": $id, "MimeType": $mime_type, "Name": $name, "Size": $size, "UpdatedDateUtc": $updated_date_utc, "User": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -440,11 +446,12 @@ export def "get-file-associations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> table<FileId: string, ObjectGroup: string, ObjectId: string, ObjectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'FileId' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/Files/{file_id}/Associations") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -479,7 +486,7 @@ export def "create-file-association" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
   --body-file-id: string # The unique identifier of the file (format: uuid)
   --object-group: string@object-group-completer # The Object Group that the object is in. These roughly correlate to the endpoints that can be used to retrieve the object via the core accounting API.
   --object-id: string # The identifier of the object that the file is being associated with (e.g. InvoiceID, BankTransactionID, ContactID) (format: uuid)
@@ -489,6 +496,7 @@ export def "create-file-association" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'FileId' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/Files/{file_id}/Associations") $auth.query)
   let req_body = {"FileId": $body_file_id, "ObjectGroup": $object_group, "ObjectId": $object_id, "ObjectType": $object_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -526,12 +534,13 @@ export def "delete-file-association" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'FileId' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'ObjectId' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), object_id: (encode-path-segment $object_id)} | format pattern "/Files/{file_id}/Associations/{object_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -566,11 +575,12 @@ export def "get-file-content" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'FileId' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/Files/{file_id}/Content") $auth.query)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -604,12 +614,13 @@ export def "get-folders" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer # values to sort by (e.g. CreatedDateUTC DESC)
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --sort: string@sort-completer # values to sort by (e.g. CreatedDateUTC DESC)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> table<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
+  let qp = [(serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Folders" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -618,7 +629,7 @@ export def "get-folders" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort} | compact)
+    query: ({"sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -643,7 +654,7 @@ export def "create-folder" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
   --email: string # The email address used to email files to the inbox. Only the inbox will have this element. (e.g. foo@bar.com)
   --file-count: int # The number of files in the folder (e.g. 5)
   --id: string # Xero unique identifier for a folder Files (format: uuid, e.g. 4ff1e5cc-9835-40d5-bb18-09fdb118db9c)
@@ -653,6 +664,7 @@ export def "create-folder" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/Folders" $auth.query)
   let req_body = {"Email": $email, "FileCount": $file_count, "Id": $id, "IsInbox": $is_inbox, "Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -689,11 +701,12 @@ export def "delete-folder" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/Folders/{folder_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -728,11 +741,12 @@ export def "get-folder" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/Folders/{folder_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -767,7 +781,7 @@ export def "update-folder" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
   --email: string # The email address used to email files to the inbox. Only the inbox will have this element. (e.g. foo@bar.com)
   --file-count: int # The number of files in the folder (e.g. 5)
   --id: string # Xero unique identifier for a folder Files (format: uuid, e.g. 4ff1e5cc-9835-40d5-bb18-09fdb118db9c)
@@ -778,6 +792,7 @@ export def "update-folder" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/Folders/{folder_id}") $auth.query)
   let req_body = {"Email": $email, "FileCount": $file_count, "Id": $id, "IsInbox": $is_inbox, "Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -813,10 +828,11 @@ export def "get-inbox" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/Inbox" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

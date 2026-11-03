@@ -1,4 +1,4 @@
-# Auto-generated client for Business Profile Performance API vv1
+# Auto-generated client for Business Profile Performance API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/businessprofileperformance/v1/openapi.json
 # Auth: --token flag or $env.BUSINESS_PROFILE_PERFORMANCE_API_TOKEN
 

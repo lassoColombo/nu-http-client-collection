@@ -1,6 +1,8 @@
 # Auto-generated client for Swagger API2Cart v1.1
 # Source: https://api.apis.guru/v2/specs/api2cart.com/1.1/openapi.json
 # Auth: --token flag or $env.SWAGGER_API2CART_TOKEN
+# Auth (api_key): --token-apikey flag or $env.SWAGGER_API2CART_APIKEY_TOKEN
+# Auth (store_key): --token-storekey flag or $env.SWAGGER_API2CART_STOREKEY_TOKEN
 
 const BASE_URL = "https://api.api2cart.com/v1.1"
 
@@ -12,8 +14,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {x-api-key: $token_val}, query: "", location: "header"} }
-    "x-store-key" => { {scheme: $scheme, headers: {x-store-key: $token_val}, query: "", location: "header"} }
+    "x-api-key" => { {scheme: $scheme, headers: {"x-api-key": $token_val}, query: "", location: "header"} }
+    "x-store-key" => { {scheme: $scheme, headers: {"x-store-key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -139,7 +141,7 @@ def type-completer-3 [] { ["option_type_checkbox" "option_type_date" "option_typ
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-apikey" "token-storekey"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-cart-add" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -549,9 +551,9 @@ export def "attribute-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --type: string@type-completer # Defines attribute's type
+  --type: string@type-completer # Defines attribute's type (required)
   --code: string # Entity code
-  --name: string # Defines attributes's name
+  --name: string # Defines attributes's name (required)
   --store-id: string # Store Id
   --lang-id: string # Language id
   --visible: oneof<nothing, bool> # Set visibility status (default: false)
@@ -573,6 +575,8 @@ export def "attribute-add" [
 ]: nothing -> record<result: record<id: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "visible" $visible "scalar") (serialize-qp "required" $required "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "attribute_group_id" $attribute_group_id "scalar") (serialize-qp "is_global" $is_global "scalar") (serialize-qp "is_searchable" $is_searchable "scalar") (serialize-qp "is_filterable" $is_filterable "scalar") (serialize-qp "is_comparable" $is_comparable "scalar") (serialize-qp "is_html_allowed_on_front" $is_html_allowed_on_front "scalar") (serialize-qp "is_filterable_in_search" $is_filterable_in_search "scalar") (serialize-qp "is_configurable" $is_configurable "scalar") (serialize-qp "is_visible_in_advanced_search" $is_visible_in_advanced_search "scalar") (serialize-qp "is_used_for_promo_rules" $is_used_for_promo_rules "scalar") (serialize-qp "used_in_product_listing" $used_in_product_listing "scalar") (serialize-qp "used_for_sort_by" $used_for_sort_by "scalar") (serialize-qp "apply_to" $apply_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.add.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -605,12 +609,14 @@ export def "attribute-assign-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Entity id
-  --group-id: string # Attribute group_id
+  --id: string # Entity id (required)
+  --group-id: string # Attribute group_id (required)
   --attribute-set-id: string # Attribute set id
 ]: nothing -> record<result: record<assigned: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($group_id == null) { error make --unspanned { msg: "required query parameter 'group_id' missing: pass --group-id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "attribute_set_id" $attribute_set_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.assign.group.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -643,12 +649,14 @@ export def "attribute-assign-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Entity id
+  --id: string # Entity id (required)
   --group-id: string # Attribute group_id
-  --attribute-set-id: string # Attribute set id
+  --attribute-set-id: string # Attribute set id (required)
 ]: nothing -> record<result: record<assigned: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($attribute_set_id == null) { error make --unspanned { msg: "required query parameter 'attribute_set_id' missing: pass --attribute-set-id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "attribute_set_id" $attribute_set_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.assign.set.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -763,10 +771,11 @@ export def "attribute-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # Store Id
-  --id: string # Entity id
+  --id: string # Entity id (required)
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.delete.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -841,7 +850,7 @@ export def "attribute-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Entity id
+  --id: string # Entity id (required)
   --store-id: string # Store Id
   --lang-id: string # Language id
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: force_all)
@@ -850,6 +859,7 @@ export def "attribute-info" [
 ]: nothing -> record<result: record<additional_fields: record, code: string, custom_fields: record, default_values: list<string>, id: string, lang_id: string, name: string, position: int, required: bool, store_id: string, system: bool, type: string, values: list<string>, visible: bool>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.info.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -963,11 +973,13 @@ export def "attribute-unassign-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Entity id
-  --group-id: string # Customer group_id
+  --id: string # Entity id (required)
+  --group-id: string # Customer group_id (required)
 ]: nothing -> record<result: record<unassigned: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($group_id == null) { error make --unspanned { msg: "required query parameter 'group_id' missing: pass --group-id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_id" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.unassign.group.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1000,11 +1012,13 @@ export def "attribute-unassign-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Entity id
-  --attribute-set-id: string # Attribute set id
+  --id: string # Entity id (required)
+  --attribute-set-id: string # Attribute set id (required)
 ]: nothing -> record<result: record<unassigned: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($attribute_set_id == null) { error make --unspanned { msg: "required query parameter 'attribute_set_id' missing: pass --attribute-set-id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "attribute_set_id" $attribute_set_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.unassign.set.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1037,13 +1051,15 @@ export def "attribute-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Entity id
-  --name: string # Defines new attributes's name
+  --id: string # Entity id (required)
+  --name: string # Defines new attributes's name (required)
   --store-id: string # Store Id
   --lang-id: string # Language id
 ]: nothing -> record<result: record<updated: bool>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.update.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1076,7 +1092,7 @@ export def "basket-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Entity id
+  --id: string # Entity id (required)
   --store-id: string # Store Id
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: force_all)
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
@@ -1084,6 +1100,7 @@ export def "basket-info" [
 ]: nothing -> record<result: record<additional_fields: record, basket_products: list<record>, basket_url: string, created_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, currency: record<additional_fields: record, avail: bool, custom_fields: record, default: bool, id: string, iso3: string, name: string, rate: float, symbol_left: string, symbol_right: string>, custom_fields: record, customer: record<additional_fields: record, custom_fields: record, email: string, first_name: string, id: string, last_name: string, phone: string>, id: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/basket.info.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1116,14 +1133,16 @@ export def "basket-item-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --customer-id: string # Retrieves orders specified by customer id
-  --product-id: string # Defines id of the product which should be added to the basket
+  --customer-id: string # Retrieves orders specified by customer id (required)
+  --product-id: string # Defines id of the product which should be added to the basket (required)
   --variant-id: string # Defines product's variants specified by variant id
   --quantity: float # Defines new items quantity (default: 0)
   --store-id: string # Store Id
 ]: nothing -> record<result: record<added: bool>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id == null) { error make --unspanned { msg: "required query parameter 'customer_id' missing: pass --customer-id" } }
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
   let qp = [(serialize-qp "customer_id" $customer_id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "variant_id" $variant_id "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/basket.item.add.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1157,11 +1176,13 @@ export def "basket-live-shipping-service-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # Store Id
-  --name: string # Shipping Service Name
-  --callback: string # Callback url that returns shipping rates. It should be able to accept POST requests with json data.
+  --name: string # Shipping Service Name (required)
+  --callback: string # Callback url that returns shipping rates. It should be able to accept POST requests with json data. (required)
 ]: nothing -> record<result: record<id: int>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
+  if ($callback == null) { error make --unspanned { msg: "required query parameter 'callback' missing: pass --callback" } }
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/basket.live_shipping_service.create.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1194,10 +1215,11 @@ export def "basket-live-shipping-service-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: int # Entity id
+  --id: int # Entity id (required)
 ]: nothing -> record<result: record<status: bool>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/basket.live_shipping_service.delete.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1482,10 +1504,11 @@ export def "cart-clear-cache" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cache-type: string # Defines which cache should be cleared.
+  --cache-type: string # Defines which cache should be cleared. (required)
 ]: nothing -> record<result: record<cache_cleared: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($cache_type == null) { error make --unspanned { msg: "required query parameter 'cache_type' missing: pass --cache-type" } }
   let qp = [(serialize-qp "cache_type" $cache_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.clear_cache.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1651,15 +1674,20 @@ export def "cart-coupon-condition-add" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # Store Id
-  --coupon-id: string # Coupon Id
+  --coupon-id: string # Coupon Id (required)
   --target: string # Defines condition operator (default: coupon_prerequisite)
-  --entity: string@entity-completer # Defines condition entity type
-  --key: string@key-completer # Defines condition entity attribute key
-  --operator: string@operator-completer # Defines condition operator
-  --value: string # Defines condition value, can be comma separated according to the operator.
+  --entity: string@entity-completer # Defines condition entity type (required)
+  --key: string@key-completer # Defines condition entity attribute key (required)
+  --operator: string@operator-completer # Defines condition operator (required)
+  --value: string # Defines condition value, can be comma separated according to the operator. (required)
 ]: nothing -> record<result: record<status: bool>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($coupon_id == null) { error make --unspanned { msg: "required query parameter 'coupon_id' missing: pass --coupon-id" } }
+  if ($entity == null) { error make --unspanned { msg: "required query parameter 'entity' missing: pass --entity" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
+  if ($operator == null) { error make --unspanned { msg: "required query parameter 'operator' missing: pass --operator" } }
+  if ($value == null) { error make --unspanned { msg: "required query parameter 'value' missing: pass --value" } }
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "coupon_id" $coupon_id "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "operator" $operator "scalar") (serialize-qp "value" $value "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.coupon.condition.add.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1733,11 +1761,12 @@ export def "cart-coupon-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Entity id
+  --id: string # Entity id (required)
   --store-id: string # Store Id
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.coupon.delete.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1821,8 +1850,8 @@ export def "cart-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cart-id: string@cart-id-completer # Store’s identifier which you can get from cart_list method
-  --store-url: string # A web address of a store that you would like to connect to API2Cart
+  --cart-id: string@cart-id-completer # Store’s identifier which you can get from cart_list method (required)
+  --store-url: string # A web address of a store that you would like to connect to API2Cart (required)
   --bridge-url: string # This parameter allows to set up store with custom bridge url (also you must use store_root parameter if a bridge folder is not in the root folder of the store)
   --store-root: string # Absolute path to the store root directory (used with "bridge_url" parameter)
   --store-key: string # Set this parameter if bridge is already uploaded to store
@@ -1860,8 +1889,8 @@ export def "cart-create" [
   --etsy-keystring: string # Etsy keystring
   --etsy-shared-secret: string # Etsy shared secret
   --token-secret: string # Secret token authorizing the app to access resources on behalf of a user
-  --etsy-client-id: string # Etsy Client Id
-  --etsy-refresh-token: string # Etsy Refresh token
+  --etsy-client-id: string # Etsy Client Id (required)
+  --etsy-refresh-token: string # Etsy Refresh token (required)
   --ebay-client-id: string # Application ID (AppID).
   --ebay-client-secret: string # Shared Secret from eBay application
   --ebay-runame: string # The RuName value that eBay assigns to your application.
@@ -1873,7 +1902,7 @@ export def "cart-create" [
   --dw-api-pass: string # Demandware api password
   --demandware-user-name: string # Demandware user name
   --demandware-user-password: string # Demandware user password
-  --store-id: string # Store Id
+  --store-id: string # Store Id (required)
   --seller-id: string # Seller Id
   --amazon-secret-key: string # Amazon Secret Key
   --amazon-access-key-id: string # Amazon Secret Key Id
@@ -1918,6 +1947,11 @@ export def "cart-create" [
 ]: nothing -> record<result: record<store_key: string>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($cart_id == null) { error make --unspanned { msg: "required query parameter 'cart_id' missing: pass --cart-id" } }
+  if ($store_url == null) { error make --unspanned { msg: "required query parameter 'store_url' missing: pass --store-url" } }
+  if ($etsy_client_id == null) { error make --unspanned { msg: "required query parameter 'etsy_client_id' missing: pass --etsy-client-id" } }
+  if ($etsy_refresh_token == null) { error make --unspanned { msg: "required query parameter 'etsy_refresh_token' missing: pass --etsy-refresh-token" } }
+  if ($store_id == null) { error make --unspanned { msg: "required query parameter 'store_id' missing: pass --store-id" } }
   let qp = [(serialize-qp "cart_id" $cart_id "scalar") (serialize-qp "store_url" $store_url "scalar") (serialize-qp "bridge_url" $bridge_url "scalar") (serialize-qp "store_root" $store_root "scalar") (serialize-qp "store_key" $store_key "scalar") (serialize-qp "shared_secret" $shared_secret "scalar") (serialize-qp "validate_version" $validate_version "scalar") (serialize-qp "verify" $verify "scalar") (serialize-qp "db_tables_prefix" $db_tables_prefix "scalar") (serialize-qp "ftp_host" $ftp_host "scalar") (serialize-qp "ftp_user" $ftp_user "scalar") (serialize-qp "ftp_password" $ftp_password "scalar") (serialize-qp "ftp_port" $ftp_port "scalar") (serialize-qp "ftp_store_dir" $ftp_store_dir "scalar") (serialize-qp "apiKey_3dcart" $api_key_3dcart "scalar") (serialize-qp "AdminAccount" $admin_account "scalar") (serialize-qp "ApiPath" $api_path "scalar") (serialize-qp "ApiKey" $api_key "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "accessToken" $access_token "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "access_token" $access_token_2 "scalar") (serialize-qp "apiKey_shopify" $api_key_shopify "scalar") (serialize-qp "apiPassword" $api_password "scalar") (serialize-qp "accessToken_shopify" $access_token_shopify "scalar") (serialize-qp "apiKey" $api_key_2 "scalar") (serialize-qp "apiUsername" $api_username "scalar") (serialize-qp "EncryptedPassword" $encrypted_password "scalar") (serialize-qp "Login" $login "scalar") (serialize-qp "apiUser_adnsf" $api_user_adnsf "scalar") (serialize-qp "apiPass" $api_pass "scalar") (serialize-qp "accessKey_scelite" $access_key_scelite "scalar") (serialize-qp "apiKey_scelite" $api_key_scelite "scalar") (serialize-qp "apiSecretKey_scelite" $api_secret_key_scelite "scalar") (serialize-qp "privateKey" $private_key "scalar") (serialize-qp "appToken" $app_token "scalar") (serialize-qp "etsy_keystring" $etsy_keystring "scalar") (serialize-qp "etsy_shared_secret" $etsy_shared_secret "scalar") (serialize-qp "tokenSecret" $token_secret "scalar") (serialize-qp "etsy_client_id" $etsy_client_id "scalar") (serialize-qp "etsy_refresh_token" $etsy_refresh_token "scalar") (serialize-qp "ebay_client_id" $ebay_client_id "scalar") (serialize-qp "ebay_client_secret" $ebay_client_secret "scalar") (serialize-qp "ebay_runame" $ebay_runame "scalar") (serialize-qp "ebay_access_token" $ebay_access_token "scalar") (serialize-qp "ebay_refresh_token" $ebay_refresh_token "scalar") (serialize-qp "ebay_environment" $ebay_environment "scalar") (serialize-qp "ebay_site_id" $ebay_site_id "scalar") (serialize-qp "dw_client_id" $dw_client_id "scalar") (serialize-qp "dw_api_pass" $dw_api_pass "scalar") (serialize-qp "demandware_user_name" $demandware_user_name "scalar") (serialize-qp "demandware_user_password" $demandware_user_password "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "seller_id" $seller_id "scalar") (serialize-qp "amazon_secret_key" $amazon_secret_key "scalar") (serialize-qp "amazon_access_key_id" $amazon_access_key_id "scalar") (serialize-qp "marketplaces_ids" $marketplaces_ids "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "hybris_client_id" $hybris_client_id "scalar") (serialize-qp "hybris_client_secret" $hybris_client_secret "scalar") (serialize-qp "hybris_username" $hybris_username "scalar") (serialize-qp "hybris_password" $hybris_password "scalar") (serialize-qp "hybris_websites" $hybris_websites "csv") (serialize-qp "walmart_client_id" $walmart_client_id "scalar") (serialize-qp "walmart_client_secret" $walmart_client_secret "scalar") (serialize-qp "walmart_environment" $walmart_environment "scalar") (serialize-qp "walmart_channel_type" $walmart_channel_type "scalar") (serialize-qp "lightspeed_api_key" $lightspeed_api_key "scalar") (serialize-qp "lightspeed_api_secret" $lightspeed_api_secret "scalar") (serialize-qp "shopware_access_key" $shopware_access_key "scalar") (serialize-qp "shopware_api_key" $shopware_api_key "scalar") (serialize-qp "shopware_api_secret" $shopware_api_secret "scalar") (serialize-qp "commercehq_api_key" $commercehq_api_key "scalar") (serialize-qp "commercehq_api_password" $commercehq_api_password "scalar") (serialize-qp "3dcart_private_key" $3dcart_private_key "scalar") (serialize-qp "3dcart_access_token" $3dcart_access_token "scalar") (serialize-qp "wc_consumer_key" $wc_consumer_key "scalar") (serialize-qp "wc_consumer_secret" $wc_consumer_secret "scalar") (serialize-qp "magento_consumer_key" $magento_consumer_key "scalar") (serialize-qp "magento_consumer_secret" $magento_consumer_secret "scalar") (serialize-qp "magento_access_token" $magento_access_token "scalar") (serialize-qp "magento_token_secret" $magento_token_secret "scalar") (serialize-qp "prestashop_webservice_key" $prestashop_webservice_key "scalar") (serialize-qp "wix_app_id" $wix_app_id "scalar") (serialize-qp "wix_app_secret_key" $wix_app_secret_key "scalar") (serialize-qp "wix_refresh_token" $wix_refresh_token "scalar") (serialize-qp "mercado_libre_app_id" $mercado_libre_app_id "scalar") (serialize-qp "mercado_libre_app_secret_key" $mercado_libre_app_secret_key "scalar") (serialize-qp "mercado_libre_refresh_token" $mercado_libre_refresh_token "scalar") (serialize-qp "zid_client_id" $zid_client_id "scalar") (serialize-qp "zid_client_secret" $zid_client_secret "scalar") (serialize-qp "zid_access_token" $zid_access_token "scalar") (serialize-qp "zid_authorization" $zid_authorization "scalar") (serialize-qp "zid_refresh_token" $zid_refresh_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.create.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2024,13 +2058,14 @@ export def "cart-giftcard-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --amount: float # Defines the gift card amount value.
+  --amount: float # Defines the gift card amount value. (required)
   --code: string # Gift card code
   --owner-email: string # Gift card owner email
   --recipient-email: string # Gift card recipient email
 ]: nothing -> record<result: record<code: string, id: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($amount == null) { error make --unspanned { msg: "required query parameter 'amount' missing: pass --amount" } }
   let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "owner_email" $owner_email "scalar") (serialize-qp "recipient_email" $recipient_email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.giftcard.add.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2216,7 +2251,7 @@ export def "cart-meta-data-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --entity-id: string # Entity Id
+  --entity-id: string # Entity Id (required)
   --entity: string # Entity (default: product)
   --store-id: string # Store Id
   --key: string # Key
@@ -2228,6 +2263,7 @@ export def "cart-meta-data-list" [
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, items: list<record>, total_count: int>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($entity_id == null) { error make --unspanned { msg: "required query parameter 'entity_id' missing: pass --entity-id" } }
   let qp = [(serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.meta_data.list.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2260,15 +2296,19 @@ export def "cart-meta-data-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --entity-id: string # Entity Id
+  --entity-id: string # Entity Id (required)
   --entity: string # Entity (default: product)
   --store-id: string # Store Id
-  --key: string # Key
-  --value: string # Value
-  --namespace: string # Metafield namespace
+  --key: string # Key (required)
+  --value: string # Value (required)
+  --namespace: string # Metafield namespace (required)
 ]: nothing -> record<result: record<id: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($entity_id == null) { error make --unspanned { msg: "required query parameter 'entity_id' missing: pass --entity-id" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
+  if ($value == null) { error make --unspanned { msg: "required query parameter 'value' missing: pass --value" } }
+  if ($namespace == null) { error make --unspanned { msg: "required query parameter 'namespace' missing: pass --namespace" } }
   let qp = [(serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "namespace" $namespace "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.meta_data.set.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2301,14 +2341,17 @@ export def "cart-meta-data-unset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --entity-id: string # Entity Id
+  --entity-id: string # Entity Id (required)
   --entity: string # Entity (default: product)
   --store-id: string # Store Id
-  --key: string # Key
-  --id: string # Entity id
+  --key: string # Key (required)
+  --id: string # Entity id (required)
 ]: nothing -> record<result: record<status: bool>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($entity_id == null) { error make --unspanned { msg: "required query parameter 'entity_id' missing: pass --entity-id" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.meta_data.unset.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2456,11 +2499,12 @@ export def "cart-script-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Entity id
+  --id: string # Entity id (required)
   --store-id: string # Store Id
 ]: nothing -> record<result: record<deleted: bool>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.script.delete.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2617,7 +2661,7 @@ export def "category-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # Defines category's name that has to be added
+  --name: string # Defines category's name that has to be added (required)
   --parent-id: string # Adds categories specified by parent id
   --stores-ids: string # Create category in the stores that is specified by comma-separated stores' id (default: 0)
   --store-id: string # Store Id
@@ -2634,6 +2678,7 @@ export def "category-add" [
 ]: nothing -> record<result: record<category_id: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "stores_ids" $stores_ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "avail" $avail "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "created_time" $created_time "scalar") (serialize-qp "modified_time" $modified_time "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "meta_title" $meta_title "scalar") (serialize-qp "meta_description" $meta_description "scalar") (serialize-qp "meta_keywords" $meta_keywords "scalar") (serialize-qp "seo_url" $seo_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.add.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2666,12 +2711,14 @@ export def "category-assign" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-id: string # Defines category assign to the product, specified by product id
-  --category-id: string # Defines category assign, specified by category id
+  --product-id: string # Defines category assign to the product, specified by product id (required)
+  --category-id: string # Defines category assign, specified by category id (required)
   --store-id: string # Store Id
 ]: nothing -> record<result: record, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
+  if ($category_id == null) { error make --unspanned { msg: "required query parameter 'category_id' missing: pass --category-id" } }
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.assign.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2747,10 +2794,11 @@ export def "category-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Defines category removal, specified by category id
+  --id: string # Defines category removal, specified by category id (required)
 ]: nothing -> record<result: record<deleted: bool>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.delete.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2783,7 +2831,7 @@ export def "category-find" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --find-value: string # Entity search that is specified by some value
+  --find-value: string # Entity search that is specified by some value (required)
   --find-where: string # Entity search that is specified by the comma-separated unique fields (default: name)
   --find-params: string # Entity search that is specified by comma-separated parameters (default: whole_words)
   --store-id: string # Store Id
@@ -2791,6 +2839,7 @@ export def "category-find" [
 ]: nothing -> record<result: record<category: list<record>>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($find_value == null) { error make --unspanned { msg: "required query parameter 'find_value' missing: pass --find-value" } }
   let qp = [(serialize-qp "find_value" $find_value "scalar") (serialize-qp "find_where" $find_where "scalar") (serialize-qp "find_params" $find_params "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.find.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2823,17 +2872,21 @@ export def "category-image-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --category-id: string # Defines category id where the image should be added
-  --image-name: string # Defines image's name
-  --url: string # Defines URL of the image that has to be added
+  --category-id: string # Defines category id where the image should be added (required)
+  --image-name: string # Defines image's name (required)
+  --url: string # Defines URL of the image that has to be added (required)
   --label: string # Defines alternative text that has to be attached to the picture
   --mime: string # Mime type of image http://en.wikipedia.org/wiki/Internet_media_type.
-  --type: string@type-completer-1 # Defines image's types that are specified by comma-separated list
+  --type: string@type-completer-1 # Defines image's types that are specified by comma-separated list (required)
   --position: int # Defines image’s position in the list (default: 0)
   --store-id: string # Store Id
 ]: nothing -> record<result: record<image_path: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($category_id == null) { error make --unspanned { msg: "required query parameter 'category_id' missing: pass --category-id" } }
+  if ($image_name == null) { error make --unspanned { msg: "required query parameter 'image_name' missing: pass --image-name" } }
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
   let qp = [(serialize-qp "category_id" $category_id "scalar") (serialize-qp "image_name" $image_name "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "mime" $mime "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.image.add.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2866,12 +2919,14 @@ export def "category-image-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --category-id: string # Defines category id where the image should be deleted
-  --image-id: string # Define image id
+  --category-id: string # Defines category id where the image should be deleted (required)
+  --image-id: string # Define image id (required)
   --store-id: string # Store Id
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($category_id == null) { error make --unspanned { msg: "required query parameter 'category_id' missing: pass --category-id" } }
+  if ($image_id == null) { error make --unspanned { msg: "required query parameter 'image_id' missing: pass --image-id" } }
   let qp = [(serialize-qp "category_id" $category_id "scalar") (serialize-qp "image_id" $image_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.image.delete.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2904,7 +2959,7 @@ export def "category-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Retrieves category's info specified by category id
+  --id: string # Retrieves category's info specified by category id (required)
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,parent_id,name,description)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
@@ -2913,6 +2968,7 @@ export def "category-info" [
 ]: nothing -> record<result: record<additional_fields: record, avail: bool, created_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, description: string, id: string, images: list<record>, keywords: string, meta_description: string, meta_title: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, name: string, parent_id: string, path: string, seo_url: string, short_description: string, sort_order: int, stores_ids: list<string>>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.info.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2994,12 +3050,14 @@ export def "category-unassign" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --category-id: string # Defines category unassign, specified by category id
-  --product-id: string # Defines category unassign to the product, specified by product id
+  --category-id: string # Defines category unassign, specified by category id (required)
+  --product-id: string # Defines category unassign to the product, specified by product id (required)
   --store-id: string # Store Id
 ]: nothing -> record<result: record, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($category_id == null) { error make --unspanned { msg: "required query parameter 'category_id' missing: pass --category-id" } }
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
   let qp = [(serialize-qp "category_id" $category_id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.unassign.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -3032,7 +3090,7 @@ export def "category-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Defines category update specified by category id
+  --id: string # Defines category update specified by category id (required)
   --name: string # Defines new category’s name
   --parent-id: string # Defines new parent category id
   --stores-ids: string # Update category in the stores that is specified by comma-separated stores' id (default: 0)
@@ -3049,6 +3107,7 @@ export def "category-update" [
 ]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "stores_ids" $stores_ids "scalar") (serialize-qp "avail" $avail "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "modified_time" $modified_time "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "meta_title" $meta_title "scalar") (serialize-qp "meta_description" $meta_description "scalar") (serialize-qp "meta_keywords" $meta_keywords "scalar") (serialize-qp "seo_url" $seo_url "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.update.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -3140,7 +3199,7 @@ export def "customer-attribute-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
   --page-cursor: string # Used to retrieve entities via cursor-based pagination (it can't be used with any other filtering parameter)
-  --customer-id: string # Retrieves orders specified by customer id
+  --customer-id: string # Retrieves orders specified by customer id (required)
   --store-id: string # Store Id
   --lang-id: string # Language id
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: force_all)
@@ -3149,6 +3208,7 @@ export def "customer-attribute-list" [
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, items: list<record>, total_count: int>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id == null) { error make --unspanned { msg: "required query parameter 'customer_id' missing: pass --customer-id" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "customer_id" $customer_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.attribute.list.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -3224,13 +3284,14 @@ export def "customer-find" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --find-value: string # Entity search that is specified by some value
+  --find-value: string # Entity search that is specified by some value (required)
   --find-where: string # Entity search that is specified by the comma-separated unique fields (default: email)
   --find-params: string # Entity search that is specified by comma-separated parameters (default: whole_words)
   --store-id: string # Store Id
 ]: nothing -> record<result: record<email: string, first_name: string, id: string, last_name: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($find_value == null) { error make --unspanned { msg: "required query parameter 'find_value' missing: pass --find-value" } }
   let qp = [(serialize-qp "find_value" $find_value "scalar") (serialize-qp "find_where" $find_where "scalar") (serialize-qp "find_params" $find_params "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.find.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -3263,12 +3324,13 @@ export def "customer-group-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # Customer group name
+  --name: string # Customer group name (required)
   --store-id: string # Store Id
   --stores-ids: string # Assign customer group to the stores that is specified by comma-separated stores' id
 ]: nothing -> record<result: record, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "stores_ids" $stores_ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.group.add.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -3345,7 +3407,7 @@ export def "customer-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Retrieves customer's info specified by customer id
+  --id: string # Retrieves customer's info specified by customer id (required)
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,email,first_name,last_name)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
@@ -3353,6 +3415,7 @@ export def "customer-info" [
 ]: nothing -> record<result: record<additional_fields: record, address_book: list<record>, birth_day: record<additional_fields: record, custom_fields: record, format: string, value: string>, company: string, created_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, email: string, fax: string, first_name: string, gender: string, group: list<record>, id: string, ip_address: string, last_login: record<additional_fields: record, custom_fields: record, format: string, value: string>, last_name: string, last_order_id: string, login: string, modified_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, news_letter_subscription: bool, orders_count: int, phone: string, status: string, stores_ids: list<string>, website: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.info.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -3434,7 +3497,7 @@ export def "customer-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Entity id
+  --id: string # Entity id (required)
   --group-id: string # Customer group_id
   --group-ids: string # Groups that will be assigned to a customer
   --first-name: string # Defines customer's first name
@@ -3455,6 +3518,7 @@ export def "customer-update" [
 ]: nothing -> record<result: record<updated: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group_ids" $group_ids "scalar") (serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "news_letter_subscription" $news_letter_subscription "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "address_book_id_{x}" $address_book_id_x "scalar") (serialize-qp "address_book_first_name_{x}" $address_book_first_name_x "scalar") (serialize-qp "address_book_last_name_{x}" $address_book_last_name_x "scalar") (serialize-qp "address_book_company_{x}" $address_book_company_x "scalar") (serialize-qp "address_book_phone_{x}" $address_book_phone_x "scalar") (serialize-qp "address_book_address1_{x}" $address_book_address1_x "scalar") (serialize-qp "address_book_address2_{x}" $address_book_address2_x "scalar") (serialize-qp "address_book_city_{x}" $address_book_city_x "scalar") (serialize-qp "address_book_country_{x}" $address_book_country_x "scalar") (serialize-qp "address_book_state_{x}" $address_book_state_x "scalar") (serialize-qp "address_book_postcode_{x}" $address_book_postcode_x "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.update.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -4069,12 +4133,14 @@ export def "order-shipment-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --shipment-id: string # Shipment id indicates the number of delivery
-  --order-id: string # Defines the order for which the shipment will be deleted
+  --shipment-id: string # Shipment id indicates the number of delivery (required)
+  --order-id: string # Defines the order for which the shipment will be deleted (required)
   --store-id: string # Store Id
 ]: nothing -> record<result: record<status: int>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($shipment_id == null) { error make --unspanned { msg: "required query parameter 'shipment_id' missing: pass --shipment-id" } }
+  if ($order_id == null) { error make --unspanned { msg: "required query parameter 'order_id' missing: pass --order-id" } }
   let qp = [(serialize-qp "shipment_id" $shipment_id "scalar") (serialize-qp "order_id" $order_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.shipment.delete.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -4107,8 +4173,8 @@ export def "order-shipment-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Entity id
-  --order-id: string # Defines the order id
+  --id: string # Entity id (required)
+  --order-id: string # Defines the order id (required)
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,order_id,items,tracking_numbers)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
@@ -4117,6 +4183,8 @@ export def "order-shipment-info" [
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, shipment: list<record>, shipment_count: int>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($order_id == null) { error make --unspanned { msg: "required query parameter 'order_id' missing: pass --order-id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "order_id" $order_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.shipment.info.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -4149,7 +4217,7 @@ export def "order-shipment-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --order-id: string # Retrieves shipments specified by order id
+  --order-id: string # Retrieves shipments specified by order id (required)
   --page-cursor: string # Used to retrieve entities via cursor-based pagination (it can't be used with any other filtering parameter)
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
@@ -4164,6 +4232,7 @@ export def "order-shipment-list" [
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, shipment: list<record>, shipment_count: int>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($order_id == null) { error make --unspanned { msg: "required query parameter 'order_id' missing: pass --order-id" } }
   let qp = [(serialize-qp "order_id" $order_id "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.shipment.list.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -4323,7 +4392,7 @@ export def "order-transaction-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
-  --order-ids: string # Retrieves order transactions specified by order ids
+  --order-ids: string # Retrieves order transactions specified by order ids (required)
   --store-id: string # Store Id
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,order_id,amount,description)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
@@ -4332,6 +4401,7 @@ export def "order-transaction-list" [
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, transactions: list<record>, transactions_count: int>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($order_ids == null) { error make --unspanned { msg: "required query parameter 'order_ids' missing: pass --order-ids" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "order_ids" $order_ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "page_cursor" $page_cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.transaction.list.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -4364,7 +4434,7 @@ export def "order-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --order-id: string # Defines the orders specified by order id
+  --order-id: string # Defines the orders specified by order id (required)
   --store-id: string # Defines store id where the order should be found
   --order-status: string # Defines new order's status
   --comment: string # Specifies order comment
@@ -4379,6 +4449,7 @@ export def "order-update" [
 ]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($order_id == null) { error make --unspanned { msg: "required query parameter 'order_id' missing: pass --order-id" } }
   let qp = [(serialize-qp "order_id" $order_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "order_status" $order_status "scalar") (serialize-qp "comment" $comment "scalar") (serialize-qp "admin_comment" $admin_comment "scalar") (serialize-qp "admin_private_comment" $admin_private_comment "scalar") (serialize-qp "date_modified" $date_modified "scalar") (serialize-qp "date_finished" $date_finished "scalar") (serialize-qp "financial_status" $financial_status "scalar") (serialize-qp "fulfillment_status" $fulfillment_status "scalar") (serialize-qp "order_payment_method" $order_payment_method "scalar") (serialize-qp "send_notifications" $send_notifications "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.update.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -4532,7 +4603,7 @@ export def "product-attribute-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-id: string # Retrieves attributes specified by product id
+  --product-id: string # Retrieves attributes specified by product id (required)
   --attribute-id: string # Retrieves info for specified attribute_id
   --variant-id: string # Defines product's variants specified by variant id
   --page-cursor: string # Used to retrieve entities via cursor-based pagination (it can't be used with any other filtering parameter)
@@ -4550,6 +4621,7 @@ export def "product-attribute-list" [
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, attribute: list<record>, custom_fields: record>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "attribute_id" $attribute_id "scalar") (serialize-qp "variant_id" $variant_id "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "attribute_group_id" $attribute_group_id "scalar") (serialize-qp "set_name" $set_name "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.attribute.list.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -4582,7 +4654,7 @@ export def "product-attribute-value-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-id: string # Defines product id where the attribute should be added
+  --product-id: string # Defines product id where the attribute should be added (required)
   --attribute-id: string # Filter by attribute_id
   --attribute-group-id: string # Filter by attribute_group_id
   --attribute-name: string # Define attribute name
@@ -4593,6 +4665,7 @@ export def "product-attribute-value-set" [
 ]: nothing -> record<result: record<attribute_id: string, product_id: string, value_id: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "attribute_id" $attribute_id "scalar") (serialize-qp "attribute_group_id" $attribute_group_id "scalar") (serialize-qp "attribute_name" $attribute_name "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "value_id" $value_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.attribute.value.set.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -4625,8 +4698,8 @@ export def "product-attribute-value-unset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-id: string # Product id
-  --attribute-id: string # Attribute Id
+  --product-id: string # Product id (required)
+  --attribute-id: string # Attribute Id (required)
   --store-id: string # Store Id
   --include-default: oneof<nothing, bool> # Boolean, whether or not to unset default value of the attribute, if applicable (default: false)
   --reindex: oneof<nothing, bool> # Is reindex required (default: true)
@@ -4634,6 +4707,8 @@ export def "product-attribute-value-unset" [
 ]: nothing -> record<result: record<success: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
+  if ($attribute_id == null) { error make --unspanned { msg: "required query parameter 'attribute_id' missing: pass --attribute-id" } }
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "attribute_id" $attribute_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "include_default" $include_default "scalar") (serialize-qp "reindex" $reindex "scalar") (serialize-qp "clear_cache" $clear_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.attribute.value.unset.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -4713,13 +4788,14 @@ export def "product-child-item-find" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --find-value: string # Entity search that is specified by some value
+  --find-value: string # Entity search that is specified by some value (required)
   --find-where: string # Entity search that is specified by the comma-separated unique fields (default: name)
   --find-params: string # Entity search that is specified by comma-separated parameters (default: whole_words)
   --store-id: string # Store Id
 ]: nothing -> record<result: record<children: list<record>>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($find_value == null) { error make --unspanned { msg: "required query parameter 'find_value' missing: pass --find-value" } }
   let qp = [(serialize-qp "find_value" $find_value "scalar") (serialize-qp "find_where" $find_where "scalar") (serialize-qp "find_params" $find_params "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.child_item.find.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -4755,14 +4831,16 @@ export def "product-child-item-info" [
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: force_all)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
-  --product-id: string # Filter by parent product id
-  --id: string # Entity id
+  --product-id: string # Filter by parent product id (required)
+  --id: string # Entity id (required)
   --store-id: string # Store Id
   --lang-id: string # Language id
   --currency-id: string # Currency Id
 ]: nothing -> record<result: record<additional_fields: record, advanced_price: list<record>, allow_backorders: bool, avail_for_sale: bool, combination: list<record>, cost_price: float, created_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, default_price: float, default_qty_in_pack: float, dimensions_unit: string, ean: string, full_description: string, gtin: string, height: float, id: string, images: list<record>, in_stock: bool, inventory: list<record>, inventory_level: float, is_qty_in_pack_fixed: bool, isbn: string, length: float, list_price: float, manage_stock: bool, meta_description: string, meta_keywords: string, meta_title: string, min_quantity: float, modified_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, mpn: string, name: string, parent_id: string, short_description: string, sku: string, sort_order: int, tax_class_id: string, upc: string, weight: float, weight_unit: string, wholesale_price: float, width: float>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "currency_id" $currency_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.child_item.info.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -4899,8 +4977,8 @@ export def "product-currency-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --iso3: string # Specifies standardized currency code
-  --rate: float # Defines the numerical identifier against to the major currency
+  --iso3: string # Specifies standardized currency code (required)
+  --rate: float # Defines the numerical identifier against to the major currency (required)
   --name: string # Defines currency's name
   --avail: oneof<nothing, bool> # Specifies whether the currency is available (default: true)
   --symbol-left: string # Defines the symbol that is located before the currency
@@ -4909,6 +4987,8 @@ export def "product-currency-add" [
 ]: nothing -> record<result: record<currency_id: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($iso3 == null) { error make --unspanned { msg: "required query parameter 'iso3' missing: pass --iso3" } }
+  if ($rate == null) { error make --unspanned { msg: "required query parameter 'rate' missing: pass --rate" } }
   let qp = [(serialize-qp "iso3" $iso3 "scalar") (serialize-qp "rate" $rate "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "avail" $avail "scalar") (serialize-qp "symbol_left" $symbol_left "scalar") (serialize-qp "symbol_right" $symbol_right "scalar") (serialize-qp "default" $default "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.currency.add.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -4984,10 +5064,11 @@ export def "product-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Product id that will be removed
+  --id: string # Product id that will be removed (required)
 ]: nothing -> record<result: record<delete_items: int>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.delete.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5054,7 +5135,7 @@ export def "product-find" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --find-value: string # Entity search that is specified by some value
+  --find-value: string # Entity search that is specified by some value (required)
   --find-where: string # Entity search that is specified by the comma-separated unique fields (default: name)
   --find-params: string # Entity search that is specified by comma-separated parameters (default: whole_words)
   --find-what: string # Parameter's value specifies the entity that has to be found (default: product)
@@ -5063,6 +5144,7 @@ export def "product-find" [
 ]: nothing -> record<result: record<product: list<record>>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($find_value == null) { error make --unspanned { msg: "required query parameter 'find_value' missing: pass --find-value" } }
   let qp = [(serialize-qp "find_value" $find_value "scalar") (serialize-qp "find_where" $find_where "scalar") (serialize-qp "find_params" $find_params "scalar") (serialize-qp "find_what" $find_what "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.find.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5144,12 +5226,14 @@ export def "product-image-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-id: string # Defines product id where the image should be deleted
-  --id: string # Entity id
+  --product-id: string # Defines product id where the image should be deleted (required)
+  --id: string # Entity id (required)
   --store-id: string # Store Id
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.image.delete.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5182,18 +5266,20 @@ export def "product-image-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-id: string # Defines product id where the image should be updated
+  --product-id: string # Defines product id where the image should be updated (required)
   --image-name: string # Defines image's name
   --type: string # Defines image's types that are specified by comma-separated list (default: additional)
   --label: string # Defines alternative text that has to be attached to the picture
   --position: int # Defines image’s position in the list
-  --id: string # Defines image update specified by image id
+  --id: string # Defines image update specified by image id (required)
   --store-id: string # Store Id
   --lang-id: string # Language id
   --hidden: oneof<nothing, bool> # Define is hide image
 ]: nothing -> record<result: record<updated: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "image_name" $image_name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "hidden" $hidden "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.image.update.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5226,7 +5312,7 @@ export def "product-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Retrieves product's info specified by product id
+  --id: string # Retrieves product's info specified by product id (required)
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,name,description,price,categories_ids)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
@@ -5238,6 +5324,7 @@ export def "product-info" [
 ]: nothing -> record<result: record<additional_fields: record, advanced_price: list<record>, avail_sale: bool, avail_view: bool, backorders: string, categories_ids: list<string>, cost_price: float, create_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, description: string, dimensions_unit: string, group_items: list<record>, group_price: list<record>, height: float, id: string, images: list<record>, inventory: list<record>, is_downloadable: bool, is_stock_managed: bool, is_virtual: bool, length: float, manage_stock: string, meta_description: string, meta_keywords: string, meta_title: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, name: string, price: float, product_options: list<record>, quantity: float, related_products_ids: list<string>, seo_url: string, short_description: string, sort_order: int, special_price: record<additional_fields: record, avail: bool, created_at: record, custom_fields: record, expired_at: record, modified_at: record, value: float>, stores_ids: list<string>, tax_class_id: string, tier_price: list<record>, type: string, u_brand: string, u_brand_id: string, u_model: string, u_mpn: string, u_sku: string, u_upc: string, url: string, weight: float, weight_unit: string, width: float>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "currency_id" $currency_id "scalar") (serialize-qp "report_request_id" $report_request_id "scalar") (serialize-qp "disable_report_cache" $disable_report_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.info.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5333,11 +5420,13 @@ export def "product-manufacturer-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-id: string # Defines products specified by product id
-  --manufacturer: string # Defines product’s manufacturer's name
+  --product-id: string # Defines products specified by product id (required)
+  --manufacturer: string # Defines product’s manufacturer's name (required)
 ]: nothing -> record<result: record<manufacturer_id: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
+  if ($manufacturer == null) { error make --unspanned { msg: "required query parameter 'manufacturer' missing: pass --manufacturer" } }
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "manufacturer" $manufacturer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.manufacturer.add.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5370,8 +5459,8 @@ export def "product-option-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # Defines option's name
-  --type: string@type-completer-3 # Defines option's type that has to be added
+  --name: string # Defines option's name (required)
+  --type: string@type-completer-3 # Defines option's type that has to be added (required)
   --product-id: string # Defines product id where the option should be added
   --default-option-value: string # Defines default option value that has to be added
   --option-values: string # Defines option values that has to be added
@@ -5383,6 +5472,8 @@ export def "product-option-add" [
 ]: nothing -> record<result: record<option_id: string, product_option_id: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "default_option_value" $default_option_value "scalar") (serialize-qp "option_values" $option_values "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "avail" $avail "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "required" $required "scalar") (serialize-qp "clear_cache" $clear_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.option.add.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5415,8 +5506,8 @@ export def "product-option-assign" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-id: string # Defines product id where the option should be assigned
-  --option-id: string # Defines option id which has to be assigned
+  --product-id: string # Defines product id where the option should be assigned (required)
+  --option-id: string # Defines option id which has to be assigned (required)
   --required: oneof<nothing, bool> # Defines if the option is required (default: false)
   --sort-order: int # Sort number in the list (default: 0)
   --option-values: string # Defines option values that has to be assigned
@@ -5424,6 +5515,8 @@ export def "product-option-assign" [
 ]: nothing -> record<result: record<product_option_id: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
+  if ($option_id == null) { error make --unspanned { msg: "required query parameter 'option_id' missing: pass --option-id" } }
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "option_id" $option_id "scalar") (serialize-qp "required" $required "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "option_values" $option_values "scalar") (serialize-qp "clear_cache" $clear_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.option.assign.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5499,14 +5592,17 @@ export def "product-option-value-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-id: string # Defines product id where the option value should be added
-  --option-id: string # Defines option id where the value has to be added
-  --option-value: string # Defines option value that has to be added
+  --product-id: string # Defines product id where the option value should be added (required)
+  --option-id: string # Defines option id where the value has to be added (required)
+  --option-value: string # Defines option value that has to be added (required)
   --sort-order: int # Sort number in the list (default: 0)
   --clear-cache: oneof<nothing, bool> # Is cache clear required (default: true)
 ]: nothing -> record<result: record<option_value_id: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
+  if ($option_id == null) { error make --unspanned { msg: "required query parameter 'option_id' missing: pass --option-id" } }
+  if ($option_value == null) { error make --unspanned { msg: "required query parameter 'option_value' missing: pass --option-value" } }
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "option_id" $option_id "scalar") (serialize-qp "option_value" $option_value "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "clear_cache" $clear_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.option.value.add.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5539,12 +5635,14 @@ export def "product-option-value-assign" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-option-id: int # Defines product's option id where the value has to be assigned
-  --option-value-id: int # Defines value id that has to be assigned
+  --product-option-id: int # Defines product's option id where the value has to be assigned (required)
+  --option-value-id: int # Defines value id that has to be assigned (required)
   --clear-cache: oneof<nothing, bool> # Is cache clear required (default: true)
 ]: nothing -> record<result: record<product_option_value_id: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($product_option_id == null) { error make --unspanned { msg: "required query parameter 'product_option_id' missing: pass --product-option-id" } }
+  if ($option_value_id == null) { error make --unspanned { msg: "required query parameter 'option_value_id' missing: pass --option-value-id" } }
   let qp = [(serialize-qp "product_option_id" $product_option_id "scalar") (serialize-qp "option_value_id" $option_value_id "scalar") (serialize-qp "clear_cache" $clear_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.option.value.assign.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5577,16 +5675,20 @@ export def "product-option-value-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-id: string # Defines product id where the option value should be updated
-  --option-id: string # Defines option id where the value has to be updated
-  --option-value-id: int # Defines value id that has to be assigned
-  --option-value: string # Defines option value that has to be added
+  --product-id: string # Defines product id where the option value should be updated (required)
+  --option-id: string # Defines option id where the value has to be updated (required)
+  --option-value-id: int # Defines value id that has to be assigned (required)
+  --option-value: string # Defines option value that has to be added (required)
   --price: float # Defines new product option price
   --quantity: float # Defines new products' options quantity
   --clear-cache: oneof<nothing, bool> # Is cache clear required (default: true)
 ]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
+  if ($option_id == null) { error make --unspanned { msg: "required query parameter 'option_id' missing: pass --option-id" } }
+  if ($option_value_id == null) { error make --unspanned { msg: "required query parameter 'option_value_id' missing: pass --option-value-id" } }
+  if ($option_value == null) { error make --unspanned { msg: "required query parameter 'option_value' missing: pass --option-value" } }
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "option_id" $option_id "scalar") (serialize-qp "option_value_id" $option_value_id "scalar") (serialize-qp "option_value" $option_value "scalar") (serialize-qp "price" $price "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "clear_cache" $clear_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.option.value.update.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5659,11 +5761,12 @@ export def "product-price-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-id: string # Defines the product where the price has to be deleted
+  --product-id: string # Defines the product where the price has to be deleted (required)
   --group-prices: string # Defines product's group prices
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "group_prices" $group_prices "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.price.delete.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5739,7 +5842,7 @@ export def "product-review-list" [
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --page-cursor: string # Used to retrieve entities via cursor-based pagination (it can't be used with any other filtering parameter)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
-  --product-id: string # Product id
+  --product-id: string # Product id (required)
   --ids: string # Retrieves reviews specified by ids
   --store-id: string # Store Id
   --status: string # Defines status
@@ -5749,6 +5852,7 @@ export def "product-review-list" [
 ]: nothing -> record<result: record<reviews: list<record>, total_count: int>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.review.list.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5781,11 +5885,13 @@ export def "product-store-assign" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-id: string # Defines id of the product which should be assigned to a store
-  --store-id: string # Defines id of the store product should be assigned to
+  --product-id: string # Defines id of the product which should be assigned to a store (required)
+  --store-id: string # Defines id of the store product should be assigned to (required)
 ]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
+  if ($store_id == null) { error make --unspanned { msg: "required query parameter 'store_id' missing: pass --store-id" } }
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.store.assign.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5859,7 +5965,7 @@ export def "product-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Defines product id that has to be updated
+  --id: string # Defines product id that has to be updated (required)
   --model: string # Defines product model that has to be updated
   --old-price: float # Defines product's old price
   --price: float # Defines new product's price
@@ -5910,6 +6016,7 @@ export def "product-update" [
 ]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "old_price" $old_price "scalar") (serialize-qp "price" $price "scalar") (serialize-qp "special_price" $special_price "scalar") (serialize-qp "sprice_create" $sprice_create "scalar") (serialize-qp "sprice_expire" $sprice_expire "scalar") (serialize-qp "cost_price" $cost_price "scalar") (serialize-qp "retail_price" $retail_price "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "weight" $weight "scalar") (serialize-qp "increase_quantity" $increase_quantity "scalar") (serialize-qp "reduce_quantity" $reduce_quantity "scalar") (serialize-qp "warehouse_id" $warehouse_id "scalar") (serialize-qp "reserve_quantity" $reserve_quantity "scalar") (serialize-qp "manage_stock" $manage_stock "scalar") (serialize-qp "backorder_status" $backorder_status "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "sku" $sku "scalar") (serialize-qp "visible" $visible "scalar") (serialize-qp "manufacturer" $manufacturer "scalar") (serialize-qp "manufacturer_id" $manufacturer_id "scalar") (serialize-qp "categories_ids" $categories_ids "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "short_description" $short_description "scalar") (serialize-qp "meta_title" $meta_title "scalar") (serialize-qp "meta_keywords" $meta_keywords "scalar") (serialize-qp "meta_description" $meta_description "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "in_stock" $in_stock "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "seo_url" $seo_url "scalar") (serialize-qp "report_request_id" $report_request_id "scalar") (serialize-qp "disable_report_cache" $disable_report_cache "scalar") (serialize-qp "reindex" $reindex "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "clear_cache" $clear_cache "scalar") (serialize-qp "gtin" $gtin "scalar") (serialize-qp "taxable" $taxable "scalar") (serialize-qp "product_class" $product_class "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "harmonized_system_code" $harmonized_system_code "scalar") (serialize-qp "country_of_origin" $country_of_origin "scalar") (serialize-qp "search_keywords" $search_keywords "scalar") (serialize-qp "barcode" $barcode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.update.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -6022,11 +6129,12 @@ export def "product-variant-count" [
   --modified-from: string # Retrieve entities from their modification date
   --modified-to: string # Retrieve entities to their modification date
   --category-id: string # Counts products’ variants specified by category id
-  --product-id: string # Retrieves products' variants specified by product id
+  --product-id: string # Retrieves products' variants specified by product id (required)
   --store-id: string # Retrieves variants specified by store id
 ]: nothing -> record<result: record<variants_count: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
   let qp = [(serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.count.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -6059,11 +6167,13 @@ export def "product-variant-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Defines variant removal, specified by variant id
-  --product-id: string # Defines product's id where the variant has to be deleted
+  --id: string # Defines variant removal, specified by variant id (required)
+  --product-id: string # Defines product's id where the variant has to be deleted (required)
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "product_id" $product_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.delete.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -6144,13 +6254,16 @@ export def "product-variant-image-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-id: string # Defines product id where the variant image should be deleted
-  --product-variant-id: int # Defines product's variants specified by variant id
-  --id: string # Entity id
+  --product-id: string # Defines product id where the variant image should be deleted (required)
+  --product-variant-id: int # Defines product's variants specified by variant id (required)
+  --id: string # Entity id (required)
   --store-id: string # Store Id
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
+  if ($product_variant_id == null) { error make --unspanned { msg: "required query parameter 'product_variant_id' missing: pass --product-variant-id" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "product_variant_id" $product_variant_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.image.delete.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -6185,11 +6298,12 @@ export def "product-variant-info" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,name,description,price)
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
-  --id: string # Retrieves variant's info specified by variant id
+  --id: string # Retrieves variant's info specified by variant id (required)
   --store-id: string # Retrieves variant info specified by store id
 ]: nothing -> record<result: record<additional_fields: record, advanced_price: list<record>, avail_sale: bool, avail_view: bool, backorders: string, categories_ids: list<string>, cost_price: float, create_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, description: string, dimensions_unit: string, group_items: list<record>, group_price: list<record>, height: float, id: string, images: list<record>, inventory: list<record>, is_downloadable: bool, is_stock_managed: bool, is_virtual: bool, length: float, manage_stock: string, meta_description: string, meta_keywords: string, meta_title: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, name: string, price: float, product_options: list<record>, quantity: float, related_products_ids: list<string>, seo_url: string, short_description: string, sort_order: int, special_price: record<additional_fields: record, avail: bool, created_at: record, custom_fields: record, expired_at: record, modified_at: record, value: float>, stores_ids: list<string>, tax_class_id: string, tier_price: list<record>, type: string, u_brand: string, u_brand_id: string, u_model: string, u_mpn: string, u_sku: string, u_upc: string, url: string, weight: float, weight_unit: string, width: float>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.info.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -6308,11 +6422,12 @@ export def "product-variant-price-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Defines the variant where the price has to be deleted
+  --id: string # Defines the variant where the price has to be deleted (required)
   --group-prices: string # Defines variants's group prices
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_prices" $group_prices "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.price.delete.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -6386,8 +6501,8 @@ export def "product-variant-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # Defines store id where the variant should be found
-  --id: string # Defines variant update specified by variant id
-  --product-id: string # Defines product's id where the variant has to be updated
+  --id: string # Defines variant update specified by variant id (required)
+  --product-id: string # Defines product's id where the variant has to be updated (required)
   --warehouse-id: string # This parameter is used for selecting a warehouse where you need to set/modify a product quantity.
   --reserve-quantity: float # This parameter allows to reserve/unreserve product variants quantity.
   --quantity: float # Defines new products' variants quantity
@@ -6430,6 +6545,8 @@ export def "product-variant-update" [
 ]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "warehouse_id" $warehouse_id "scalar") (serialize-qp "reserve_quantity" $reserve_quantity "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "increase_quantity" $increase_quantity "scalar") (serialize-qp "reduce_quantity" $reduce_quantity "scalar") (serialize-qp "price" $price "scalar") (serialize-qp "special_price" $special_price "scalar") (serialize-qp "retail_price" $retail_price "scalar") (serialize-qp "old_price" $old_price "scalar") (serialize-qp "cost_price" $cost_price "scalar") (serialize-qp "sprice_create" $sprice_create "scalar") (serialize-qp "sprice_expire" $sprice_expire "scalar") (serialize-qp "manage_stock" $manage_stock "scalar") (serialize-qp "in_stock" $in_stock "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "sku" $sku "scalar") (serialize-qp "meta_title" $meta_title "scalar") (serialize-qp "meta_description" $meta_description "scalar") (serialize-qp "meta_keywords" $meta_keywords "scalar") (serialize-qp "short_description" $short_description "scalar") (serialize-qp "visible" $visible "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "backorder_status" $backorder_status "scalar") (serialize-qp "weight" $weight "scalar") (serialize-qp "barcode" $barcode "scalar") (serialize-qp "reindex" $reindex "scalar") (serialize-qp "taxable" $taxable "scalar") (serialize-qp "options" $options "csv") (serialize-qp "harmonized_system_code" $harmonized_system_code "scalar") (serialize-qp "country_of_origin" $country_of_origin "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "gtin" $gtin "scalar") (serialize-qp "clear_cache" $clear_cache "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "available_for_sale" $available_for_sale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.update.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -6510,7 +6627,7 @@ export def "tax-class-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tax-class-id: string # Retrieves taxes specified by class id
+  --tax-class-id: string # Retrieves taxes specified by class id (required)
   --store-id: string # Store Id
   --lang-id: string # Language id
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: tax_class_id,name,avail)
@@ -6519,6 +6636,7 @@ export def "tax-class-info" [
 ]: nothing -> record<result: record<additional_fields: record, avail: bool, custom_fields: record, id: string, name: string, tax: float, tax_rates: list<record>, tax_type: int>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($tax_class_id == null) { error make --unspanned { msg: "required query parameter 'tax_class_id' missing: pass --tax-class-id" } }
   let qp = [(serialize-qp "tax_class_id" $tax_class_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tax.class.info.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -6589,8 +6707,8 @@ export def "webhook-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --entity: string # Specify the entity that you want to enable webhooks for (e.g product, order, customer, category)
-  --action: string # Specify what action (event) will trigger the webhook (e.g add, delete, or update)
+  --entity: string # Specify the entity that you want to enable webhooks for (e.g product, order, customer, category) (required)
+  --action: string # Specify what action (event) will trigger the webhook (e.g add, delete, or update) (required)
   --callback: string # Callback url that returns shipping rates. It should be able to accept POST requests with json data.
   --label: string # The name you give to the webhook
   --fields: string # Fields the webhook should send (default: force_all)
@@ -6599,6 +6717,8 @@ export def "webhook-create" [
 ]: nothing -> record<result: record<id: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($entity == null) { error make --unspanned { msg: "required query parameter 'entity' missing: pass --entity" } }
+  if ($action == null) { error make --unspanned { msg: "required query parameter 'action' missing: pass --action" } }
   let qp = [(serialize-qp "entity" $entity "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhook.create.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -6631,10 +6751,11 @@ export def "webhook-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Webhook id
+  --id: string # Webhook id (required)
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhook.delete.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -6743,7 +6864,7 @@ export def "webhook-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Webhook id
+  --id: string # Webhook id (required)
   --callback: string # Callback url that returns shipping rates. It should be able to accept POST requests with json data.
   --label: string # The name you give to the webhook
   --fields: string # Fields the webhook should send
@@ -6751,6 +6872,7 @@ export def "webhook-update" [
 ]: nothing -> record<result: record<updated: string>, return_code: int, return_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "active" $active "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhook.update.json" $qp $auth.query)
   let accept_val = "application/json"

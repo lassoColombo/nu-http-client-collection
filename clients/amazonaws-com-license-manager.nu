@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -98,14 +98,19 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def x-amz-target-completer [] { ["AWSLicenseManager.AcceptGrant"] }
 def x-amz-target-completer-1 [] { ["AWSLicenseManager.CheckInLicense"] }
+def digital-signature-method-completer [] { ["JWT_PS384"] }
 def x-amz-target-completer-2 [] { ["AWSLicenseManager.CheckoutBorrowLicense"] }
+def checkout-type-completer [] { ["PERPETUAL" "PROVISIONAL"] }
 def x-amz-target-completer-3 [] { ["AWSLicenseManager.CheckoutLicense"] }
 def x-amz-target-completer-4 [] { ["AWSLicenseManager.CreateGrant"] }
+def status-completer [] { ["ACTIVE" "DELETED" "DISABLED" "FAILED_WORKFLOW" "PENDING_ACCEPT" "PENDING_DELETE" "PENDING_WORKFLOW" "REJECTED" "WORKFLOW_COMPLETED"] }
 def x-amz-target-completer-5 [] { ["AWSLicenseManager.CreateGrantVersion"] }
 def x-amz-target-completer-6 [] { ["AWSLicenseManager.CreateLicense"] }
+def license-counting-type-completer [] { ["Core" "Instance" "Socket" "vCPU"] }
 def x-amz-target-completer-7 [] { ["AWSLicenseManager.CreateLicenseConfiguration"] }
 def x-amz-target-completer-8 [] { ["AWSLicenseManager.CreateLicenseConversionTaskForResource"] }
 def x-amz-target-completer-9 [] { ["AWSLicenseManager.CreateLicenseManagerReportGenerator"] }
+def status-completer-1 [] { ["AVAILABLE" "DEACTIVATED" "DELETED" "EXPIRED" "PENDING_AVAILABLE" "PENDING_DELETE" "SUSPENDED"] }
 def x-amz-target-completer-10 [] { ["AWSLicenseManager.CreateLicenseVersion"] }
 def x-amz-target-completer-11 [] { ["AWSLicenseManager.CreateToken"] }
 def x-amz-target-completer-12 [] { ["AWSLicenseManager.DeleteGrant"] }
@@ -142,6 +147,7 @@ def x-amz-target-completer-42 [] { ["AWSLicenseManager.ListUsageForLicenseConfig
 def x-amz-target-completer-43 [] { ["AWSLicenseManager.RejectGrant"] }
 def x-amz-target-completer-44 [] { ["AWSLicenseManager.TagResource"] }
 def x-amz-target-completer-45 [] { ["AWSLicenseManager.UntagResource"] }
+def license-configuration-status-completer [] { ["AVAILABLE" "DISABLED"] }
 def x-amz-target-completer-46 [] { ["AWSLicenseManager.UpdateLicenseConfiguration"] }
 def x-amz-target-completer-47 [] { ["AWSLicenseManager.UpdateLicenseManagerReportGenerator"] }
 def x-amz-target-completer-48 [] { ["AWSLicenseManager.UpdateLicenseSpecificationsForResource"] }
@@ -191,12 +197,13 @@ export def "accept-grant" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  grant_arn: any
-]: any -> record<GrantArn: record, Status: record, Version: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  grant_arn: string # Amazon Resource Name (ARN) of the grant.
+]: any -> record<GrantArn: string, Status: string, Version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.AcceptGrant")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GrantArn": $grant_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -239,13 +246,14 @@ export def "check-in-license" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  license_consumption_token: any
-  --beneficiary: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  license_consumption_token: string # License consumption token.
+  --beneficiary: string # License beneficiary.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.CheckInLicense")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseConsumptionToken": $license_consumption_token, "Beneficiary": $beneficiary} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -271,6 +279,8 @@ export def "check-in-license" [
 #
 # POST /
 # operationId: CheckoutBorrowLicense
+# --Entitlements item shape: {Name: string, Value?: string, Unit: "Count"|"None"|"Seconds"|"Microseconds"|"Milliseconds"|"Bytes"|"Kilobytes"|"Megabytes"|"Gigabytes"|"Terabytes"|"Bits"|"Kilobits"|"Megabits"|"Gigabits"|"Terabits"|"Percent"|"Bytes/Second"|"Kilobytes/Second"|"Megabytes/Second"|"Gigabytes/Second"|"Terabytes/Second"|"Bits/Second"|"Kilobits/Second"|"Megabits/Second"|"Gigabits/Second"|"Terabits/Second"|"Count/Second"}
+# --CheckoutMetadata item shape: {Name?: string, Value?: string}
 export def "checkout-borrow-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,17 +298,18 @@ export def "checkout-borrow-license" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  license_arn: any
-  entitlements: any
-  digital_signature_method: any
-  --node-id: any
-  --checkout-metadata: any
-  client_token: any
-]: any -> record<LicenseArn: record, LicenseConsumptionToken: record, EntitlementsAllowed: record, NodeId: record, SignedToken: record, IssuedAt: record, Expiration: record, CheckoutMetadata: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  license_arn: string # Amazon Resource Name (ARN) of the license. The license must use the borrow consumption configuration.
+  entitlements: list # License entitlements. Partial checkouts are not supported. — item shape: {Name: string, Value?: string, Unit: "Count"|"None"|"Seconds"|"Microseconds"|"Milliseconds"|"Bytes"|"Kilobytes"|"Megabytes"|"Gigabytes"|"Terabytes"|"Bits"|"Kilobits"|"Megabits"|"Gigabits"|"Terabits"|"Percent"|"Bytes/Second"|"Kilobytes/Second"|"Megabytes/Second"|"Gigabytes/Second"|"Terabytes/Second"|"Bits/Second"|"Kilobits/Second"|"Megabits/Second"|"Gigabits/Second"|"Terabits/Second"|"Count/Second"}
+  digital_signature_method: string@digital-signature-method-completer # Digital signature method. The possible value is JSON Web Signature (JWS) algorithm PS384. For more information, see RFC 7518 Digital Signature with RSASSA-PSS (https://tools.ietf.org/html/rfc7518#section-3.5).
+  --node-id: string # Node ID.
+  --checkout-metadata: list # Information about constraints. — item shape: {Name?: string, Value?: string}
+  client_token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
+]: any -> record<LicenseArn: string, LicenseConsumptionToken: string, EntitlementsAllowed: table<Name: string, Value: string, Unit: string>, NodeId: string, SignedToken: string, IssuedAt: string, Expiration: string, CheckoutMetadata: table<Name: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.CheckoutBorrowLicense")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseArn": $license_arn, "Entitlements": $entitlements, "DigitalSignatureMethod": $digital_signature_method, "NodeId": $node_id, "CheckoutMetadata": $checkout_metadata, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -324,6 +335,7 @@ export def "checkout-borrow-license" [
 #
 # POST /
 # operationId: CheckoutLicense
+# --Entitlements item shape: {Name: string, Value?: string, Unit: "Count"|"None"|"Seconds"|"Microseconds"|"Milliseconds"|"Bytes"|"Kilobytes"|"Megabytes"|"Gigabytes"|"Terabytes"|"Bits"|"Kilobits"|"Megabits"|"Gigabits"|"Terabits"|"Percent"|"Bytes/Second"|"Kilobytes/Second"|"Megabytes/Second"|"Gigabytes/Second"|"Terabytes/Second"|"Bits/Second"|"Kilobits/Second"|"Megabits/Second"|"Gigabits/Second"|"Terabits/Second"|"Count/Second"}
 export def "checkout-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -341,18 +353,19 @@ export def "checkout-license" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  product_sku: any
-  checkout_type: any
-  key_fingerprint: any
-  entitlements: any
-  client_token: any
-  --beneficiary: any
-  --node-id: any
-]: any -> record<CheckoutType: record, LicenseConsumptionToken: record, EntitlementsAllowed: record, SignedToken: record, NodeId: record, IssuedAt: record, Expiration: record, LicenseArn: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  product_sku: string # Product SKU.
+  checkout_type: string@checkout-type-completer # Checkout type.
+  key_fingerprint: string # Key fingerprint identifying the license.
+  entitlements: list # License entitlements. — item shape: {Name: string, Value?: string, Unit: "Count"|"None"|"Seconds"|"Microseconds"|"Milliseconds"|"Bytes"|"Kilobytes"|"Megabytes"|"Gigabytes"|"Terabytes"|"Bits"|"Kilobits"|"Megabits"|"Gigabits"|"Terabits"|"Percent"|"Bytes/Second"|"Kilobytes/Second"|"Megabytes/Second"|"Gigabytes/Second"|"Terabytes/Second"|"Bits/Second"|"Kilobits/Second"|"Megabits/Second"|"Gigabits/Second"|"Terabits/Second"|"Count/Second"}
+  client_token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
+  --beneficiary: string # License beneficiary.
+  --node-id: string # Node ID.
+]: any -> record<CheckoutType: string, LicenseConsumptionToken: string, EntitlementsAllowed: table<Name: string, Value: string, Unit: string>, SignedToken: string, NodeId: string, IssuedAt: string, Expiration: string, LicenseArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.CheckoutLicense")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProductSKU": $product_sku, "CheckoutType": $checkout_type, "KeyFingerprint": $key_fingerprint, "Entitlements": $entitlements, "ClientToken": $client_token, "Beneficiary": $beneficiary, "NodeId": $node_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -395,17 +408,18 @@ export def "create-grant" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  client_token: any
-  grant_name: any
-  license_arn: any
-  principals: any
-  home_region: any
-  allowed_operations: any
-]: any -> record<GrantArn: record, Status: record, Version: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  client_token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
+  grant_name: string # Grant name.
+  license_arn: string # Amazon Resource Name (ARN) of the license.
+  principals: list<string> # The grant principals. You can specify one of the following as an Amazon Resource Name (ARN): An Amazon Web Services account, which includes only the account specified. An organizational unit (OU), which includes all accounts in the OU. An organization, which will include all accounts across your organization.
+  home_region: string # Home Region of the grant.
+  allowed_operations: list<string> # Allowed operations for the grant.
+]: any -> record<GrantArn: string, Status: string, Version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.CreateGrant")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClientToken": $client_token, "GrantName": $grant_name, "LicenseArn": $license_arn, "Principals": $principals, "HomeRegion": $home_region, "AllowedOperations": $allowed_operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -431,6 +445,7 @@ export def "create-grant" [
 #
 # POST /
 # operationId: CreateGrantVersion
+# --Options shape: {ActivationOverrideBehavior?: "DISTRIBUTED_GRANTS_ONLY"|"ALL_GRANTS_PERMITTED_BY_ISSUER"}
 export def "create-grant-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -448,19 +463,20 @@ export def "create-grant-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  client_token: any
-  grant_arn: any
-  --grant-name: any
-  --allowed-operations: any
-  --status: any
-  --status-reason: any
-  --source-version: any
-  --options: any
-]: any -> record<GrantArn: record, Status: record, Version: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  client_token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
+  grant_arn: string # Amazon Resource Name (ARN) of the grant.
+  --grant-name: string # Grant name.
+  --allowed-operations: list<string> # Allowed operations for the grant.
+  --status: string@status-completer # Grant status.
+  --status-reason: string # Grant status reason.
+  --source-version: string # Current version of the grant.
+  --options: record # The options you can specify when you create a new version of a grant, such as activation override behavior. For more information, see Granted licenses in License Manager (https://docs.aws.amazon.com/license-manager/latest/userguide/granted-licenses.html) in the License Manager User Guide. — shape: {ActivationOverrideBehavior?: "DISTRIBUTED_GRANTS_ONLY"|"ALL_GRANTS_PERMITTED_BY_ISSUER"}
+]: any -> record<GrantArn: string, Status: string, Version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.CreateGrantVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClientToken": $client_token, "GrantArn": $grant_arn, "GrantName": $grant_name, "AllowedOperations": $allowed_operations, "Status": $status, "StatusReason": $status_reason, "SourceVersion": $source_version, "Options": $options} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -486,6 +502,11 @@ export def "create-grant-version" [
 #
 # POST /
 # operationId: CreateLicense
+# --Issuer shape: {Name: string, SignKey?: string}
+# --Validity shape: {Begin: string, End?: string}
+# --Entitlements item shape: {Name: string, Value?: string, MaxCount?: int, Overage?: bool, Unit: "Count"|"None"|"Seconds"|"Microseconds"|"Milliseconds"|"Bytes"|"Kilobytes"|"Megabytes"|"Gigabytes"|"Terabytes"|"Bits"|"Kilobits"|"Megabits"|"Gigabits"|"Terabits"|"Percent"|"Bytes/Second"|"Kilobytes/Second"|"Megabytes/Second"|"Gigabytes/Second"|"Terabytes/Second"|"Bits/Second"|"Kilobits/Second"|"Megabits/Second"|"Gigabits/Second"|"Terabits/Second"|"Count/Second", AllowCheckIn?: bool}
+# --ConsumptionConfiguration shape: {RenewType?: "None"|"Weekly"|"Monthly", ProvisionalConfiguration?: record, BorrowConfiguration?: record}
+# --LicenseMetadata item shape: {Name?: string, Value?: string}
 export def "create-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -503,22 +524,23 @@ export def "create-license" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  license_name: any
-  product_name: any
-  product_sku: any
-  issuer: any
-  home_region: any
-  validity: any
-  entitlements: any
-  beneficiary: any
-  consumption_configuration: any
-  --license-metadata: any
-  client_token: any
-]: any -> record<LicenseArn: record, Status: record, Version: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  license_name: string # License name.
+  product_name: string # Product name.
+  product_sku: string # Product SKU.
+  issuer: record # Details about the issuer of a license. — shape: {Name: string, SignKey?: string}
+  home_region: string # Home Region for the license.
+  validity: record # Describes a time range, in ISO8601-UTC format. — shape: {Begin: string, End?: string}
+  entitlements: list # License entitlements. — item shape: {Name: string, Value?: string, MaxCount?: int, Overage?: bool, Unit: "Count"|"None"|"Seconds"|"Microseconds"|"Milliseconds"|"Bytes"|"Kilobytes"|"Megabytes"|"Gigabytes"|"Terabytes"|"Bits"|"Kilobits"|"Megabits"|"Gigabits"|"Terabits"|"Percent"|"Bytes/Second"|"Kilobytes/Second"|"Megabytes/Second"|"Gigabytes/Second"|"Terabytes/Second"|"Bits/Second"|"Kilobits/Second"|"Megabits/Second"|"Gigabits/Second"|"Terabits/Second"|"Count/Second", AllowCheckIn?: bool}
+  beneficiary: string # License beneficiary.
+  consumption_configuration: record # Details about a consumption configuration. — shape: {RenewType?: "None"|"Weekly"|"Monthly", ProvisionalConfiguration?: record, BorrowConfiguration?: record}
+  --license-metadata: list # Information about the license. — item shape: {Name?: string, Value?: string}
+  client_token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
+]: any -> record<LicenseArn: string, Status: string, Version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.CreateLicense")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseName": $license_name, "ProductName": $product_name, "ProductSKU": $product_sku, "Issuer": $issuer, "HomeRegion": $home_region, "Validity": $validity, "Entitlements": $entitlements, "Beneficiary": $beneficiary, "ConsumptionConfiguration": $consumption_configuration, "LicenseMetadata": $license_metadata, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -544,6 +566,8 @@ export def "create-license" [
 #
 # POST /
 # operationId: CreateLicenseConfiguration
+# --Tags item shape: {Key?: string, Value?: string}
+# --ProductInformationList item shape: {ResourceType: string, ProductInformationFilterList: list}
 export def "create-license-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -561,20 +585,21 @@ export def "create-license-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  name: any
-  --description: any
-  license_counting_type: any
-  --license-count: any
-  --license-count-hard-limit: any
-  --license-rules: any
-  --tags: any
-  --disassociate-when-not-found: any
-  --product-information-list: any
-]: any -> record<LicenseConfigurationArn: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  name: string # Name of the license configuration.
+  --description: string # Description of the license configuration.
+  license_counting_type: string@license-counting-type-completer # Dimension used to track the license inventory.
+  --license-count: int # Number of licenses managed by the license configuration.
+  --license-count-hard-limit: oneof<nothing, bool> # Indicates whether hard or soft license enforcement is used. Exceeding a hard limit blocks the launch of new instances.
+  --license-rules: list<string> # License rules. The syntax is #name=value (for example, #allowedTenancy=EC2-DedicatedHost). The available rules vary by dimension, as follows. Cores dimension: allowedTenancy | licenseAffinityToHost | maximumCores | minimumCores Instances dimension: allowedTenancy | maximumCores | minimumCores | maximumSockets | minimumSockets | maximumVcpus | minimumVcpus Sockets dimension: allowedTenancy | licenseAffinityToHost | maximumSockets | minimumSockets vCPUs dimension: allowedTenancy | honorVcpuOptimization | maximumVcpus | minimumVcpus The unit for licenseAffinityToHost is days and the range is 1 to 180. The possible values for allowedTenancy are EC2-Default, EC2-DedicatedHost, and EC2-DedicatedInstance. The possible values for honorVcpuOptimization are True and False.
+  --tags: list # Tags to add to the license configuration. — item shape: {Key?: string, Value?: string}
+  --disassociate-when-not-found: oneof<nothing, bool> # When true, disassociates a resource when software is uninstalled.
+  --product-information-list: list # Product information. — item shape: {ResourceType: string, ProductInformationFilterList: list}
+]: any -> record<LicenseConfigurationArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.CreateLicenseConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "LicenseCountingType": $license_counting_type, "LicenseCount": $license_count, "LicenseCountHardLimit": $license_count_hard_limit, "LicenseRules": $license_rules, "Tags": $tags, "DisassociateWhenNotFound": $disassociate_when_not_found, "ProductInformationList": $product_information_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -600,6 +625,8 @@ export def "create-license-configuration" [
 #
 # POST /
 # operationId: CreateLicenseConversionTaskForResource
+# --SourceLicenseContext shape: {UsageOperation?: string}
+# --DestinationLicenseContext shape: {UsageOperation?: string}
 export def "create-license-conversion-task-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -617,14 +644,15 @@ export def "create-license-conversion-task-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  resource_arn: any
-  source_license_context: any
-  destination_license_context: any
-]: any -> record<LicenseConversionTaskId: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  resource_arn: string # Amazon Resource Name (ARN) of the resource you are converting the license type for.
+  source_license_context: record # Information about a license type conversion task. — shape: {UsageOperation?: string}
+  destination_license_context: record # Information about a license type conversion task. — shape: {UsageOperation?: string}
+]: any -> record<LicenseConversionTaskId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.CreateLicenseConversionTaskForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "SourceLicenseContext": $source_license_context, "DestinationLicenseContext": $destination_license_context} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -650,6 +678,9 @@ export def "create-license-conversion-task-for-resource" [
 #
 # POST /
 # operationId: CreateLicenseManagerReportGenerator
+# --ReportContext shape: {licenseConfigurationArns: list<string>}
+# --ReportFrequency shape: {value?: int, period?: "DAY"|"WEEK"|"MONTH"}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-license-manager-report-generator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -667,18 +698,19 @@ export def "create-license-manager-report-generator" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  report_generator_name: any
-  type: any
-  report_context: any
-  report_frequency: any
-  client_token: any
-  --description: any
-  --tags: any
-]: any -> record<LicenseManagerReportGeneratorArn: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  report_generator_name: string # Name of the report generator.
+  type: list<string> # Type of reports to generate. The following report types an be generated: License configuration report - Reports the number and details of consumed licenses for a license configuration. Resource report - Reports the tracked licenses and resource consumption for a license configuration.
+  report_context: record # Details of the license configuration that this generator reports on. — shape: {licenseConfigurationArns: list<string>}
+  report_frequency: record # Details about how frequently reports are generated. — shape: {value?: int, period?: "DAY"|"WEEK"|"MONTH"}
+  client_token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
+  --description: string # Description of the report generator.
+  --tags: list # Tags to add to the report generator. — item shape: {Key?: string, Value?: string}
+]: any -> record<LicenseManagerReportGeneratorArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.CreateLicenseManagerReportGenerator")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ReportGeneratorName": $report_generator_name, "Type": $type, "ReportContext": $report_context, "ReportFrequency": $report_frequency, "ClientToken": $client_token, "Description": $description, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -704,6 +736,11 @@ export def "create-license-manager-report-generator" [
 #
 # POST /
 # operationId: CreateLicenseVersion
+# --Issuer shape: {Name: string, SignKey?: string}
+# --Validity shape: {Begin: string, End?: string}
+# --LicenseMetadata item shape: {Name?: string, Value?: string}
+# --Entitlements item shape: {Name: string, Value?: string, MaxCount?: int, Overage?: bool, Unit: "Count"|"None"|"Seconds"|"Microseconds"|"Milliseconds"|"Bytes"|"Kilobytes"|"Megabytes"|"Gigabytes"|"Terabytes"|"Bits"|"Kilobits"|"Megabits"|"Gigabits"|"Terabits"|"Percent"|"Bytes/Second"|"Kilobytes/Second"|"Megabytes/Second"|"Gigabytes/Second"|"Terabytes/Second"|"Bits/Second"|"Kilobits/Second"|"Megabits/Second"|"Gigabits/Second"|"Terabits/Second"|"Count/Second", AllowCheckIn?: bool}
+# --ConsumptionConfiguration shape: {RenewType?: "None"|"Weekly"|"Monthly", ProvisionalConfiguration?: record, BorrowConfiguration?: record}
 export def "create-license-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -721,23 +758,24 @@ export def "create-license-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  license_arn: any
-  license_name: any
-  product_name: any
-  issuer: any
-  home_region: any
-  validity: any
-  --license-metadata: any
-  entitlements: any
-  consumption_configuration: any
-  status: any
-  client_token: any
-  --source-version: any
-]: any -> record<LicenseArn: record, Version: record, Status: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  license_arn: string # Amazon Resource Name (ARN) of the license.
+  license_name: string # License name.
+  product_name: string # Product name.
+  issuer: record # Details about the issuer of a license. — shape: {Name: string, SignKey?: string}
+  home_region: string # Home Region of the license.
+  validity: record # Describes a time range, in ISO8601-UTC format. — shape: {Begin: string, End?: string}
+  --license-metadata: list # Information about the license. — item shape: {Name?: string, Value?: string}
+  entitlements: list # License entitlements. — item shape: {Name: string, Value?: string, MaxCount?: int, Overage?: bool, Unit: "Count"|"None"|"Seconds"|"Microseconds"|"Milliseconds"|"Bytes"|"Kilobytes"|"Megabytes"|"Gigabytes"|"Terabytes"|"Bits"|"Kilobits"|"Megabits"|"Gigabits"|"Terabits"|"Percent"|"Bytes/Second"|"Kilobytes/Second"|"Megabytes/Second"|"Gigabytes/Second"|"Terabytes/Second"|"Bits/Second"|"Kilobits/Second"|"Megabits/Second"|"Gigabits/Second"|"Terabits/Second"|"Count/Second", AllowCheckIn?: bool}
+  consumption_configuration: record # Details about a consumption configuration. — shape: {RenewType?: "None"|"Weekly"|"Monthly", ProvisionalConfiguration?: record, BorrowConfiguration?: record}
+  status: string@status-completer-1 # License status.
+  client_token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
+  --source-version: string # Current version of the license.
+]: any -> record<LicenseArn: string, Version: string, Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.CreateLicenseVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseArn": $license_arn, "LicenseName": $license_name, "ProductName": $product_name, "Issuer": $issuer, "HomeRegion": $home_region, "Validity": $validity, "LicenseMetadata": $license_metadata, "Entitlements": $entitlements, "ConsumptionConfiguration": $consumption_configuration, "Status": $status, "ClientToken": $client_token, "SourceVersion": $source_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -780,16 +818,17 @@ export def "create-token" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  license_arn: any
-  --role-arns: any
-  --expiration-in-days: any
-  --token-properties: any
-  client_token: any
-]: any -> record<TokenId: record, TokenType: record, Token: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  license_arn: string # Amazon Resource Name (ARN) of the license. The ARN is mapped to the aud claim of the JWT token.
+  --role-arns: list<string> # Amazon Resource Name (ARN) of the IAM roles to embed in the token. License Manager does not check whether the roles are in use.
+  --expiration-in-days: int # Token expiration, in days, counted from token creation. The default is 365 days.
+  --token-properties: list<string> # Data specified by the caller to be included in the JWT token. The data is mapped to the amr claim of the JWT token.
+  client_token: string # Idempotency token, valid for 10 minutes.
+]: any -> record<TokenId: string, TokenType: string, Token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.CreateToken")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseArn": $license_arn, "RoleArns": $role_arns, "ExpirationInDays": $expiration_in_days, "TokenProperties": $token_properties, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -832,14 +871,15 @@ export def "delete-grant" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  grant_arn: any
-  --status-reason: any
-  version: any
-]: any -> record<GrantArn: record, Status: record, Version: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  grant_arn: string # Amazon Resource Name (ARN) of the grant.
+  --status-reason: string # The Status reason for the delete request.
+  version: string # Current version of the grant.
+]: any -> record<GrantArn: string, Status: string, Version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.DeleteGrant")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GrantArn": $grant_arn, "StatusReason": $status_reason, "Version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -882,13 +922,14 @@ export def "delete-license" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  license_arn: any
-  source_version: any
-]: any -> record<Status: record, DeletionDate: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  license_arn: string # Amazon Resource Name (ARN) of the license.
+  source_version: string # Current version of the license.
+]: any -> record<Status: string, DeletionDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.DeleteLicense")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseArn": $license_arn, "SourceVersion": $source_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -931,12 +972,13 @@ export def "delete-license-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  license_configuration_arn: any
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  license_configuration_arn: string # ID of the license configuration.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.DeleteLicenseConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseConfigurationArn": $license_configuration_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -979,12 +1021,13 @@ export def "delete-license-manager-report-generator" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  license_manager_report_generator_arn: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  license_manager_report_generator_arn: string # Amazon Resource Name (ARN) of the report generator to be deleted.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.DeleteLicenseManagerReportGenerator")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseManagerReportGeneratorArn": $license_manager_report_generator_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1027,12 +1070,13 @@ export def "delete-token" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  token_id: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  token_id: string # Token ID.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.DeleteToken")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TokenId": $token_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1075,13 +1119,14 @@ export def "extend-license-consumption" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  license_consumption_token: any
-  --body-dry-run: any
-]: any -> record<LicenseConsumptionToken: record, Expiration: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  license_consumption_token: string # License consumption token.
+  --body-dry-run: oneof<nothing, bool> # Checks whether you have the required permissions for the action, without actually making the request. Provides an error response if you do not have the required permissions.
+]: any -> record<LicenseConsumptionToken: string, Expiration: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.ExtendLicenseConsumption")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseConsumptionToken": $license_consumption_token, "DryRun": $body_dry_run} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1124,16 +1169,18 @@ export def "get-access-token" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  --body-token: any
-  --token-properties: any
-]: any -> record<AccessToken: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  --body-token: string # Refresh token, encoded as a JWT token.
+  --token-properties: list<string> # Token properties to validate against those present in the JWT token.
+]: any -> record<AccessToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.GetAccessToken")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Token": $body_token, "TokenProperties": $token_properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "Token") == null) { error make --unspanned { msg: "required body field 'Token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -1173,13 +1220,14 @@ export def "get-grant" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  grant_arn: any
-  --version: any
-]: any -> record<Grant: record<GrantArn: record, GrantName: record, ParentArn: record, LicenseArn: record, GranteePrincipalArn: record, HomeRegion: record, GrantStatus: record, StatusReason: record, Version: record, GrantedOperations: record, Options: record<ActivationOverrideBehavior: record>>> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  grant_arn: string # Amazon Resource Name (ARN) of the grant.
+  --version: string # Grant version.
+]: any -> record<Grant: record<GrantArn: string, GrantName: string, ParentArn: string, LicenseArn: string, GranteePrincipalArn: string, HomeRegion: string, GrantStatus: string, StatusReason: string, Version: string, GrantedOperations: list<string>, Options: record<ActivationOverrideBehavior: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.GetGrant")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GrantArn": $grant_arn, "Version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1222,13 +1270,14 @@ export def "get-license" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  license_arn: any
-  --version: any
-]: any -> record<License: record<LicenseArn: record, LicenseName: record, ProductName: record, ProductSKU: record, Issuer: record<Name: record, SignKey: record, KeyFingerprint: record>, HomeRegion: record, Status: record, Validity: record<Begin: record, End: record>, Beneficiary: record, Entitlements: record, ConsumptionConfiguration: record<RenewType: record, ProvisionalConfiguration: record, BorrowConfiguration: record>, LicenseMetadata: record, CreateTime: record, Version: record>> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  license_arn: string # Amazon Resource Name (ARN) of the license.
+  --version: string # License version.
+]: any -> record<License: record<LicenseArn: string, LicenseName: string, ProductName: string, ProductSKU: string, Issuer: record<Name: string, SignKey: string, KeyFingerprint: string>, HomeRegion: string, Status: string, Validity: record<Begin: string, End: string>, Beneficiary: string, Entitlements: list<record>, ConsumptionConfiguration: record<RenewType: string, ProvisionalConfiguration: record, BorrowConfiguration: record>, LicenseMetadata: list<record>, CreateTime: string, Version: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.GetLicense")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseArn": $license_arn, "Version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1271,12 +1320,13 @@ export def "get-license-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  license_configuration_arn: any
-]: any -> record<LicenseConfigurationId: record, LicenseConfigurationArn: record, Name: record, Description: record, LicenseCountingType: record, LicenseRules: record, LicenseCount: record, LicenseCountHardLimit: record, ConsumedLicenses: record, Status: record, OwnerAccountId: record, ConsumedLicenseSummaryList: record, ManagedResourceSummaryList: record, Tags: record, ProductInformationList: record, AutomatedDiscoveryInformation: record<LastRunTime: record>, DisassociateWhenNotFound: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  license_configuration_arn: string # Amazon Resource Name (ARN) of the license configuration.
+]: any -> record<LicenseConfigurationId: string, LicenseConfigurationArn: string, Name: string, Description: string, LicenseCountingType: string, LicenseRules: list<string>, LicenseCount: int, LicenseCountHardLimit: bool, ConsumedLicenses: int, Status: string, OwnerAccountId: string, ConsumedLicenseSummaryList: table<ResourceType: string, ConsumedLicenses: int>, ManagedResourceSummaryList: table<ResourceType: string, AssociationCount: int>, Tags: table<Key: string, Value: string>, ProductInformationList: table<ResourceType: string, ProductInformationFilterList: list>, AutomatedDiscoveryInformation: record<LastRunTime: string>, DisassociateWhenNotFound: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.GetLicenseConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseConfigurationArn": $license_configuration_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1319,12 +1369,13 @@ export def "get-license-conversion-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  license_conversion_task_id: any
-]: any -> record<LicenseConversionTaskId: record, ResourceArn: record, SourceLicenseContext: record<UsageOperation: record>, DestinationLicenseContext: record<UsageOperation: record>, StatusMessage: record, Status: record, StartTime: record, LicenseConversionTime: record, EndTime: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  license_conversion_task_id: string # ID of the license type conversion task to retrieve information on.
+]: any -> record<LicenseConversionTaskId: string, ResourceArn: string, SourceLicenseContext: record<UsageOperation: string>, DestinationLicenseContext: record<UsageOperation: string>, StatusMessage: string, Status: string, StartTime: string, LicenseConversionTime: string, EndTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.GetLicenseConversionTask")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseConversionTaskId": $license_conversion_task_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1367,12 +1418,13 @@ export def "get-license-manager-report-generator" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  license_manager_report_generator_arn: any
-]: any -> record<ReportGenerator: record<ReportGeneratorName: record, ReportType: record, ReportContext: record<licenseConfigurationArns: record>, ReportFrequency: record<value: record, period: record>, LicenseManagerReportGeneratorArn: record, LastRunStatus: record, LastRunFailureReason: record, LastReportGenerationTime: record, ReportCreatorAccount: record, Description: record, S3Location: record<bucket: record, keyPrefix: record>, CreateTime: record, Tags: record>> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  license_manager_report_generator_arn: string # Amazon Resource Name (ARN) of the report generator.
+]: any -> record<ReportGenerator: record<ReportGeneratorName: string, ReportType: list<string>, ReportContext: record<licenseConfigurationArns: list>, ReportFrequency: record<value: int, period: string>, LicenseManagerReportGeneratorArn: string, LastRunStatus: string, LastRunFailureReason: string, LastReportGenerationTime: string, ReportCreatorAccount: string, Description: string, S3Location: record<bucket: string, keyPrefix: string>, CreateTime: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.GetLicenseManagerReportGenerator")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseManagerReportGeneratorArn": $license_manager_report_generator_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1415,12 +1467,13 @@ export def "get-license-usage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  license_arn: any
-]: any -> record<LicenseUsage: record<EntitlementUsages: record>> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  license_arn: string # Amazon Resource Name (ARN) of the license.
+]: any -> record<LicenseUsage: record<EntitlementUsages: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.GetLicenseUsage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseArn": $license_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1463,12 +1516,13 @@ export def "get-service-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
+  --x-amz-target: string@x-amz-target-completer-25 # required
   --body: record
-]: any -> record<S3BucketArn: record, SnsTopicArn: record, OrganizationConfiguration: record<EnableIntegration: record>, EnableCrossAccountsDiscovery: record, LicenseManagerResourceShareArn: record> {
+]: any -> record<S3BucketArn: string, SnsTopicArn: string, OrganizationConfiguration: record<EnableIntegration: bool>, EnableCrossAccountsDiscovery: bool, LicenseManagerResourceShareArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.GetServiceSettings")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1511,14 +1565,15 @@ export def "list-associations-for-license-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  license_configuration_arn: any
-  --max-results: any
-  --next-token: any
-]: any -> record<LicenseConfigurationAssociations: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  license_configuration_arn: string # Amazon Resource Name (ARN) of a license configuration.
+  --max-results: int # Maximum number of results to return in a single call.
+  --next-token: string # Token for the next set of results.
+]: any -> record<LicenseConfigurationAssociations: table<ResourceArn: string, ResourceType: string, ResourceOwnerId: string, AssociationTime: string, AmiAssociationScope: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.ListAssociationsForLicenseConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseConfigurationArn": $license_configuration_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1544,6 +1599,7 @@ export def "list-associations-for-license-configuration" [
 #
 # POST /
 # operationId: ListDistributedGrants
+# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-distributed-grants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1561,15 +1617,16 @@ export def "list-distributed-grants" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  --grant-arns: any
-  --filters: any
-  --next-token: any
-  --max-results: any
-]: any -> record<Grants: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  --grant-arns: list<string> # Amazon Resource Names (ARNs) of the grants.
+  --filters: list # Filters to scope the results. The following filters are supported: LicenseArn GrantStatus GranteePrincipalARN ProductSKU LicenseIssuerName — item shape: {Name?: string, Values?: list<string>}
+  --next-token: string # Token for the next set of results.
+  --max-results: int # Maximum number of results to return in a single call.
+]: any -> record<Grants: table<GrantArn: string, GrantName: string, ParentArn: string, LicenseArn: string, GranteePrincipalArn: string, HomeRegion: string, GrantStatus: string, StatusReason: string, Version: string, GrantedOperations: list, Options: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.ListDistributedGrants")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GrantArns": $grant_arns, "Filters": $filters, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1612,14 +1669,15 @@ export def "list-failures-for-license-configuration-operations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  license_configuration_arn: any
-  --max-results: any
-  --next-token: any
-]: any -> record<LicenseOperationFailureList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  license_configuration_arn: string # Amazon Resource Name of the license configuration.
+  --max-results: int # Maximum number of results to return in a single call.
+  --next-token: string # Token for the next set of results.
+]: any -> record<LicenseOperationFailureList: table<ResourceArn: string, ResourceType: string, ErrorMessage: string, FailureTime: string, OperationName: string, ResourceOwnerId: string, OperationRequestedBy: string, MetadataList: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.ListFailuresForLicenseConfigurationOperations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseConfigurationArn": $license_configuration_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1645,6 +1703,7 @@ export def "list-failures-for-license-configuration-operations" [
 #
 # POST /
 # operationId: ListLicenseConfigurations
+# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-license-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1662,15 +1721,16 @@ export def "list-license-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  --license-configuration-arns: any
-  --max-results: any
-  --next-token: any
-  --filters: any
-]: any -> record<LicenseConfigurations: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  --license-configuration-arns: list<string> # Amazon Resource Names (ARN) of the license configurations.
+  --max-results: int # Maximum number of results to return in a single call.
+  --next-token: string # Token for the next set of results.
+  --filters: list # Filters to scope the results. The following filters and logical operators are supported: licenseCountingType - The dimension for which licenses are counted. Possible values are vCPU | Instance | Core | Socket. Logical operators are EQUALS | NOT_EQUALS. enforceLicenseCount - A Boolean value that indicates whether hard license enforcement is used. Logical operators are EQUALS | NOT_EQUALS. usagelimitExceeded - A Boolean value that indicates whether the available licenses have been exceeded. Logical operators are EQUALS | NOT_EQUALS. — item shape: {Name?: string, Values?: list<string>}
+]: any -> record<LicenseConfigurations: table<LicenseConfigurationId: string, LicenseConfigurationArn: string, Name: string, Description: string, LicenseCountingType: string, LicenseRules: list, LicenseCount: int, LicenseCountHardLimit: bool, DisassociateWhenNotFound: bool, ConsumedLicenses: int, Status: string, OwnerAccountId: string, ConsumedLicenseSummaryList: list, ManagedResourceSummaryList: list, ProductInformationList: list, AutomatedDiscoveryInformation: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.ListLicenseConfigurations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseConfigurationArns": $license_configuration_arns, "MaxResults": $max_results, "NextToken": $next_token, "Filters": $filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1696,6 +1756,7 @@ export def "list-license-configurations" [
 #
 # POST /
 # operationId: ListLicenseConversionTasks
+# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-license-conversion-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1713,14 +1774,15 @@ export def "list-license-conversion-tasks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  --next-token: any
-  --max-results: any
-  --filters: any
-]: any -> record<LicenseConversionTasks: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  --next-token: string # Token for the next set of results.
+  --max-results: int # Maximum number of results to return in a single call.
+  --filters: list # Filters to scope the results. Valid filters are ResourceArns and Status. — item shape: {Name?: string, Values?: list<string>}
+]: any -> record<LicenseConversionTasks: table<LicenseConversionTaskId: string, ResourceArn: string, SourceLicenseContext: record, DestinationLicenseContext: record, Status: string, StatusMessage: string, StartTime: string, LicenseConversionTime: string, EndTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.ListLicenseConversionTasks")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NextToken": $next_token, "MaxResults": $max_results, "Filters": $filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1746,6 +1808,7 @@ export def "list-license-conversion-tasks" [
 #
 # POST /
 # operationId: ListLicenseManagerReportGenerators
+# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-license-manager-report-generators" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1763,14 +1826,15 @@ export def "list-license-manager-report-generators" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  --filters: any
-  --next-token: any
-  --max-results: any
-]: any -> record<ReportGenerators: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  --filters: list # Filters to scope the results. The following filters are supported: LicenseConfigurationArn — item shape: {Name?: string, Values?: list<string>}
+  --next-token: string # Token for the next set of results.
+  --max-results: int # Maximum number of results to return in a single call.
+]: any -> record<ReportGenerators: table<ReportGeneratorName: string, ReportType: list, ReportContext: record, ReportFrequency: record, LicenseManagerReportGeneratorArn: string, LastRunStatus: string, LastRunFailureReason: string, LastReportGenerationTime: string, ReportCreatorAccount: string, Description: string, S3Location: record, CreateTime: string, Tags: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.ListLicenseManagerReportGenerators")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Filters": $filters, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1813,14 +1877,15 @@ export def "list-license-specifications-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  resource_arn: any
-  --max-results: any
-  --next-token: any
-]: any -> record<LicenseSpecifications: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  resource_arn: string # Amazon Resource Name (ARN) of a resource that has an associated license configuration.
+  --max-results: int # Maximum number of results to return in a single call.
+  --next-token: string # Token for the next set of results.
+]: any -> record<LicenseSpecifications: table<LicenseConfigurationArn: string, AmiAssociationScope: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.ListLicenseSpecificationsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1863,14 +1928,15 @@ export def "list-license-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  license_arn: any
-  --next-token: any
-  --max-results: any
-]: any -> record<Licenses: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  license_arn: string # Amazon Resource Name (ARN) of the license.
+  --next-token: string # Token for the next set of results.
+  --max-results: int # Maximum number of results to return in a single call.
+]: any -> record<Licenses: table<LicenseArn: string, LicenseName: string, ProductName: string, ProductSKU: string, Issuer: record, HomeRegion: string, Status: string, Validity: record, Beneficiary: string, Entitlements: list, ConsumptionConfiguration: record, LicenseMetadata: list, CreateTime: string, Version: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.ListLicenseVersions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseArn": $license_arn, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1896,6 +1962,7 @@ export def "list-license-versions" [
 #
 # POST /
 # operationId: ListLicenses
+# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-licenses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1913,15 +1980,16 @@ export def "list-licenses" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  --license-arns: any
-  --filters: any
-  --next-token: any
-  --max-results: any
-]: any -> record<Licenses: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  --license-arns: list<string> # Amazon Resource Names (ARNs) of the licenses.
+  --filters: list # Filters to scope the results. The following filters are supported: Beneficiary ProductSKU Fingerprint Status — item shape: {Name?: string, Values?: list<string>}
+  --next-token: string # Token for the next set of results.
+  --max-results: int # Maximum number of results to return in a single call.
+]: any -> record<Licenses: table<LicenseArn: string, LicenseName: string, ProductName: string, ProductSKU: string, Issuer: record, HomeRegion: string, Status: string, Validity: record, Beneficiary: string, Entitlements: list, ConsumptionConfiguration: record, LicenseMetadata: list, CreateTime: string, Version: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.ListLicenses")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseArns": $license_arns, "Filters": $filters, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1947,6 +2015,7 @@ export def "list-licenses" [
 #
 # POST /
 # operationId: ListReceivedGrants
+# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-received-grants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1964,15 +2033,16 @@ export def "list-received-grants" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  --grant-arns: any
-  --filters: any
-  --next-token: any
-  --max-results: any
-]: any -> record<Grants: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  --grant-arns: list<string> # Amazon Resource Names (ARNs) of the grants.
+  --filters: list # Filters to scope the results. The following filters are supported: ProductSKU LicenseIssuerName LicenseArn GrantStatus GranterAccountId — item shape: {Name?: string, Values?: list<string>}
+  --next-token: string # Token for the next set of results.
+  --max-results: int # Maximum number of results to return in a single call.
+]: any -> record<Grants: table<GrantArn: string, GrantName: string, ParentArn: string, LicenseArn: string, GranteePrincipalArn: string, HomeRegion: string, GrantStatus: string, StatusReason: string, Version: string, GrantedOperations: list, Options: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.ListReceivedGrants")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GrantArns": $grant_arns, "Filters": $filters, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1998,6 +2068,7 @@ export def "list-received-grants" [
 #
 # POST /
 # operationId: ListReceivedGrantsForOrganization
+# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-received-grants-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2015,15 +2086,16 @@ export def "list-received-grants-for-organization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  license_arn: any
-  --filters: any
-  --next-token: any
-  --max-results: any
-]: any -> record<Grants: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  license_arn: string # The Amazon Resource Name (ARN) of the received license.
+  --filters: list # Filters to scope the results. The following filters are supported: ParentArn GranteePrincipalArn — item shape: {Name?: string, Values?: list<string>}
+  --next-token: string # Token for the next set of results.
+  --max-results: int # Maximum number of results to return in a single call.
+]: any -> record<Grants: table<GrantArn: string, GrantName: string, ParentArn: string, LicenseArn: string, GranteePrincipalArn: string, HomeRegion: string, GrantStatus: string, StatusReason: string, Version: string, GrantedOperations: list, Options: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.ListReceivedGrantsForOrganization")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseArn": $license_arn, "Filters": $filters, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2049,6 +2121,7 @@ export def "list-received-grants-for-organization" [
 #
 # POST /
 # operationId: ListReceivedLicenses
+# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-received-licenses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2066,15 +2139,16 @@ export def "list-received-licenses" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  --license-arns: any
-  --filters: any
-  --next-token: any
-  --max-results: any
-]: any -> record<Licenses: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  --license-arns: list<string> # Amazon Resource Names (ARNs) of the licenses.
+  --filters: list # Filters to scope the results. The following filters are supported: ProductSKU Status Fingerprint IssuerName Beneficiary — item shape: {Name?: string, Values?: list<string>}
+  --next-token: string # Token for the next set of results.
+  --max-results: int # Maximum number of results to return in a single call.
+]: any -> record<Licenses: table<LicenseArn: string, LicenseName: string, ProductName: string, ProductSKU: string, Issuer: record, HomeRegion: string, Status: string, Validity: record, Beneficiary: string, Entitlements: list, ConsumptionConfiguration: record, LicenseMetadata: list, CreateTime: string, Version: string, ReceivedMetadata: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.ListReceivedLicenses")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseArns": $license_arns, "Filters": $filters, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2100,6 +2174,7 @@ export def "list-received-licenses" [
 #
 # POST /
 # operationId: ListReceivedLicensesForOrganization
+# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-received-licenses-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2117,14 +2192,15 @@ export def "list-received-licenses-for-organization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  --filters: any
-  --next-token: any
-  --max-results: any
-]: any -> record<Licenses: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  --filters: list # Filters to scope the results. The following filters are supported: Beneficiary ProductSKU — item shape: {Name?: string, Values?: list<string>}
+  --next-token: string # Token for the next set of results.
+  --max-results: int # Maximum number of results to return in a single call.
+]: any -> record<Licenses: table<LicenseArn: string, LicenseName: string, ProductName: string, ProductSKU: string, Issuer: record, HomeRegion: string, Status: string, Validity: record, Beneficiary: string, Entitlements: list, ConsumptionConfiguration: record, LicenseMetadata: list, CreateTime: string, Version: string, ReceivedMetadata: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.ListReceivedLicensesForOrganization")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Filters": $filters, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2150,6 +2226,7 @@ export def "list-received-licenses-for-organization" [
 #
 # POST /
 # operationId: ListResourceInventory
+# --Filters item shape: {Name: string, Condition: "EQUALS"|"NOT_EQUALS"|"BEGINS_WITH"|"CONTAINS", Value?: string}
 export def "list-resource-inventory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2167,14 +2244,15 @@ export def "list-resource-inventory" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  --max-results: any
-  --next-token: any
-  --filters: any
-]: any -> record<ResourceInventoryList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  --max-results: int # Maximum number of results to return in a single call.
+  --next-token: string # Token for the next set of results.
+  --filters: list # Filters to scope the results. The following filters and logical operators are supported: account_id - The ID of the Amazon Web Services account that owns the resource. Logical operators are EQUALS | NOT_EQUALS. application_name - The name of the application. Logical operators are EQUALS | BEGINS_WITH. license_included - The type of license included. Logical operators are EQUALS | NOT_EQUALS. Possible values are sql-server-enterprise | sql-server-standard | sql-server-web | windows-server-datacenter. platform - The platform of the resource. Logical operators are EQUALS | BEGINS_WITH. resource_id - The ID of the resource. Logical operators are EQUALS | NOT_EQUALS. tag:<key> - The key/value combination of a tag assigned to the resource. Logical operators are EQUALS (single account) or EQUALS | NOT_EQUALS (cross account). — item shape: {Name: string, Condition: "EQUALS"|"NOT_EQUALS"|"BEGINS_WITH"|"CONTAINS", Value?: string}
+]: any -> record<ResourceInventoryList: table<ResourceId: string, ResourceType: string, ResourceArn: string, Platform: string, PlatformVersion: string, ResourceOwningAccountId: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.ListResourceInventory")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MaxResults": $max_results, "NextToken": $next_token, "Filters": $filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2217,12 +2295,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  resource_arn: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  resource_arn: string # Amazon Resource Name (ARN) of the license configuration.
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2248,6 +2327,7 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: ListTokens
+# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2265,15 +2345,16 @@ export def "list-tokens" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  --token-ids: any
-  --filters: any
-  --next-token: any
-  --max-results: any
-]: any -> record<Tokens: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  --token-ids: list<string> # Token IDs.
+  --filters: list # Filters to scope the results. The following filter is supported: LicenseArns — item shape: {Name?: string, Values?: list<string>}
+  --next-token: string # Token for the next set of results.
+  --max-results: int # Maximum number of results to return in a single call.
+]: any -> record<Tokens: table<TokenId: string, TokenType: string, LicenseArn: string, ExpirationTime: string, TokenProperties: list, RoleArns: list, Status: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.ListTokens")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TokenIds": $token_ids, "Filters": $filters, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2299,6 +2380,7 @@ export def "list-tokens" [
 #
 # POST /
 # operationId: ListUsageForLicenseConfiguration
+# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-usage-for-license-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2316,15 +2398,16 @@ export def "list-usage-for-license-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  license_configuration_arn: any
-  --max-results: any
-  --next-token: any
-  --filters: any
-]: any -> record<LicenseConfigurationUsageList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  license_configuration_arn: string # Amazon Resource Name (ARN) of the license configuration.
+  --max-results: int # Maximum number of results to return in a single call.
+  --next-token: string # Token for the next set of results.
+  --filters: list # Filters to scope the results. The following filters and logical operators are supported: resourceArn - The ARN of the license configuration resource. Logical operators are EQUALS | NOT_EQUALS. resourceType - The resource type (EC2_INSTANCE | EC2_HOST | EC2_AMI | SYSTEMS_MANAGER_MANAGED_INSTANCE). Logical operators are EQUALS | NOT_EQUALS. resourceAccount - The ID of the account that owns the resource. Logical operators are EQUALS | NOT_EQUALS. — item shape: {Name?: string, Values?: list<string>}
+]: any -> record<LicenseConfigurationUsageList: table<ResourceArn: string, ResourceType: string, ResourceStatus: string, ResourceOwnerId: string, AssociationTime: string, ConsumedLicenses: int>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.ListUsageForLicenseConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseConfigurationArn": $license_configuration_arn, "MaxResults": $max_results, "NextToken": $next_token, "Filters": $filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2367,12 +2450,13 @@ export def "reject-grant" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  grant_arn: any
-]: any -> record<GrantArn: record, Status: record, Version: record> {
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  grant_arn: string # Amazon Resource Name (ARN) of the grant.
+]: any -> record<GrantArn: string, Status: string, Version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.RejectGrant")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GrantArn": $grant_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2398,6 +2482,7 @@ export def "reject-grant" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2415,13 +2500,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  resource_arn: string # Amazon Resource Name (ARN) of the license configuration.
+  tags: list # One or more tags. — item shape: {Key?: string, Value?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2464,13 +2550,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  resource_arn: string # Amazon Resource Name (ARN) of the license configuration.
+  tag_keys: list<string> # Keys identifying the tags to remove.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2496,6 +2583,7 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateLicenseConfiguration
+# --ProductInformationList item shape: {ResourceType: string, ProductInformationFilterList: list}
 export def "update-license-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2513,20 +2601,21 @@ export def "update-license-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  license_configuration_arn: any
-  --license-configuration-status: any
-  --license-rules: any
-  --license-count: any
-  --license-count-hard-limit: any
-  --name: any
-  --description: any
-  --product-information-list: any
-  --disassociate-when-not-found: any
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  license_configuration_arn: string # Amazon Resource Name (ARN) of the license configuration.
+  --license-configuration-status: string@license-configuration-status-completer # New status of the license configuration.
+  --license-rules: list<string> # New license rule. The only rule that you can add after you create a license configuration is licenseAffinityToHost.
+  --license-count: int # New number of licenses managed by the license configuration.
+  --license-count-hard-limit: oneof<nothing, bool> # New hard limit of the number of available licenses.
+  --name: string # New name of the license configuration.
+  --description: string # New description of the license configuration.
+  --product-information-list: list # New product information. — item shape: {ResourceType: string, ProductInformationFilterList: list}
+  --disassociate-when-not-found: oneof<nothing, bool> # When true, disassociates a resource when software is uninstalled.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.UpdateLicenseConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseConfigurationArn": $license_configuration_arn, "LicenseConfigurationStatus": $license_configuration_status, "LicenseRules": $license_rules, "LicenseCount": $license_count, "LicenseCountHardLimit": $license_count_hard_limit, "Name": $name, "Description": $description, "ProductInformationList": $product_information_list, "DisassociateWhenNotFound": $disassociate_when_not_found} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2552,6 +2641,8 @@ export def "update-license-configuration" [
 #
 # POST /
 # operationId: UpdateLicenseManagerReportGenerator
+# --ReportContext shape: {licenseConfigurationArns: list<string>}
+# --ReportFrequency shape: {value?: int, period?: "DAY"|"WEEK"|"MONTH"}
 export def "update-license-manager-report-generator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2569,18 +2660,19 @@ export def "update-license-manager-report-generator" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  license_manager_report_generator_arn: any
-  report_generator_name: any
-  type: any
-  report_context: any
-  report_frequency: any
-  client_token: any
-  --description: any
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  license_manager_report_generator_arn: string # Amazon Resource Name (ARN) of the report generator to update.
+  report_generator_name: string # Name of the report generator.
+  type: list<string> # Type of reports to generate. The following report types are supported: License configuration report - Reports the number and details of consumed licenses for a license configuration. Resource report - Reports the tracked licenses and resource consumption for a license configuration.
+  report_context: record # Details of the license configuration that this generator reports on. — shape: {licenseConfigurationArns: list<string>}
+  report_frequency: record # Details about how frequently reports are generated. — shape: {value?: int, period?: "DAY"|"WEEK"|"MONTH"}
+  client_token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
+  --description: string # Description of the report generator.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.UpdateLicenseManagerReportGenerator")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LicenseManagerReportGeneratorArn": $license_manager_report_generator_arn, "ReportGeneratorName": $report_generator_name, "Type": $type, "ReportContext": $report_context, "ReportFrequency": $report_frequency, "ClientToken": $client_token, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2606,6 +2698,8 @@ export def "update-license-manager-report-generator" [
 #
 # POST /
 # operationId: UpdateLicenseSpecificationsForResource
+# --AddLicenseSpecifications item shape: {LicenseConfigurationArn: string, AmiAssociationScope?: string}
+# --RemoveLicenseSpecifications item shape: {LicenseConfigurationArn: string, AmiAssociationScope?: string}
 export def "update-license-specifications-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2623,14 +2717,15 @@ export def "update-license-specifications-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-48
-  resource_arn: any
-  --add-license-specifications: any
-  --remove-license-specifications: any
+  --x-amz-target: string@x-amz-target-completer-48 # required
+  resource_arn: string # Amazon Resource Name (ARN) of the Amazon Web Services resource.
+  --add-license-specifications: list # ARNs of the license configurations to add. — item shape: {LicenseConfigurationArn: string, AmiAssociationScope?: string}
+  --remove-license-specifications: list # ARNs of the license configurations to remove. — item shape: {LicenseConfigurationArn: string, AmiAssociationScope?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.UpdateLicenseSpecificationsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "AddLicenseSpecifications": $add_license_specifications, "RemoveLicenseSpecifications": $remove_license_specifications} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2656,6 +2751,7 @@ export def "update-license-specifications-for-resource" [
 #
 # POST /
 # operationId: UpdateServiceSettings
+# --OrganizationConfiguration shape: {EnableIntegration: bool}
 export def "update-service-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2673,15 +2769,16 @@ export def "update-service-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-49
-  --s3-bucket-arn: any
-  --sns-topic-arn: any
-  --organization-configuration: any
-  --enable-cross-accounts-discovery: any
+  --x-amz-target: string@x-amz-target-completer-49 # required
+  --s3-bucket-arn: string # Amazon Resource Name (ARN) of the Amazon S3 bucket where the License Manager information is stored.
+  --sns-topic-arn: string # Amazon Resource Name (ARN) of the Amazon SNS topic used for License Manager alerts.
+  --organization-configuration: record # Configuration information for Organizations. — shape: {EnableIntegration: bool}
+  --enable-cross-accounts-discovery: oneof<nothing, bool> # Activates cross-account discovery.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLicenseManager.UpdateServiceSettings")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"S3BucketArn": $s3_bucket_arn, "SnsTopicArn": $sns_topic_arn, "OrganizationConfiguration": $organization_configuration, "EnableCrossAccountsDiscovery": $enable_cross_accounts_discovery} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -100,6 +100,9 @@ def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: b
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def table-auditing-policy-name-completer [] { ["default"] }
+def connection-policy-name-completer [] { ["default"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -143,13 +146,14 @@ export def "server-table-auditing-policies-list-by-server" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<value: table<kind: string, location: string, properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<value: table<kind: string, location: string, properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/auditingPolicies") $qp $auth.query)
   let accept_val = "application/json"
@@ -178,7 +182,7 @@ export def "server-table-auditing-policies-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
-  table_auditing_policy_name: string
+  table_auditing_policy_name: string@table-auditing-policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,14 +192,15 @@ export def "server-table-auditing-policies-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<kind: string, location: string, properties: record<auditLogsTableName: string, auditingState: string, eventTypesToAudit: string, fullAuditLogsTableName: string, retentionDays: string, storageAccountKey: string, storageAccountName: string, storageAccountResourceGroupName: string, storageAccountSecondaryKey: string, storageAccountSubscriptionId: string, storageTableEndpoint: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<kind: string, location: string, properties: record<auditLogsTableName: string, auditingState: string, eventTypesToAudit: string, fullAuditLogsTableName: string, retentionDays: string, storageAccountKey: string, storageAccountName: string, storageAccountResourceGroupName: string, storageAccountSecondaryKey: string, storageAccountSubscriptionId: string, storageTableEndpoint: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($table_auditing_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'tableAuditingPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), table_auditing_policy_name: (encode-path-segment $table_auditing_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/auditingPolicies/{table_auditing_policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -219,12 +224,13 @@ export def "server-table-auditing-policies-get" [
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/auditingPolicies/{tableAuditingPolicyName}
 # DEPRECATED
 # operationId: ServerTableAuditingPolicies_CreateOrUpdate
+# --properties shape: {auditLogsTableName?: string, auditingState?: string, eventTypesToAudit?: string, fullAuditLogsTableName?: string, retentionDays?: string, storageAccountKey?: string, storageAccountName?: string, storageAccountResourceGroupName?: string, storageAccountSecondaryKey?: string, storageAccountSubscriptionId?: string, storageTableEndpoint?: string}
 @deprecated
 export def "server-table-auditing-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
-  table_auditing_policy_name: string
+  table_auditing_policy_name: string@table-auditing-policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,9 +240,9 @@ export def "server-table-auditing-policies-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-  --properties: any # Properties of a server table auditing policy.
-]: any -> record<kind: string, location: string, properties: record<auditLogsTableName: string, auditingState: string, eventTypesToAudit: string, fullAuditLogsTableName: string, retentionDays: string, storageAccountKey: string, storageAccountName: string, storageAccountResourceGroupName: string, storageAccountSecondaryKey: string, storageAccountSubscriptionId: string, storageTableEndpoint: string>> {
+  --api-version: string # The API version to use for the request. (required)
+  --properties: record # Properties of a server table auditing policy. — shape: {auditLogsTableName?: string, auditingState?: string, eventTypesToAudit?: string, fullAuditLogsTableName?: string, retentionDays?: string, storageAccountKey?: string, storageAccountName?: string, storageAccountResourceGroupName?: string, storageAccountSecondaryKey?: string, storageAccountSubscriptionId?: string, storageTableEndpoint?: string}
+]: any -> record<kind: string, location: string, properties: record<auditLogsTableName: string, auditingState: string, eventTypesToAudit: string, fullAuditLogsTableName: string, retentionDays: string, storageAccountKey: string, storageAccountName: string, storageAccountResourceGroupName: string, storageAccountSecondaryKey: string, storageAccountSubscriptionId: string, storageTableEndpoint: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -244,6 +250,7 @@ export def "server-table-auditing-policies-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($table_auditing_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'tableAuditingPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), table_auditing_policy_name: (encode-path-segment $table_auditing_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/auditingPolicies/{table_auditing_policy_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -284,14 +291,15 @@ export def "database-table-auditing-policies-list-by-database" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<value: table<kind: string, location: string, properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<value: table<kind: string, location: string, properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/auditingPolicies") $qp $auth.query)
   let accept_val = "application/json"
@@ -321,7 +329,7 @@ export def "database-table-auditing-policies-get" [
   resource_group_name: string
   server_name: string
   database_name: string
-  table_auditing_policy_name: string
+  table_auditing_policy_name: string@table-auditing-policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,8 +339,8 @@ export def "database-table-auditing-policies-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<kind: string, location: string, properties: record<useServerDefault: string, auditLogsTableName: string, auditingState: string, eventTypesToAudit: string, fullAuditLogsTableName: string, retentionDays: string, storageAccountKey: string, storageAccountName: string, storageAccountResourceGroupName: string, storageAccountSecondaryKey: string, storageAccountSubscriptionId: string, storageTableEndpoint: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<kind: string, location: string, properties: record<useServerDefault: string, auditLogsTableName: string, auditingState: string, eventTypesToAudit: string, fullAuditLogsTableName: string, retentionDays: string, storageAccountKey: string, storageAccountName: string, storageAccountResourceGroupName: string, storageAccountSecondaryKey: string, storageAccountSubscriptionId: string, storageTableEndpoint: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -340,6 +348,7 @@ export def "database-table-auditing-policies-get" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($table_auditing_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'tableAuditingPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name), table_auditing_policy_name: (encode-path-segment $table_auditing_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/auditingPolicies/{table_auditing_policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -370,7 +379,7 @@ export def "database-table-auditing-policies-create-or-update" [
   resource_group_name: string
   server_name: string
   database_name: string
-  table_auditing_policy_name: string
+  table_auditing_policy_name: string@table-auditing-policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,9 +389,9 @@ export def "database-table-auditing-policies-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-  --properties: any # Properties of a database table auditing policy. — shape: {useServerDefault?: string, auditLogsTableName?: string, auditingState?: string, eventTypesToAudit?: string, fullAuditLogsTableName?: string, retentionDays?: string, storageAccountKey?: string, storageAccountName?: string, storageAccountResourceGroupName?: string, storageAccountSecondaryKey?: string, storageAccountSubscriptionId?: string, storageTableEndpoint?: string}
-]: any -> record<kind: string, location: string, properties: record<useServerDefault: string, auditLogsTableName: string, auditingState: string, eventTypesToAudit: string, fullAuditLogsTableName: string, retentionDays: string, storageAccountKey: string, storageAccountName: string, storageAccountResourceGroupName: string, storageAccountSecondaryKey: string, storageAccountSubscriptionId: string, storageTableEndpoint: string>> {
+  --api-version: string # The API version to use for the request. (required)
+  --properties: record # Properties of a database table auditing policy. — shape: {useServerDefault?: string, auditLogsTableName?: string, auditingState?: string, eventTypesToAudit?: string, fullAuditLogsTableName?: string, retentionDays?: string, storageAccountKey?: string, storageAccountName?: string, storageAccountResourceGroupName?: string, storageAccountSecondaryKey?: string, storageAccountSubscriptionId?: string, storageTableEndpoint?: string}
+]: any -> record<kind: string, location: string, properties: record<useServerDefault: string, auditLogsTableName: string, auditingState: string, eventTypesToAudit: string, fullAuditLogsTableName: string, retentionDays: string, storageAccountKey: string, storageAccountName: string, storageAccountResourceGroupName: string, storageAccountSecondaryKey: string, storageAccountSubscriptionId: string, storageTableEndpoint: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -391,6 +400,7 @@ export def "database-table-auditing-policies-create-or-update" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($table_auditing_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'tableAuditingPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name), table_auditing_policy_name: (encode-path-segment $table_auditing_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/auditingPolicies/{table_auditing_policy_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -422,7 +432,7 @@ export def "database-connection-policies-get" [
   resource_group_name: string
   server_name: string
   database_name: string
-  connection_policy_name: string
+  connection_policy_name: string@connection-policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,8 +442,8 @@ export def "database-connection-policies-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<kind: string, location: string, properties: record<proxyDnsName: string, proxyPort: string, redirectionState: string, securityEnabledAccess: string, state: string, useServerDefault: string, visibility: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<kind: string, location: string, properties: record<proxyDnsName: string, proxyPort: string, redirectionState: string, securityEnabledAccess: string, state: string, useServerDefault: string, visibility: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -441,6 +451,7 @@ export def "database-connection-policies-get" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($connection_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'connectionPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name), connection_policy_name: (encode-path-segment $connection_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/connectionPolicies/{connection_policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -471,7 +482,7 @@ export def "database-connection-policies-create-or-update" [
   resource_group_name: string
   server_name: string
   database_name: string
-  connection_policy_name: string
+  connection_policy_name: string@connection-policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,9 +492,9 @@ export def "database-connection-policies-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: record # Properties of a database connection policy. — shape: {proxyDnsName?: string, proxyPort?: string, redirectionState?: string, securityEnabledAccess?: string, state?: string, useServerDefault?: string, visibility?: string}
-]: any -> record<kind: string, location: string, properties: record<proxyDnsName: string, proxyPort: string, redirectionState: string, securityEnabledAccess: string, state: string, useServerDefault: string, visibility: string>> {
+]: any -> record<kind: string, location: string, properties: record<proxyDnsName: string, proxyPort: string, redirectionState: string, securityEnabledAccess: string, state: string, useServerDefault: string, visibility: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -492,6 +503,7 @@ export def "database-connection-policies-create-or-update" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($connection_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'connectionPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name), connection_policy_name: (encode-path-segment $connection_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/connectionPolicies/{connection_policy_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -127,8 +127,8 @@ export def commands []: nothing -> table {
 #
 # POST /createSignalingChannel
 # operationId: CreateSignalingChannel
-# --SingleMasterConfiguration shape: {MessageTtlSeconds?: any}
-# --Tags item shape: {Key: any, Value: any}
+# --SingleMasterConfiguration shape: {MessageTtlSeconds?: int}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-signaling-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -148,9 +148,9 @@ export def "create-signaling-channel" [
   --x-amz-signed-headers: string
   channel_name: string # A name for the signaling channel that you are creating. It must be unique for each Amazon Web Services account and Amazon Web Services Region.
   --channel-type: string@channel-type-completer # A type of the signaling channel that you are creating. Currently, SINGLE_MASTER is the only supported channel type.
-  --single-master-configuration: record # A structure that contains the configuration for the SINGLE_MASTER channel type. — shape: {MessageTtlSeconds?: any}
-  --tags: list # A set of tags (key-value pairs) that you want to associate with this channel. — item shape: {Key: any, Value: any}
-]: any -> record<ChannelARN: record> {
+  --single-master-configuration: record # A structure that contains the configuration for the SINGLE_MASTER channel type. — shape: {MessageTtlSeconds?: int}
+  --tags: list # A set of tags (key-value pairs) that you want to associate with this channel. — item shape: {Key: string, Value: string}
+]: any -> record<ChannelARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -202,7 +202,7 @@ export def "create-stream" [
   --kms-key-id: string # The ID of the Key Management Service (KMS) key that you want Kinesis Video Streams to use to encrypt stream data. If no key ID is specified, the default, Kinesis Video-managed key (aws/kinesisvideo) is used. For more information, see DescribeKey (https://docs.aws.amazon.com/kms/latest/APIReference/API_DescribeKey.html#API_DescribeKey_RequestParameters).
   --data-retention-in-hours: int # The number of hours that you want to retain the data in the stream. Kinesis Video Streams retains the data in a data store that is associated with the stream. The default value is 0, indicating that the stream does not persist data. When the DataRetentionInHours value is 0, consumers can still consume the fragments that remain in the service host buffer, which has a retention time limit of 5 minutes and a retention memory limit of 200 MB. Fragments are removed from the buffer when either limit is reached.
   --tags: record # A list of tags to associate with the specified stream. Each tag is a key-value pair (the value is optional).
-]: any -> record<StreamARN: record> {
+]: any -> record<StreamARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -346,7 +346,7 @@ export def "describe-edge-configuration" [
   --x-amz-signed-headers: string
   --stream-name: string # The name of the stream whose edge configuration you want to update. Specify either the StreamName or the StreamARN.
   --stream-arn: string # The Amazon Resource Name (ARN) of the stream. Specify either the StreamNameor the StreamARN.
-]: any -> record<StreamName: record, StreamARN: record, CreationTime: record, LastUpdatedTime: record, SyncStatus: record, FailedStatusDetails: record, EdgeConfig: record<HubDeviceArn: record, RecorderConfig: record<MediaSourceConfig: record, ScheduleConfig: record>, UploaderConfig: record<ScheduleConfig: record>, DeletionConfig: record<EdgeRetentionInHours: record, LocalSizeConfig: record, DeleteAfterUpload: record>>> {
+]: any -> record<StreamName: string, StreamARN: string, CreationTime: string, LastUpdatedTime: string, SyncStatus: string, FailedStatusDetails: string, EdgeConfig: record<HubDeviceArn: string, RecorderConfig: record<MediaSourceConfig: record, ScheduleConfig: record>, UploaderConfig: record<ScheduleConfig: record>, DeletionConfig: record<EdgeRetentionInHours: int, LocalSizeConfig: record, DeleteAfterUpload: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -394,7 +394,7 @@ export def "describe-image-generation-configuration" [
   --x-amz-signed-headers: string
   --stream-name: string # The name of the stream from which to retrieve the image generation configuration. You must specify either the StreamName or the StreamARN.
   --stream-arn: string # The Amazon Resource Name (ARN) of the Kinesis video stream from which to retrieve the image generation configuration. You must specify either the StreamName or the StreamARN.
-]: any -> record<ImageGenerationConfiguration: record<Status: record, ImageSelectorType: record, DestinationConfig: record<Uri: record, DestinationRegion: record>, SamplingInterval: record, Format: record, FormatConfig: record, WidthPixels: record, HeightPixels: record>> {
+]: any -> record<ImageGenerationConfiguration: record<Status: string, ImageSelectorType: string, DestinationConfig: record<Uri: string, DestinationRegion: string>, SamplingInterval: int, Format: string, FormatConfig: record, WidthPixels: int, HeightPixels: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -446,7 +446,7 @@ export def "describe-mapped-resource-configuration" [
   --stream-arn: string # The Amazon Resource Name (ARN) of the stream.
   --max-results-body: int # The maximum number of results to return in the response. (body field)
   --next-token-body: string # The token to provide in your next request, to get another batch of results. (body field)
-]: any -> record<MappedResourceConfigurationList: record, NextToken: record> {
+]: any -> record<MappedResourceConfigurationList: table<Type: string, ARN: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -495,7 +495,7 @@ export def "describe-media-storage-configuration" [
   --x-amz-signed-headers: string
   --channel-name: string # The name of the channel.
   --channel-arn: string # The Amazon Resource Name (ARN) of the channel.
-]: any -> record<MediaStorageConfiguration: record<StreamARN: record, Status: record>> {
+]: any -> record<MediaStorageConfiguration: record<StreamARN: string, Status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -543,7 +543,7 @@ export def "describe-notification-configuration" [
   --x-amz-signed-headers: string
   --stream-name: string # The name of the stream from which to retrieve the notification configuration. You must specify either the StreamName or the StreamARN.
   --stream-arn: string # The Amazon Resource Name (ARN) of the Kinesis video stream from where you want to retrieve the notification configuration. You must specify either the StreamName or the StreamARN.
-]: any -> record<NotificationConfiguration: record<Status: record, DestinationConfig: record<Uri: record>>> {
+]: any -> record<NotificationConfiguration: record<Status: string, DestinationConfig: record<Uri: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -591,7 +591,7 @@ export def "describe-signaling-channel" [
   --x-amz-signed-headers: string
   --channel-name: string # The name of the signaling channel that you want to describe.
   --channel-arn: string # The ARN of the signaling channel that you want to describe.
-]: any -> record<ChannelInfo: record<ChannelName: record, ChannelARN: record, ChannelType: record, ChannelStatus: record, CreationTime: record, SingleMasterConfiguration: record<MessageTtlSeconds: record>, Version: record>> {
+]: any -> record<ChannelInfo: record<ChannelName: string, ChannelARN: string, ChannelType: string, ChannelStatus: string, CreationTime: string, SingleMasterConfiguration: record<MessageTtlSeconds: int>, Version: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -639,7 +639,7 @@ export def "describe-stream" [
   --x-amz-signed-headers: string
   --stream-name: string # The name of the stream.
   --stream-arn: string # The Amazon Resource Name (ARN) of the stream.
-]: any -> record<StreamInfo: record<DeviceName: record, StreamName: record, StreamARN: record, MediaType: record, KmsKeyId: record, Version: record, Status: record, CreationTime: record, DataRetentionInHours: record>> {
+]: any -> record<StreamInfo: record<DeviceName: string, StreamName: string, StreamARN: string, MediaType: string, KmsKeyId: string, Version: string, Status: string, CreationTime: string, DataRetentionInHours: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -688,7 +688,7 @@ export def "get-data-endpoint" [
   --stream-name: string # The name of the stream that you want to get the endpoint for. You must specify either this parameter or a StreamARN in the request.
   --stream-arn: string # The Amazon Resource Name (ARN) of the stream that you want to get the endpoint for. You must specify either this parameter or a StreamName in the request.
   api_name: string@api-name-completer # The name of the API action for which to get an endpoint.
-]: any -> record<DataEndpoint: record> {
+]: any -> record<DataEndpoint: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -717,7 +717,7 @@ export def "get-data-endpoint" [
 #
 # POST /getSignalingChannelEndpoint
 # operationId: GetSignalingChannelEndpoint
-# --SingleMasterChannelEndpointConfiguration shape: {Protocols?: any, Role?: any}
+# --SingleMasterChannelEndpointConfiguration shape: {Protocols?: list<string>, Role?: "MASTER"|"VIEWER"}
 export def "get-signaling-channel-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -736,8 +736,8 @@ export def "get-signaling-channel-endpoint" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   channel_arn: string # The Amazon Resource Name (ARN) of the signalling channel for which you want to get an endpoint.
-  --single-master-channel-endpoint-configuration: record # An object that contains the endpoint configuration for the SINGLE_MASTER channel type. — shape: {Protocols?: any, Role?: any}
-]: any -> record<ResourceEndpointList: record> {
+  --single-master-channel-endpoint-configuration: record # An object that contains the endpoint configuration for the SINGLE_MASTER channel type. — shape: {Protocols?: list<string>, Role?: "MASTER"|"VIEWER"}
+]: any -> record<ResourceEndpointList: table<Protocol: string, ResourceEndpoint: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -766,7 +766,7 @@ export def "get-signaling-channel-endpoint" [
 #
 # POST /listSignalingChannels
 # operationId: ListSignalingChannels
-# --ChannelNameCondition shape: {ComparisonOperator?: any, ComparisonValue?: any}
+# --ChannelNameCondition shape: {ComparisonOperator?: "BEGINS_WITH", ComparisonValue?: string}
 export def "list-signaling-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -788,8 +788,8 @@ export def "list-signaling-channels" [
   --x-amz-signed-headers: string
   --max-results-body: int # The maximum number of channels to return in the response. The default is 500. (body field)
   --next-token-body: string # If you specify this parameter, when the result of a ListSignalingChannels operation is truncated, the call returns the NextToken in the response. To get another batch of channels, provide this token in your next request. (body field)
-  --channel-name-condition: record # An optional input parameter for the ListSignalingChannels API. When this parameter is specified while invoking ListSignalingChannels, the API returns only the channels that satisfy a condition specified in ChannelNameCondition. — shape: {ComparisonOperator?: any, ComparisonValue?: any}
-]: any -> record<ChannelInfoList: record, NextToken: record> {
+  --channel-name-condition: record # An optional input parameter for the ListSignalingChannels API. When this parameter is specified while invoking ListSignalingChannels, the API returns only the channels that satisfy a condition specified in ChannelNameCondition. — shape: {ComparisonOperator?: "BEGINS_WITH", ComparisonValue?: string}
+]: any -> record<ChannelInfoList: table<ChannelName: string, ChannelARN: string, ChannelType: string, ChannelStatus: string, CreationTime: string, SingleMasterConfiguration: record, Version: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -819,7 +819,7 @@ export def "list-signaling-channels" [
 #
 # POST /listStreams
 # operationId: ListStreams
-# --StreamNameCondition shape: {ComparisonOperator?: any, ComparisonValue?: any}
+# --StreamNameCondition shape: {ComparisonOperator?: "BEGINS_WITH", ComparisonValue?: string}
 export def "list-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -841,8 +841,8 @@ export def "list-streams" [
   --x-amz-signed-headers: string
   --max-results-body: int # The maximum number of streams to return in the response. The default is 10,000. (body field)
   --next-token-body: string # If you specify this parameter, when the result of a ListStreams operation is truncated, the call returns the NextToken in the response. To get another batch of streams, provide this token in your next request. (body field)
-  --stream-name-condition: record # Specifies the condition that streams must satisfy to be returned when you list streams (see the ListStreams API). A condition has a comparison operation and a value. Currently, you can specify only the BEGINS_WITH operator, which finds streams whose names start with a given prefix. — shape: {ComparisonOperator?: any, ComparisonValue?: any}
-]: any -> record<StreamInfoList: record, NextToken: record> {
+  --stream-name-condition: record # Specifies the condition that streams must satisfy to be returned when you list streams (see the ListStreams API). A condition has a comparison operation and a value. Currently, you can specify only the BEGINS_WITH operator, which finds streams whose names start with a given prefix. — shape: {ComparisonOperator?: "BEGINS_WITH", ComparisonValue?: string}
+]: any -> record<StreamInfoList: table<DeviceName: string, StreamName: string, StreamARN: string, MediaType: string, KmsKeyId: string, Version: string, Status: string, CreationTime: string, DataRetentionInHours: int>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -891,7 +891,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --next-token: string # If you specify this parameter and the result of a ListTagsForResource call is truncated, the response includes a token that you can use in the next request to fetch the next batch of tags.
   resource_arn: string # The Amazon Resource Name (ARN) of the signaling channel for which you want to list tags.
-]: any -> record<NextToken: record, Tags: record> {
+]: any -> record<NextToken: string, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -940,7 +940,7 @@ export def "list-tags-for-stream" [
   --next-token: string # If you specify this parameter and the result of a ListTagsForStream call is truncated, the response includes a token that you can use in the next request to fetch the next batch of tags.
   --stream-arn: string # The Amazon Resource Name (ARN) of the stream that you want to list tags for.
   --stream-name: string # The name of the stream that you want to list tags for.
-]: any -> record<NextToken: record, Tags: record> {
+]: any -> record<NextToken: string, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -969,7 +969,7 @@ export def "list-tags-for-stream" [
 #
 # POST /startEdgeConfigurationUpdate
 # operationId: StartEdgeConfigurationUpdate
-# --EdgeConfig shape: {HubDeviceArn?: any, RecorderConfig?: any, UploaderConfig?: any, DeletionConfig?: any}
+# --EdgeConfig shape: {HubDeviceArn?: string, RecorderConfig?: record, UploaderConfig?: record, DeletionConfig?: record}
 export def "start-edge-configuration-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -989,8 +989,8 @@ export def "start-edge-configuration-update" [
   --x-amz-signed-headers: string
   --stream-name: string # The name of the stream whose edge configuration you want to update. Specify either the StreamName or the StreamARN.
   --stream-arn: string # The Amazon Resource Name (ARN) of the stream. Specify either the StreamName or the StreamARN.
-  edge_config: record # A description of the stream's edge configuration that will be used to sync with the Edge Agent IoT Greengrass component. The Edge Agent component will run on an IoT Hub Device setup at your premise. — shape: {HubDeviceArn?: any, RecorderConfig?: any, UploaderConfig?: any, DeletionConfig?: any}
-]: any -> record<StreamName: record, StreamARN: record, CreationTime: record, LastUpdatedTime: record, SyncStatus: record, FailedStatusDetails: record, EdgeConfig: record<HubDeviceArn: record, RecorderConfig: record<MediaSourceConfig: record, ScheduleConfig: record>, UploaderConfig: record<ScheduleConfig: record>, DeletionConfig: record<EdgeRetentionInHours: record, LocalSizeConfig: record, DeleteAfterUpload: record>>> {
+  edge_config: record # A description of the stream's edge configuration that will be used to sync with the Edge Agent IoT Greengrass component. The Edge Agent component will run on an IoT Hub Device setup at your premise. — shape: {HubDeviceArn?: string, RecorderConfig?: record, UploaderConfig?: record, DeletionConfig?: record}
+]: any -> record<StreamName: string, StreamARN: string, CreationTime: string, LastUpdatedTime: string, SyncStatus: string, FailedStatusDetails: string, EdgeConfig: record<HubDeviceArn: string, RecorderConfig: record<MediaSourceConfig: record, ScheduleConfig: record>, UploaderConfig: record<ScheduleConfig: record>, DeletionConfig: record<EdgeRetentionInHours: int, LocalSizeConfig: record, DeleteAfterUpload: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1019,7 +1019,7 @@ export def "start-edge-configuration-update" [
 #
 # POST /TagResource
 # operationId: TagResource
-# --Tags item shape: {Key: any, Value: any}
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1038,7 +1038,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   resource_arn: string # The Amazon Resource Name (ARN) of the signaling channel to which you want to add tags.
-  tags: list # A list of tags to associate with the specified signaling channel. Each tag is a key-value pair. — item shape: {Key: any, Value: any}
+  tags: list # A list of tags to associate with the specified signaling channel. Each tag is a key-value pair. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1265,7 +1265,7 @@ export def "update-data-retention" [
 #
 # POST /updateImageGenerationConfiguration
 # operationId: UpdateImageGenerationConfiguration
-# --ImageGenerationConfiguration shape: {Status?: any, ImageSelectorType?: any, DestinationConfig?: any, SamplingInterval?: any, Format?: any, FormatConfig?: any, WidthPixels?: any, HeightPixels?: any}
+# --ImageGenerationConfiguration shape: {Status?: "ENABLED"|"DISABLED", ImageSelectorType?: "SERVER_TIMESTAMP"|"PRODUCER_TIMESTAMP", DestinationConfig?: record, SamplingInterval?: int, Format?: "JPEG"|"PNG", FormatConfig?: record, WidthPixels?: int, HeightPixels?: int}
 export def "update-image-generation-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1285,7 +1285,7 @@ export def "update-image-generation-configuration" [
   --x-amz-signed-headers: string
   --stream-name: string # The name of the stream from which to update the image generation configuration. You must specify either the StreamName or the StreamARN.
   --stream-arn: string # The Amazon Resource Name (ARN) of the Kinesis video stream from where you want to update the image generation configuration. You must specify either the StreamName or the StreamARN.
-  --image-generation-configuration: record # The structure that contains the information required for the KVS images delivery. If null, the configuration will be deleted from the stream. — shape: {Status?: any, ImageSelectorType?: any, DestinationConfig?: any, SamplingInterval?: any, Format?: any, FormatConfig?: any, WidthPixels?: any, HeightPixels?: any}
+  --image-generation-configuration: record # The structure that contains the information required for the KVS images delivery. If null, the configuration will be deleted from the stream. — shape: {Status?: "ENABLED"|"DISABLED", ImageSelectorType?: "SERVER_TIMESTAMP"|"PRODUCER_TIMESTAMP", DestinationConfig?: record, SamplingInterval?: int, Format?: "JPEG"|"PNG", FormatConfig?: record, WidthPixels?: int, HeightPixels?: int}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1315,7 +1315,7 @@ export def "update-image-generation-configuration" [
 #
 # POST /updateMediaStorageConfiguration
 # operationId: UpdateMediaStorageConfiguration
-# --MediaStorageConfiguration shape: {StreamARN?: any, Status?: any}
+# --MediaStorageConfiguration shape: {StreamARN?: string, Status?: "ENABLED"|"DISABLED"}
 export def "update-media-storage-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1334,7 +1334,7 @@ export def "update-media-storage-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   channel_arn: string # The Amazon Resource Name (ARN) of the channel.
-  media_storage_configuration: record # A structure that encapsulates, or contains, the media storage configuration properties. — shape: {StreamARN?: any, Status?: any}
+  media_storage_configuration: record # A structure that encapsulates, or contains, the media storage configuration properties. — shape: {StreamARN?: string, Status?: "ENABLED"|"DISABLED"}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1364,7 +1364,7 @@ export def "update-media-storage-configuration" [
 #
 # POST /updateNotificationConfiguration
 # operationId: UpdateNotificationConfiguration
-# --NotificationConfiguration shape: {Status?: any, DestinationConfig?: any}
+# --NotificationConfiguration shape: {Status?: "ENABLED"|"DISABLED", DestinationConfig?: record}
 export def "update-notification-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1384,7 +1384,7 @@ export def "update-notification-configuration" [
   --x-amz-signed-headers: string
   --stream-name: string # The name of the stream from which to update the notification configuration. You must specify either the StreamName or the StreamARN.
   --stream-arn: string # The Amazon Resource Name (ARN) of the Kinesis video stream from where you want to update the notification configuration. You must specify either the StreamName or the StreamARN.
-  --notification-configuration: record # The structure that contains the notification information for the KVS images delivery. If this parameter is null, the configuration will be deleted from the stream. — shape: {Status?: any, DestinationConfig?: any}
+  --notification-configuration: record # The structure that contains the notification information for the KVS images delivery. If this parameter is null, the configuration will be deleted from the stream. — shape: {Status?: "ENABLED"|"DISABLED", DestinationConfig?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1414,7 +1414,7 @@ export def "update-notification-configuration" [
 #
 # POST /updateSignalingChannel
 # operationId: UpdateSignalingChannel
-# --SingleMasterConfiguration shape: {MessageTtlSeconds?: any}
+# --SingleMasterConfiguration shape: {MessageTtlSeconds?: int}
 export def "update-signaling-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1434,7 +1434,7 @@ export def "update-signaling-channel" [
   --x-amz-signed-headers: string
   channel_arn: string # The Amazon Resource Name (ARN) of the signaling channel that you want to update.
   current_version: string # The current version of the signaling channel that you want to update.
-  --single-master-configuration: record # A structure that contains the configuration for the SINGLE_MASTER channel type. — shape: {MessageTtlSeconds?: any}
+  --single-master-configuration: record # A structure that contains the configuration for the SINGLE_MASTER channel type. — shape: {MessageTtlSeconds?: int}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

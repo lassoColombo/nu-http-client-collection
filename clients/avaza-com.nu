@@ -1,4 +1,4 @@
-# Auto-generated client for Avaza API Documentation vv1
+# Auto-generated client for Avaza API Documentation v1
 # Source: https://api.apis.guru/v2/specs/avaza.com/v1/swagger.json
 # Auth: --token flag or $env.AVAZA_API_DOCUMENTATION_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -408,19 +408,19 @@ export def "bill-get" [
   --updated-after: string # format: date-time
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
-  --qp-sort: string
+  --sort: string
   --company-idfk: int # format: int32
 ]: nothing -> record<Bills: table<AccountIDFK: int, Balance: float, BillNumber: string, CompanyIDFK: int, CompanyName: string, CurrencyCode: string, DateCreated: string, DateIssued: string, DateUpdated: string, DateVerified: string, DueDate: string, ExchangeRate: float, Issuer: record, LineItems: list, Links: record, Notes: string, Recipient: record, Subject: string, SupplierPONumber: string, TaxAmount: float, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionStatusCode: string, TransactionTaxConfigCode: string>, PageNumber: int, PageSize: int, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Bill" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort, "CompanyIDFK": $company_idfk} | compact)
+    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $sort, "CompanyIDFK": $company_idfk} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -669,18 +669,18 @@ export def "company-get" [
   --updated-after: string # format: date-time
   --page-size: int # Number of results per page (format: int32)
   --page-number: int # 1 based page number to retrieve (format: int32)
-  --qp-sort: string # (optional) Supply one of: "DateUpdated", "DateCreated", "CompanyName","DateUpdated desc","DateCreated desc", "CompanyName desc"
+  --sort: string # (optional) Supply one of: "DateUpdated", "DateCreated", "CompanyName","DateUpdated desc","DateCreated desc", "CompanyName desc"
 ]: nothing -> record<Companies: table<BillingAddress: string, BillingAddressCity: string, BillingAddressLine: string, BillingAddressPostCode: string, BillingAddressState: string, BillingCountryCode: string, Comments: string, CompanyID: int, CompanyName: string, Contacts: list, CurrencyCode: string, DateCreated: string, DateUpdated: string, DefaultTradingTermIDFK: int, Fax: string, Phone: string, TaxNumber: string, website: string>, PageNumber: int, PageSize: int, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Company" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort} | compact)
+    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -888,19 +888,19 @@ export def "contact-get" [
   --updated-after: string # format: date-time
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
-  --qp-sort: string
+  --sort: string
   --company-idfk: int # format: int32
 ]: nothing -> record<Contacts: table<CompanyIDFK: int, CompanyName: string, ContactID: int, DateCreated: string, DateUpdated: string, Email: string, Firstname: string, Lastname: string, Mobile: string, Phone: string, PositionTitle: string, TimeZone: string>, PageNumber: int, PageSize: int, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Contact" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort, "CompanyIDFK": $company_idfk} | compact)
+    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $sort, "CompanyIDFK": $company_idfk} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1131,19 +1131,19 @@ export def "estimate-get" [
   --updated-after: string # format: date-time
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
-  --qp-sort: string
+  --sort: string
   --company-idfk: int # format: int32
 ]: nothing -> record<Estimates: table<AccountIDFK: int, Balance: float, CompanyIDFK: int, CompanyName: string, CurrencyCode: string, DateCreated: string, DateIssued: string, DateSent: string, DateUpdated: string, DueDate: string, EstimateID: int, EstimateItemNumber: string, EstimatePrefix: string, EstimateStatusCode: string, EstimateTaxConfigCode: string, ExchangeRate: float, Issuer: record, LineItems: list, Links: record, Notes: string, Recipient: record, Subject: string, TaxAmount: float, TotalAmount: float>, PageNumber: int, PageSize: int, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Estimate" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort, "CompanyIDFK": $company_idfk} | compact)
+    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $sort, "CompanyIDFK": $company_idfk} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1317,18 +1317,18 @@ export def "expense-get" [
   --search: string
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
-  --qp-sort: string
+  --sort: string
 ]: nothing -> record<Expenses: table<Amount: float, AttachmentPreviewURL: string, AttachmentURL: string, ChargeableStatusCode: string, CurrencyCode: string, CustomerIDFK: int, CustomerName: string, DateCreated: string, DateUpdated: string, Email: string, ExchangeRate: float, ExpenseApprovalStatusCode: string, ExpenseCategoryHasUnitPrice: bool, ExpenseCategoryIDFK: int, ExpenseCategoryName: string, ExpenseCategoryUnitName: string, ExpenseCategoryUnitPrice: float, ExpenseDate: string, ExpenseID: int, ExpensePaymentMethodIDFK: int, ExpensePaymentMethodName: string, ExpenseReimbursementIDFK: int, ExpenseReimbursementStatusCode: string, ExpenseReportIDFK: int, ExpenseReportName: string, FileAttachmentIDFK: int, Firstname: string, Lastname: string, Merchant: string, MerchantTaxNumber: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, Quantity: float, TaskIDFK: int, TaskTitle: string, TaxAmount: float, TaxIDFK: int, TaxName: string, TransactionTaxConfigCode: string, TransactionTaxConfigName: string, UserIDFK: int, isChargeable: bool, isOfficialExchangeRate: bool, isReimbursable: bool>, PageNumber: int, PageSize: int, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "ExpenseDateFrom" $expense_date_from "scalar") (serialize-qp "ExpenseDateTo" $expense_date_to "scalar") (serialize-qp "UserEmail" $user_email "scalar") (serialize-qp "UserID" $user_id "scalar") (serialize-qp "CategoryName" $category_name "scalar") (serialize-qp "CustomerID" $customer_id "scalar") (serialize-qp "ProjectID" $project_id "scalar") (serialize-qp "isChargeable" $is_chargeable "scalar") (serialize-qp "isInvoiced" $is_invoiced "scalar") (serialize-qp "ExpenseReimbursementIDFK" $expense_reimbursement_idfk "scalar") (serialize-qp "ExpensePaymentMethodIDFK" $expense_payment_method_idfk "scalar") (serialize-qp "ExpenseApprovalStatusCode" $expense_approval_status_code "scalar") (serialize-qp "Search" $search "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "ExpenseDateFrom" $expense_date_from "scalar") (serialize-qp "ExpenseDateTo" $expense_date_to "scalar") (serialize-qp "UserEmail" $user_email "scalar") (serialize-qp "UserID" $user_id "scalar") (serialize-qp "CategoryName" $category_name "scalar") (serialize-qp "CustomerID" $customer_id "scalar") (serialize-qp "ProjectID" $project_id "scalar") (serialize-qp "isChargeable" $is_chargeable "scalar") (serialize-qp "isInvoiced" $is_invoiced "scalar") (serialize-qp "ExpenseReimbursementIDFK" $expense_reimbursement_idfk "scalar") (serialize-qp "ExpensePaymentMethodIDFK" $expense_payment_method_idfk "scalar") (serialize-qp "ExpenseApprovalStatusCode" $expense_approval_status_code "scalar") (serialize-qp "Search" $search "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Expense" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"UpdatedAfter": $updated_after, "ExpenseDateFrom": $expense_date_from, "ExpenseDateTo": $expense_date_to, "UserEmail": $user_email, "UserID": $user_id, "CategoryName": $category_name, "CustomerID": $customer_id, "ProjectID": $project_id, "isChargeable": $is_chargeable, "isInvoiced": $is_invoiced, "ExpenseReimbursementIDFK": $expense_reimbursement_idfk, "ExpensePaymentMethodIDFK": $expense_payment_method_idfk, "ExpenseApprovalStatusCode": $expense_approval_status_code, "Search": $search, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort} | compact)
+    query: ({"UpdatedAfter": $updated_after, "ExpenseDateFrom": $expense_date_from, "ExpenseDateTo": $expense_date_to, "UserEmail": $user_email, "UserID": $user_id, "CategoryName": $category_name, "CustomerID": $customer_id, "ProjectID": $project_id, "isChargeable": $is_chargeable, "isInvoiced": $is_invoiced, "ExpenseReimbursementIDFK": $expense_reimbursement_idfk, "ExpensePaymentMethodIDFK": $expense_payment_method_idfk, "ExpenseApprovalStatusCode": $expense_approval_status_code, "Search": $search, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1487,8 +1487,8 @@ export def "expense-attachment" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["File"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["File"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1796,18 +1796,18 @@ export def "fixed-amount-get" [
   --is-invoiced: oneof<nothing, bool>
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
-  --qp-sort: string # Optional sorting instruction. Currently possible values: "DateUpdated", "DateCreated", "DateUpdated desc", "DateCreated desc","EntryDate", "EntryDate desc", "StartTimeLocal","StartTimeLocal desc", "TimeSheetEntryID", "TimeSheetEntryID desc"
+  --sort: string # Optional sorting instruction. Currently possible values: "DateUpdated", "DateCreated", "DateUpdated desc", "DateCreated desc","EntryDate", "EntryDate desc", "StartTimeLocal","StartTimeLocal desc", "TimeSheetEntryID", "TimeSheetEntryID desc"
 ]: nothing -> record<FixedAmounts: table<Amount: float, DateCreated: string, DateUpdated: string, FixedAmountID: int, InventoryItemIDFK: int, InventoryItemName: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, TaskIDFK: int, TaskTitle: string, UpdatedByUserIDFK: int, isInvoiced: bool>, PageNumber: int, PageSize: int, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "EntryDateFrom" $entry_date_from "scalar") (serialize-qp "EntryDateTo" $entry_date_to "scalar") (serialize-qp "ProjectID" $project_id "scalar") (serialize-qp "TaskID" $task_id "scalar") (serialize-qp "isInvoiced" $is_invoiced "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "EntryDateFrom" $entry_date_from "scalar") (serialize-qp "EntryDateTo" $entry_date_to "scalar") (serialize-qp "ProjectID" $project_id "scalar") (serialize-qp "TaskID" $task_id "scalar") (serialize-qp "isInvoiced" $is_invoiced "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/FixedAmount" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"UpdatedAfter": $updated_after, "EntryDateFrom": $entry_date_from, "EntryDateTo": $entry_date_to, "ProjectID": $project_id, "TaskID": $task_id, "isInvoiced": $is_invoiced, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort} | compact)
+    query: ({"UpdatedAfter": $updated_after, "EntryDateFrom": $entry_date_from, "EntryDateTo": $entry_date_to, "ProjectID": $project_id, "TaskID": $task_id, "isInvoiced": $is_invoiced, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1912,19 +1912,19 @@ export def "invoice-get" [
   --updated-after: string # format: date-time
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
-  --qp-sort: string
+  --sort: string
   --company-idfk: int # format: int32
 ]: nothing -> record<Invoices: table<AccountIDFK: int, Balance: float, CompanyIDFK: int, CompanyName: string, CurrencyCode: string, CustomerPONumber: string, DateCreated: string, DateIssued: string, DateSent: string, DateUpdated: string, DueDate: string, ExchangeRate: float, InvoiceNumber: string, Issuer: record, LineItems: list, Links: record, Notes: string, Recipient: record, Subject: string, TaxAmount: float, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionStatusCode: string, TransactionTaxConfigCode: string>, PageNumber: int, PageSize: int, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar") (serialize-qp "CompanyIDFK" $company_idfk "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Invoice" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort, "CompanyIDFK": $company_idfk} | compact)
+    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $sort, "CompanyIDFK": $company_idfk} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2172,20 +2172,20 @@ export def "project-get" [
   --updated-after: string # Only show project records updated after a certain date (UTC) (format: date-time)
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
-  --qp-sort: string # A column to sort on. Current possible values: "DateUpdated", "DateCreated", "DateUpdated desc", "DateCreated desc"
+  --sort: string # A column to sort on. Current possible values: "DateUpdated", "DateCreated", "DateUpdated desc", "DateCreated desc"
   --timesheet-user-id: int # Filter to the projects that the supplied UserID can add timesheets to (format: int32)
   --include-archived: oneof<nothing, bool> # Include Archived Projects in the results
 ]: nothing -> record<PageNumber: int, PageSize: int, Projects: table<CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, DefaultAccountTaskTypeIDFK: int, DefaultAccountTaskTypeName: string, Notes: string, ProjectCategoryIDFK: int, ProjectCategoryName: string, ProjectCode: string, ProjectID: int, ProjectOwnerUserIDFK: int, Title: string, isArchived: bool, isTaskRequiredOnTimesheet: bool>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar") (serialize-qp "TimesheetUserID" $timesheet_user_id "scalar") (serialize-qp "includeArchived" $include_archived "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar") (serialize-qp "TimesheetUserID" $timesheet_user_id "scalar") (serialize-qp "includeArchived" $include_archived "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Project" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort, "TimesheetUserID": $timesheet_user_id, "includeArchived": $include_archived} | compact)
+    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $sort, "TimesheetUserID": $timesheet_user_id, "includeArchived": $include_archived} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2625,18 +2625,18 @@ export def "schedule-assignment-get" [
   --user-email: string # The email of the user who has been scheduled
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
-  --qp-sort: string # Optional sorting instruction. Currently possible values: "DateUpdated", "DateCreated", "DateUpdated desc", "DateCreated desc"
+  --sort: string # Optional sorting instruction. Currently possible values: "DateUpdated", "DateCreated", "DateUpdated desc", "DateCreated desc"
 ]: nothing -> record<PageNumber: int, PageSize: int, ScheduleAssignments: table<AccountIDFK: int, DateCreated: string, DateUpdated: string, Duration: float, ScheduleAssignmentID: int, ScheduleDate: string, ScheduleSeriesIDFK: int, UserIDFK: int>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "ScheduleDateFrom" $schedule_date_from "scalar") (serialize-qp "ScheduleDateTo" $schedule_date_to "scalar") (serialize-qp "ScheduleSeriesID" $schedule_series_id "scalar") (serialize-qp "UserID" $user_id "scalar") (serialize-qp "UserEmail" $user_email "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "ScheduleDateFrom" $schedule_date_from "scalar") (serialize-qp "ScheduleDateTo" $schedule_date_to "scalar") (serialize-qp "ScheduleSeriesID" $schedule_series_id "scalar") (serialize-qp "UserID" $user_id "scalar") (serialize-qp "UserEmail" $user_email "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/ScheduleAssignment" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"UpdatedAfter": $updated_after, "ScheduleDateFrom": $schedule_date_from, "ScheduleDateTo": $schedule_date_to, "ScheduleSeriesID": $schedule_series_id, "UserID": $user_id, "UserEmail": $user_email, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort} | compact)
+    query: ({"UpdatedAfter": $updated_after, "ScheduleDateFrom": $schedule_date_from, "ScheduleDateTo": $schedule_date_to, "ScheduleSeriesID": $schedule_series_id, "UserID": $user_id, "UserEmail": $user_email, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2676,18 +2676,18 @@ export def "schedule-series-get" [
   --company-id: int # Filter to only include records linked to projects, where that project belongs to a specific customer company (format: int32)
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
-  --qp-sort: string # Optional sorting instruction. Currently possible values: "DateUpdated", "DateCreated", "DateUpdated desc", "DateCreated desc"
+  --sort: string # Optional sorting instruction. Currently possible values: "DateUpdated", "DateCreated", "DateUpdated desc", "DateCreated desc"
 ]: nothing -> record<PageNumber: int, PageSize: int, ScheduleSeries: table<AccountIDFK: int, CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, EndDate: string, Firstname: string, HoursPerDay: float, Lastname: string, LeaveTypeIDFK: int, LeaveTypeName: string, Notes: string, ProjectIDFK: int, ProjectTitle: string, ScheduleOnDaysOff: bool, ScheduleSeriesID: int, StartDate: string, TaskIDFK: int, TaskTitle: string, TimeSheetCategoryIDFK: int, TimeSheetCategoryName: string, TotalDuration: float, UpdatedByUserIDFK: int, UserIDFK: int>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "ScheduleStartDateFrom" $schedule_start_date_from "scalar") (serialize-qp "ScheduleStartDateTo" $schedule_start_date_to "scalar") (serialize-qp "ScheduleEndDateFrom" $schedule_end_date_from "scalar") (serialize-qp "ScheduleEndDateTo" $schedule_end_date_to "scalar") (serialize-qp "UserID" $user_id "scalar") (serialize-qp "UserEmail" $user_email "scalar") (serialize-qp "TimeSheetCategoryID" $time_sheet_category_id "scalar") (serialize-qp "TimeSheetCategoryName" $time_sheet_category_name "scalar") (serialize-qp "LeaveTypeID" $leave_type_id "scalar") (serialize-qp "ProjectID" $project_id "scalar") (serialize-qp "CompanyID" $company_id "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "ScheduleStartDateFrom" $schedule_start_date_from "scalar") (serialize-qp "ScheduleStartDateTo" $schedule_start_date_to "scalar") (serialize-qp "ScheduleEndDateFrom" $schedule_end_date_from "scalar") (serialize-qp "ScheduleEndDateTo" $schedule_end_date_to "scalar") (serialize-qp "UserID" $user_id "scalar") (serialize-qp "UserEmail" $user_email "scalar") (serialize-qp "TimeSheetCategoryID" $time_sheet_category_id "scalar") (serialize-qp "TimeSheetCategoryName" $time_sheet_category_name "scalar") (serialize-qp "LeaveTypeID" $leave_type_id "scalar") (serialize-qp "ProjectID" $project_id "scalar") (serialize-qp "CompanyID" $company_id "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/ScheduleSeries" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"UpdatedAfter": $updated_after, "ScheduleStartDateFrom": $schedule_start_date_from, "ScheduleStartDateTo": $schedule_start_date_to, "ScheduleEndDateFrom": $schedule_end_date_from, "ScheduleEndDateTo": $schedule_end_date_to, "UserID": $user_id, "UserEmail": $user_email, "TimeSheetCategoryID": $time_sheet_category_id, "TimeSheetCategoryName": $time_sheet_category_name, "LeaveTypeID": $leave_type_id, "ProjectID": $project_id, "CompanyID": $company_id, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort} | compact)
+    query: ({"UpdatedAfter": $updated_after, "ScheduleStartDateFrom": $schedule_start_date_from, "ScheduleStartDateTo": $schedule_start_date_to, "ScheduleEndDateFrom": $schedule_end_date_from, "ScheduleEndDateTo": $schedule_end_date_to, "UserID": $user_id, "UserEmail": $user_email, "TimeSheetCategoryID": $time_sheet_category_id, "TimeSheetCategoryName": $time_sheet_category_name, "LeaveTypeID": $leave_type_id, "ProjectID": $project_id, "CompanyID": $company_id, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2713,10 +2713,11 @@ export def "section-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --section-id: int # format: int64
+  --section-id: int # required, format: int64
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($section_id == null) { error make --unspanned { msg: "required query parameter 'SectionID' missing: pass --section-id" } }
   let qp = [(serialize-qp "SectionID" $section_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Section" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2750,10 +2751,11 @@ export def "section-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --project-id: int # Get sections for Project with ProjectID (format: int32)
+  --project-id: int # Get sections for Project with ProjectID (required, format: int32)
 ]: nothing -> record<Sections: table<DisplayOrder: int, EndDate: string, EndDateUTC: string, ProjectIDFK: int, SectionID: int, StartDate: string, StartDateUTC: string, Title: string>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id == null) { error make --unspanned { msg: "required query parameter 'ProjectID' missing: pass --project-id" } }
   let qp = [(serialize-qp "ProjectID" $project_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Section" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2829,10 +2831,11 @@ export def "task-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --task-id: int # format: int64
+  --task-id: int # required, format: int64
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id == null) { error make --unspanned { msg: "required query parameter 'TaskID' missing: pass --task-id" } }
   let qp = [(serialize-qp "TaskID" $task_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Task" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2869,20 +2872,20 @@ export def "task-get" [
   --updated-after: string # Optional filter to records updated after a specific date. (format: date-time)
   --page-size: int # Number of items per page. Defaults to 20. (format: int32)
   --page-number: int # Page to display. Starts from 1. Defaults to 1 (format: int32)
-  --qp-sort: string # Optional sorting instruction. Currently possible values: "DateUpdated", "DateCreated", "DateUpdated desc", "DateCreated desc", "SectionTitle", "Title"
+  --sort: string # Optional sorting instruction. Currently possible values: "DateUpdated", "DateCreated", "DateUpdated desc", "DateCreated desc", "SectionTitle", "Title"
   --is-complete: oneof<nothing, bool> # Optional filter to only display tasks linked to a Task Status where isComplete=false, or where isComplete=true
   --project-id: int # Optional filter to only display tasks belonging to a specific ProjectID (format: int32)
 ]: nothing -> record<PageNumber: int, PageSize: int, Tasks: table<AccountTaskTypeIDFK: int, ActualTime: float, AssignedToUsers: list, DateCompleted: string, DateCreated: string, DateDue: string, DateStart: string, DateUpdated: string, Description: string, DescriptionNoHTML: string, EstimatedEffort: float, PercentComplete: float, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, SectionIDFK: int, SectionTitle: string, Tags: list, TaskID: int, TaskPriorityCode: string, TaskPriorityName: string, TaskStatusCode: string, TaskStatusName: string, Title: string, isCompleteStatus: bool>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $qp_sort "scalar") (serialize-qp "isComplete" $is_complete "scalar") (serialize-qp "ProjectID" $project_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "Sort" $sort "scalar") (serialize-qp "isComplete" $is_complete "scalar") (serialize-qp "ProjectID" $project_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Task" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $qp_sort, "isComplete": $is_complete, "ProjectID": $project_id} | compact)
+    query: ({"UpdatedAfter": $updated_after, "pageSize": $page_size, "pageNumber": $page_number, "Sort": $sort, "isComplete": $is_complete, "ProjectID": $project_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3010,7 +3013,7 @@ export def "task-lookup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --project-id: int # (required) The ProjectID to use when filtering Tasks (format: int32)
+  --project-id: int # (required) The ProjectID to use when filtering Tasks (required, format: int32)
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
   --hide-completed: oneof<nothing, bool> # (optional) true/false to hide completed tasks. Defaults false
@@ -3018,6 +3021,7 @@ export def "task-lookup" [
 ]: nothing -> record<PageSize: int, hasMore: bool, pageNumber: int, sections: table<SectionTitle: string, tasks: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectID' missing: pass --project-id" } }
   let qp = [(serialize-qp "projectID" $project_id "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "hideCompleted" $hide_completed "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Task/Lookup" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3206,18 +3210,18 @@ export def "timesheet-get" [
   --page-size: int # Number of items per page (max 1000) (format: int32)
   --page-number: int # Page to display. Starts from 1. (format: int32)
   --include-invoice-details: oneof<nothing, bool> # Defaults to false. When true, the InvoiceIDFK value will be included in the response.
-  --qp-sort: string # Optional sorting instruction. Currently possible values: "DateUpdated", "DateCreated", "DateUpdated desc", "DateCreated desc","EntryDate", "EntryDate desc", "StartTimeLocal","StartTimeLocal desc", "TimeSheetEntryID", "TimeSheetEntryID desc"
+  --sort: string # Optional sorting instruction. Currently possible values: "DateUpdated", "DateCreated", "DateUpdated desc", "DateCreated desc","EntryDate", "EntryDate desc", "StartTimeLocal","StartTimeLocal desc", "TimeSheetEntryID", "TimeSheetEntryID desc"
 ]: nothing -> record<PageNumber: int, PageSize: int, Timesheets: table<ApprovedBy: string, CategoryName: string, CustomMetadata: string, CustomerIDFK: int, CustomerName: string, DateApproved: string, DateCreated: string, DateUpdated: string, Duration: float, Email: string, EndTimeLocal: string, EndTimeUTC: string, EntryDate: string, Firstname: string, HasTimer: bool, InvoiceIDFK: int, InvoiceLineItemIDFK: int, Lastname: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, StartTimeLocal: string, StartTimeUTC: string, TaskIDFK: int, TaskTitle: string, TimerStartedAtUTC: string, TimesheetCategoryIDFK: int, TimesheetEntryApprovalStatusCode: string, TimesheetEntryID: int, TimesheetUserTimeZone: string, UserIDFK: int, isBillable: bool, isInvoiced: bool>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "EntryDateFrom" $entry_date_from "scalar") (serialize-qp "EntryDateTo" $entry_date_to "scalar") (serialize-qp "UserID" $user_id "scalar") (serialize-qp "UserEmail" $user_email "scalar") (serialize-qp "CategoryName" $category_name "scalar") (serialize-qp "ProjectID" $project_id "scalar") (serialize-qp "isBillable" $is_billable "scalar") (serialize-qp "isInvoiced" $is_invoiced "scalar") (serialize-qp "isTimerRunning" $is_timer_running "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "includeInvoiceDetails" $include_invoice_details "scalar") (serialize-qp "Sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "UpdatedAfter" $updated_after "scalar") (serialize-qp "EntryDateFrom" $entry_date_from "scalar") (serialize-qp "EntryDateTo" $entry_date_to "scalar") (serialize-qp "UserID" $user_id "scalar") (serialize-qp "UserEmail" $user_email "scalar") (serialize-qp "CategoryName" $category_name "scalar") (serialize-qp "ProjectID" $project_id "scalar") (serialize-qp "isBillable" $is_billable "scalar") (serialize-qp "isInvoiced" $is_invoiced "scalar") (serialize-qp "isTimerRunning" $is_timer_running "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "includeInvoiceDetails" $include_invoice_details "scalar") (serialize-qp "Sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Timesheet" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"UpdatedAfter": $updated_after, "EntryDateFrom": $entry_date_from, "EntryDateTo": $entry_date_to, "UserID": $user_id, "UserEmail": $user_email, "CategoryName": $category_name, "ProjectID": $project_id, "isBillable": $is_billable, "isInvoiced": $is_invoiced, "isTimerRunning": $is_timer_running, "pageSize": $page_size, "pageNumber": $page_number, "includeInvoiceDetails": $include_invoice_details, "Sort": $qp_sort} | compact)
+    query: ({"UpdatedAfter": $updated_after, "EntryDateFrom": $entry_date_from, "EntryDateTo": $entry_date_to, "UserID": $user_id, "UserEmail": $user_email, "CategoryName": $category_name, "ProjectID": $project_id, "isBillable": $is_billable, "isInvoiced": $is_invoiced, "isTimerRunning": $is_timer_running, "pageSize": $page_size, "pageNumber": $page_number, "includeInvoiceDetails": $include_invoice_details, "Sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3651,10 +3655,11 @@ export def "webhook-delete-by-url" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --target-url: string # Target URL that should be used to delete subscriptions
+  --target-url: string # Target URL that should be used to delete subscriptions (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($target_url == null) { error make --unspanned { msg: "required query parameter 'target_url' missing: pass --target-url" } }
   let qp = [(serialize-qp "target_url" $target_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Webhook" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

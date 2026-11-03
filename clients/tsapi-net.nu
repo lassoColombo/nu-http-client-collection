@@ -1,4 +1,4 @@
-# Auto-generated client for TSAPI vv1
+# Auto-generated client for TSAPI v1
 # Source: https://api.apis.guru/v2/specs/tsapi.net/v1/openapi.json
 # Auth: --token flag or $env.TSAPI_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -208,7 +208,7 @@ export def "get-surveys-survey-id-metadata" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<hierarchies: table<ident: string, metadata: record, parent: record>, interviewCount: int, languages: table<ident: string, name: string, subLanguages: list>, name: string, title: string, variables: table<ident: string, label: record, maxResponses: int, name: string, parentType: record, questions: list, type: record, use: record, variableValues: record>> {
+]: nothing -> record<hierarchies: table<ident: string, metadata: record, parent: record>, interviewCount: int, languages: table<ident: string, name: string, subLanguages: list>, name: string, title: string, variables: table<ident: string, label: record, maxResponses: int, name: string, parentType: int, questions: list, type: int, use: int, variableValues: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($survey_id | is-empty) { error make --unspanned { msg: "path parameter 'surveyId' must be non-empty" } }

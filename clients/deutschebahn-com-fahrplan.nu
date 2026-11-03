@@ -1,4 +1,4 @@
-# Auto-generated client for Fahrplan-Free vv1
+# Auto-generated client for Fahrplan-Free v1
 # Source: https://api.apis.guru/v2/specs/deutschebahn.com/fahrplan/v1/swagger.json
 # Auth: --token flag or $env.FAHRPLAN_FREE_TOKEN
 
@@ -131,11 +131,12 @@ export def "get-arrival-board-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --date: string # Date and time in ISO-8601 format, yyyy-mm-ddThh:mm:ss, example: 2017-04-01 or 2017-04-01T10:30
+  --date: string # Date and time in ISO-8601 format, yyyy-mm-ddThh:mm:ss, example: 2017-04-01 or 2017-04-01T10:30 (required)
 ]: nothing -> record<boards: table<boardId: string, dateTime: string, detailsId: string, name: string, origin: string, stopId: string, stopName: string, track: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($date == null) { error make --unspanned { msg: "required query parameter 'date' missing: pass --date" } }
   let qp = [(serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/arrivalBoard/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -168,11 +169,12 @@ export def "get-departure-board-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --date: string # Date and time in ISO-8601 format, yyyy-mm-ddThh:mm:ss, example: 2017-04-01 or 2017-04-01T10:30
+  --date: string # Date and time in ISO-8601 format, yyyy-mm-ddThh:mm:ss, example: 2017-04-01 or 2017-04-01T10:30 (required)
 ]: nothing -> record<boards: table<boardId: string, dateTime: string, detailsId: string, name: string, origin: string, stopId: string, stopName: string, track: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($date == null) { error make --unspanned { msg: "required query parameter 'date' missing: pass --date" } }
   let qp = [(serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/departureBoard/{id}") $qp $auth.query)
   let accept_val = "application/json"

@@ -225,11 +225,12 @@ export def "account-update-delivery-device" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --device: string # Must be one of: sms, none. Example Values: sms
+  --device: string # Must be one of: sms, none. Example Values: sms (required)
   --include-entities: string # When set to either true, t or 1, each tweet will include a node called "entities,". This node offers a variety of metadata about the tweet in a discreet structure, including: user_mentions, urls, and hashtags. While entities are opt-in on timelines at present, they will be made a default component of output in the future. See Tweet Entities for more detail on entities. Example Values: true
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($device == null) { error make --unspanned { msg: "required query parameter 'device' missing: pass --device" } }
   let qp = [(serialize-qp "device" $device "scalar") (serialize-qp "include_entities" $include_entities "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/update_delivery_device.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -306,14 +307,15 @@ export def "accounts-update-profile-background-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --tile: string # Whether or not to tile the background image. If set to true, t or 1 the background image will be displayed tiled. The image will not be tiled otherwise.
-  --qp-use: string # Determines whether to display the profile background image or not. When set to true, t or 1 the background image will be displayed if an image is being uploaded with the request, or has been uploaded previously. An error will be returned if you try to use a background image when one is not being uploaded or does not exist. If this parameter is defined but set to anything other than true, t or 1, the background image will stop being used.
+  --use: string # Determines whether to display the profile background image or not. When set to true, t or 1 the background image will be displayed if an image is being uploaded with the request, or has been uploaded previously. An error will be returned if you try to use a background image when one is not being uploaded or does not exist. If this parameter is defined but set to anything other than true, t or 1, the background image will stop being used.
   --include-entities: string # The entities node will not be included when set to false. Example Values: false
   --skip-status: string # When set to either true, t or 1 statuses will not be included in the returned user objects.
-  --content-type: string # Content type header
+  --content-type: string # Content type header (required, default: multipart/form-data)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tile" $tile "scalar") (serialize-qp "use" $qp_use "scalar") (serialize-qp "include_entities" $include_entities "scalar") (serialize-qp "skip_status" $skip_status "scalar")] | flatten | str join "&"
+  let content_type = ($content_type | default "multipart/form-data")
+  let qp = [(serialize-qp "tile" $tile "scalar") (serialize-qp "use" $use "scalar") (serialize-qp "include_entities" $include_entities "scalar") (serialize-qp "skip_status" $skip_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/update_profile_background_image.json" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -322,7 +324,7 @@ export def "accounts-update-profile-background-image" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"tile": $tile, "use": $qp_use, "include_entities": $include_entities, "skip_status": $skip_status} | compact)
+    query: ({"tile": $tile, "use": $use, "include_entities": $include_entities, "skip_status": $skip_status} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -392,10 +394,11 @@ export def "accounts-update-profile-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip-status: string # When set to either true, t or 1 statuses will not be included in the returned user objects.
-  --content-type: string # Content type header
+  --content-type: string # Content type header (required, default: multipart/form-data)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "multipart/form-data")
   let qp = [(serialize-qp "skip_status" $skip_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/update_profile_image.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -663,11 +666,12 @@ export def "direct-messages-destroy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The ID of the direct message to delete. Example Values: 1270516771
+  --id: string # The ID of the direct message to delete. Example Values: 1270516771 (required)
   --include-entities: string # The entities node will not be included when set to false. Example Values: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "include_entities" $include_entities "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/direct_messages/destroy.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -701,10 +705,11 @@ export def "direct-messages-new" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --text: string # The text of your direct message. Be sure to URL encode as necessary, and keep the message under 140 characters. Example Values: Meet me behind the cafeteria after school
+  --text: string # The text of your direct message. Be sure to URL encode as necessary, and keep the message under 140 characters. Example Values: Meet me behind the cafeteria after school (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/direct_messages/new.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -779,10 +784,11 @@ export def "direct-messages-show" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The ID of the direct message. Example Values: 587424932
+  --id: string # The ID of the direct message. Example Values: 587424932 (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/direct_messages/show.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -816,11 +822,12 @@ export def "favorites-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The numerical ID of the desired status. Example Values: 123
+  --id: string # The numerical ID of the desired status. Example Values: 123 (required)
   --include-entities: string # The entities node will be omitted when set to false. Example Values: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "include_entities" $include_entities "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/favorites/create.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -854,11 +861,12 @@ export def "favorites-destroy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The numerical ID of the desired status. Example Values: 123
+  --id: string # The numerical ID of the desired status. Example Values: 123 (required)
   --include-entities: string # The entities node will be omitted when set to false. Example Values: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "include_entities" $include_entities "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/favorites/destroy.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1193,11 +1201,13 @@ export def "friendships-show" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --source-id: string # The user_id of the subject user. Example Values: 3191321
   --source-screen-name: string # The screen_name of the subject user. Example Values: raffi
-  --target-id: string # The user_id of the target user. Example Values: 20
-  --target-screen-name: string # The screen_name of the target user. Example Values: noradio
+  --target-id: string # The user_id of the target user. Example Values: 20 (required)
+  --target-screen-name: string # The screen_name of the target user. Example Values: noradio (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($target_id == null) { error make --unspanned { msg: "required query parameter 'target_id' missing: pass --target-id" } }
+  if ($target_screen_name == null) { error make --unspanned { msg: "required query parameter 'target_screen_name' missing: pass --target-screen-name" } }
   let qp = [(serialize-qp "source_id" $source_id "scalar") (serialize-qp "source_screen_name" $source_screen_name "scalar") (serialize-qp "target_id" $target_id "scalar") (serialize-qp "target_screen_name" $target_screen_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/friendships/show.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1231,11 +1241,13 @@ export def "friendships-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --device: string # Enable/disable device notifications from the target user. Example Values: true, false
-  --retweets: string # Enable/disable retweets from the target user. Example Values: true, false
+  --device: string # Enable/disable device notifications from the target user. Example Values: true, false (required)
+  --retweets: string # Enable/disable retweets from the target user. Example Values: true, false (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($device == null) { error make --unspanned { msg: "required query parameter 'device' missing: pass --device" } }
+  if ($retweets == null) { error make --unspanned { msg: "required query parameter 'retweets' missing: pass --retweets" } }
   let qp = [(serialize-qp "device" $device "scalar") (serialize-qp "retweets" $retweets "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/friendships/update.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1344,8 +1356,8 @@ export def "geo-reverse-geocode" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lat: string # The latitude to search around. This parameter will be ignored unless it is inside the range -90.0 to +90.0 (North is positive) inclusive. It will also be ignored if there isn't a corresponding long parameter. Example Values: 37.7821120598956
-  --long: string # The longitude to search around. The valid ranges for longitude is -180.0 to +180.0 (East is positive) inclusive. This parameter will be ignored if outside that range, if it is not a number, if geo_enabled is disabled, or if there not a corresponding lat parameter. Example Values: -122.400612831116
+  --lat: string # The latitude to search around. This parameter will be ignored unless it is inside the range -90.0 to +90.0 (North is positive) inclusive. It will also be ignored if there isn't a corresponding long parameter. Example Values: 37.7821120598956 (required)
+  --long: string # The longitude to search around. The valid ranges for longitude is -180.0 to +180.0 (East is positive) inclusive. This parameter will be ignored if outside that range, if it is not a number, if geo_enabled is disabled, or if there not a corresponding lat parameter. Example Values: -122.400612831116 (required)
   --accuracy: string # A hint on the "region" in which to search. If a number, then this is a radius in meters, but it can also take a string that is suffixed with ft to specify feet. If this is not passed in, then it is assumed to be 0m. If coming from a device, in practice, this value is whatever accuracy the device has measuring its location (whether it be coming from a GPS, WiFi triangulation, etc.). Example Values: 5ft
   --granularity: string # This is the minimal granularity of place types to return and must be one of: poi, neighborhood, city, admin or country. If no granularity is provided for the request neighborhood is assumed. Setting this to city, for example, will find places which have a type of city, admin or country. Example Values: city
   --max-results: string # A hint as to the number of results to return. This does not guarantee that the number of results returned will equal max_results, but instead informs how many "nearby" results to return. Ideally, only pass in the number of places you intend to display to the user here. Example Values: 3
@@ -1353,6 +1365,8 @@ export def "geo-reverse-geocode" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($long == null) { error make --unspanned { msg: "required query parameter 'long' missing: pass --long" } }
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "long" $long "scalar") (serialize-qp "accuracy" $accuracy "scalar") (serialize-qp "granularity" $granularity "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geo/reverse_geocode.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1606,12 +1620,13 @@ export def "lists-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # The name for the list.A list's name must start with a letter and can consist only of 25 or fewer letters, numbers, "-", or "_" characters.
+  --name: string # The name for the list.A list's name must start with a letter and can consist only of 25 or fewer letters, numbers, "-", or "_" characters. (required)
   --mode: string # Whether your list is public or private. Values can be public or private. If no mode is specified the list will be public.
   --description: string # The description to give the list.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "mode" $mode "scalar") (serialize-qp "description" $description "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lists/create.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1683,11 +1698,13 @@ export def "lists-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --screen-name: string # The screen name of the user for whom to return results for. Helpful for disambiguating when a valid screen name is also a user ID. Example Values: noradio
-  --user-id: string # The ID of the user for whom to return results for. Helpful for disambiguating when a valid user ID is also a valid screen name. Example Values: 12345 Note:: Specifies the ID of the user to get lists from. Helpful for disambiguating when a valid user ID is also a valid screen name.
+  --screen-name: string # The screen name of the user for whom to return results for. Helpful for disambiguating when a valid screen name is also a user ID. Example Values: noradio (required)
+  --user-id: string # The ID of the user for whom to return results for. Helpful for disambiguating when a valid user ID is also a valid screen name. Example Values: 12345 Note:: Specifies the ID of the user to get lists from. Helpful for disambiguating when a valid user ID is also a valid screen name. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($screen_name == null) { error make --unspanned { msg: "required query parameter 'screen_name' missing: pass --screen-name" } }
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'user_id' missing: pass --user-id" } }
   let qp = [(serialize-qp "screen_name" $screen_name "scalar") (serialize-qp "user_id" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lists/list.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1840,8 +1857,8 @@ export def "lists-members-destroy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --list-id: string # The numerical id of the list.
-  --slug: string # You can identify a list by its slug instead of its numerical id. If you decide to do so, note that you'll also have to specify the list owner using the owner_id or owner_screen_name parameters.
+  --list-id: string # The numerical id of the list. (required)
+  --slug: string # You can identify a list by its slug instead of its numerical id. If you decide to do so, note that you'll also have to specify the list owner using the owner_id or owner_screen_name parameters. (required)
   --owner-screen-name: string # The screen name of the user who owns the list being requested by a slug.
   --owner-id: string # The user ID of the user who owns the list being requested by a slug.
   --user-id: string # The ID of the user to remove from the list. Helpful for disambiguating when a valid user ID is also a valid screen name.
@@ -1849,6 +1866,8 @@ export def "lists-members-destroy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($list_id == null) { error make --unspanned { msg: "required query parameter 'list_id' missing: pass --list-id" } }
+  if ($slug == null) { error make --unspanned { msg: "required query parameter 'slug' missing: pass --slug" } }
   let qp = [(serialize-qp "list_id" $list_id "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "owner_screen_name" $owner_screen_name "scalar") (serialize-qp "owner_id" $owner_id "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "screen_name" $screen_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lists/members/destroy.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2046,10 +2065,11 @@ export def "lists-statuses" [
   --max-id: string # Returns results with an ID less than (that is, older than) or equal to the specified ID.
   --count: string # Specifies the number of results to retrieve per "page.
   --include-entities: string # Entities are ON by default in API 1.1, each tweet includes a node called "entities". This node offers a variety of metadata about the tweet in a discreet structure, including: user_mentions, urls, and hashtags. You can omit entities from the result by using include_entities=false
-  --include-rts: string # When set to either true, t or 1, the list timeline will contain native retweets (if they exist) in addition to the standard stream of tweets. The output format of retweeted tweets is identical to the representation you see in home_timeline.
+  --include-rts: string # When set to either true, t or 1, the list timeline will contain native retweets (if they exist) in addition to the standard stream of tweets. The output format of retweeted tweets is identical to the representation you see in home_timeline. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($include_rts == null) { error make --unspanned { msg: "required query parameter 'include_rts' missing: pass --include-rts" } }
   let qp = [(serialize-qp "owner_screen_name" $owner_screen_name "scalar") (serialize-qp "owner_id" $owner_id "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "max_id" $max_id "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "include_entities" $include_entities "scalar") (serialize-qp "include_rts" $include_rts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lists/statuses.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2319,10 +2339,11 @@ export def "saved-searches-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # The query of the search the user would like to save.
+  --query: string # The query of the search the user would like to save. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/saved_searches/create.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2465,7 +2486,7 @@ export def "search-tweets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # A UTF-8, URL-encoded search query of 1,000 characters maximum, including operators. Queries may additionally be limited by complexity.Example: @noradio.
+  --q: string # A UTF-8, URL-encoded search query of 1,000 characters maximum, including operators. Queries may additionally be limited by complexity.Example: @noradio. (required)
   --geocode: string # Returns tweets by users located within a given radius of the given latitude/longitude. The location is preferentially taking from the Geotagging API, but will fall back to their Twitter profile. The parameter value is specified by "latitude,longitude,radius", where radius units must be specified as either "mi" (miles) or "km" (kilometers). Note that you cannot use the near operator via the API to geocode arbitrary locations; however you can use this geocode parameter to search near geocodes directly. A maximum of 1,000 distinct "sub-regions" will be considered when using the radius modifier.
   --lang: string # Restricts tweets to the given language, given by an ISO 639-1 code. Language detection is best-effort.Example Values: eu
   --locale: string # Specify the language of the query you are sending (only ja is currently effective). This is intended for language-specific consumers and the default should work in the majority of cases.Example Values: ja
@@ -2479,6 +2500,7 @@ export def "search-tweets" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "geocode" $geocode "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "result_type" $result_type "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "max_id" $max_id "scalar") (serialize-qp "include_entities" $include_entities "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/tweets.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2798,7 +2820,7 @@ export def "statuses-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --status: string # The text of your status update, typically up to 140 characters. URL encode as necessary. t.co link short-url wrapping (https://dev.twitter.com/docs/tco-link-wrapper/faq) may effect character counts. (default: Posting from @apigee's API test console. It's like a command line for the Twitter API! #apitools)
+  --status: string # The text of your status update, typically up to 140 characters. URL encode as necessary. t.co link short-url wrapping (https://dev.twitter.com/docs/tco-link-wrapper/faq) may effect character counts. (required, default: Posting from @apigee's API test console. It's like a command line for the Twitter API! #apitools)
   --in-reply-to-status-id: string # The ID of an existing status that the update is in reply to. Note: This parameter will be ignored unless the author of the tweet this parameter references is mentioned within the status text. Therefore, you must include @username, where username is the author of the referenced tweet, within the update.
   --lat: string # The latitude of the location this tweet refers to. This parameter will be ignored unless it is inside the range -90.0 to +90.0 (North is positive) inclusive. It will also be ignored if there isn't a corresponding long parameter. (default: 37.426363)
   --long: string # The longitude of the location this tweet refers to. The valid ranges for longitude is -180.0 to +180.0 (East is positive) inclusive. This parameter will be ignored if outside that range, if it is not a number, if geo_enabled is disabled, or if there not a corresponding lat parameter. (default: -122.141114)
@@ -2808,6 +2830,7 @@ export def "statuses-update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let status = ($status | default "Posting from @apigee's API test console. It's like a command line for the Twitter API! #apitools")
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "in_reply_to_status_id" $in_reply_to_status_id "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "long" $long "scalar") (serialize-qp "place_id" $place_id "scalar") (serialize-qp "display_coordinates" $display_coordinates "scalar") (serialize-qp "trim_user" $trim_user "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/statuses/update.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2841,18 +2864,21 @@ export def "statuses-update-with-media" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --status: string # The text of your status update. URL encode as necessary. t.co link wrapping (https://dev.twitter.com/docs/tco-link-wrapper/faq) may affect character counts if the post contains URLs. You must additionally account for the characters_reserved_per_media per uploaded media, additionally accounting for space characters in between finalized URLs. Note: Request the GET help/configuration (https://dev.twitter.com/docs/api/1.1/get/help/configuration) endpoint to get the current characters_reserved_per_media and max_media_per_upload values.
-  --media: string # Up to max_media_per_upload files may be specified in the request, each named media[]. Supported image formats are PNG, JPG and GIF. Animated GIFs are not supported. Note: Request the GET help/configuration (https://dev.twitter.com/docs/api/1.1/get/help/configuration) endpoint to get the current max_media_per_upload and photo_size_limit values.
+  --status: string # The text of your status update. URL encode as necessary. t.co link wrapping (https://dev.twitter.com/docs/tco-link-wrapper/faq) may affect character counts if the post contains URLs. You must additionally account for the characters_reserved_per_media per uploaded media, additionally accounting for space characters in between finalized URLs. Note: Request the GET help/configuration (https://dev.twitter.com/docs/api/1.1/get/help/configuration) endpoint to get the current characters_reserved_per_media and max_media_per_upload values. (required)
+  --media: string # Up to max_media_per_upload files may be specified in the request, each named media[]. Supported image formats are PNG, JPG and GIF. Animated GIFs are not supported. Note: Request the GET help/configuration (https://dev.twitter.com/docs/api/1.1/get/help/configuration) endpoint to get the current max_media_per_upload and photo_size_limit values. (required)
   --possibly-sensitive: string # Set to true for content which may not be suitable for every audience.
   --in-reply-to-status-id: string # The ID of an existing status that the update is in reply to. Note: This parameter will be ignored unless the author of the tweet this parameter references is mentioned within the status text. Therefore, you must include @username, where username is the author of the referenced tweet, within the update.
   --lat: string # The latitude of the location this tweet refers to. This parameter will be ignored unless it is inside the range -90.0 to +90.0 (North is positive) inclusive. It will also be ignored if there isn't a corresponding long parameter. Example value: 37.7821120598956.
   --long: string # The longitude of the location this tweet refers to. The valid ranges for longitude is -180.0 to +180.0 (East is positive) inclusive. This parameter will be ignored if outside that range, not a number, geo_enabled is disabled, or if there not a corresponding lat parameter. Example value: -122.400612831116.
   --place-id: string # A place in the world identified by a Twitter place ID. Place IDs can be retrieved from geo/reverse_geocode.
   --display-coordinates: string # Whether or not to put a pin on the exact coordinates a tweet has been sent from.
-  --content-type: string # Content type.
+  --content-type: string # Content type. (required, default: multipart/form-data)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($status == null) { error make --unspanned { msg: "required query parameter 'status' missing: pass --status" } }
+  if ($media == null) { error make --unspanned { msg: "required query parameter 'media' missing: pass --media" } }
+  let content_type = ($content_type | default "multipart/form-data")
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "media" $media "scalar") (serialize-qp "possibly_sensitive" $possibly_sensitive "scalar") (serialize-qp "in_reply_to_status_id" $in_reply_to_status_id "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "long" $long "scalar") (serialize-qp "place_id" $place_id "scalar") (serialize-qp "display_coordinates" $display_coordinates "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/statuses/update_with_media.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -3004,11 +3030,12 @@ export def "trends-place" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The Yahoo! Where On Earth ID of the location to return trending information for. Global information is available by using 1 as the WOEID.
+  --id: string # The Yahoo! Where On Earth ID of the location to return trending information for. Global information is available by using 1 as the WOEID. (required)
   --exclude: string # Setting this equal to hashtags will remove all hashtags from the trends list.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/trends/place.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -3192,13 +3219,14 @@ export def "users-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The search query to run against people search. Example Values: Twitter%20API
+  --q: string # The search query to run against people search. Example Values: Twitter%20API (required)
   --page: string # Specifies the page of results to retrieve. Example Values: 3
   --count: string # The number of potential user results to retrieve per page. This value has a maximum of 20. Example Values: 5
   --include-entities: string # The entities node will be disincluded when set to false. Example Values: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "include_entities" $include_entities "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/search.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -3232,12 +3260,14 @@ export def "users-show" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --screen-name: string # The screen name of the user for whom to return results for. Either a id or screen_name is required for this method. Example Values: noradio
-  --user-id: string # The ID of the user for whom to return results for. Either an id or screen_name is required for this method. Example Values: 12345
+  --screen-name: string # The screen name of the user for whom to return results for. Either a id or screen_name is required for this method. Example Values: noradio (required)
+  --user-id: string # The ID of the user for whom to return results for. Either an id or screen_name is required for this method. Example Values: 12345 (required)
   --include-entities: string # The entities node will be disincluded when set to false. Example Values: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($screen_name == null) { error make --unspanned { msg: "required query parameter 'screen_name' missing: pass --screen-name" } }
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'user_id' missing: pass --user-id" } }
   let qp = [(serialize-qp "screen_name" $screen_name "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "include_entities" $include_entities "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/show.json" $qp $auth.query)
   let accept_val = "application/json"

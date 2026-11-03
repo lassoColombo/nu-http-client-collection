@@ -1,6 +1,7 @@
 # Auto-generated client for GiftCard API v1.0
 # Source: https://api.apis.guru/v2/specs/vtex.local/Giftcard-API/1.0/openapi.json
-# Auth: --token flag or $env.GIFTCARD_API_TOKEN
+# Auth (appKey): --token-appkey flag or $env.GIFTCARD_API_APPKEY_TOKEN
+# Auth (appToken): --token-apptoken flag or $env.GIFTCARD_API_APPTOKEN_TOKEN
 
 const BASE_URL = "https://vtex.local"
 
@@ -12,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {X-VTEX-API-AppKey: $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {X-VTEX-API-AppToken: $token_val}, query: "", location: "header"} }
+    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
+    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -114,7 +115,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-gift-card" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -149,15 +150,19 @@ export def "create-gift-card" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --x-vtex-api-app-key: string # The AppKey configured by the merchant
-  --x-vtex-api-app-token: string # The AppToken configured by the merchant
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --x-vtex-api-app-key: string # The AppKey configured by the merchant (required, default: {{X-VTEX-API-AppKey}})
+  --x-vtex-api-app-token: string # The AppToken configured by the merchant (required, default: {{X-VTEX-API-AppToken}})
   --body: any
 ]: any -> record<balance: int, caption: string, emissionDate: string, expiringDate: string, id: string, redemptionCode: string, redemptionToken: string, relationName: string, transactions: record<href: string>> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
+  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
   let full_url = (build-url $base "/giftcards" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -197,15 +202,17 @@ export def "get-gift-cardusing-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --rest-range: string # PaginationB control.B ThisB queryB variableB mustB followB theB formatB _resources={from}-{to}_.
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
+  --rest-range: string # PaginationB control.B ThisB queryB variableB mustB followB theB formatB _resources={from}-{to}_. (default: giftcard=0-49)
   cart: record # e.g. {discounts: 0, grandTotal: 123.1, items: [{id: 1, name: Product Name, price: 100, productId: 1, quantity: 1, refId: 12}], itemsTotal: 100, redemptionCode: , relationName: , shipping: 0, taxes: 12} — shape: {discounts: int, grandTotal: float, items: list, itemsTotal: int, redemptionCode: string, relationName: string, shipping: int, taxes: int}
   client: record # e.g. {document: 21301923110, email: email@damoain.com, id: 019a0cc1-409a-4c16-859b-eefdb81f825e} — shape: {document: string, email: string, id: string}
 ]: any -> record<items: table<_self: record, id: string>, paging: record<page: int, pages: int, perPage: int, total: int>> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base "/giftcards/_search" $auth.query)
   let req_body = {"cart": $cart, "client": $client} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -244,12 +251,14 @@ export def "get-gift-cardby-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
 ]: nothing -> record<balance: int, caption: string, emissionDate: string, expiringDate: string, id: string, redemptionCode: string, redemptionToken: string, relationName: string, transactions: record<href: string>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({gift_card_id: (encode-path-segment $gift_card_id)} | format pattern "/giftcards/{gift_card_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -284,12 +293,14 @@ export def "get-gift-card-transactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
 ]: nothing -> table<_self: record<href: string>, id: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({gift_card_id: (encode-path-segment $gift_card_id)} | format pattern "/giftcards/{gift_card_id}/transactions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -325,8 +336,8 @@ export def "create-gift-card-transaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   description: string # default: insert test here
   operation: string # default: Debit
   --order-info: record # default: {cart: {discounts: 2.5, grandTotal: 0, items: [{discount: 2.5, id: 2001023, name: insert name here, price: 14.99, priceTags: [{name: insert name here, value: 0}], productId: 2000492, quantity: 1, refId: 35994, shippingDiscount: 0, value: 14.99}], itemsTotal: 14.99, shipping: 7.27, taxes: 0}, clientProfile: {birthDate: 0001-01-01T00:00:00, document: 02906792063, email: email@email.com.br, firstName: example, isCorporate: false, lastName: example, phone: +551111111111}, orderId: v500, sequence: 5006128, shipping: {city: Rio de Janeiro, complement: , country: BRA, neighborhood: example, number: 11, postalCode: 22250040, receiverName: example, reference: , state: RJ, street: Praia de Botafogo}} — shape: {cart?: record, clientProfile?: record, orderId?: string, sequence?: int, shipping?: record}
@@ -339,6 +350,8 @@ export def "create-gift-card-transaction" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({gift_card_id: (encode-path-segment $gift_card_id)} | format pattern "/giftcards/{gift_card_id}/transactions") $auth.query)
   let req_body = {"description": $description, "operation": $operation, "orderInfo": $order_info, "redemptionCode": $redemption_code, "redemptionToken": $redemption_token, "requestId": $request_id, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -378,13 +391,15 @@ export def "get-gift-card-transactionby-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
 ]: nothing -> record<date: string, description: string, redemptionMode: string, value: float> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionID' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({gift_card_id: (encode-path-segment $gift_card_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/giftcards/{gift_card_id}/transactions/{transaction_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -420,13 +435,15 @@ export def "get-transaction-authorizations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
 ]: nothing -> record<date: string, oid: string, value: float> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionID' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({gift_card_id: (encode-path-segment $gift_card_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/giftcards/{gift_card_id}/transactions/{transaction_id}/authorization") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -462,13 +479,15 @@ export def "get-transaction-cancellations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
 ]: nothing -> table<date: string, id: string, value: float> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionID' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({gift_card_id: (encode-path-segment $gift_card_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/giftcards/{gift_card_id}/transactions/{transaction_id}/cancellations") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -504,8 +523,8 @@ export def "cancel-gift-card-transaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   request_id: string
   value: float
 ]: any -> record<date: string, oid: string, value: float> {
@@ -514,6 +533,8 @@ export def "cancel-gift-card-transaction" [
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionID' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({gift_card_id: (encode-path-segment $gift_card_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/giftcards/{gift_card_id}/transactions/{transaction_id}/cancellations") $auth.query)
   let req_body = {"requestId": $request_id, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -553,13 +574,15 @@ export def "get-transaction-settlements" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
 ]: nothing -> table<date: string, oid: string, value: float> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionID' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({gift_card_id: (encode-path-segment $gift_card_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/giftcards/{gift_card_id}/transactions/{transaction_id}/settlements") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -595,8 +618,8 @@ export def "settle-gift-card-transaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   request_id: string
   value: float
 ]: any -> record<date: string, oid: string, value: float> {
@@ -605,6 +628,8 @@ export def "settle-gift-card-transaction" [
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionID' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({gift_card_id: (encode-path-segment $gift_card_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/giftcards/{gift_card_id}/transactions/{transaction_id}/settlements") $auth.query)
   let req_body = {"requestId": $request_id, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

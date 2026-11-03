@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -115,6 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def type-completer [] { ["artist" "user"] }
 def type-completer-1 [] { ["artist"] }
+def type-completer-2 [] { ["artists" "tracks"] }
 def include-external-completer [] { ["audio"] }
 
 # List all available API commands with their parameters
@@ -154,11 +155,12 @@ export def "get-multiple-albums" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 382ObEPsp2rxGrnsizN5TX,1A2GTWGtFfWp7KSQTwWOyo,2noRn2Aes5aoNVsU6iWThc
+  --ids: string # required, e.g. 382ObEPsp2rxGrnsizN5TX,1A2GTWGtFfWp7KSQTwWOyo,2noRn2Aes5aoNVsU6iWThc
   --market: string # e.g. ES
-]: nothing -> any {
+]: nothing -> record<albums: table<album_type: string, available_markets: list, copyrights: list, external_ids: record, external_urls: record, genres: list, href: string, id: string, images: list, label: string, name: string, popularity: int, release_date: string, release_date_precision: string, restrictions: record, total_tracks: int, type: string, uri: string, artists: list, tracks: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar") (serialize-qp "market" $market "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/albums" $qp $auth.query)
   let accept_val = "application/json"
@@ -193,7 +195,7 @@ export def "get-an-album" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
-]: nothing -> any {
+]: nothing -> record<album_type: string, available_markets: list<string>, copyrights: table<text: string, type: string>, external_ids: record<ean: string, isrc: string, upc: string>, external_urls: record<spotify: string>, genres: list<string>, href: string, id: string, images: table<height: int, url: string, width: int>, label: string, name: string, popularity: int, release_date: string, release_date_precision: string, restrictions: record<reason: string>, total_tracks: int, type: string, uri: string, artists: table<external_urls: record, followers: record, genres: list, href: string, id: string, images: list, name: string, popularity: int, type: string, uri: string>, tracks: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -233,7 +235,7 @@ export def "get-an-albums-tracks" [
   --market: string # e.g. ES
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> any {
+]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<artists: list, available_markets: list, disc_number: int, duration_ms: int, explicit: bool, external_urls: record, href: string, id: string, is_local: bool, is_playable: bool, linked_from: record, name: string, preview_url: string, restrictions: record, track_number: int, type: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -269,10 +271,11 @@ export def "get-multiple-artists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 2CIMQHirSU0MQqyYHq0eOx,57dN52uHvrHOxijzpIgu3E,1vCWHaC5f2uS3yhpwWbIA6
-]: nothing -> any {
+  --ids: string # required, e.g. 2CIMQHirSU0MQqyYHq0eOx,57dN52uHvrHOxijzpIgu3E,1vCWHaC5f2uS3yhpwWbIA6
+]: nothing -> record<artists: table<external_urls: record, followers: record, genres: list, href: string, id: string, images: list, name: string, popularity: int, type: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/artists" $qp $auth.query)
   let accept_val = "application/json"
@@ -306,7 +309,7 @@ export def "get-an-artist" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<external_urls: record<spotify: string>, followers: record<href: string, total: int>, genres: list<string>, href: string, id: string, images: table<height: int, url: string, width: int>, name: string, popularity: int, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -346,7 +349,7 @@ export def "get-an-artists-albums" [
   --market: string # e.g. ES
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> any {
+]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<album_type: string, available_markets: list, copyrights: list, external_ids: record, external_urls: record, genres: list, href: string, id: string, images: list, label: string, name: string, popularity: int, release_date: string, release_date_precision: string, restrictions: record, total_tracks: int, type: string, uri: string, album_group: string, artists: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -383,7 +386,7 @@ export def "get-an-artists-related-artists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<artists: table<external_urls: record, followers: record, genres: list, href: string, id: string, images: list, name: string, popularity: int, type: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -420,7 +423,7 @@ export def "get-an-artists-top-tracks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
-]: nothing -> any {
+]: nothing -> record<tracks: table<album: record, artists: list, available_markets: list, disc_number: int, duration_ms: int, explicit: bool, external_ids: record, external_urls: record, href: string, id: string, is_local: bool, is_playable: bool, linked_from: record, name: string, popularity: int, preview_url: string, restrictions: record, track_number: int, type: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -457,7 +460,7 @@ export def "get-audio-analysis" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<bars: table<confidence: float, duration: float, start: float>, beats: table<confidence: float, duration: float, start: float>, meta: record<analysis_time: float, analyzer_version: string, detailed_status: string, input_process: string, platform: string, status_code: int, timestamp: int>, sections: table<confidence: float, duration: float, key: int, key_confidence: float, loudness: float, mode: float, mode_confidence: float, start: float, tempo: float, tempo_confidence: float, time_signature: int, time_signature_confidence: float>, segments: table<confidence: float, duration: float, loudness_end: float, loudness_max: float, loudness_max_time: float, loudness_start: float, pitches: list, start: float, timbre: list>, tatums: table<confidence: float, duration: float, start: float>, track: record<analysis_channels: int, analysis_sample_rate: int, code_version: float, codestring: string, duration: float, echoprint_version: float, echoprintstring: string, end_of_fade_in: float, key: int, key_confidence: float, loudness: float, mode: int, mode_confidence: float, num_samples: int, offset_seconds: int, rhythm_version: float, rhythmstring: string, sample_md5: string, start_of_fade_out: float, synch_version: float, synchstring: string, tempo: float, tempo_confidence: float, time_signature: int, time_signature_confidence: float, window_seconds: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -492,10 +495,11 @@ export def "get-several-audio-features" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 7ouMYWpwJ422jRcDASZB7P,4VqPOruhp5EdPBeR92t6lQ,2takcwOaAZWiXQijPHIx7B
-]: nothing -> any {
+  --ids: string # required, e.g. 7ouMYWpwJ422jRcDASZB7P,4VqPOruhp5EdPBeR92t6lQ,2takcwOaAZWiXQijPHIx7B
+]: nothing -> record<audio_features: table<acousticness: float, analysis_url: string, danceability: float, duration_ms: int, energy: float, id: string, instrumentalness: float, key: int, liveness: float, loudness: float, mode: int, speechiness: float, tempo: float, time_signature: int, track_href: string, type: string, uri: string, valence: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/audio-features" $qp $auth.query)
   let accept_val = "application/json"
@@ -529,7 +533,7 @@ export def "get-audio-features" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<acousticness: float, analysis_url: string, danceability: float, duration_ms: int, energy: float, id: string, instrumentalness: float, key: int, liveness: float, loudness: float, mode: int, speechiness: float, tempo: float, time_signature: int, track_href: string, type: string, uri: string, valence: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -564,11 +568,12 @@ export def "get-multiple-audiobooks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 18yVqkdbdRvS24c0Ilj2ci,1HGw3J3NxZO1TP1BTtVhpZ,7iHfbu1YPACw6oZPAFJtqe
+  --ids: string # required, e.g. 18yVqkdbdRvS24c0Ilj2ci,1HGw3J3NxZO1TP1BTtVhpZ,7iHfbu1YPACw6oZPAFJtqe
   --market: string # e.g. ES
-]: nothing -> any {
+]: nothing -> record<audiobooks: table<authors: list, available_markets: list, copyrights: list, description: string, edition: string, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, languages: list, media_type: string, name: string, narrators: list, publisher: string, total_chapters: int, type: string, uri: string, chapters: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar") (serialize-qp "market" $market "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/audiobooks" $qp $auth.query)
   let accept_val = "application/json"
@@ -603,7 +608,7 @@ export def "get-an-audiobook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
-]: nothing -> any {
+]: nothing -> record<authors: table<name: string>, available_markets: list<string>, copyrights: table<text: string, type: string>, description: string, edition: string, explicit: bool, external_urls: record<spotify: string>, href: string, html_description: string, id: string, images: table<height: int, url: string, width: int>, languages: list<string>, media_type: string, name: string, narrators: table<name: string>, publisher: string, total_chapters: int, type: string, uri: string, chapters: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -643,7 +648,7 @@ export def "get-audiobook-chapters" [
   --market: string # e.g. ES
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> any {
+]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<audio_preview_url: string, available_markets: list, chapter_number: int, description: string, duration_ms: int, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, is_playable: bool, languages: list, name: string, release_date: string, release_date_precision: string, restrictions: record, resume_point: record, type: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -683,7 +688,7 @@ export def "get-categories" [
   --locale: string # e.g. sv_SE
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> any {
+]: nothing -> record<categories: record<href: string, limit: int, next: string, offset: int, previous: string, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -721,7 +726,7 @@ export def "get-a-category" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # e.g. SE
   --locale: string # e.g. sv_SE
-]: nothing -> any {
+]: nothing -> record<href: string, icons: table<height: int, url: string, width: int>, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'category_id' must be non-empty" } }
@@ -761,7 +766,7 @@ export def "get-a-categories-playlists" [
   --country: string # e.g. SE
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> any {
+]: nothing -> record<message: string, playlists: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'category_id' must be non-empty" } }
@@ -802,7 +807,7 @@ export def "get-featured-playlists" [
   --timestamp: string # e.g. 2014-10-23T09:00:00
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> any {
+]: nothing -> record<message: string, playlists: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -840,7 +845,7 @@ export def "get-new-releases" [
   --country: string # e.g. SE
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> any {
+]: nothing -> record<albums: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -875,11 +880,12 @@ export def "get-several-chapters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 0IsXVP0JmcB2adSE338GkK,3ZXb8FKZGU0EHALYX6uCzU,0D5wENdkdwbqlrHoaJ9g29
+  --ids: string # required, e.g. 0IsXVP0JmcB2adSE338GkK,3ZXb8FKZGU0EHALYX6uCzU,0D5wENdkdwbqlrHoaJ9g29
   --market: string # e.g. ES
-]: nothing -> any {
+]: nothing -> record<chapters: table<audio_preview_url: string, available_markets: list, chapter_number: int, description: string, duration_ms: int, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, is_playable: bool, languages: list, name: string, release_date: string, release_date_precision: string, restrictions: record, resume_point: record, type: string, uri: string, audiobook: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar") (serialize-qp "market" $market "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/chapters" $qp $auth.query)
   let accept_val = "application/json"
@@ -914,7 +920,7 @@ export def "get-a-chapter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
-]: nothing -> any {
+]: nothing -> record<audio_preview_url: string, available_markets: list<string>, chapter_number: int, description: string, duration_ms: int, explicit: bool, external_urls: record<spotify: string>, href: string, html_description: string, id: string, images: table<height: int, url: string, width: int>, is_playable: bool, languages: list<string>, name: string, release_date: string, release_date_precision: string, restrictions: record<reason: string>, resume_point: record<fully_played: bool, resume_position_ms: int>, type: string, uri: string, audiobook: record<authors: list<record>, available_markets: list<string>, copyrights: list<record>, description: string, edition: string, explicit: bool, external_urls: record<spotify: string>, href: string, html_description: string, id: string, images: list<record>, languages: list<string>, media_type: string, name: string, narrators: list<record>, publisher: string, total_chapters: int, type: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -950,11 +956,12 @@ export def "get-multiple-episodes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 77o6BIVlYM3msb4MMIL1jH,0Q86acNRm6V9GYx55SXKwf
+  --ids: string # required, e.g. 77o6BIVlYM3msb4MMIL1jH,0Q86acNRm6V9GYx55SXKwf
   --market: string # e.g. ES
-]: nothing -> any {
+]: nothing -> record<episodes: table<audio_preview_url: string, description: string, duration_ms: int, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, is_externally_hosted: bool, is_playable: bool, language: string, languages: list, name: string, release_date: string, release_date_precision: string, restrictions: record, resume_point: record, type: string, uri: string, show: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar") (serialize-qp "market" $market "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/episodes" $qp $auth.query)
   let accept_val = "application/json"
@@ -989,7 +996,7 @@ export def "get-an-episode" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
-]: nothing -> any {
+]: nothing -> record<audio_preview_url: string, description: string, duration_ms: int, explicit: bool, external_urls: record<spotify: string>, href: string, html_description: string, id: string, images: table<height: int, url: string, width: int>, is_externally_hosted: bool, is_playable: bool, language: string, languages: list<string>, name: string, release_date: string, release_date_precision: string, restrictions: record<reason: string>, resume_point: record<fully_played: bool, resume_position_ms: int>, type: string, uri: string, show: record<available_markets: list<string>, copyrights: list<record>, description: string, explicit: bool, external_urls: record<spotify: string>, href: string, html_description: string, id: string, images: list<record>, is_externally_hosted: bool, languages: list<string>, media_type: string, name: string, publisher: string, total_episodes: int, type: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1059,7 +1066,7 @@ export def "get-current-users-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<country: string, display_name: string, email: string, explicit_content: record<filter_enabled: bool, filter_locked: bool>, external_urls: record<spotify: string>, followers: record<href: string, total: int>, href: string, id: string, images: table<height: int, url: string, width: int>, product: string, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me" $auth.query)
@@ -1093,12 +1100,13 @@ export def "remove-albums-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 382ObEPsp2rxGrnsizN5TX,1A2GTWGtFfWp7KSQTwWOyo,2noRn2Aes5aoNVsU6iWThc
+  --ids: string # required, e.g. 382ObEPsp2rxGrnsizN5TX,1A2GTWGtFfWp7KSQTwWOyo,2noRn2Aes5aoNVsU6iWThc
   --ids-body: list<string> # A JSON array of the [Spotify IDs](/documentation/web-api/#spotify-uris-and-ids). For example: `["4iV5W9uYEdYUVa79Axb7Rh", "1301WleyT98MSxVHPZCA6M"]`A maximum of 50 items can be specified in one request. _**Note**: if the `ids` parameter is present in the query string, any IDs listed here in the body will be ignored._ (body field)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/albums" $qp $auth.query)
   let req_body = {"ids": $ids_body} | compact
@@ -1136,7 +1144,7 @@ export def "get-users-saved-albums" [
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
   --market: string # e.g. ES
-]: nothing -> any {
+]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<added_at: string, album: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "market" $market "scalar")] | flatten | str join "&"
@@ -1171,12 +1179,13 @@ export def "save-albums-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 382ObEPsp2rxGrnsizN5TX,1A2GTWGtFfWp7KSQTwWOyo,2noRn2Aes5aoNVsU6iWThc
+  --ids: string # required, e.g. 382ObEPsp2rxGrnsizN5TX,1A2GTWGtFfWp7KSQTwWOyo,2noRn2Aes5aoNVsU6iWThc
   --ids-body: list<string> # A JSON array of the [Spotify IDs](/documentation/web-api/#spotify-uris-and-ids). For example: `["4iV5W9uYEdYUVa79Axb7Rh", "1301WleyT98MSxVHPZCA6M"]`A maximum of 50 items can be specified in one request. _**Note**: if the `ids` parameter is present in the query string, any IDs listed here in the body will be ignored._ (body field)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/albums" $qp $auth.query)
   let req_body = {"ids": $ids_body} | compact
@@ -1211,10 +1220,11 @@ export def "check-users-saved-albums" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 382ObEPsp2rxGrnsizN5TX,1A2GTWGtFfWp7KSQTwWOyo,2noRn2Aes5aoNVsU6iWThc
-]: nothing -> any {
+  --ids: string # required, e.g. 382ObEPsp2rxGrnsizN5TX,1A2GTWGtFfWp7KSQTwWOyo,2noRn2Aes5aoNVsU6iWThc
+]: nothing -> list<bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/albums/contains" $qp $auth.query)
   let accept_val = "application/json"
@@ -1247,10 +1257,11 @@ export def "remove-audiobooks-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 18yVqkdbdRvS24c0Ilj2ci,1HGw3J3NxZO1TP1BTtVhpZ,7iHfbu1YPACw6oZPAFJtqe
+  --ids: string # required, e.g. 18yVqkdbdRvS24c0Ilj2ci,1HGw3J3NxZO1TP1BTtVhpZ,7iHfbu1YPACw6oZPAFJtqe
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/audiobooks" $qp $auth.query)
   let accept_val = "application/json"
@@ -1285,7 +1296,7 @@ export def "get-users-saved-audiobooks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> any {
+]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<authors: list, available_markets: list, copyrights: list, description: string, edition: string, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, languages: list, media_type: string, name: string, narrators: list, publisher: string, total_chapters: int, type: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -1320,10 +1331,11 @@ export def "save-audiobooks-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 18yVqkdbdRvS24c0Ilj2ci,1HGw3J3NxZO1TP1BTtVhpZ,7iHfbu1YPACw6oZPAFJtqe
+  --ids: string # required, e.g. 18yVqkdbdRvS24c0Ilj2ci,1HGw3J3NxZO1TP1BTtVhpZ,7iHfbu1YPACw6oZPAFJtqe
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/audiobooks" $qp $auth.query)
   let accept_val = "application/json"
@@ -1356,10 +1368,11 @@ export def "check-users-saved-audiobooks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 18yVqkdbdRvS24c0Ilj2ci,1HGw3J3NxZO1TP1BTtVhpZ,7iHfbu1YPACw6oZPAFJtqe
-]: nothing -> any {
+  --ids: string # required, e.g. 18yVqkdbdRvS24c0Ilj2ci,1HGw3J3NxZO1TP1BTtVhpZ,7iHfbu1YPACw6oZPAFJtqe
+]: nothing -> list<bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/audiobooks/contains" $qp $auth.query)
   let accept_val = "application/json"
@@ -1392,12 +1405,13 @@ export def "remove-episodes-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 7ouMYWpwJ422jRcDASZB7P,4VqPOruhp5EdPBeR92t6lQ,2takcwOaAZWiXQijPHIx7B
+  --ids: string # required, e.g. 7ouMYWpwJ422jRcDASZB7P,4VqPOruhp5EdPBeR92t6lQ,2takcwOaAZWiXQijPHIx7B
   --ids-body: list<string> # A JSON array of the [Spotify IDs](/documentation/web-api/#spotify-uris-and-ids). A maximum of 50 items can be specified in one request. _**Note**: if the `ids` parameter is present in the query string, any IDs listed here in the body will be ignored._ (body field)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/episodes" $qp $auth.query)
   let req_body = {"ids": $ids_body} | compact
@@ -1435,7 +1449,7 @@ export def "get-users-saved-episodes" [
   --market: string # e.g. ES
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> any {
+]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<added_at: string, episode: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -1470,12 +1484,13 @@ export def "save-episodes-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 77o6BIVlYM3msb4MMIL1jH,0Q86acNRm6V9GYx55SXKwf
+  --ids: string # required, e.g. 77o6BIVlYM3msb4MMIL1jH,0Q86acNRm6V9GYx55SXKwf
   --ids-body: list<string> # A JSON array of the [Spotify IDs](/documentation/web-api/#spotify-uris-and-ids). A maximum of 50 items can be specified in one request. _**Note**: if the `ids` parameter is present in the query string, any IDs listed here in the body will be ignored._ (body field)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/episodes" $qp $auth.query)
   let req_body = {"ids": $ids_body} | compact
@@ -1510,10 +1525,11 @@ export def "check-users-saved-episodes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 77o6BIVlYM3msb4MMIL1jH,0Q86acNRm6V9GYx55SXKwf
-]: nothing -> any {
+  --ids: string # required, e.g. 77o6BIVlYM3msb4MMIL1jH,0Q86acNRm6V9GYx55SXKwf
+]: nothing -> list<bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/episodes/contains" $qp $auth.query)
   let accept_val = "application/json"
@@ -1546,13 +1562,15 @@ export def "unfollow-artists-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --type: string@type-completer # e.g. artist
-  --ids: string # e.g. 2CIMQHirSU0MQqyYHq0eOx,57dN52uHvrHOxijzpIgu3E,1vCWHaC5f2uS3yhpwWbIA6
+  --type: string@type-completer # required, e.g. artist
+  --ids: string # required, e.g. 2CIMQHirSU0MQqyYHq0eOx,57dN52uHvrHOxijzpIgu3E,1vCWHaC5f2uS3yhpwWbIA6
   --ids-body: list<string> # A JSON array of the artist or user [Spotify IDs](/documentation/web-api/#spotify-uris-and-ids). For example: `{ids:["74ASZWbe4lXaubB36ztrGX", "08td7MxkoHQkXnWAYD8d6Q"]}`. A maximum of 50 IDs can be sent in one request. _**Note**: if the `ids` parameter is present in the query string, any IDs listed here in the body will be ignored._ (body field)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/following" $qp $auth.query)
   let req_body = {"ids": $ids_body} | compact
@@ -1587,12 +1605,13 @@ export def "get-followed" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --type: string@type-completer-1 # e.g. artist
+  --type: string@type-completer-1 # required, e.g. artist
   --after: string # e.g. 0I2XqVXqHScXjHhk6AYYRe
   --limit: int # default: 20, e.g. 10
-]: nothing -> any {
+]: nothing -> record<artists: record<cursors: record<after: string, before: string>, href: string, limit: int, next: string, total: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let type = ($type | default "artist")
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/following" $qp $auth.query)
   let accept_val = "application/json"
@@ -1625,17 +1644,20 @@ export def "follow-artists-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --type: string@type-completer # e.g. artist
-  --ids: string # e.g. 2CIMQHirSU0MQqyYHq0eOx,57dN52uHvrHOxijzpIgu3E,1vCWHaC5f2uS3yhpwWbIA6
+  --type: string@type-completer # required, e.g. artist
+  --ids: string # required, e.g. 2CIMQHirSU0MQqyYHq0eOx,57dN52uHvrHOxijzpIgu3E,1vCWHaC5f2uS3yhpwWbIA6
   --ids-body: list<string> # A JSON array of the artist or user [Spotify IDs](/documentation/web-api/#spotify-uris-and-ids). For example: `{ids:["74ASZWbe4lXaubB36ztrGX", "08td7MxkoHQkXnWAYD8d6Q"]}`. A maximum of 50 IDs can be sent in one request. _**Note**: if the `ids` parameter is present in the query string, any IDs listed here in the body will be ignored._ (body field)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/following" $qp $auth.query)
   let req_body = {"ids": $ids_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "ids") == null) { error make --unspanned { msg: "required body field 'ids' missing: pass --ids-body or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1666,11 +1688,13 @@ export def "check-current-user-follows" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --type: string@type-completer # e.g. artist
-  --ids: string # e.g. 2CIMQHirSU0MQqyYHq0eOx,57dN52uHvrHOxijzpIgu3E,1vCWHaC5f2uS3yhpwWbIA6
-]: nothing -> any {
+  --type: string@type-completer # required, e.g. artist
+  --ids: string # required, e.g. 2CIMQHirSU0MQqyYHq0eOx,57dN52uHvrHOxijzpIgu3E,1vCWHaC5f2uS3yhpwWbIA6
+]: nothing -> list<bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/following/contains" $qp $auth.query)
   let accept_val = "application/json"
@@ -1705,7 +1729,7 @@ export def "get-information-about-the-users-current-playback" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
   --additional-types: string
-]: nothing -> any {
+]: nothing -> record<actions: record<interrupting_playback: bool, pausing: bool, resuming: bool, seeking: bool, skipping_next: bool, skipping_prev: bool, toggling_repeat_context: bool, toggling_repeat_track: bool, toggling_shuffle: bool, transferring_playback: bool>, context: record<external_urls: record<spotify: string>, href: string, type: string, uri: string>, currently_playing_type: string, device: record<id: string, is_active: bool, is_private_session: bool, is_restricted: bool, name: string, type: string, volume_percent: int>, is_playing: bool, item: any, progress_ms: int, repeat_state: string, shuffle_state: bool, timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "additional_types" $additional_types "scalar")] | flatten | str join "&"
@@ -1781,7 +1805,7 @@ export def "get-the-users-currently-playing-track" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
   --additional-types: string
-]: nothing -> any {
+]: nothing -> record<actions: record<interrupting_playback: bool, pausing: bool, resuming: bool, seeking: bool, skipping_next: bool, skipping_prev: bool, toggling_repeat_context: bool, toggling_repeat_track: bool, toggling_shuffle: bool, transferring_playback: bool>, context: record<external_urls: record<spotify: string>, href: string, type: string, uri: string>, currently_playing_type: string, device: record<id: string, is_active: bool, is_private_session: bool, is_restricted: bool, name: string, type: string, volume_percent: int>, is_playing: bool, item: any, progress_ms: int, repeat_state: string, shuffle_state: bool, timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "additional_types" $additional_types "scalar")] | flatten | str join "&"
@@ -1816,7 +1840,7 @@ export def "get-a-users-available-devices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<devices: table<id: string, is_active: bool, is_private_session: bool, is_restricted: bool, name: string, type: string, volume_percent: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/player/devices" $auth.query)
@@ -2001,7 +2025,7 @@ export def "get-queue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<currently_playing: any, queue: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/player/queue" $auth.query)
@@ -2035,11 +2059,12 @@ export def "add-to-queue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --uri: string # e.g. spotify:track:4iV5W9uYEdYUVa79Axb7Rh
+  --uri: string # required, e.g. spotify:track:4iV5W9uYEdYUVa79Axb7Rh
   --device-id: string # e.g. 0d1841b0976bae2a3a310dd74c0f3df354899bc8
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($uri == null) { error make --unspanned { msg: "required query parameter 'uri' missing: pass --uri" } }
   let qp = [(serialize-qp "uri" $uri "scalar") (serialize-qp "device_id" $device_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/player/queue" $qp $auth.query)
   let accept_val = "application/json"
@@ -2075,7 +2100,7 @@ export def "get-recently-played" [
   --limit: int # default: 20, e.g. 10
   --after: int # e.g. 1484811043508
   --before: int
-]: nothing -> any {
+]: nothing -> record<cursors: record<after: string, before: string>, href: string, limit: int, next: string, total: int, items: table<context: record, played_at: string, track: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "before" $before "scalar")] | flatten | str join "&"
@@ -2110,11 +2135,12 @@ export def "set-repeat-mode-on-users-playback" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --state: string # e.g. context
+  --state: string # required, e.g. context
   --device-id: string # e.g. 0d1841b0976bae2a3a310dd74c0f3df354899bc8
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($state == null) { error make --unspanned { msg: "required query parameter 'state' missing: pass --state" } }
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "device_id" $device_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/player/repeat" $qp $auth.query)
   let accept_val = "application/json"
@@ -2147,11 +2173,12 @@ export def "seek-to-position-in-currently-playing-track" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --position-ms: int # e.g. 25000
+  --position-ms: int # required, e.g. 25000
   --device-id: string # e.g. 0d1841b0976bae2a3a310dd74c0f3df354899bc8
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($position_ms == null) { error make --unspanned { msg: "required query parameter 'position_ms' missing: pass --position-ms" } }
   let qp = [(serialize-qp "position_ms" $position_ms "scalar") (serialize-qp "device_id" $device_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/player/seek" $qp $auth.query)
   let accept_val = "application/json"
@@ -2184,11 +2211,12 @@ export def "toggle-shuffle-for-users-playback" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --state: oneof<nothing, bool> # e.g. true
+  --state: oneof<nothing, bool> # required, e.g. true
   --device-id: string # e.g. 0d1841b0976bae2a3a310dd74c0f3df354899bc8
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($state == null) { error make --unspanned { msg: "required query parameter 'state' missing: pass --state" } }
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "device_id" $device_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/player/shuffle" $qp $auth.query)
   let accept_val = "application/json"
@@ -2221,11 +2249,12 @@ export def "set-volume-for-users-playback" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --volume-percent: int # e.g. 50
+  --volume-percent: int # required, e.g. 50
   --device-id: string # e.g. 0d1841b0976bae2a3a310dd74c0f3df354899bc8
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($volume_percent == null) { error make --unspanned { msg: "required query parameter 'volume_percent' missing: pass --volume-percent" } }
   let qp = [(serialize-qp "volume_percent" $volume_percent "scalar") (serialize-qp "device_id" $device_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/player/volume" $qp $auth.query)
   let accept_val = "application/json"
@@ -2260,7 +2289,7 @@ export def "get-a-list-of-current-users-playlists" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> any {
+]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<collaborative: bool, description: string, external_urls: record, href: string, id: string, images: list, name: string, owner: record, public: bool, snapshot_id: string, tracks: record, type: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -2295,11 +2324,12 @@ export def "remove-shows-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 5CfCWKI5pZ28U0uOzXkDHe,5as3aKmN2k11yfDDDSrvaZ
+  --ids: string # required, e.g. 5CfCWKI5pZ28U0uOzXkDHe,5as3aKmN2k11yfDDDSrvaZ
   --market: string # e.g. ES
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar") (serialize-qp "market" $market "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/shows" $qp $auth.query)
   let accept_val = "application/json"
@@ -2334,7 +2364,7 @@ export def "get-users-saved-shows" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> any {
+]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<added_at: string, show: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -2369,10 +2399,11 @@ export def "save-shows-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 5CfCWKI5pZ28U0uOzXkDHe,5as3aKmN2k11yfDDDSrvaZ
+  --ids: string # required, e.g. 5CfCWKI5pZ28U0uOzXkDHe,5as3aKmN2k11yfDDDSrvaZ
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/shows" $qp $auth.query)
   let accept_val = "application/json"
@@ -2405,10 +2436,11 @@ export def "check-users-saved-shows" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 5CfCWKI5pZ28U0uOzXkDHe,5as3aKmN2k11yfDDDSrvaZ
-]: nothing -> any {
+  --ids: string # required, e.g. 5CfCWKI5pZ28U0uOzXkDHe,5as3aKmN2k11yfDDDSrvaZ
+]: nothing -> list<bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/shows/contains" $qp $auth.query)
   let accept_val = "application/json"
@@ -2432,7 +2464,7 @@ export def "check-users-saved-shows" [
 # GET /me/top/{type}
 # operationId: get-users-top-artists-and-tracks
 export def "get-users-top-artists-and-tracks" [
-  type: string
+  type: string@type-completer-2
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2445,7 +2477,7 @@ export def "get-users-top-artists-and-tracks" [
   --time-range: string # default: medium_term, e.g. medium_term
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> any {
+]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -2481,12 +2513,13 @@ export def "remove-tracks-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 7ouMYWpwJ422jRcDASZB7P,4VqPOruhp5EdPBeR92t6lQ,2takcwOaAZWiXQijPHIx7B
+  --ids: string # required, e.g. 7ouMYWpwJ422jRcDASZB7P,4VqPOruhp5EdPBeR92t6lQ,2takcwOaAZWiXQijPHIx7B
   --ids-body: list<string> # A JSON array of the [Spotify IDs](/documentation/web-api/#spotify-uris-and-ids). For example: `["4iV5W9uYEdYUVa79Axb7Rh", "1301WleyT98MSxVHPZCA6M"]`A maximum of 50 items can be specified in one request. _**Note**: if the `ids` parameter is present in the query string, any IDs listed here in the body will be ignored._ (body field)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/tracks" $qp $auth.query)
   let req_body = {"ids": $ids_body} | compact
@@ -2524,7 +2557,7 @@ export def "get-users-saved-tracks" [
   --market: string # e.g. ES
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> any {
+]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<added_at: string, track: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -2559,12 +2592,13 @@ export def "save-tracks-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 7ouMYWpwJ422jRcDASZB7P,4VqPOruhp5EdPBeR92t6lQ,2takcwOaAZWiXQijPHIx7B
+  --ids: string # required, e.g. 7ouMYWpwJ422jRcDASZB7P,4VqPOruhp5EdPBeR92t6lQ,2takcwOaAZWiXQijPHIx7B
   --ids-body: list<string> # A JSON array of the [Spotify IDs](/documentation/web-api/#spotify-uris-and-ids). For example: `["4iV5W9uYEdYUVa79Axb7Rh", "1301WleyT98MSxVHPZCA6M"]`A maximum of 50 items can be specified in one request. _**Note**: if the `ids` parameter is present in the query string, any IDs listed here in the body will be ignored._ (body field)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/tracks" $qp $auth.query)
   let req_body = {"ids": $ids_body} | compact
@@ -2599,10 +2633,11 @@ export def "check-users-saved-tracks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. 7ouMYWpwJ422jRcDASZB7P,4VqPOruhp5EdPBeR92t6lQ,2takcwOaAZWiXQijPHIx7B
-]: nothing -> any {
+  --ids: string # required, e.g. 7ouMYWpwJ422jRcDASZB7P,4VqPOruhp5EdPBeR92t6lQ,2takcwOaAZWiXQijPHIx7B
+]: nothing -> list<bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/tracks/contains" $qp $auth.query)
   let accept_val = "application/json"
@@ -2639,7 +2674,7 @@ export def "get-playlist" [
   --market: string # e.g. ES
   --fields: string # e.g. items(added_by.id,track(name,href,album(name,href)))
   --additional-types: string
-]: nothing -> any {
+]: nothing -> record<collaborative: bool, description: string, external_urls: record<spotify: string>, followers: record<href: string, total: int>, href: string, id: string, images: table<height: int, url: string, width: int>, name: string, owner: record<external_urls: record<spotify: string>, followers: record<href: string, total: int>, href: string, id: string, type: string, uri: string, display_name: string>, public: bool, snapshot_id: string, tracks: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
@@ -2795,11 +2830,12 @@ export def "check-if-user-follows-playlist" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # e.g. jmperezperez,thelinmichael,wizzler
-]: nothing -> any {
+  --ids: string # required, e.g. jmperezperez,thelinmichael,wizzler
+]: nothing -> list<bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/playlists/{playlist_id}/followers/contains") $qp $auth.query)
   let accept_val = "application/json"
@@ -2833,7 +2869,7 @@ export def "get-playlist-cover" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<height: int, url: string, width: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
@@ -2908,7 +2944,7 @@ export def "remove-tracks-playlist" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --snapshot-id: string # The playlist's snapshot ID against which you want to make the changes. The API will validate that the specified items exist and in the specified positions and make the changes, even if more recent changes have been made to the playlist.
   tracks: list # An array of objects containing [Spotify URIs](https://developer.spotify.com/documentation/web-api/#spotify-uris-and-ids) of the tracks or episodes to remove. For example: `{ "tracks": [{ "uri": "spotify:track:4iV5W9uYEdYUVa79Axb7Rh" },{ "uri": "spotify:track:1301WleyT98MSxVHPZCA6M" }] }`. A maximum of 100 objects can be sent at once. — item shape: {uri?: string}
-]: any -> any {
+]: any -> record<snapshot_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2952,7 +2988,7 @@ export def "get-playlists-tracks" [
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
   --additional-types: string
-]: nothing -> any {
+]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<added_at: string, added_by: record, is_local: bool, track: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
@@ -2993,7 +3029,7 @@ export def "add-tracks-to-playlist" [
   --uris: string # e.g. spotify:track:4iV5W9uYEdYUVa79Axb7Rh,spotify:track:1301WleyT98MSxVHPZCA6M
   --position-body: int # The position to insert the items, a zero-based index. For example, to insert the items in the first position: `position=0` ; to insert the items in the third position: `position=2`. If omitted, the items will be appended to the playlist. Items are added in the order they appear in the uris array. For example: `{"uris": ["spotify:track:4iV5W9uYEdYUVa79Axb7Rh","spotify:track:1301WleyT98MSxVHPZCA6M"], "position": 3}` (body field)
   --uris-body: list<string> # A JSON array of the [Spotify URIs](/documentation/web-api/#spotify-uris-and-ids) to add. For example: `{"uris": ["spotify:track:4iV5W9uYEdYUVa79Axb7Rh","spotify:track:1301WleyT98MSxVHPZCA6M", "spotify:episode:512ojhOuo1ktJprKbVcKyQ"]}`A maximum of 100 items can be added in one request. _**Note**: if the `uris` parameter is present in the query string, any URIs listed here in the body will be ignored._ (body field)
-]: any -> any {
+]: any -> record<snapshot_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3038,8 +3074,8 @@ export def "reorder-or-replace-playlists-tracks" [
   --range-length: int # The amount of items to be reordered. Defaults to 1 if not set.The range of items to be reordered begins from the _range_start_ position, and includes the _range_length_ subsequent items.Example:To move the items at index 9-10 to the start of the playlist, _range_start_ is set to 9, and _range_length_ is set to 2.
   --range-start: int # The position of the first item to be reordered.
   --snapshot-id: string # The playlist's snapshot ID against which you want to make the changes.
-  --uris-body: list<string> #  (body field)
-]: any -> any {
+  --uris-body: list<string> # (body field)
+]: any -> record<snapshot_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3080,9 +3116,9 @@ export def "get-recommendations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 20, e.g. 10
   --market: string # e.g. ES
-  --seed-artists: string # e.g. 4NHQUGzhtTLFvgF5SZesLK
-  --seed-genres: string # e.g. classical,country
-  --seed-tracks: string # e.g. 0c6xIDDpzE81m2q797ordA
+  --seed-artists: string # required, e.g. 4NHQUGzhtTLFvgF5SZesLK
+  --seed-genres: string # required, e.g. classical,country
+  --seed-tracks: string # required, e.g. 0c6xIDDpzE81m2q797ordA
   --min-acousticness: float
   --max-acousticness: float
   --target-acousticness: float
@@ -3125,9 +3161,12 @@ export def "get-recommendations" [
   --min-valence: float
   --max-valence: float
   --target-valence: float
-]: nothing -> any {
+]: nothing -> record<seeds: table<afterFilteringSize: int, afterRelinkingSize: int, href: string, id: string, initialPoolSize: int, type: string>, tracks: table<album: record, artists: list, available_markets: list, disc_number: int, duration_ms: int, explicit: bool, external_ids: record, external_urls: record, href: string, id: string, is_local: bool, is_playable: bool, linked_from: record, name: string, popularity: int, preview_url: string, restrictions: record, track_number: int, type: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($seed_artists == null) { error make --unspanned { msg: "required query parameter 'seed_artists' missing: pass --seed-artists" } }
+  if ($seed_genres == null) { error make --unspanned { msg: "required query parameter 'seed_genres' missing: pass --seed-genres" } }
+  if ($seed_tracks == null) { error make --unspanned { msg: "required query parameter 'seed_tracks' missing: pass --seed-tracks" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "market" $market "scalar") (serialize-qp "seed_artists" $seed_artists "scalar") (serialize-qp "seed_genres" $seed_genres "scalar") (serialize-qp "seed_tracks" $seed_tracks "scalar") (serialize-qp "min_acousticness" $min_acousticness "scalar") (serialize-qp "max_acousticness" $max_acousticness "scalar") (serialize-qp "target_acousticness" $target_acousticness "scalar") (serialize-qp "min_danceability" $min_danceability "scalar") (serialize-qp "max_danceability" $max_danceability "scalar") (serialize-qp "target_danceability" $target_danceability "scalar") (serialize-qp "min_duration_ms" $min_duration_ms "scalar") (serialize-qp "max_duration_ms" $max_duration_ms "scalar") (serialize-qp "target_duration_ms" $target_duration_ms "scalar") (serialize-qp "min_energy" $min_energy "scalar") (serialize-qp "max_energy" $max_energy "scalar") (serialize-qp "target_energy" $target_energy "scalar") (serialize-qp "min_instrumentalness" $min_instrumentalness "scalar") (serialize-qp "max_instrumentalness" $max_instrumentalness "scalar") (serialize-qp "target_instrumentalness" $target_instrumentalness "scalar") (serialize-qp "min_key" $min_key "scalar") (serialize-qp "max_key" $max_key "scalar") (serialize-qp "target_key" $target_key "scalar") (serialize-qp "min_liveness" $min_liveness "scalar") (serialize-qp "max_liveness" $max_liveness "scalar") (serialize-qp "target_liveness" $target_liveness "scalar") (serialize-qp "min_loudness" $min_loudness "scalar") (serialize-qp "max_loudness" $max_loudness "scalar") (serialize-qp "target_loudness" $target_loudness "scalar") (serialize-qp "min_mode" $min_mode "scalar") (serialize-qp "max_mode" $max_mode "scalar") (serialize-qp "target_mode" $target_mode "scalar") (serialize-qp "min_popularity" $min_popularity "scalar") (serialize-qp "max_popularity" $max_popularity "scalar") (serialize-qp "target_popularity" $target_popularity "scalar") (serialize-qp "min_speechiness" $min_speechiness "scalar") (serialize-qp "max_speechiness" $max_speechiness "scalar") (serialize-qp "target_speechiness" $target_speechiness "scalar") (serialize-qp "min_tempo" $min_tempo "scalar") (serialize-qp "max_tempo" $max_tempo "scalar") (serialize-qp "target_tempo" $target_tempo "scalar") (serialize-qp "min_time_signature" $min_time_signature "scalar") (serialize-qp "max_time_signature" $max_time_signature "scalar") (serialize-qp "target_time_signature" $target_time_signature "scalar") (serialize-qp "min_valence" $min_valence "scalar") (serialize-qp "max_valence" $max_valence "scalar") (serialize-qp "target_valence" $target_valence "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recommendations" $qp $auth.query)
   let accept_val = "application/json"
@@ -3160,7 +3199,7 @@ export def "get-recommendation-genres" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<genres: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recommendations/available-genre-seeds" $auth.query)
@@ -3194,15 +3233,17 @@ export def "search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # e.g. remaster%20track:Doxy%20artist:Miles%20Davis
-  --type: list<string>
+  --q: string # required, e.g. remaster%20track:Doxy%20artist:Miles%20Davis
+  --type: list<string> # required
   --market: string # e.g. ES
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
   --include-external: string@include-external-completer
-]: nothing -> any {
+]: nothing -> record<albums: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, artists: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, audiobooks: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, episodes: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, playlists: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, shows: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, tracks: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "type" $type "csv") (serialize-qp "market" $market "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "include_external" $include_external "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -3236,10 +3277,11 @@ export def "get-multiple-shows" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
-  --ids: string # e.g. 5CfCWKI5pZ28U0uOzXkDHe,5as3aKmN2k11yfDDDSrvaZ
-]: nothing -> any {
+  --ids: string # required, e.g. 5CfCWKI5pZ28U0uOzXkDHe,5as3aKmN2k11yfDDDSrvaZ
+]: nothing -> record<shows: table<available_markets: list, copyrights: list, description: string, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, is_externally_hosted: bool, languages: list, media_type: string, name: string, publisher: string, total_episodes: int, type: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shows" $qp $auth.query)
   let accept_val = "application/json"
@@ -3274,7 +3316,7 @@ export def "get-a-show" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
-]: nothing -> any {
+]: nothing -> record<available_markets: list<string>, copyrights: table<text: string, type: string>, description: string, explicit: bool, external_urls: record<spotify: string>, href: string, html_description: string, id: string, images: table<height: int, url: string, width: int>, is_externally_hosted: bool, languages: list<string>, media_type: string, name: string, publisher: string, total_episodes: int, type: string, uri: string, episodes: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3314,7 +3356,7 @@ export def "get-a-shows-episodes" [
   --market: string # e.g. ES
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> any {
+]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<audio_preview_url: string, description: string, duration_ms: int, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, is_externally_hosted: bool, is_playable: bool, language: string, languages: list, name: string, release_date: string, release_date_precision: string, restrictions: record, resume_point: record, type: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3351,10 +3393,11 @@ export def "get-several-tracks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
-  --ids: string # e.g. 7ouMYWpwJ422jRcDASZB7P,4VqPOruhp5EdPBeR92t6lQ,2takcwOaAZWiXQijPHIx7B
-]: nothing -> any {
+  --ids: string # required, e.g. 7ouMYWpwJ422jRcDASZB7P,4VqPOruhp5EdPBeR92t6lQ,2takcwOaAZWiXQijPHIx7B
+]: nothing -> record<tracks: table<album: record, artists: list, available_markets: list, disc_number: int, duration_ms: int, explicit: bool, external_ids: record, external_urls: record, href: string, id: string, is_local: bool, is_playable: bool, linked_from: record, name: string, popularity: int, preview_url: string, restrictions: record, track_number: int, type: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tracks" $qp $auth.query)
   let accept_val = "application/json"
@@ -3389,7 +3432,7 @@ export def "get-track" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
-]: nothing -> any {
+]: nothing -> record<album: record<album_type: string, available_markets: list<string>, copyrights: list<record>, external_ids: record<ean: string, isrc: string, upc: string>, external_urls: record<spotify: string>, genres: list<string>, href: string, id: string, images: list<record>, label: string, name: string, popularity: int, release_date: string, release_date_precision: string, restrictions: record<reason: string>, total_tracks: int, type: string, uri: string, album_group: string, artists: list<record>>, artists: table<external_urls: record, followers: record, genres: list, href: string, id: string, images: list, name: string, popularity: int, type: string, uri: string>, available_markets: list<string>, disc_number: int, duration_ms: int, explicit: bool, external_ids: record<ean: string, isrc: string, upc: string>, external_urls: record<spotify: string>, href: string, id: string, is_local: bool, is_playable: bool, linked_from: record, name: string, popularity: int, preview_url: string, restrictions: record<reason: string>, track_number: int, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3426,7 +3469,7 @@ export def "get-users-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<display_name: string, external_urls: record<spotify: string>, followers: record<href: string, total: int>, href: string, id: string, images: table<height: int, url: string, width: int>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -3464,7 +3507,7 @@ export def "get-list-users-playlists" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> any {
+]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<collaborative: bool, description: string, external_urls: record, href: string, id: string, images: list, name: string, owner: record, public: bool, snapshot_id: string, tracks: record, type: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -3505,7 +3548,7 @@ export def "create-playlist" [
   --description: string # value for playlist description as displayed in Spotify Clients and in the Web API.
   name: string # The name for the new playlist, for example `"Your Coolest Playlist"`. This name does not need to be unique; a user may have several playlists with the same name.
   --public: oneof<nothing, bool> # Defaults to `true`. If `true` the playlist will be public, if `false` it will be private. To be able to create private playlists, the user must have granted the `playlist-modify-private` [scope](/documentation/general/guides/authorization-guide/#list-of-scopes)
-]: any -> any {
+]: any -> record<collaborative: bool, description: string, external_urls: record<spotify: string>, followers: record<href: string, total: int>, href: string, id: string, images: table<height: int, url: string, width: int>, name: string, owner: record<external_urls: record<spotify: string>, followers: record<href: string, total: int>, href: string, id: string, type: string, uri: string, display_name: string>, public: bool, snapshot_id: string, tracks: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, type: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -208,9 +208,9 @@ export def "get-attach-instances" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --instance-ids: list # The IDs of the instances. You can specify up to 20 instances.
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --action: string@action-completer
-  --version: string@version-completer
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -221,6 +221,9 @@ export def "get-attach-instances" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "AttachInstances")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "InstanceIds" $instance_ids "multi") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -255,8 +258,8 @@ export def "post-attach-instances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer
-  --version: string@version-completer
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -269,6 +272,8 @@ export def "post-attach-instances" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "AttachInstances")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -305,10 +310,10 @@ export def "get-attach-load-balancer-target-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --target-group-ar-ns: list # The Amazon Resource Names (ARNs) of the target groups. You can specify up to 10 target groups. To get the ARN of a target group, use the Elastic Load Balancing DescribeTargetGroups (https://docs.aws.amazon.com/elasticloadbalancing/latest/APIReference/API_DescribeTargetGroups.html) API operation.
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --target-group-ar-ns: list # The Amazon Resource Names (ARNs) of the target groups. You can specify up to 10 target groups. To get the ARN of a target group, use the Elastic Load Balancing DescribeTargetGroups (https://docs.aws.amazon.com/elasticloadbalancing/latest/APIReference/API_DescribeTargetGroups.html) API operation. (required)
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -319,6 +324,10 @@ export def "get-attach-load-balancer-target-groups" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($target_group_ar_ns == null) { error make --unspanned { msg: "required query parameter 'TargetGroupARNs' missing: pass --target-group-ar-ns" } }
+  let action = ($action | default "AttachLoadBalancerTargetGroups")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "TargetGroupARNs" $target_group_ar_ns "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -353,8 +362,8 @@ export def "post-attach-load-balancer-target-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -367,6 +376,8 @@ export def "post-attach-load-balancer-target-groups" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "AttachLoadBalancerTargetGroups")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -403,10 +414,10 @@ export def "get-attach-load-balancers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --load-balancer-names: list # The names of the load balancers. You can specify up to 10 load balancers.
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --load-balancer-names: list # The names of the load balancers. You can specify up to 10 load balancers. (required)
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -417,6 +428,10 @@ export def "get-attach-load-balancers" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($load_balancer_names == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerNames' missing: pass --load-balancer-names" } }
+  let action = ($action | default "AttachLoadBalancers")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "LoadBalancerNames" $load_balancer_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -451,8 +466,8 @@ export def "post-attach-load-balancers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -465,6 +480,8 @@ export def "post-attach-load-balancers" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "AttachLoadBalancers")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -501,10 +518,10 @@ export def "get-attach-traffic-sources" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --traffic-sources: list # The unique identifiers of one or more traffic sources. You can specify up to 10 traffic sources.
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --traffic-sources: list # The unique identifiers of one or more traffic sources. You can specify up to 10 traffic sources. (required)
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -515,6 +532,10 @@ export def "get-attach-traffic-sources" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($traffic_sources == null) { error make --unspanned { msg: "required query parameter 'TrafficSources' missing: pass --traffic-sources" } }
+  let action = ($action | default "AttachTrafficSources")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "TrafficSources" $traffic_sources "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -549,8 +570,8 @@ export def "post-attach-traffic-sources" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -563,6 +584,8 @@ export def "post-attach-traffic-sources" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "AttachTrafficSources")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -599,10 +622,10 @@ export def "get-batch-delete-scheduled-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --scheduled-action-names: list # The names of the scheduled actions to delete. The maximum number allowed is 50.
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --scheduled-action-names: list # The names of the scheduled actions to delete. The maximum number allowed is 50. (required)
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -610,9 +633,13 @@ export def "get-batch-delete-scheduled-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FailedScheduledActions: record> {
+]: nothing -> record<FailedScheduledActions: table<ScheduledActionName: string, ErrorCode: string, ErrorMessage: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($scheduled_action_names == null) { error make --unspanned { msg: "required query parameter 'ScheduledActionNames' missing: pass --scheduled-action-names" } }
+  let action = ($action | default "BatchDeleteScheduledAction")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ScheduledActionNames" $scheduled_action_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -647,8 +674,8 @@ export def "post-batch-delete-scheduled-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -657,10 +684,12 @@ export def "post-batch-delete-scheduled-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<FailedScheduledActions: record> {
+]: any -> record<FailedScheduledActions: table<ScheduledActionName: string, ErrorCode: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "BatchDeleteScheduledAction")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -697,10 +726,10 @@ export def "get-batch-put-scheduled-update-group-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --scheduled-update-group-actions: list # One or more scheduled actions. The maximum number allowed is 50.
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --scheduled-update-group-actions: list # One or more scheduled actions. The maximum number allowed is 50. (required)
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -708,9 +737,13 @@ export def "get-batch-put-scheduled-update-group-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FailedScheduledUpdateGroupActions: record> {
+]: nothing -> record<FailedScheduledUpdateGroupActions: table<ScheduledActionName: string, ErrorCode: string, ErrorMessage: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($scheduled_update_group_actions == null) { error make --unspanned { msg: "required query parameter 'ScheduledUpdateGroupActions' missing: pass --scheduled-update-group-actions" } }
+  let action = ($action | default "BatchPutScheduledUpdateGroupAction")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ScheduledUpdateGroupActions" $scheduled_update_group_actions "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -745,8 +778,8 @@ export def "post-batch-put-scheduled-update-group-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -755,10 +788,12 @@ export def "post-batch-put-scheduled-update-group-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<FailedScheduledUpdateGroupActions: record> {
+]: any -> record<FailedScheduledUpdateGroupActions: table<ScheduledActionName: string, ErrorCode: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "BatchPutScheduledUpdateGroupAction")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -795,9 +830,9 @@ export def "get-cancel-instance-refresh" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -805,9 +840,12 @@ export def "get-cancel-instance-refresh" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<InstanceRefreshId: record> {
+]: nothing -> record<InstanceRefreshId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "CancelInstanceRefresh")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -842,8 +880,8 @@ export def "post-cancel-instance-refresh" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -852,10 +890,12 @@ export def "post-cancel-instance-refresh" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<InstanceRefreshId: record> {
+]: any -> record<InstanceRefreshId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CancelInstanceRefresh")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -892,13 +932,13 @@ export def "get-complete-lifecycle-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lifecycle-hook-name: string # The name of the lifecycle hook.
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
+  --lifecycle-hook-name: string # The name of the lifecycle hook. (required)
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
   --lifecycle-action-token: string # A universally unique identifier (UUID) that identifies a specific lifecycle action associated with an instance. Amazon EC2 Auto Scaling sends this token to the notification target you specified when you created the lifecycle hook.
-  --lifecycle-action-result: string # The action for the group to take. You can specify either CONTINUE or ABANDON.
+  --lifecycle-action-result: string # The action for the group to take. You can specify either CONTINUE or ABANDON. (required)
   --instance-id: string # The ID of the instance.
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -909,6 +949,11 @@ export def "get-complete-lifecycle-action" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lifecycle_hook_name == null) { error make --unspanned { msg: "required query parameter 'LifecycleHookName' missing: pass --lifecycle-hook-name" } }
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($lifecycle_action_result == null) { error make --unspanned { msg: "required query parameter 'LifecycleActionResult' missing: pass --lifecycle-action-result" } }
+  let action = ($action | default "CompleteLifecycleAction")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "LifecycleHookName" $lifecycle_hook_name "scalar") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "LifecycleActionToken" $lifecycle_action_token "scalar") (serialize-qp "LifecycleActionResult" $lifecycle_action_result "scalar") (serialize-qp "InstanceId" $instance_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -943,8 +988,8 @@ export def "post-complete-lifecycle-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -957,6 +1002,8 @@ export def "post-complete-lifecycle-action" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CompleteLifecycleAction")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -993,13 +1040,13 @@ export def "get-create-auto-scaling-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group. This name must be unique per Region per account. The name can contain any ASCII character 33 to 126 including most punctuation characters, digits, and upper and lowercased letters. You cannot use a colon (:) in the name.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. This name must be unique per Region per account. The name can contain any ASCII character 33 to 126 including most punctuation characters, digits, and upper and lowercased letters. You cannot use a colon (:) in the name. (required)
   --launch-configuration-name: string # The name of the launch configuration to use to launch instances. Conditional: You must specify either a launch template (LaunchTemplate or MixedInstancesPolicy) or a launch configuration (LaunchConfigurationName or InstanceId).
   --launch-template: record # Information used to specify the launch template and version to use to launch instances. Conditional: You must specify either a launch template (LaunchTemplate or MixedInstancesPolicy) or a launch configuration (LaunchConfigurationName or InstanceId). The launch template that is specified must be configured for use with an Auto Scaling group. For more information, see Creating a launch template for an Auto Scaling group (https://docs.aws.amazon.com/autoscaling/ec2/userguide/create-launch-template.html) in the Amazon EC2 Auto Scaling User Guide.
   --mixed-instances-policy: record # The mixed instances policy. For more information, see Auto Scaling groups with multiple instance types and purchase options (https://docs.aws.amazon.com/autoscaling/ec2/userguide/ec2-auto-scaling-mixed-instances-groups.html) in the Amazon EC2 Auto Scaling User Guide.
   --instance-id: string # The ID of the instance used to base the launch configuration on. If specified, Amazon EC2 Auto Scaling uses the configuration values from the specified instance to create a new launch configuration. To get the instance ID, use the Amazon EC2 DescribeInstances (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeInstances.html) API operation. For more information, see Creating an Auto Scaling group using an EC2 instance (https://docs.aws.amazon.com/autoscaling/ec2/userguide/create-asg-from-instance.html) in the Amazon EC2 Auto Scaling User Guide.
-  --min-size: int # The minimum size of the group.
-  --max-size: int # The maximum size of the group. With a mixed instances policy that uses instance weighting, Amazon EC2 Auto Scaling may need to go above MaxSize to meet your capacity requirements. In this event, Amazon EC2 Auto Scaling will never go above MaxSize by more than your largest instance weight (weights that define how many units each instance contributes to the desired capacity of the group).
+  --min-size: int # The minimum size of the group. (required)
+  --max-size: int # The maximum size of the group. With a mixed instances policy that uses instance weighting, Amazon EC2 Auto Scaling may need to go above MaxSize to meet your capacity requirements. In this event, Amazon EC2 Auto Scaling will never go above MaxSize by more than your largest instance weight (weights that define how many units each instance contributes to the desired capacity of the group). (required)
   --desired-capacity: int # The desired capacity is the initial capacity of the Auto Scaling group at the time of its creation and the capacity it attempts to maintain. It can scale beyond this capacity if you configure auto scaling. This number must be greater than or equal to the minimum size of the group and less than or equal to the maximum size of the group. If you do not specify a desired capacity, the default is the minimum size of the group.
   --default-cooldown: int # Only needed if you use simple scaling policies. The amount of time, in seconds, between one scaling activity ending and another one starting due to simple scaling policies. For more information, see Scaling cooldowns for Amazon EC2 Auto Scaling (https://docs.aws.amazon.com/autoscaling/ec2/userguide/Cooldown.html) in the Amazon EC2 Auto Scaling User Guide. Default: 300 seconds
   --availability-zones: list # A list of Availability Zones where instances in the Auto Scaling group can be created. Used for launching into the default VPC subnet in each Availability Zone when not using the VPCZoneIdentifier property, or for attaching a network interface when an existing network interface ID is specified in a launch template.
@@ -1020,8 +1067,8 @@ export def "get-create-auto-scaling-group" [
   --desired-capacity-type: string # The unit of measurement for the value specified for desired capacity. Amazon EC2 Auto Scaling supports DesiredCapacityType for attribute-based instance type selection only. For more information, see Creating an Auto Scaling group using attribute-based instance type selection (https://docs.aws.amazon.com/autoscaling/ec2/userguide/create-asg-instance-type-requirements.html) in the Amazon EC2 Auto Scaling User Guide. By default, Amazon EC2 Auto Scaling specifies units, which translates into number of instances. Valid values: units | vcpu | memory-mib
   --default-instance-warmup: int # The amount of time, in seconds, until a new instance is considered to have finished initializing and resource consumption to become stable after it enters the InService state. During an instance refresh, Amazon EC2 Auto Scaling waits for the warm-up period after it replaces an instance before it moves on to replacing the next instance. Amazon EC2 Auto Scaling also waits for the warm-up period before aggregating the metrics for new instances with existing instances in the Amazon CloudWatch metrics that are used for scaling, resulting in more reliable usage data. For more information, see Set the default instance warmup for an Auto Scaling group (https://docs.aws.amazon.com/autoscaling/ec2/userguide/ec2-auto-scaling-default-instance-warmup.html) in the Amazon EC2 Auto Scaling User Guide. To manage various warm-up settings at the group level, we recommend that you set the default instance warmup, even if it is set to 0 seconds. To remove a value that you previously set, include the property but specify -1 for the value. However, we strongly recommend keeping the default instance warmup enabled by specifying a value of 0 or other nominal value. Default: None
   --traffic-sources: list # The list of traffic sources to attach to this Auto Scaling group. You can use any of the following as traffic sources for an Auto Scaling group: Classic Load Balancer, Application Load Balancer, Gateway Load Balancer, Network Load Balancer, and VPC Lattice.
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1032,6 +1079,11 @@ export def "get-create-auto-scaling-group" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($min_size == null) { error make --unspanned { msg: "required query parameter 'MinSize' missing: pass --min-size" } }
+  if ($max_size == null) { error make --unspanned { msg: "required query parameter 'MaxSize' missing: pass --max-size" } }
+  let action = ($action | default "CreateAutoScalingGroup")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "LaunchConfigurationName" $launch_configuration_name "scalar") (serialize-qp "LaunchTemplate" $launch_template "multi") (serialize-qp "MixedInstancesPolicy" $mixed_instances_policy "multi") (serialize-qp "InstanceId" $instance_id "scalar") (serialize-qp "MinSize" $min_size "scalar") (serialize-qp "MaxSize" $max_size "scalar") (serialize-qp "DesiredCapacity" $desired_capacity "scalar") (serialize-qp "DefaultCooldown" $default_cooldown "scalar") (serialize-qp "AvailabilityZones" $availability_zones "multi") (serialize-qp "LoadBalancerNames" $load_balancer_names "multi") (serialize-qp "TargetGroupARNs" $target_group_ar_ns "multi") (serialize-qp "HealthCheckType" $health_check_type "scalar") (serialize-qp "HealthCheckGracePeriod" $health_check_grace_period "scalar") (serialize-qp "PlacementGroup" $placement_group "scalar") (serialize-qp "VPCZoneIdentifier" $vpc_zone_identifier "scalar") (serialize-qp "TerminationPolicies" $termination_policies "multi") (serialize-qp "NewInstancesProtectedFromScaleIn" $new_instances_protected_from_scale_in "scalar") (serialize-qp "CapacityRebalance" $capacity_rebalance "scalar") (serialize-qp "LifecycleHookSpecificationList" $lifecycle_hook_specification_list "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "ServiceLinkedRoleARN" $service_linked_role_arn "scalar") (serialize-qp "MaxInstanceLifetime" $max_instance_lifetime "scalar") (serialize-qp "Context" $context "scalar") (serialize-qp "DesiredCapacityType" $desired_capacity_type "scalar") (serialize-qp "DefaultInstanceWarmup" $default_instance_warmup "scalar") (serialize-qp "TrafficSources" $traffic_sources "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1066,8 +1118,8 @@ export def "post-create-auto-scaling-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1080,6 +1132,8 @@ export def "post-create-auto-scaling-group" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateAutoScalingGroup")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1116,7 +1170,7 @@ export def "get-create-launch-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --launch-configuration-name: string # The name of the launch configuration. This name must be unique per Region per account.
+  --launch-configuration-name: string # The name of the launch configuration. This name must be unique per Region per account. (required)
   --image-id: string # The ID of the Amazon Machine Image (AMI) that was assigned during registration. For more information, see Finding a Linux AMI (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/finding-an-ami.html) in the Amazon EC2 User Guide for Linux Instances. If you specify InstanceId, an ImageId is not required.
   --key-name: string # The name of the key pair. For more information, see Amazon EC2 key pairs and Linux instances (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html) in the Amazon EC2 User Guide for Linux Instances.
   --security-groups: list # A list that contains the security group IDs to assign to the instances in the Auto Scaling group. For more information, see Control traffic to resources using security groups (https://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_SecurityGroups.html) in the Amazon Virtual Private Cloud User Guide.
@@ -1135,8 +1189,8 @@ export def "get-create-launch-configuration" [
   --associate-public-ip-address: oneof<nothing, bool> # Specifies whether to assign a public IPv4 address to the group's instances. If the instance is launched into a default subnet, the default is to assign a public IPv4 address, unless you disabled the option to assign a public IPv4 address on the subnet. If the instance is launched into a nondefault subnet, the default is not to assign a public IPv4 address, unless you enabled the option to assign a public IPv4 address on the subnet. If you specify true, each instance in the Auto Scaling group receives a unique public IPv4 address. For more information, see Launching Auto Scaling instances in a VPC (https://docs.aws.amazon.com/autoscaling/ec2/userguide/asg-in-vpc.html) in the Amazon EC2 Auto Scaling User Guide. If you specify this property, you must specify at least one subnet for VPCZoneIdentifier when you create your group.
   --placement-tenancy: string # The tenancy of the instance, either default or dedicated. An instance with dedicated tenancy runs on isolated, single-tenant hardware and can only be launched into a VPC. To launch dedicated instances into a shared tenancy VPC (a VPC with the instance placement tenancy attribute set to default), you must set the value of this property to dedicated. For more information, see Configuring instance tenancy with Amazon EC2 Auto Scaling (https://docs.aws.amazon.com/autoscaling/ec2/userguide/auto-scaling-dedicated-instances.html) in the Amazon EC2 Auto Scaling User Guide. If you specify PlacementTenancy, you must specify at least one subnet for VPCZoneIdentifier when you create your group. Valid values: default | dedicated
   --metadata-options: record # The metadata options for the instances. For more information, see Configuring the Instance Metadata Options (https://docs.aws.amazon.com/autoscaling/ec2/userguide/create-launch-config.html#launch-configurations-imds) in the Amazon EC2 Auto Scaling User Guide.
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1147,6 +1201,9 @@ export def "get-create-launch-configuration" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($launch_configuration_name == null) { error make --unspanned { msg: "required query parameter 'LaunchConfigurationName' missing: pass --launch-configuration-name" } }
+  let action = ($action | default "CreateLaunchConfiguration")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "LaunchConfigurationName" $launch_configuration_name "scalar") (serialize-qp "ImageId" $image_id "scalar") (serialize-qp "KeyName" $key_name "scalar") (serialize-qp "SecurityGroups" $security_groups "multi") (serialize-qp "ClassicLinkVPCId" $classic_link_vpc_id "scalar") (serialize-qp "ClassicLinkVPCSecurityGroups" $classic_link_vpc_security_groups "multi") (serialize-qp "UserData" $user_data "scalar") (serialize-qp "InstanceId" $instance_id "scalar") (serialize-qp "InstanceType" $instance_type "scalar") (serialize-qp "KernelId" $kernel_id "scalar") (serialize-qp "RamdiskId" $ramdisk_id "scalar") (serialize-qp "BlockDeviceMappings" $block_device_mappings "multi") (serialize-qp "InstanceMonitoring" $instance_monitoring "multi") (serialize-qp "SpotPrice" $spot_price "scalar") (serialize-qp "IamInstanceProfile" $iam_instance_profile "scalar") (serialize-qp "EbsOptimized" $ebs_optimized "scalar") (serialize-qp "AssociatePublicIpAddress" $associate_public_ip_address "scalar") (serialize-qp "PlacementTenancy" $placement_tenancy "scalar") (serialize-qp "MetadataOptions" $metadata_options "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1181,8 +1238,8 @@ export def "post-create-launch-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1195,6 +1252,8 @@ export def "post-create-launch-configuration" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateLaunchConfiguration")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1231,9 +1290,9 @@ export def "get-create-or-update-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tags: list # One or more tags.
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --tags: list # One or more tags. (required)
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1244,6 +1303,9 @@ export def "get-create-or-update-tags" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($tags == null) { error make --unspanned { msg: "required query parameter 'Tags' missing: pass --tags" } }
+  let action = ($action | default "CreateOrUpdateTags")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1278,8 +1340,8 @@ export def "post-create-or-update-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1292,6 +1354,8 @@ export def "post-create-or-update-tags" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateOrUpdateTags")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1328,10 +1392,10 @@ export def "get-delete-auto-scaling-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
   --force-delete: oneof<nothing, bool> # Specifies that the group is to be deleted along with all instances associated with the group, without waiting for all instances to be terminated. This action also deletes any outstanding lifecycle actions associated with the group.
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1342,6 +1406,9 @@ export def "get-delete-auto-scaling-group" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "DeleteAutoScalingGroup")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ForceDelete" $force_delete "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1376,8 +1443,8 @@ export def "post-delete-auto-scaling-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1390,6 +1457,8 @@ export def "post-delete-auto-scaling-group" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteAutoScalingGroup")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1426,9 +1495,9 @@ export def "get-delete-launch-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --launch-configuration-name: string # The name of the launch configuration.
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --launch-configuration-name: string # The name of the launch configuration. (required)
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1439,6 +1508,9 @@ export def "get-delete-launch-configuration" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($launch_configuration_name == null) { error make --unspanned { msg: "required query parameter 'LaunchConfigurationName' missing: pass --launch-configuration-name" } }
+  let action = ($action | default "DeleteLaunchConfiguration")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "LaunchConfigurationName" $launch_configuration_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1473,8 +1545,8 @@ export def "post-delete-launch-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1487,6 +1559,8 @@ export def "post-delete-launch-configuration" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteLaunchConfiguration")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1523,10 +1597,10 @@ export def "get-delete-lifecycle-hook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lifecycle-hook-name: string # The name of the lifecycle hook.
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --lifecycle-hook-name: string # The name of the lifecycle hook. (required)
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1537,6 +1611,10 @@ export def "get-delete-lifecycle-hook" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lifecycle_hook_name == null) { error make --unspanned { msg: "required query parameter 'LifecycleHookName' missing: pass --lifecycle-hook-name" } }
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "DeleteLifecycleHook")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "LifecycleHookName" $lifecycle_hook_name "scalar") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1571,8 +1649,8 @@ export def "post-delete-lifecycle-hook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1585,6 +1663,8 @@ export def "post-delete-lifecycle-hook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteLifecycleHook")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1621,10 +1701,10 @@ export def "get-delete-notification-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --topic-arn: string # The Amazon Resource Name (ARN) of the Amazon SNS topic.
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --topic-arn: string # The Amazon Resource Name (ARN) of the Amazon SNS topic. (required)
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1635,6 +1715,10 @@ export def "get-delete-notification-configuration" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($topic_arn == null) { error make --unspanned { msg: "required query parameter 'TopicARN' missing: pass --topic-arn" } }
+  let action = ($action | default "DeleteNotificationConfiguration")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "TopicARN" $topic_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1669,8 +1753,8 @@ export def "post-delete-notification-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1683,6 +1767,8 @@ export def "post-delete-notification-configuration" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteNotificationConfiguration")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1720,9 +1806,9 @@ export def "get-delete-policy" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --policy-name: string # The name or Amazon Resource Name (ARN) of the policy.
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --policy-name: string # The name or Amazon Resource Name (ARN) of the policy. (required)
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1733,6 +1819,9 @@ export def "get-delete-policy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($policy_name == null) { error make --unspanned { msg: "required query parameter 'PolicyName' missing: pass --policy-name" } }
+  let action = ($action | default "DeletePolicy")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "PolicyName" $policy_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1767,8 +1856,8 @@ export def "post-delete-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1781,6 +1870,8 @@ export def "post-delete-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeletePolicy")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1817,10 +1908,10 @@ export def "get-delete-scheduled-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --scheduled-action-name: string # The name of the action to delete.
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --scheduled-action-name: string # The name of the action to delete. (required)
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1831,6 +1922,10 @@ export def "get-delete-scheduled-action" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($scheduled_action_name == null) { error make --unspanned { msg: "required query parameter 'ScheduledActionName' missing: pass --scheduled-action-name" } }
+  let action = ($action | default "DeleteScheduledAction")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ScheduledActionName" $scheduled_action_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1865,8 +1960,8 @@ export def "post-delete-scheduled-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1879,6 +1974,8 @@ export def "post-delete-scheduled-action" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteScheduledAction")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1915,9 +2012,9 @@ export def "get-delete-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tags: list # One or more tags.
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --tags: list # One or more tags. (required)
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1928,6 +2025,9 @@ export def "get-delete-tags" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($tags == null) { error make --unspanned { msg: "required query parameter 'Tags' missing: pass --tags" } }
+  let action = ($action | default "DeleteTags")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1962,8 +2062,8 @@ export def "post-delete-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1976,6 +2076,8 @@ export def "post-delete-tags" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteTags")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2012,10 +2114,10 @@ export def "get-delete-warm-pool" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
   --force-delete: oneof<nothing, bool> # Specifies that the warm pool is to be deleted along with all of its associated instances, without waiting for all instances to be terminated. This parameter also deletes any outstanding lifecycle actions associated with the warm pool instances.
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2026,6 +2128,9 @@ export def "get-delete-warm-pool" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "DeleteWarmPool")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ForceDelete" $force_delete "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2060,8 +2165,8 @@ export def "post-delete-warm-pool" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2074,6 +2179,8 @@ export def "post-delete-warm-pool" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteWarmPool")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2110,8 +2217,8 @@ export def "get-describe-account-limits" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2119,9 +2226,11 @@ export def "get-describe-account-limits" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MaxNumberOfAutoScalingGroups: record, MaxNumberOfLaunchConfigurations: record, NumberOfAutoScalingGroups: record, NumberOfLaunchConfigurations: record> {
+]: nothing -> record<MaxNumberOfAutoScalingGroups: int, MaxNumberOfLaunchConfigurations: int, NumberOfAutoScalingGroups: int, NumberOfLaunchConfigurations: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAccountLimits")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2156,8 +2265,8 @@ export def "post-describe-account-limits" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2165,9 +2274,11 @@ export def "post-describe-account-limits" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MaxNumberOfAutoScalingGroups: record, MaxNumberOfLaunchConfigurations: record, NumberOfAutoScalingGroups: record, NumberOfLaunchConfigurations: record> {
+]: nothing -> record<MaxNumberOfAutoScalingGroups: int, MaxNumberOfLaunchConfigurations: int, NumberOfAutoScalingGroups: int, NumberOfLaunchConfigurations: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAccountLimits")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2202,8 +2313,8 @@ export def "get-describe-adjustment-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2211,9 +2322,11 @@ export def "get-describe-adjustment-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AdjustmentTypes: record> {
+]: nothing -> record<AdjustmentTypes: table<AdjustmentType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAdjustmentTypes")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2248,8 +2361,8 @@ export def "post-describe-adjustment-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2257,9 +2370,11 @@ export def "post-describe-adjustment-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AdjustmentTypes: record> {
+]: nothing -> record<AdjustmentTypes: table<AdjustmentType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAdjustmentTypes")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2298,8 +2413,8 @@ export def "get-describe-auto-scaling-groups" [
   --next-token: string # The token for the next set of items to return. (You received this token from a previous call.)
   --max-records: int # The maximum number of items to return with this call. The default value is 50 and the maximum value is 100.
   --filters: list # One or more filters to limit the results based on specific tags.
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2307,9 +2422,11 @@ export def "get-describe-auto-scaling-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AutoScalingGroups: record, NextToken: record> {
+]: nothing -> record<AutoScalingGroups: table<AutoScalingGroupName: string, AutoScalingGroupARN: string, LaunchConfigurationName: string, LaunchTemplate: record, MixedInstancesPolicy: record, MinSize: int, MaxSize: int, DesiredCapacity: int, PredictedCapacity: int, DefaultCooldown: int, AvailabilityZones: list, LoadBalancerNames: list, TargetGroupARNs: list, HealthCheckType: string, HealthCheckGracePeriod: int, Instances: list, CreatedTime: string, SuspendedProcesses: list, PlacementGroup: string, VPCZoneIdentifier: string, EnabledMetrics: list, Status: string, Tags: list, TerminationPolicies: list, NewInstancesProtectedFromScaleIn: bool, ServiceLinkedRoleARN: string, MaxInstanceLifetime: int, CapacityRebalance: bool, WarmPoolConfiguration: record, WarmPoolSize: int, Context: string, DesiredCapacityType: string, DefaultInstanceWarmup: int, TrafficSources: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAutoScalingGroups")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupNames" $auto_scaling_group_names "multi") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2346,8 +2463,8 @@ export def "post-describe-auto-scaling-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2356,10 +2473,12 @@ export def "post-describe-auto-scaling-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AutoScalingGroups: record, NextToken: record> {
+]: any -> record<AutoScalingGroups: table<AutoScalingGroupName: string, AutoScalingGroupARN: string, LaunchConfigurationName: string, LaunchTemplate: record, MixedInstancesPolicy: record, MinSize: int, MaxSize: int, DesiredCapacity: int, PredictedCapacity: int, DefaultCooldown: int, AvailabilityZones: list, LoadBalancerNames: list, TargetGroupARNs: list, HealthCheckType: string, HealthCheckGracePeriod: int, Instances: list, CreatedTime: string, SuspendedProcesses: list, PlacementGroup: string, VPCZoneIdentifier: string, EnabledMetrics: list, Status: string, Tags: list, TerminationPolicies: list, NewInstancesProtectedFromScaleIn: bool, ServiceLinkedRoleARN: string, MaxInstanceLifetime: int, CapacityRebalance: bool, WarmPoolConfiguration: record, WarmPoolSize: int, Context: string, DesiredCapacityType: string, DefaultInstanceWarmup: int, TrafficSources: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAutoScalingGroups")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2399,8 +2518,8 @@ export def "get-describe-auto-scaling-instances" [
   --instance-ids: list # The IDs of the instances. If you omit this property, all Auto Scaling instances are described. If you specify an ID that does not exist, it is ignored with no error. Array Members: Maximum number of 50 items.
   --max-records: int # The maximum number of items to return with this call. The default value is 50 and the maximum value is 50.
   --next-token: string # The token for the next set of items to return. (You received this token from a previous call.)
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2408,9 +2527,11 @@ export def "get-describe-auto-scaling-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AutoScalingInstances: record, NextToken: record> {
+]: nothing -> record<AutoScalingInstances: table<InstanceId: string, InstanceType: string, AutoScalingGroupName: string, AvailabilityZone: string, LifecycleState: string, HealthStatus: string, LaunchConfigurationName: string, LaunchTemplate: record, ProtectedFromScaleIn: bool, WeightedCapacity: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAutoScalingInstances")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "InstanceIds" $instance_ids "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2447,8 +2568,8 @@ export def "post-describe-auto-scaling-instances" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2457,10 +2578,12 @@ export def "post-describe-auto-scaling-instances" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AutoScalingInstances: record, NextToken: record> {
+]: any -> record<AutoScalingInstances: table<InstanceId: string, InstanceType: string, AutoScalingGroupName: string, AvailabilityZone: string, LifecycleState: string, HealthStatus: string, LaunchConfigurationName: string, LaunchTemplate: record, ProtectedFromScaleIn: bool, WeightedCapacity: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAutoScalingInstances")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2497,8 +2620,8 @@ export def "get-describe-auto-scaling-notification-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2506,9 +2629,11 @@ export def "get-describe-auto-scaling-notification-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AutoScalingNotificationTypes: record> {
+]: nothing -> record<AutoScalingNotificationTypes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAutoScalingNotificationTypes")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2543,8 +2668,8 @@ export def "post-describe-auto-scaling-notification-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2552,9 +2677,11 @@ export def "post-describe-auto-scaling-notification-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AutoScalingNotificationTypes: record> {
+]: nothing -> record<AutoScalingNotificationTypes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAutoScalingNotificationTypes")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2589,12 +2716,12 @@ export def "get-describe-instance-refreshes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
   --instance-refresh-ids: list # One or more instance refresh IDs.
   --next-token: string # The token for the next set of items to return. (You received this token from a previous call.)
   --max-records: int # The maximum number of items to return with this call. The default value is 50 and the maximum value is 100.
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2602,9 +2729,12 @@ export def "get-describe-instance-refreshes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<InstanceRefreshes: record, NextToken: record> {
+]: nothing -> record<InstanceRefreshes: table<InstanceRefreshId: string, AutoScalingGroupName: string, Status: string, StatusReason: string, StartTime: string, EndTime: string, PercentageComplete: int, InstancesToUpdate: int, ProgressDetails: record, Preferences: record, DesiredConfiguration: record, RollbackDetails: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "DescribeInstanceRefreshes")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "InstanceRefreshIds" $instance_refresh_ids "multi") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2639,8 +2769,8 @@ export def "post-describe-instance-refreshes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2649,10 +2779,12 @@ export def "post-describe-instance-refreshes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<InstanceRefreshes: record, NextToken: record> {
+]: any -> record<InstanceRefreshes: table<InstanceRefreshId: string, AutoScalingGroupName: string, Status: string, StatusReason: string, StartTime: string, EndTime: string, PercentageComplete: int, InstancesToUpdate: int, ProgressDetails: record, Preferences: record, DesiredConfiguration: record, RollbackDetails: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeInstanceRefreshes")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2692,8 +2824,8 @@ export def "get-describe-launch-configurations" [
   --launch-configuration-names: list # The launch configuration names. If you omit this property, all launch configurations are described. Array Members: Maximum number of 50 items.
   --next-token: string # The token for the next set of items to return. (You received this token from a previous call.)
   --max-records: int # The maximum number of items to return with this call. The default value is 50 and the maximum value is 100.
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2701,9 +2833,11 @@ export def "get-describe-launch-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LaunchConfigurations: record, NextToken: record> {
+]: nothing -> record<LaunchConfigurations: table<LaunchConfigurationName: string, LaunchConfigurationARN: string, ImageId: string, KeyName: string, SecurityGroups: list, ClassicLinkVPCId: string, ClassicLinkVPCSecurityGroups: list, UserData: string, InstanceType: string, KernelId: string, RamdiskId: string, BlockDeviceMappings: list, InstanceMonitoring: record, SpotPrice: string, IamInstanceProfile: string, CreatedTime: string, EbsOptimized: bool, AssociatePublicIpAddress: bool, PlacementTenancy: string, MetadataOptions: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeLaunchConfigurations")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "LaunchConfigurationNames" $launch_configuration_names "multi") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2740,8 +2874,8 @@ export def "post-describe-launch-configurations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2750,10 +2884,12 @@ export def "post-describe-launch-configurations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<LaunchConfigurations: record, NextToken: record> {
+]: any -> record<LaunchConfigurations: table<LaunchConfigurationName: string, LaunchConfigurationARN: string, ImageId: string, KeyName: string, SecurityGroups: list, ClassicLinkVPCId: string, ClassicLinkVPCSecurityGroups: list, UserData: string, InstanceType: string, KernelId: string, RamdiskId: string, BlockDeviceMappings: list, InstanceMonitoring: record, SpotPrice: string, IamInstanceProfile: string, CreatedTime: string, EbsOptimized: bool, AssociatePublicIpAddress: bool, PlacementTenancy: string, MetadataOptions: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeLaunchConfigurations")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2790,8 +2926,8 @@ export def "get-describe-lifecycle-hook-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-26
-  --version: string@version-completer
+  --action: string@action-completer-26 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2799,9 +2935,11 @@ export def "get-describe-lifecycle-hook-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LifecycleHookTypes: record> {
+]: nothing -> record<LifecycleHookTypes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeLifecycleHookTypes")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2836,8 +2974,8 @@ export def "post-describe-lifecycle-hook-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-26
-  --version: string@version-completer
+  --action: string@action-completer-26 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2845,9 +2983,11 @@ export def "post-describe-lifecycle-hook-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LifecycleHookTypes: record> {
+]: nothing -> record<LifecycleHookTypes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeLifecycleHookTypes")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2882,10 +3022,10 @@ export def "get-describe-lifecycle-hooks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
   --lifecycle-hook-names: list # The names of one or more lifecycle hooks. If you omit this property, all lifecycle hooks are described.
-  --action: string@action-completer-27
-  --version: string@version-completer
+  --action: string@action-completer-27 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2893,9 +3033,12 @@ export def "get-describe-lifecycle-hooks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LifecycleHooks: record> {
+]: nothing -> record<LifecycleHooks: table<LifecycleHookName: string, AutoScalingGroupName: string, LifecycleTransition: string, NotificationTargetARN: string, RoleARN: string, NotificationMetadata: string, HeartbeatTimeout: int, GlobalTimeout: int, DefaultResult: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "DescribeLifecycleHooks")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "LifecycleHookNames" $lifecycle_hook_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2930,8 +3073,8 @@ export def "post-describe-lifecycle-hooks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-27
-  --version: string@version-completer
+  --action: string@action-completer-27 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2940,10 +3083,12 @@ export def "post-describe-lifecycle-hooks" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<LifecycleHooks: record> {
+]: any -> record<LifecycleHooks: table<LifecycleHookName: string, AutoScalingGroupName: string, LifecycleTransition: string, NotificationTargetARN: string, RoleARN: string, NotificationMetadata: string, HeartbeatTimeout: int, GlobalTimeout: int, DefaultResult: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeLifecycleHooks")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2980,11 +3125,11 @@ export def "get-describe-load-balancer-target-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
   --next-token: string # The token for the next set of items to return. (You received this token from a previous call.)
   --max-records: int # The maximum number of items to return with this call. The default value is 100 and the maximum value is 100.
-  --action: string@action-completer-28
-  --version: string@version-completer
+  --action: string@action-completer-28 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2992,9 +3137,12 @@ export def "get-describe-load-balancer-target-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LoadBalancerTargetGroups: record, NextToken: record> {
+]: nothing -> record<LoadBalancerTargetGroups: table<LoadBalancerTargetGroupARN: string, State: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "DescribeLoadBalancerTargetGroups")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3029,8 +3177,8 @@ export def "post-describe-load-balancer-target-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-28
-  --version: string@version-completer
+  --action: string@action-completer-28 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3039,10 +3187,12 @@ export def "post-describe-load-balancer-target-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<LoadBalancerTargetGroups: record, NextToken: record> {
+]: any -> record<LoadBalancerTargetGroups: table<LoadBalancerTargetGroupARN: string, State: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeLoadBalancerTargetGroups")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3079,11 +3229,11 @@ export def "get-describe-load-balancers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
   --next-token: string # The token for the next set of items to return. (You received this token from a previous call.)
   --max-records: int # The maximum number of items to return with this call. The default value is 100 and the maximum value is 100.
-  --action: string@action-completer-29
-  --version: string@version-completer
+  --action: string@action-completer-29 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3091,9 +3241,12 @@ export def "get-describe-load-balancers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LoadBalancers: record, NextToken: record> {
+]: nothing -> record<LoadBalancers: table<LoadBalancerName: string, State: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "DescribeLoadBalancers")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3128,8 +3281,8 @@ export def "post-describe-load-balancers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-29
-  --version: string@version-completer
+  --action: string@action-completer-29 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3138,10 +3291,12 @@ export def "post-describe-load-balancers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<LoadBalancers: record, NextToken: record> {
+]: any -> record<LoadBalancers: table<LoadBalancerName: string, State: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeLoadBalancers")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3178,8 +3333,8 @@ export def "get-describe-metric-collection-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-30
-  --version: string@version-completer
+  --action: string@action-completer-30 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3187,9 +3342,11 @@ export def "get-describe-metric-collection-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Metrics: record, Granularities: record> {
+]: nothing -> record<Metrics: table<Metric: string>, Granularities: table<Granularity: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeMetricCollectionTypes")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3224,8 +3381,8 @@ export def "post-describe-metric-collection-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-30
-  --version: string@version-completer
+  --action: string@action-completer-30 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3233,9 +3390,11 @@ export def "post-describe-metric-collection-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Metrics: record, Granularities: record> {
+]: nothing -> record<Metrics: table<Metric: string>, Granularities: table<Granularity: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeMetricCollectionTypes")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3273,8 +3432,8 @@ export def "get-describe-notification-configurations" [
   --auto-scaling-group-names: list # The name of the Auto Scaling group.
   --next-token: string # The token for the next set of items to return. (You received this token from a previous call.)
   --max-records: int # The maximum number of items to return with this call. The default value is 50 and the maximum value is 100.
-  --action: string@action-completer-31
-  --version: string@version-completer
+  --action: string@action-completer-31 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3282,9 +3441,11 @@ export def "get-describe-notification-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NotificationConfigurations: record, NextToken: record> {
+]: nothing -> record<NotificationConfigurations: table<AutoScalingGroupName: string, TopicARN: string, NotificationType: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeNotificationConfigurations")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupNames" $auto_scaling_group_names "multi") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3321,8 +3482,8 @@ export def "post-describe-notification-configurations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-31
-  --version: string@version-completer
+  --action: string@action-completer-31 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3331,10 +3492,12 @@ export def "post-describe-notification-configurations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<NotificationConfigurations: record, NextToken: record> {
+]: any -> record<NotificationConfigurations: table<AutoScalingGroupName: string, TopicARN: string, NotificationType: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeNotificationConfigurations")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3376,8 +3539,8 @@ export def "get-describe-policies" [
   --policy-types: list # One or more policy types. The valid values are SimpleScaling, StepScaling, TargetTrackingScaling, and PredictiveScaling.
   --next-token: string # The token for the next set of items to return. (You received this token from a previous call.)
   --max-records: int # The maximum number of items to be returned with each call. The default value is 50 and the maximum value is 100.
-  --action: string@action-completer-32
-  --version: string@version-completer
+  --action: string@action-completer-32 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3385,9 +3548,11 @@ export def "get-describe-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ScalingPolicies: record, NextToken: record> {
+]: nothing -> record<ScalingPolicies: table<AutoScalingGroupName: string, PolicyName: string, PolicyARN: string, PolicyType: string, AdjustmentType: string, MinAdjustmentStep: int, MinAdjustmentMagnitude: int, ScalingAdjustment: int, Cooldown: int, StepAdjustments: list, MetricAggregationType: string, EstimatedInstanceWarmup: int, Alarms: list, TargetTrackingConfiguration: record, Enabled: bool, PredictiveScalingConfiguration: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribePolicies")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "PolicyNames" $policy_names "multi") (serialize-qp "PolicyTypes" $policy_types "multi") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3424,8 +3589,8 @@ export def "post-describe-policies" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-32
-  --version: string@version-completer
+  --action: string@action-completer-32 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3434,10 +3599,12 @@ export def "post-describe-policies" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ScalingPolicies: record, NextToken: record> {
+]: any -> record<ScalingPolicies: table<AutoScalingGroupName: string, PolicyName: string, PolicyARN: string, PolicyType: string, AdjustmentType: string, MinAdjustmentStep: int, MinAdjustmentMagnitude: int, ScalingAdjustment: int, Cooldown: int, StepAdjustments: list, MetricAggregationType: string, EstimatedInstanceWarmup: int, Alarms: list, TargetTrackingConfiguration: record, Enabled: bool, PredictiveScalingConfiguration: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribePolicies")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3479,8 +3646,8 @@ export def "get-describe-scaling-activities" [
   --include-deleted-groups: oneof<nothing, bool> # Indicates whether to include scaling activity from deleted Auto Scaling groups.
   --max-records: int # The maximum number of items to return with this call. The default value is 100 and the maximum value is 100.
   --next-token: string # The token for the next set of items to return. (You received this token from a previous call.)
-  --action: string@action-completer-33
-  --version: string@version-completer
+  --action: string@action-completer-33 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3488,9 +3655,11 @@ export def "get-describe-scaling-activities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Activities: record, NextToken: record> {
+]: nothing -> record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeScalingActivities")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "ActivityIds" $activity_ids "multi") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "IncludeDeletedGroups" $include_deleted_groups "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3527,8 +3696,8 @@ export def "post-describe-scaling-activities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-33
-  --version: string@version-completer
+  --action: string@action-completer-33 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3537,10 +3706,12 @@ export def "post-describe-scaling-activities" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Activities: record, NextToken: record> {
+]: any -> record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeScalingActivities")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3577,8 +3748,8 @@ export def "get-describe-scaling-process-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-34
-  --version: string@version-completer
+  --action: string@action-completer-34 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3586,9 +3757,11 @@ export def "get-describe-scaling-process-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Processes: record> {
+]: nothing -> record<Processes: table<ProcessName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeScalingProcessTypes")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3623,8 +3796,8 @@ export def "post-describe-scaling-process-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-34
-  --version: string@version-completer
+  --action: string@action-completer-34 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3632,9 +3805,11 @@ export def "post-describe-scaling-process-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Processes: record> {
+]: nothing -> record<Processes: table<ProcessName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeScalingProcessTypes")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3675,8 +3850,8 @@ export def "get-describe-scheduled-actions" [
   --end-time: string # The latest scheduled start time to return. If scheduled action names are provided, this property is ignored. (format: date-time)
   --next-token: string # The token for the next set of items to return. (You received this token from a previous call.)
   --max-records: int # The maximum number of items to return with this call. The default value is 50 and the maximum value is 100.
-  --action: string@action-completer-35
-  --version: string@version-completer
+  --action: string@action-completer-35 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3684,9 +3859,11 @@ export def "get-describe-scheduled-actions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ScheduledUpdateGroupActions: record, NextToken: record> {
+]: nothing -> record<ScheduledUpdateGroupActions: table<AutoScalingGroupName: string, ScheduledActionName: string, ScheduledActionARN: string, Time: string, StartTime: string, EndTime: string, Recurrence: string, MinSize: int, MaxSize: int, DesiredCapacity: int, TimeZone: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeScheduledActions")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ScheduledActionNames" $scheduled_action_names "multi") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3723,8 +3900,8 @@ export def "post-describe-scheduled-actions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-35
-  --version: string@version-completer
+  --action: string@action-completer-35 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3733,10 +3910,12 @@ export def "post-describe-scheduled-actions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ScheduledUpdateGroupActions: record, NextToken: record> {
+]: any -> record<ScheduledUpdateGroupActions: table<AutoScalingGroupName: string, ScheduledActionName: string, ScheduledActionARN: string, Time: string, StartTime: string, EndTime: string, Recurrence: string, MinSize: int, MaxSize: int, DesiredCapacity: int, TimeZone: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeScheduledActions")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3776,8 +3955,8 @@ export def "get-describe-tags" [
   --filters: list # One or more filters to scope the tags to return. The maximum number of filters per filter type (for example, auto-scaling-group) is 1000.
   --next-token: string # The token for the next set of items to return. (You received this token from a previous call.)
   --max-records: int # The maximum number of items to return with this call. The default value is 50 and the maximum value is 100.
-  --action: string@action-completer-36
-  --version: string@version-completer
+  --action: string@action-completer-36 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3785,9 +3964,11 @@ export def "get-describe-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record, NextToken: record> {
+]: nothing -> record<Tags: table<ResourceId: string, ResourceType: string, Key: string, Value: string, PropagateAtLaunch: bool>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeTags")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Filters" $filters "multi") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3824,8 +4005,8 @@ export def "post-describe-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-36
-  --version: string@version-completer
+  --action: string@action-completer-36 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3834,10 +4015,12 @@ export def "post-describe-tags" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Tags: record, NextToken: record> {
+]: any -> record<Tags: table<ResourceId: string, ResourceType: string, Key: string, Value: string, PropagateAtLaunch: bool>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeTags")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3874,8 +4057,8 @@ export def "get-describe-termination-policy-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-37
-  --version: string@version-completer
+  --action: string@action-completer-37 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3883,9 +4066,11 @@ export def "get-describe-termination-policy-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TerminationPolicyTypes: record> {
+]: nothing -> record<TerminationPolicyTypes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeTerminationPolicyTypes")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3920,8 +4105,8 @@ export def "post-describe-termination-policy-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-37
-  --version: string@version-completer
+  --action: string@action-completer-37 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3929,9 +4114,11 @@ export def "post-describe-termination-policy-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TerminationPolicyTypes: record> {
+]: nothing -> record<TerminationPolicyTypes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeTerminationPolicyTypes")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3966,12 +4153,12 @@ export def "get-describe-traffic-sources" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
   --traffic-source-type: string # The traffic source type that you want to describe. The following lists the valid values: elb if the traffic source is a Classic Load Balancer. elbv2 if the traffic source is a Application Load Balancer, Gateway Load Balancer, or Network Load Balancer. vpc-lattice if the traffic source is VPC Lattice.
   --next-token: string # The token for the next set of items to return. (You received this token from a previous call.)
   --max-records: int # The maximum number of items to return with this call. The maximum value is 50.
-  --action: string@action-completer-38
-  --version: string@version-completer
+  --action: string@action-completer-38 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3979,9 +4166,12 @@ export def "get-describe-traffic-sources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TrafficSources: record, NextToken: record> {
+]: nothing -> record<TrafficSources: table<TrafficSource: string, State: string, Identifier: string, Type: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "DescribeTrafficSources")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "TrafficSourceType" $traffic_source_type "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4018,8 +4208,8 @@ export def "post-describe-traffic-sources" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-38
-  --version: string@version-completer
+  --action: string@action-completer-38 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4028,10 +4218,12 @@ export def "post-describe-traffic-sources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TrafficSources: record, NextToken: record> {
+]: any -> record<TrafficSources: table<TrafficSource: string, State: string, Identifier: string, Type: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeTrafficSources")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4068,11 +4260,11 @@ export def "get-describe-warm-pool" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
   --max-records: int # The maximum number of instances to return with this call. The maximum value is 50.
   --next-token: string # The token for the next set of instances to return. (You received this token from a previous call.)
-  --action: string@action-completer-39
-  --version: string@version-completer
+  --action: string@action-completer-39 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4080,9 +4272,12 @@ export def "get-describe-warm-pool" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<WarmPoolConfiguration: record<MaxGroupPreparedCapacity: record, MinSize: record, PoolState: record, Status: record, InstanceReusePolicy: record<ReuseOnScaleIn: record>>, Instances: record, NextToken: record> {
+]: nothing -> record<WarmPoolConfiguration: record<MaxGroupPreparedCapacity: int, MinSize: int, PoolState: string, Status: string, InstanceReusePolicy: record<ReuseOnScaleIn: bool>>, Instances: table<InstanceId: string, InstanceType: string, AvailabilityZone: string, LifecycleState: string, HealthStatus: string, LaunchConfigurationName: string, LaunchTemplate: record, ProtectedFromScaleIn: bool, WeightedCapacity: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "DescribeWarmPool")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4117,8 +4312,8 @@ export def "post-describe-warm-pool" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-39
-  --version: string@version-completer
+  --action: string@action-completer-39 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4127,10 +4322,12 @@ export def "post-describe-warm-pool" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<WarmPoolConfiguration: record<MaxGroupPreparedCapacity: record, MinSize: record, PoolState: record, Status: record, InstanceReusePolicy: record<ReuseOnScaleIn: record>>, Instances: record, NextToken: record> {
+]: any -> record<WarmPoolConfiguration: record<MaxGroupPreparedCapacity: int, MinSize: int, PoolState: string, Status: string, InstanceReusePolicy: record<ReuseOnScaleIn: bool>>, Instances: table<InstanceId: string, InstanceType: string, AvailabilityZone: string, LifecycleState: string, HealthStatus: string, LaunchConfigurationName: string, LaunchTemplate: record, ProtectedFromScaleIn: bool, WeightedCapacity: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeWarmPool")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4168,10 +4365,10 @@ export def "get-detach-instances" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --instance-ids: list # The IDs of the instances. You can specify up to 20 instances.
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --should-decrement-desired-capacity: oneof<nothing, bool> # Indicates whether the Auto Scaling group decrements the desired capacity value by the number of instances detached.
-  --action: string@action-completer-40
-  --version: string@version-completer
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --should-decrement-desired-capacity: oneof<nothing, bool> # Indicates whether the Auto Scaling group decrements the desired capacity value by the number of instances detached. (required)
+  --action: string@action-completer-40 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4179,9 +4376,13 @@ export def "get-detach-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Activities: record> {
+]: nothing -> record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($should_decrement_desired_capacity == null) { error make --unspanned { msg: "required query parameter 'ShouldDecrementDesiredCapacity' missing: pass --should-decrement-desired-capacity" } }
+  let action = ($action | default "DetachInstances")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "InstanceIds" $instance_ids "multi") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ShouldDecrementDesiredCapacity" $should_decrement_desired_capacity "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4216,8 +4417,8 @@ export def "post-detach-instances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-40
-  --version: string@version-completer
+  --action: string@action-completer-40 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4226,10 +4427,12 @@ export def "post-detach-instances" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Activities: record> {
+]: any -> record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DetachInstances")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4266,10 +4469,10 @@ export def "get-detach-load-balancer-target-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --target-group-ar-ns: list # The Amazon Resource Names (ARN) of the target groups. You can specify up to 10 target groups.
-  --action: string@action-completer-41
-  --version: string@version-completer
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --target-group-ar-ns: list # The Amazon Resource Names (ARN) of the target groups. You can specify up to 10 target groups. (required)
+  --action: string@action-completer-41 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4280,6 +4483,10 @@ export def "get-detach-load-balancer-target-groups" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($target_group_ar_ns == null) { error make --unspanned { msg: "required query parameter 'TargetGroupARNs' missing: pass --target-group-ar-ns" } }
+  let action = ($action | default "DetachLoadBalancerTargetGroups")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "TargetGroupARNs" $target_group_ar_ns "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4314,8 +4521,8 @@ export def "post-detach-load-balancer-target-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-41
-  --version: string@version-completer
+  --action: string@action-completer-41 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4328,6 +4535,8 @@ export def "post-detach-load-balancer-target-groups" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DetachLoadBalancerTargetGroups")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4364,10 +4573,10 @@ export def "get-detach-load-balancers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --load-balancer-names: list # The names of the load balancers. You can specify up to 10 load balancers.
-  --action: string@action-completer-42
-  --version: string@version-completer
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --load-balancer-names: list # The names of the load balancers. You can specify up to 10 load balancers. (required)
+  --action: string@action-completer-42 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4378,6 +4587,10 @@ export def "get-detach-load-balancers" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($load_balancer_names == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerNames' missing: pass --load-balancer-names" } }
+  let action = ($action | default "DetachLoadBalancers")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "LoadBalancerNames" $load_balancer_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4412,8 +4625,8 @@ export def "post-detach-load-balancers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-42
-  --version: string@version-completer
+  --action: string@action-completer-42 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4426,6 +4639,8 @@ export def "post-detach-load-balancers" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DetachLoadBalancers")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4462,10 +4677,10 @@ export def "get-detach-traffic-sources" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --traffic-sources: list # The unique identifiers of one or more traffic sources. You can specify up to 10 traffic sources.
-  --action: string@action-completer-43
-  --version: string@version-completer
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --traffic-sources: list # The unique identifiers of one or more traffic sources. You can specify up to 10 traffic sources. (required)
+  --action: string@action-completer-43 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4476,6 +4691,10 @@ export def "get-detach-traffic-sources" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($traffic_sources == null) { error make --unspanned { msg: "required query parameter 'TrafficSources' missing: pass --traffic-sources" } }
+  let action = ($action | default "DetachTrafficSources")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "TrafficSources" $traffic_sources "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4510,8 +4729,8 @@ export def "post-detach-traffic-sources" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-43
-  --version: string@version-completer
+  --action: string@action-completer-43 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4524,6 +4743,8 @@ export def "post-detach-traffic-sources" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DetachTrafficSources")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4560,10 +4781,10 @@ export def "get-disable-metrics-collection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
   --metrics: list # Identifies the metrics to disable. You can specify one or more of the following metrics: GroupMinSize GroupMaxSize GroupDesiredCapacity GroupInServiceInstances GroupPendingInstances GroupStandbyInstances GroupTerminatingInstances GroupTotalInstances GroupInServiceCapacity GroupPendingCapacity GroupStandbyCapacity GroupTerminatingCapacity GroupTotalCapacity WarmPoolDesiredCapacity WarmPoolWarmedCapacity WarmPoolPendingCapacity WarmPoolTerminatingCapacity WarmPoolTotalCapacity GroupAndWarmPoolDesiredCapacity GroupAndWarmPoolTotalCapacity If you omit this property, all metrics are disabled. For more information, see Auto Scaling group metrics (https://docs.aws.amazon.com/autoscaling/ec2/userguide/ec2-auto-scaling-cloudwatch-monitoring.html#as-group-metrics) in the Amazon EC2 Auto Scaling User Guide.
-  --action: string@action-completer-44
-  --version: string@version-completer
+  --action: string@action-completer-44 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4574,6 +4795,9 @@ export def "get-disable-metrics-collection" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "DisableMetricsCollection")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "Metrics" $metrics "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -4608,8 +4832,8 @@ export def "post-disable-metrics-collection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-44
-  --version: string@version-completer
+  --action: string@action-completer-44 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4622,6 +4846,8 @@ export def "post-disable-metrics-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DisableMetricsCollection")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4658,11 +4884,11 @@ export def "get-enable-metrics-collection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
   --metrics: list # Identifies the metrics to enable. You can specify one or more of the following metrics: GroupMinSize GroupMaxSize GroupDesiredCapacity GroupInServiceInstances GroupPendingInstances GroupStandbyInstances GroupTerminatingInstances GroupTotalInstances GroupInServiceCapacity GroupPendingCapacity GroupStandbyCapacity GroupTerminatingCapacity GroupTotalCapacity WarmPoolDesiredCapacity WarmPoolWarmedCapacity WarmPoolPendingCapacity WarmPoolTerminatingCapacity WarmPoolTotalCapacity GroupAndWarmPoolDesiredCapacity GroupAndWarmPoolTotalCapacity If you specify Granularity and don't specify any metrics, all metrics are enabled. For more information, see Auto Scaling group metrics (https://docs.aws.amazon.com/autoscaling/ec2/userguide/ec2-auto-scaling-cloudwatch-monitoring.html#as-group-metrics) in the Amazon EC2 Auto Scaling User Guide.
-  --granularity: string # The frequency at which Amazon EC2 Auto Scaling sends aggregated data to CloudWatch. The only valid value is 1Minute.
-  --action: string@action-completer-45
-  --version: string@version-completer
+  --granularity: string # The frequency at which Amazon EC2 Auto Scaling sends aggregated data to CloudWatch. The only valid value is 1Minute. (required)
+  --action: string@action-completer-45 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4673,6 +4899,10 @@ export def "get-enable-metrics-collection" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($granularity == null) { error make --unspanned { msg: "required query parameter 'Granularity' missing: pass --granularity" } }
+  let action = ($action | default "EnableMetricsCollection")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "Metrics" $metrics "multi") (serialize-qp "Granularity" $granularity "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -4707,8 +4937,8 @@ export def "post-enable-metrics-collection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-45
-  --version: string@version-completer
+  --action: string@action-completer-45 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4721,6 +4951,8 @@ export def "post-enable-metrics-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "EnableMetricsCollection")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4758,10 +4990,10 @@ export def "get-enter-standby" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --instance-ids: list # The IDs of the instances. You can specify up to 20 instances.
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --should-decrement-desired-capacity: oneof<nothing, bool> # Indicates whether to decrement the desired capacity of the Auto Scaling group by the number of instances moved to Standby mode.
-  --action: string@action-completer-46
-  --version: string@version-completer
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --should-decrement-desired-capacity: oneof<nothing, bool> # Indicates whether to decrement the desired capacity of the Auto Scaling group by the number of instances moved to Standby mode. (required)
+  --action: string@action-completer-46 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4769,9 +5001,13 @@ export def "get-enter-standby" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Activities: record> {
+]: nothing -> record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($should_decrement_desired_capacity == null) { error make --unspanned { msg: "required query parameter 'ShouldDecrementDesiredCapacity' missing: pass --should-decrement-desired-capacity" } }
+  let action = ($action | default "EnterStandby")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "InstanceIds" $instance_ids "multi") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ShouldDecrementDesiredCapacity" $should_decrement_desired_capacity "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4806,8 +5042,8 @@ export def "post-enter-standby" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-46
-  --version: string@version-completer
+  --action: string@action-completer-46 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4816,10 +5052,12 @@ export def "post-enter-standby" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Activities: record> {
+]: any -> record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "EnterStandby")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4857,12 +5095,12 @@ export def "get-execute-policy" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --policy-name: string # The name or ARN of the policy.
+  --policy-name: string # The name or ARN of the policy. (required)
   --honor-cooldown: oneof<nothing, bool> # Indicates whether Amazon EC2 Auto Scaling waits for the cooldown period to complete before executing the policy. Valid only if the policy type is SimpleScaling. For more information, see Scaling cooldowns for Amazon EC2 Auto Scaling (https://docs.aws.amazon.com/autoscaling/ec2/userguide/Cooldown.html) in the Amazon EC2 Auto Scaling User Guide.
   --metric-value: float # The metric value to compare to BreachThreshold. This enables you to execute a policy of type StepScaling and determine which step adjustment to use. For example, if the breach threshold is 50 and you want to use a step adjustment with a lower bound of 0 and an upper bound of 10, you can set the metric value to 59. If you specify a metric value that doesn't correspond to a step adjustment for the policy, the call returns an error. Required if the policy type is StepScaling and not supported otherwise. (format: double)
   --breach-threshold: float # The breach threshold for the alarm. Required if the policy type is StepScaling and not supported otherwise. (format: double)
-  --action: string@action-completer-47
-  --version: string@version-completer
+  --action: string@action-completer-47 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4873,6 +5111,9 @@ export def "get-execute-policy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($policy_name == null) { error make --unspanned { msg: "required query parameter 'PolicyName' missing: pass --policy-name" } }
+  let action = ($action | default "ExecutePolicy")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "PolicyName" $policy_name "scalar") (serialize-qp "HonorCooldown" $honor_cooldown "scalar") (serialize-qp "MetricValue" $metric_value "scalar") (serialize-qp "BreachThreshold" $breach_threshold "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -4907,8 +5148,8 @@ export def "post-execute-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-47
-  --version: string@version-completer
+  --action: string@action-completer-47 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4921,6 +5162,8 @@ export def "post-execute-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ExecutePolicy")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4958,9 +5201,9 @@ export def "get-exit-standby" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --instance-ids: list # The IDs of the instances. You can specify up to 20 instances.
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --action: string@action-completer-48
-  --version: string@version-completer
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --action: string@action-completer-48 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4968,9 +5211,12 @@ export def "get-exit-standby" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Activities: record> {
+]: nothing -> record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "ExitStandby")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "InstanceIds" $instance_ids "multi") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5005,8 +5251,8 @@ export def "post-exit-standby" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-48
-  --version: string@version-completer
+  --action: string@action-completer-48 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5015,10 +5261,12 @@ export def "post-exit-standby" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Activities: record> {
+]: any -> record<Activities: table<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ExitStandby")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5055,12 +5303,12 @@ export def "get-get-predictive-scaling-forecast" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --policy-name: string # The name of the policy.
-  --start-time: string # The inclusive start time of the time range for the forecast data to get. At most, the date and time can be one year before the current date and time. (format: date-time)
-  --end-time: string # The exclusive end time of the time range for the forecast data to get. The maximum time duration between the start and end time is 30 days. Although this parameter can accept a date and time that is more than two days in the future, the availability of forecast data has limits. Amazon EC2 Auto Scaling only issues forecasts for periods of two days in advance. (format: date-time)
-  --action: string@action-completer-49
-  --version: string@version-completer
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --policy-name: string # The name of the policy. (required)
+  --start-time: string # The inclusive start time of the time range for the forecast data to get. At most, the date and time can be one year before the current date and time. (required, format: date-time)
+  --end-time: string # The exclusive end time of the time range for the forecast data to get. The maximum time duration between the start and end time is 30 days. Although this parameter can accept a date and time that is more than two days in the future, the availability of forecast data has limits. Amazon EC2 Auto Scaling only issues forecasts for periods of two days in advance. (required, format: date-time)
+  --action: string@action-completer-49 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5068,9 +5316,15 @@ export def "get-get-predictive-scaling-forecast" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LoadForecast: record, CapacityForecast: record<Timestamps: record, Values: record>, UpdateTime: record> {
+]: nothing -> record<LoadForecast: table<Timestamps: list, Values: list, MetricSpecification: record>, CapacityForecast: record<Timestamps: list<string>, Values: list<float>>, UpdateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($policy_name == null) { error make --unspanned { msg: "required query parameter 'PolicyName' missing: pass --policy-name" } }
+  if ($start_time == null) { error make --unspanned { msg: "required query parameter 'StartTime' missing: pass --start-time" } }
+  if ($end_time == null) { error make --unspanned { msg: "required query parameter 'EndTime' missing: pass --end-time" } }
+  let action = ($action | default "GetPredictiveScalingForecast")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "PolicyName" $policy_name "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5105,8 +5359,8 @@ export def "post-get-predictive-scaling-forecast" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-49
-  --version: string@version-completer
+  --action: string@action-completer-49 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5115,10 +5369,12 @@ export def "post-get-predictive-scaling-forecast" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<LoadForecast: record, CapacityForecast: record<Timestamps: record, Values: record>, UpdateTime: record> {
+]: any -> record<LoadForecast: table<Timestamps: list, Values: list, MetricSpecification: record>, CapacityForecast: record<Timestamps: list<string>, Values: list<float>>, UpdateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetPredictiveScalingForecast")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5155,16 +5411,16 @@ export def "get-put-lifecycle-hook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lifecycle-hook-name: string # The name of the lifecycle hook.
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
+  --lifecycle-hook-name: string # The name of the lifecycle hook. (required)
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
   --lifecycle-transition: string # The lifecycle transition. For Auto Scaling groups, there are two major lifecycle transitions. To create a lifecycle hook for scale-out events, specify autoscaling:EC2_INSTANCE_LAUNCHING. To create a lifecycle hook for scale-in events, specify autoscaling:EC2_INSTANCE_TERMINATING. Required for new lifecycle hooks, but optional when updating existing hooks.
   --role-arn: string # The ARN of the IAM role that allows the Auto Scaling group to publish to the specified notification target. Valid only if the notification target is an Amazon SNS topic or an Amazon SQS queue. Required for new lifecycle hooks, but optional when updating existing hooks.
   --notification-target-arn: string # The Amazon Resource Name (ARN) of the notification target that Amazon EC2 Auto Scaling uses to notify you when an instance is in a wait state for the lifecycle hook. You can specify either an Amazon SNS topic or an Amazon SQS queue. If you specify an empty string, this overrides the current ARN. This operation uses the JSON format when sending notifications to an Amazon SQS queue, and an email key-value pair format when sending notifications to an Amazon SNS topic. When you specify a notification target, Amazon EC2 Auto Scaling sends it a test message. Test messages contain the following additional key-value pair: "Event": "autoscaling:TEST_NOTIFICATION".
   --notification-metadata: string # Additional information that you want to include any time Amazon EC2 Auto Scaling sends a message to the notification target.
   --heartbeat-timeout: int # The maximum time, in seconds, that can elapse before the lifecycle hook times out. The range is from 30 to 7200 seconds. The default value is 3600 seconds (1 hour).
   --default-result: string # The action the Auto Scaling group takes when the lifecycle hook timeout elapses or if an unexpected failure occurs. The default value is ABANDON. Valid values: CONTINUE | ABANDON
-  --action: string@action-completer-50
-  --version: string@version-completer
+  --action: string@action-completer-50 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5175,6 +5431,10 @@ export def "get-put-lifecycle-hook" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lifecycle_hook_name == null) { error make --unspanned { msg: "required query parameter 'LifecycleHookName' missing: pass --lifecycle-hook-name" } }
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "PutLifecycleHook")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "LifecycleHookName" $lifecycle_hook_name "scalar") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "LifecycleTransition" $lifecycle_transition "scalar") (serialize-qp "RoleARN" $role_arn "scalar") (serialize-qp "NotificationTargetARN" $notification_target_arn "scalar") (serialize-qp "NotificationMetadata" $notification_metadata "scalar") (serialize-qp "HeartbeatTimeout" $heartbeat_timeout "scalar") (serialize-qp "DefaultResult" $default_result "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5209,8 +5469,8 @@ export def "post-put-lifecycle-hook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-50
-  --version: string@version-completer
+  --action: string@action-completer-50 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5223,6 +5483,8 @@ export def "post-put-lifecycle-hook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PutLifecycleHook")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5259,11 +5521,11 @@ export def "get-put-notification-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --topic-arn: string # The Amazon Resource Name (ARN) of the Amazon SNS topic.
-  --notification-types: list # The type of event that causes the notification to be sent. To query the notification types supported by Amazon EC2 Auto Scaling, call the DescribeAutoScalingNotificationTypes API.
-  --action: string@action-completer-51
-  --version: string@version-completer
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --topic-arn: string # The Amazon Resource Name (ARN) of the Amazon SNS topic. (required)
+  --notification-types: list # The type of event that causes the notification to be sent. To query the notification types supported by Amazon EC2 Auto Scaling, call the DescribeAutoScalingNotificationTypes API. (required)
+  --action: string@action-completer-51 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5274,6 +5536,11 @@ export def "get-put-notification-configuration" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($topic_arn == null) { error make --unspanned { msg: "required query parameter 'TopicARN' missing: pass --topic-arn" } }
+  if ($notification_types == null) { error make --unspanned { msg: "required query parameter 'NotificationTypes' missing: pass --notification-types" } }
+  let action = ($action | default "PutNotificationConfiguration")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "TopicARN" $topic_arn "scalar") (serialize-qp "NotificationTypes" $notification_types "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -5308,8 +5575,8 @@ export def "post-put-notification-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-51
-  --version: string@version-completer
+  --action: string@action-completer-51 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5322,6 +5589,8 @@ export def "post-put-notification-configuration" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PutNotificationConfiguration")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5358,8 +5627,8 @@ export def "get-put-scaling-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --policy-name: string # The name of the policy.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --policy-name: string # The name of the policy. (required)
   --policy-type: string # One of the following policy types: TargetTrackingScaling StepScaling SimpleScaling (default) PredictiveScaling
   --adjustment-type: string # Specifies how the scaling adjustment is interpreted (for example, an absolute number or a percentage). The valid values are ChangeInCapacity, ExactCapacity, and PercentChangeInCapacity. Required if the policy type is StepScaling or SimpleScaling. For more information, see Scaling adjustment types (https://docs.aws.amazon.com/autoscaling/ec2/userguide/as-scaling-simple-step.html#as-scaling-adjustment) in the Amazon EC2 Auto Scaling User Guide.
   --min-adjustment-step: int # Available for backward compatibility. Use MinAdjustmentMagnitude instead.
@@ -5372,8 +5641,8 @@ export def "get-put-scaling-policy" [
   --target-tracking-configuration: record # A target tracking scaling policy. Provides support for predefined or custom metrics. The following predefined metrics are available: ASGAverageCPUUtilization ASGAverageNetworkIn ASGAverageNetworkOut ALBRequestCountPerTarget If you specify ALBRequestCountPerTarget for the metric, you must specify the ResourceLabel property with the PredefinedMetricSpecification. For more information, see TargetTrackingConfiguration (https://docs.aws.amazon.com/autoscaling/ec2/APIReference/API_TargetTrackingConfiguration.html) in the Amazon EC2 Auto Scaling API Reference. Required if the policy type is TargetTrackingScaling.
   --enabled: oneof<nothing, bool> # Indicates whether the scaling policy is enabled or disabled. The default is enabled. For more information, see Disabling a scaling policy for an Auto Scaling group (https://docs.aws.amazon.com/autoscaling/ec2/userguide/as-enable-disable-scaling-policy.html) in the Amazon EC2 Auto Scaling User Guide.
   --predictive-scaling-configuration: record # A predictive scaling policy. Provides support for predefined and custom metrics. Predefined metrics include CPU utilization, network in/out, and the Application Load Balancer request count. For more information, see PredictiveScalingConfiguration (https://docs.aws.amazon.com/autoscaling/ec2/APIReference/API_PredictiveScalingConfiguration.html) in the Amazon EC2 Auto Scaling API Reference. Required if the policy type is PredictiveScaling.
-  --action: string@action-completer-52
-  --version: string@version-completer
+  --action: string@action-completer-52 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5381,9 +5650,13 @@ export def "get-put-scaling-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PolicyARN: record, Alarms: record> {
+]: nothing -> record<PolicyARN: string, Alarms: table<AlarmName: string, AlarmARN: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($policy_name == null) { error make --unspanned { msg: "required query parameter 'PolicyName' missing: pass --policy-name" } }
+  let action = ($action | default "PutScalingPolicy")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "PolicyName" $policy_name "scalar") (serialize-qp "PolicyType" $policy_type "scalar") (serialize-qp "AdjustmentType" $adjustment_type "scalar") (serialize-qp "MinAdjustmentStep" $min_adjustment_step "scalar") (serialize-qp "MinAdjustmentMagnitude" $min_adjustment_magnitude "scalar") (serialize-qp "ScalingAdjustment" $scaling_adjustment "scalar") (serialize-qp "Cooldown" $cooldown "scalar") (serialize-qp "MetricAggregationType" $metric_aggregation_type "scalar") (serialize-qp "StepAdjustments" $step_adjustments "multi") (serialize-qp "EstimatedInstanceWarmup" $estimated_instance_warmup "scalar") (serialize-qp "TargetTrackingConfiguration" $target_tracking_configuration "multi") (serialize-qp "Enabled" $enabled "scalar") (serialize-qp "PredictiveScalingConfiguration" $predictive_scaling_configuration "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5418,8 +5691,8 @@ export def "post-put-scaling-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-52
-  --version: string@version-completer
+  --action: string@action-completer-52 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5428,10 +5701,12 @@ export def "post-put-scaling-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PolicyARN: record, Alarms: record> {
+]: any -> record<PolicyARN: string, Alarms: table<AlarmName: string, AlarmARN: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PutScalingPolicy")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5468,8 +5743,8 @@ export def "get-put-scheduled-update-group-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --scheduled-action-name: string # The name of this scaling action.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --scheduled-action-name: string # The name of this scaling action. (required)
   --time: string # This property is no longer used. (format: date-time)
   --start-time: string # The date and time for this action to start, in YYYY-MM-DDThh:mm:ssZ format in UTC/GMT only and in quotes (for example, "2021-06-01T00:00:00Z"). If you specify Recurrence and StartTime, Amazon EC2 Auto Scaling performs the action at this time, and then performs the action based on the specified recurrence. (format: date-time)
   --end-time: string # The date and time for the recurring schedule to end, in UTC. For example, "2021-06-01T00:00:00Z". (format: date-time)
@@ -5478,8 +5753,8 @@ export def "get-put-scheduled-update-group-action" [
   --max-size: int # The maximum size of the Auto Scaling group.
   --desired-capacity: int # The desired capacity is the initial capacity of the Auto Scaling group after the scheduled action runs and the capacity it attempts to maintain. It can scale beyond this capacity if you add more scaling conditions. You must specify at least one of the following properties: MaxSize, MinSize, or DesiredCapacity.
   --time-zone: string # Specifies the time zone for a cron expression. If a time zone is not provided, UTC is used by default. Valid values are the canonical names of the IANA time zones, derived from the IANA Time Zone Database (such as Etc/GMT+9 or Pacific/Tahiti). For more information, see https://en.wikipedia.org/wiki/List_of_tz_database_time_zones (https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
-  --action: string@action-completer-53
-  --version: string@version-completer
+  --action: string@action-completer-53 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5490,6 +5765,10 @@ export def "get-put-scheduled-update-group-action" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($scheduled_action_name == null) { error make --unspanned { msg: "required query parameter 'ScheduledActionName' missing: pass --scheduled-action-name" } }
+  let action = ($action | default "PutScheduledUpdateGroupAction")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ScheduledActionName" $scheduled_action_name "scalar") (serialize-qp "Time" $time "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "Recurrence" $recurrence "scalar") (serialize-qp "MinSize" $min_size "scalar") (serialize-qp "MaxSize" $max_size "scalar") (serialize-qp "DesiredCapacity" $desired_capacity "scalar") (serialize-qp "TimeZone" $time_zone "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -5524,8 +5803,8 @@ export def "post-put-scheduled-update-group-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-53
-  --version: string@version-completer
+  --action: string@action-completer-53 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5538,6 +5817,8 @@ export def "post-put-scheduled-update-group-action" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PutScheduledUpdateGroupAction")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5574,13 +5855,13 @@ export def "get-put-warm-pool" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
   --max-group-prepared-capacity: int # Specifies the maximum number of instances that are allowed to be in the warm pool or in any state except Terminated for the Auto Scaling group. This is an optional property. Specify it only if you do not want the warm pool size to be determined by the difference between the group's maximum capacity and its desired capacity. If a value for MaxGroupPreparedCapacity is not specified, Amazon EC2 Auto Scaling launches and maintains the difference between the group's maximum capacity and its desired capacity. If you specify a value for MaxGroupPreparedCapacity, Amazon EC2 Auto Scaling uses the difference between the MaxGroupPreparedCapacity and the desired capacity instead. The size of the warm pool is dynamic. Only when MaxGroupPreparedCapacity and MinSize are set to the same value does the warm pool have an absolute size. If the desired capacity of the Auto Scaling group is higher than the MaxGroupPreparedCapacity, the capacity of the warm pool is 0, unless you specify a value for MinSize. To remove a value that you previously set, include the property but specify -1 for the value.
   --min-size: int # Specifies the minimum number of instances to maintain in the warm pool. This helps you to ensure that there is always a certain number of warmed instances available to handle traffic spikes. Defaults to 0 if not specified.
   --pool-state: string@pool-state-completer # Sets the instance state to transition to after the lifecycle actions are complete. Default is Stopped.
   --instance-reuse-policy: record # Indicates whether instances in the Auto Scaling group can be returned to the warm pool on scale in. The default is to terminate instances in the Auto Scaling group when the group scales in.
-  --action: string@action-completer-54
-  --version: string@version-completer
+  --action: string@action-completer-54 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5591,6 +5872,9 @@ export def "get-put-warm-pool" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "PutWarmPool")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "MaxGroupPreparedCapacity" $max_group_prepared_capacity "scalar") (serialize-qp "MinSize" $min_size "scalar") (serialize-qp "PoolState" $pool_state "scalar") (serialize-qp "InstanceReusePolicy" $instance_reuse_policy "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5625,8 +5909,8 @@ export def "post-put-warm-pool" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-54
-  --version: string@version-completer
+  --action: string@action-completer-54 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5639,6 +5923,8 @@ export def "post-put-warm-pool" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PutWarmPool")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5675,12 +5961,12 @@ export def "get-record-lifecycle-action-heartbeat" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lifecycle-hook-name: string # The name of the lifecycle hook.
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
+  --lifecycle-hook-name: string # The name of the lifecycle hook. (required)
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
   --lifecycle-action-token: string # A token that uniquely identifies a specific lifecycle action associated with an instance. Amazon EC2 Auto Scaling sends this token to the notification target that you specified when you created the lifecycle hook.
   --instance-id: string # The ID of the instance.
-  --action: string@action-completer-55
-  --version: string@version-completer
+  --action: string@action-completer-55 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5691,6 +5977,10 @@ export def "get-record-lifecycle-action-heartbeat" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lifecycle_hook_name == null) { error make --unspanned { msg: "required query parameter 'LifecycleHookName' missing: pass --lifecycle-hook-name" } }
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "RecordLifecycleActionHeartbeat")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "LifecycleHookName" $lifecycle_hook_name "scalar") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "LifecycleActionToken" $lifecycle_action_token "scalar") (serialize-qp "InstanceId" $instance_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5725,8 +6015,8 @@ export def "post-record-lifecycle-action-heartbeat" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-55
-  --version: string@version-completer
+  --action: string@action-completer-55 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5739,6 +6029,8 @@ export def "post-record-lifecycle-action-heartbeat" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RecordLifecycleActionHeartbeat")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5775,10 +6067,10 @@ export def "get-resume-processes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
   --scaling-processes: list # One or more of the following processes: Launch Terminate AddToLoadBalancer AlarmNotification AZRebalance HealthCheck InstanceRefresh ReplaceUnhealthy ScheduledActions If you omit this property, all processes are specified.
-  --action: string@action-completer-56
-  --version: string@version-completer
+  --action: string@action-completer-56 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5789,6 +6081,9 @@ export def "get-resume-processes" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "ResumeProcesses")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ScalingProcesses" $scaling_processes "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -5823,8 +6118,8 @@ export def "post-resume-processes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-56
-  --version: string@version-completer
+  --action: string@action-completer-56 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5837,6 +6132,8 @@ export def "post-resume-processes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ResumeProcesses")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5874,8 +6171,8 @@ export def "get-rollback-instance-refresh" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --action: string@action-completer-57
-  --version: string@version-completer
+  --action: string@action-completer-57 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5883,9 +6180,11 @@ export def "get-rollback-instance-refresh" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<InstanceRefreshId: record> {
+]: nothing -> record<InstanceRefreshId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RollbackInstanceRefresh")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5920,8 +6219,8 @@ export def "post-rollback-instance-refresh" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-57
-  --version: string@version-completer
+  --action: string@action-completer-57 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5930,10 +6229,12 @@ export def "post-rollback-instance-refresh" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<InstanceRefreshId: record> {
+]: any -> record<InstanceRefreshId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RollbackInstanceRefresh")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5970,11 +6271,11 @@ export def "get-set-desired-capacity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --desired-capacity: int # The desired capacity is the initial capacity of the Auto Scaling group after this operation completes and the capacity it attempts to maintain.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --desired-capacity: int # The desired capacity is the initial capacity of the Auto Scaling group after this operation completes and the capacity it attempts to maintain. (required)
   --honor-cooldown: oneof<nothing, bool> # Indicates whether Amazon EC2 Auto Scaling waits for the cooldown period to complete before initiating a scaling activity to set your Auto Scaling group to its new capacity. By default, Amazon EC2 Auto Scaling does not honor the cooldown period during manual scaling activities.
-  --action: string@action-completer-58
-  --version: string@version-completer
+  --action: string@action-completer-58 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5985,6 +6286,10 @@ export def "get-set-desired-capacity" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($desired_capacity == null) { error make --unspanned { msg: "required query parameter 'DesiredCapacity' missing: pass --desired-capacity" } }
+  let action = ($action | default "SetDesiredCapacity")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "DesiredCapacity" $desired_capacity "scalar") (serialize-qp "HonorCooldown" $honor_cooldown "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -6019,8 +6324,8 @@ export def "post-set-desired-capacity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-58
-  --version: string@version-completer
+  --action: string@action-completer-58 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6033,6 +6338,8 @@ export def "post-set-desired-capacity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetDesiredCapacity")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6069,11 +6376,11 @@ export def "get-set-instance-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --instance-id: string # The ID of the instance.
-  --health-status: string # The health status of the instance. Set to Healthy to have the instance remain in service. Set to Unhealthy to have the instance be out of service. Amazon EC2 Auto Scaling terminates and replaces the unhealthy instance.
+  --instance-id: string # The ID of the instance. (required)
+  --health-status: string # The health status of the instance. Set to Healthy to have the instance remain in service. Set to Unhealthy to have the instance be out of service. Amazon EC2 Auto Scaling terminates and replaces the unhealthy instance. (required)
   --should-respect-grace-period: oneof<nothing, bool> # If the Auto Scaling group of the specified instance has a HealthCheckGracePeriod specified for the group, by default, this call respects the grace period. Set this to False, to have the call not respect the grace period associated with the group. For more information about the health check grace period, see CreateAutoScalingGroup (https://docs.aws.amazon.com/autoscaling/ec2/APIReference/API_CreateAutoScalingGroup.html) in the Amazon EC2 Auto Scaling API Reference.
-  --action: string@action-completer-59
-  --version: string@version-completer
+  --action: string@action-completer-59 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6084,6 +6391,10 @@ export def "get-set-instance-health" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($instance_id == null) { error make --unspanned { msg: "required query parameter 'InstanceId' missing: pass --instance-id" } }
+  if ($health_status == null) { error make --unspanned { msg: "required query parameter 'HealthStatus' missing: pass --health-status" } }
+  let action = ($action | default "SetInstanceHealth")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "InstanceId" $instance_id "scalar") (serialize-qp "HealthStatus" $health_status "scalar") (serialize-qp "ShouldRespectGracePeriod" $should_respect_grace_period "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -6118,8 +6429,8 @@ export def "post-set-instance-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-59
-  --version: string@version-completer
+  --action: string@action-completer-59 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6132,6 +6443,8 @@ export def "post-set-instance-health" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetInstanceHealth")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6168,11 +6481,11 @@ export def "get-set-instance-protection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --instance-ids: list # One or more instance IDs. You can specify up to 50 instances.
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
-  --protected-from-scale-in: oneof<nothing, bool> # Indicates whether the instance is protected from termination by Amazon EC2 Auto Scaling when scaling in.
-  --action: string@action-completer-60
-  --version: string@version-completer
+  --instance-ids: list # One or more instance IDs. You can specify up to 50 instances. (required)
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
+  --protected-from-scale-in: oneof<nothing, bool> # Indicates whether the instance is protected from termination by Amazon EC2 Auto Scaling when scaling in. (required)
+  --action: string@action-completer-60 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6183,6 +6496,11 @@ export def "get-set-instance-protection" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($instance_ids == null) { error make --unspanned { msg: "required query parameter 'InstanceIds' missing: pass --instance-ids" } }
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  if ($protected_from_scale_in == null) { error make --unspanned { msg: "required query parameter 'ProtectedFromScaleIn' missing: pass --protected-from-scale-in" } }
+  let action = ($action | default "SetInstanceProtection")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "InstanceIds" $instance_ids "multi") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ProtectedFromScaleIn" $protected_from_scale_in "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -6217,8 +6535,8 @@ export def "post-set-instance-protection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-60
-  --version: string@version-completer
+  --action: string@action-completer-60 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6231,6 +6549,8 @@ export def "post-set-instance-protection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetInstanceProtection")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6267,12 +6587,12 @@ export def "get-start-instance-refresh" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
   --strategy: string@strategy-completer # The strategy to use for the instance refresh. The only valid value is Rolling.
   --desired-configuration: record # The desired configuration. For example, the desired configuration can specify a new launch template or a new version of the current launch template. Once the instance refresh succeeds, Amazon EC2 Auto Scaling updates the settings of the Auto Scaling group to reflect the new desired configuration. When you specify a new launch template or a new version of the current launch template for your desired configuration, consider enabling the SkipMatching property in preferences. If it's enabled, Amazon EC2 Auto Scaling skips replacing instances that already use the specified launch template and instance types. This can help you reduce the number of replacements that are required to apply updates.
   --preferences: record # Sets your preferences for the instance refresh so that it performs as expected when you start it. Includes the instance warmup time, the minimum healthy percentage, and the behaviors that you want Amazon EC2 Auto Scaling to use if instances that are in Standby state or protected from scale in are found. You can also choose to enable additional features, such as the following: Auto rollback Checkpoints Skip matching
-  --action: string@action-completer-61
-  --version: string@version-completer
+  --action: string@action-completer-61 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6280,9 +6600,12 @@ export def "get-start-instance-refresh" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<InstanceRefreshId: record> {
+]: nothing -> record<InstanceRefreshId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "StartInstanceRefresh")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "Strategy" $strategy "scalar") (serialize-qp "DesiredConfiguration" $desired_configuration "multi") (serialize-qp "Preferences" $preferences "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -6317,8 +6640,8 @@ export def "post-start-instance-refresh" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-61
-  --version: string@version-completer
+  --action: string@action-completer-61 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6327,10 +6650,12 @@ export def "post-start-instance-refresh" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<InstanceRefreshId: record> {
+]: any -> record<InstanceRefreshId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "StartInstanceRefresh")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6367,10 +6692,10 @@ export def "get-suspend-processes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
   --scaling-processes: list # One or more of the following processes: Launch Terminate AddToLoadBalancer AlarmNotification AZRebalance HealthCheck InstanceRefresh ReplaceUnhealthy ScheduledActions If you omit this property, all processes are specified.
-  --action: string@action-completer-62
-  --version: string@version-completer
+  --action: string@action-completer-62 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6381,6 +6706,9 @@ export def "get-suspend-processes" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "SuspendProcesses")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ScalingProcesses" $scaling_processes "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -6415,8 +6743,8 @@ export def "post-suspend-processes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-62
-  --version: string@version-completer
+  --action: string@action-completer-62 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6429,6 +6757,8 @@ export def "post-suspend-processes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SuspendProcesses")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6465,10 +6795,10 @@ export def "get-terminate-instance-in-auto-scaling-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --instance-id: string # The ID of the instance.
-  --should-decrement-desired-capacity: oneof<nothing, bool> # Indicates whether terminating the instance also decrements the size of the Auto Scaling group.
-  --action: string@action-completer-63
-  --version: string@version-completer
+  --instance-id: string # The ID of the instance. (required)
+  --should-decrement-desired-capacity: oneof<nothing, bool> # Indicates whether terminating the instance also decrements the size of the Auto Scaling group. (required)
+  --action: string@action-completer-63 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6476,9 +6806,13 @@ export def "get-terminate-instance-in-auto-scaling-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Activity: record<ActivityId: record, AutoScalingGroupName: record, Description: record, Cause: record, StartTime: record, EndTime: record, StatusCode: record, StatusMessage: record, Progress: record, Details: record, AutoScalingGroupState: record, AutoScalingGroupARN: record>> {
+]: nothing -> record<Activity: record<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($instance_id == null) { error make --unspanned { msg: "required query parameter 'InstanceId' missing: pass --instance-id" } }
+  if ($should_decrement_desired_capacity == null) { error make --unspanned { msg: "required query parameter 'ShouldDecrementDesiredCapacity' missing: pass --should-decrement-desired-capacity" } }
+  let action = ($action | default "TerminateInstanceInAutoScalingGroup")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "InstanceId" $instance_id "scalar") (serialize-qp "ShouldDecrementDesiredCapacity" $should_decrement_desired_capacity "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -6513,8 +6847,8 @@ export def "post-terminate-instance-in-auto-scaling-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-63
-  --version: string@version-completer
+  --action: string@action-completer-63 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6523,10 +6857,12 @@ export def "post-terminate-instance-in-auto-scaling-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Activity: record<ActivityId: record, AutoScalingGroupName: record, Description: record, Cause: record, StartTime: record, EndTime: record, StatusCode: record, StatusMessage: record, Progress: record, Details: record, AutoScalingGroupState: record, AutoScalingGroupARN: record>> {
+]: any -> record<Activity: record<ActivityId: string, AutoScalingGroupName: string, Description: string, Cause: string, StartTime: string, EndTime: string, StatusCode: string, StatusMessage: string, Progress: int, Details: string, AutoScalingGroupState: string, AutoScalingGroupARN: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "TerminateInstanceInAutoScalingGroup")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6563,7 +6899,7 @@ export def "get-update-auto-scaling-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-scaling-group-name: string # The name of the Auto Scaling group.
+  --auto-scaling-group-name: string # The name of the Auto Scaling group. (required)
   --launch-configuration-name: string # The name of the launch configuration. If you specify LaunchConfigurationName in your update request, you can't specify LaunchTemplate or MixedInstancesPolicy.
   --launch-template: record # The launch template and version to use to specify the updates. If you specify LaunchTemplate in your update request, you can't specify LaunchConfigurationName or MixedInstancesPolicy.
   --mixed-instances-policy: record # The mixed instances policy. For more information, see Auto Scaling groups with multiple instance types and purchase options (https://docs.aws.amazon.com/autoscaling/ec2/userguide/ec2-auto-scaling-mixed-instances-groups.html) in the Amazon EC2 Auto Scaling User Guide.
@@ -6584,8 +6920,8 @@ export def "get-update-auto-scaling-group" [
   --context: string # Reserved.
   --desired-capacity-type: string # The unit of measurement for the value specified for desired capacity. Amazon EC2 Auto Scaling supports DesiredCapacityType for attribute-based instance type selection only. For more information, see Creating an Auto Scaling group using attribute-based instance type selection (https://docs.aws.amazon.com/autoscaling/ec2/userguide/create-asg-instance-type-requirements.html) in the Amazon EC2 Auto Scaling User Guide. By default, Amazon EC2 Auto Scaling specifies units, which translates into number of instances. Valid values: units | vcpu | memory-mib
   --default-instance-warmup: int # The amount of time, in seconds, until a new instance is considered to have finished initializing and resource consumption to become stable after it enters the InService state. During an instance refresh, Amazon EC2 Auto Scaling waits for the warm-up period after it replaces an instance before it moves on to replacing the next instance. Amazon EC2 Auto Scaling also waits for the warm-up period before aggregating the metrics for new instances with existing instances in the Amazon CloudWatch metrics that are used for scaling, resulting in more reliable usage data. For more information, see Set the default instance warmup for an Auto Scaling group (https://docs.aws.amazon.com/autoscaling/ec2/userguide/ec2-auto-scaling-default-instance-warmup.html) in the Amazon EC2 Auto Scaling User Guide. To manage various warm-up settings at the group level, we recommend that you set the default instance warmup, even if it is set to 0 seconds. To remove a value that you previously set, include the property but specify -1 for the value. However, we strongly recommend keeping the default instance warmup enabled by specifying a value of 0 or other nominal value.
-  --action: string@action-completer-64
-  --version: string@version-completer
+  --action: string@action-completer-64 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6596,6 +6932,9 @@ export def "get-update-auto-scaling-group" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($auto_scaling_group_name == null) { error make --unspanned { msg: "required query parameter 'AutoScalingGroupName' missing: pass --auto-scaling-group-name" } }
+  let action = ($action | default "UpdateAutoScalingGroup")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "LaunchConfigurationName" $launch_configuration_name "scalar") (serialize-qp "LaunchTemplate" $launch_template "multi") (serialize-qp "MixedInstancesPolicy" $mixed_instances_policy "multi") (serialize-qp "MinSize" $min_size "scalar") (serialize-qp "MaxSize" $max_size "scalar") (serialize-qp "DesiredCapacity" $desired_capacity "scalar") (serialize-qp "DefaultCooldown" $default_cooldown "scalar") (serialize-qp "AvailabilityZones" $availability_zones "multi") (serialize-qp "HealthCheckType" $health_check_type "scalar") (serialize-qp "HealthCheckGracePeriod" $health_check_grace_period "scalar") (serialize-qp "PlacementGroup" $placement_group "scalar") (serialize-qp "VPCZoneIdentifier" $vpc_zone_identifier "scalar") (serialize-qp "TerminationPolicies" $termination_policies "multi") (serialize-qp "NewInstancesProtectedFromScaleIn" $new_instances_protected_from_scale_in "scalar") (serialize-qp "ServiceLinkedRoleARN" $service_linked_role_arn "scalar") (serialize-qp "MaxInstanceLifetime" $max_instance_lifetime "scalar") (serialize-qp "CapacityRebalance" $capacity_rebalance "scalar") (serialize-qp "Context" $context "scalar") (serialize-qp "DesiredCapacityType" $desired_capacity_type "scalar") (serialize-qp "DefaultInstanceWarmup" $default_instance_warmup "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -6630,8 +6969,8 @@ export def "post-update-auto-scaling-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-64
-  --version: string@version-completer
+  --action: string@action-completer-64 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6644,6 +6983,8 @@ export def "post-update-auto-scaling-group" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateAutoScalingGroup")
+  let version = ($version | default "2011-01-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body

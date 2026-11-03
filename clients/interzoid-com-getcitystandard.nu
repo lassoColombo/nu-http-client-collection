@@ -131,11 +131,13 @@ export def "getcitystandard" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register
-  --city: string # City name from which to retrieve the standardized version
+  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register (required)
+  --city: string # City name from which to retrieve the standardized version (required)
 ]: nothing -> record<CityStandard: string, Code: string, Credits: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($license == null) { error make --unspanned { msg: "required query parameter 'license' missing: pass --license" } }
+  if ($city == null) { error make --unspanned { msg: "required query parameter 'city' missing: pass --city" } }
   let qp = [(serialize-qp "license" $license "scalar") (serialize-qp "city" $city "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getcitystandard" $qp $auth.query)
   let accept_val = "application/json"

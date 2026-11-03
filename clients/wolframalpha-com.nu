@@ -1,4 +1,4 @@
-# Auto-generated client for Wolfram vv0.1
+# Auto-generated client for Wolfram v0.1
 # Source: https://api.apis.guru/v2/specs/wolframalpha.com/v0.1/openapi.json
 # Auth: --token flag or $env.WOLFRAM_TOKEN
 
@@ -132,18 +132,19 @@ export def "get-wolfram-cloud-results" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --input: string # the input expression
+  --qp-input: string # the input expression (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "input" $input "scalar")] | flatten | str join "&"
+  if ($qp_input == null) { error make --unspanned { msg: "required query parameter 'input' missing: pass --qp-input" } }
+  let qp = [(serialize-qp "input" $qp_input "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/cloud-plugin" $qp $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"input": $input} | compact)
+    query: ({"input": $qp_input} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -169,18 +170,19 @@ export def "get-wolfram-alpha-results" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --input: string # the input
+  --qp-input: string # the input (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "input" $input "scalar")] | flatten | str join "&"
+  if ($qp_input == null) { error make --unspanned { msg: "required query parameter 'input' missing: pass --qp-input" } }
+  let qp = [(serialize-qp "input" $qp_input "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/llm-api" $qp $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"input": $input} | compact)
+    query: ({"input": $qp_input} | compact)
     headers: $auth.headers
     body: null
     content_type: null

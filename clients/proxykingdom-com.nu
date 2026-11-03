@@ -1,4 +1,4 @@
-# Auto-generated client for ProxyKingdom-Api vv1
+# Auto-generated client for ProxyKingdom-Api v1
 # Source: https://api.apis.guru/v2/specs/proxykingdom.com/v1/openapi.json
 # Auth: --token flag or $env.PROXYKINGDOM_API_TOKEN
 
@@ -145,10 +145,11 @@ export def "get-proxy" [
   --continent: string
   --timezone: string
   --last-tested: string
-  --correlation-id: string # Correlation Id header field
+  --correlation-id: string # Correlation Id header field (required, default: d85ab6a3-51a9-4359-b9d3-41f5dffb366e)
 ]: nothing -> record<accessType: string, address: string, isSsl: bool, isp: record<id: int, name: string>, lastTested: string, location: record<accuracyRadius: int, cityName: string, continent: record<code: string, name: string>, country: record<code: string, name: string>, latitude: float, longitude: float, postalCode: string, subdivisions: list<record>, timezone: string>, port: int, protocol: string, timings: record<connectTime: float, firstByteTime: float, responseTime: float>, uptime: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let correlation_id = ($correlation_id | default "d85ab6a3-51a9-4359-b9d3-41f5dffb366e")
   let qp = [(serialize-qp "Token" $qp_token "scalar") (serialize-qp "Address" $address "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "Protocol" $protocol "scalar") (serialize-qp "AccessType" $access_type "scalar") (serialize-qp "ResponseTime" $response_time "scalar") (serialize-qp "IsSsl" $is_ssl "scalar") (serialize-qp "Uptime" $uptime "scalar") (serialize-qp "Country" $country "scalar") (serialize-qp "Continent" $continent "scalar") (serialize-qp "Timezone" $timezone "scalar") (serialize-qp "LastTested" $last_tested "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/proxy" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

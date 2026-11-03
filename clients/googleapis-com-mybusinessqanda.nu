@@ -1,4 +1,4 @@
-# Auto-generated client for My Business Q&A API vv1
+# Auto-generated client for My Business Q&A API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/mybusinessqanda/v1/openapi.json
 # Auth: --token flag or $env.MY_BUSINESS_Q_A_API_TOKEN
 

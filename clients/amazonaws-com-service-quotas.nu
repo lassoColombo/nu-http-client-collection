@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -105,6 +105,7 @@ def x-amz-target-completer-5 [] { ["ServiceQuotasV20190624.GetRequestedServiceQu
 def x-amz-target-completer-6 [] { ["ServiceQuotasV20190624.GetServiceQuota"] }
 def x-amz-target-completer-7 [] { ["ServiceQuotasV20190624.GetServiceQuotaIncreaseRequestFromTemplate"] }
 def x-amz-target-completer-8 [] { ["ServiceQuotasV20190624.ListAWSDefaultServiceQuotas"] }
+def status-completer [] { ["APPROVED" "CASE_CLOSED" "CASE_OPENED" "DENIED" "PENDING"] }
 def x-amz-target-completer-9 [] { ["ServiceQuotasV20190624.ListRequestedServiceQuotaChangeHistory"] }
 def x-amz-target-completer-10 [] { ["ServiceQuotasV20190624.ListRequestedServiceQuotaChangeHistoryByQuota"] }
 def x-amz-target-completer-11 [] { ["ServiceQuotasV20190624.ListServiceQuotaIncreaseRequestsInTemplate"] }
@@ -160,12 +161,13 @@ export def "associate-service-quota-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
+  --x-amz-target: string@x-amz-target-completer # required
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.AssociateServiceQuotaTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -208,14 +210,15 @@ export def "delete-service-quota-increase-request-from-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  service_code: any
-  quota_code: any
-  aws_region: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  service_code: string # The service identifier.
+  quota_code: string # The quota identifier.
+  aws_region: string # The AWS Region.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.DeleteServiceQuotaIncreaseRequestFromTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceCode": $service_code, "QuotaCode": $quota_code, "AwsRegion": $aws_region} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -258,12 +261,13 @@ export def "disassociate-service-quota-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
+  --x-amz-target: string@x-amz-target-completer-2 # required
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.DisassociateServiceQuotaTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -306,13 +310,14 @@ export def "get-aws-default-service-quota" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  service_code: any
-  quota_code: any
-]: any -> record<Quota: record<ServiceCode: record, ServiceName: record, QuotaArn: record, QuotaCode: record, QuotaName: record, Value: record, Unit: record, Adjustable: record, GlobalQuota: record, UsageMetric: record<MetricNamespace: record, MetricName: record, MetricDimensions: record, MetricStatisticRecommendation: record>, Period: record<PeriodValue: record, PeriodUnit: record>, ErrorReason: record<ErrorCode: record, ErrorMessage: record>>> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  service_code: string # The service identifier.
+  quota_code: string # The quota identifier.
+]: any -> record<Quota: record<ServiceCode: string, ServiceName: string, QuotaArn: string, QuotaCode: string, QuotaName: string, Value: float, Unit: string, Adjustable: bool, GlobalQuota: bool, UsageMetric: record<MetricNamespace: string, MetricName: string, MetricDimensions: record, MetricStatisticRecommendation: string>, Period: record<PeriodValue: int, PeriodUnit: string>, ErrorReason: record<ErrorCode: string, ErrorMessage: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.GetAWSDefaultServiceQuota")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceCode": $service_code, "QuotaCode": $quota_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -355,12 +360,13 @@ export def "get-association-for-service-quota-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
+  --x-amz-target: string@x-amz-target-completer-4 # required
   --body: record
-]: any -> record<ServiceQuotaTemplateAssociationStatus: record> {
+]: any -> record<ServiceQuotaTemplateAssociationStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.GetAssociationForServiceQuotaTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -403,12 +409,13 @@ export def "get-requested-service-quota-change" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  request_id: any
-]: any -> record<RequestedQuota: record<Id: record, CaseId: record, ServiceCode: record, ServiceName: record, QuotaCode: record, QuotaName: record, DesiredValue: record, Status: record, Created: record, LastUpdated: record, Requester: record, QuotaArn: record, GlobalQuota: record, Unit: record>> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  request_id: string # The ID of the quota increase request.
+]: any -> record<RequestedQuota: record<Id: string, CaseId: string, ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, Status: string, Created: string, LastUpdated: string, Requester: string, QuotaArn: string, GlobalQuota: bool, Unit: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.GetRequestedServiceQuotaChange")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RequestId": $request_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -451,13 +458,14 @@ export def "get-service-quota" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  service_code: any
-  quota_code: any
-]: any -> record<Quota: record<ServiceCode: record, ServiceName: record, QuotaArn: record, QuotaCode: record, QuotaName: record, Value: record, Unit: record, Adjustable: record, GlobalQuota: record, UsageMetric: record<MetricNamespace: record, MetricName: record, MetricDimensions: record, MetricStatisticRecommendation: record>, Period: record<PeriodValue: record, PeriodUnit: record>, ErrorReason: record<ErrorCode: record, ErrorMessage: record>>> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  service_code: string # The service identifier.
+  quota_code: string # The quota identifier.
+]: any -> record<Quota: record<ServiceCode: string, ServiceName: string, QuotaArn: string, QuotaCode: string, QuotaName: string, Value: float, Unit: string, Adjustable: bool, GlobalQuota: bool, UsageMetric: record<MetricNamespace: string, MetricName: string, MetricDimensions: record, MetricStatisticRecommendation: string>, Period: record<PeriodValue: int, PeriodUnit: string>, ErrorReason: record<ErrorCode: string, ErrorMessage: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.GetServiceQuota")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceCode": $service_code, "QuotaCode": $quota_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -500,14 +508,15 @@ export def "get-service-quota-increase-request-from-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  service_code: any
-  quota_code: any
-  aws_region: any
-]: any -> record<ServiceQuotaIncreaseRequestInTemplate: record<ServiceCode: record, ServiceName: record, QuotaCode: record, QuotaName: record, DesiredValue: record, AwsRegion: record, Unit: record, GlobalQuota: record>> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  service_code: string # The service identifier.
+  quota_code: string # The quota identifier.
+  aws_region: string # The AWS Region.
+]: any -> record<ServiceQuotaIncreaseRequestInTemplate: record<ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, AwsRegion: string, Unit: string, GlobalQuota: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.GetServiceQuotaIncreaseRequestFromTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceCode": $service_code, "QuotaCode": $quota_code, "AwsRegion": $aws_region} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -552,14 +561,15 @@ export def "list-aws-default-service-quotas" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  service_code: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, Quotas: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  service_code: string # The service identifier.
+  --next-token-body: string # The token for the next page of results. (body field)
+  --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, if any, make another call with the token returned from this call. (body field)
+]: any -> record<NextToken: string, Quotas: table<ServiceCode: string, ServiceName: string, QuotaArn: string, QuotaCode: string, QuotaName: string, Value: float, Unit: string, Adjustable: bool, GlobalQuota: bool, UsageMetric: record, Period: record, ErrorReason: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.ListAWSDefaultServiceQuotas")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ServiceCode": $service_code, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -605,15 +615,16 @@ export def "list-requested-service-quota-change-history" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  --service-code: any
-  --status: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, RequestedQuotas: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  --service-code: string # The service identifier.
+  --status: string@status-completer # The status of the quota increase request.
+  --next-token-body: string # The token for the next page of results. (body field)
+  --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, if any, make another call with the token returned from this call. (body field)
+]: any -> record<NextToken: string, RequestedQuotas: table<Id: string, CaseId: string, ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, Status: string, Created: string, LastUpdated: string, Requester: string, QuotaArn: string, GlobalQuota: bool, Unit: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.ListRequestedServiceQuotaChangeHistory")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ServiceCode": $service_code, "Status": $status, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -659,16 +670,17 @@ export def "list-requested-service-quota-change-history-by-quota" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  service_code: any
-  quota_code: any
-  --status: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, RequestedQuotas: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  service_code: string # The service identifier.
+  quota_code: string # The quota identifier.
+  --status: string@status-completer # The status value of the quota increase request.
+  --next-token-body: string # The token for the next page of results. (body field)
+  --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, if any, make another call with the token returned from this call. (body field)
+]: any -> record<NextToken: string, RequestedQuotas: table<Id: string, CaseId: string, ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, Status: string, Created: string, LastUpdated: string, Requester: string, QuotaArn: string, GlobalQuota: bool, Unit: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.ListRequestedServiceQuotaChangeHistoryByQuota")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ServiceCode": $service_code, "QuotaCode": $quota_code, "Status": $status, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -714,15 +726,16 @@ export def "list-service-quota-increase-requests-in-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  --service-code: any
-  --aws-region: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<ServiceQuotaIncreaseRequestInTemplateList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  --service-code: string # The service identifier.
+  --aws-region: string # The AWS Region.
+  --next-token-body: string # The token for the next page of results. (body field)
+  --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, if any, make another call with the token returned from this call. (body field)
+]: any -> record<ServiceQuotaIncreaseRequestInTemplateList: table<ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, AwsRegion: string, Unit: string, GlobalQuota: bool>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.ListServiceQuotaIncreaseRequestsInTemplate")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ServiceCode": $service_code, "AwsRegion": $aws_region, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -768,14 +781,15 @@ export def "list-service-quotas" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  service_code: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, Quotas: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  service_code: string # The service identifier.
+  --next-token-body: string # The token for the next page of results. (body field)
+  --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, if any, make another call with the token returned from this call. (body field)
+]: any -> record<NextToken: string, Quotas: table<ServiceCode: string, ServiceName: string, QuotaArn: string, QuotaCode: string, QuotaName: string, Value: float, Unit: string, Adjustable: bool, GlobalQuota: bool, UsageMetric: record, Period: record, ErrorReason: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.ListServiceQuotas")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ServiceCode": $service_code, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -821,13 +835,14 @@ export def "list-services" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, Services: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  --next-token-body: string # The token for the next page of results. (body field)
+  --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, if any, make another call with the token returned from this call. (body field)
+]: any -> record<NextToken: string, Services: table<ServiceCode: string, ServiceName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.ListServices")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -871,12 +886,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  resource_arn: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  resource_arn: string # The Amazon Resource Name (ARN) for the applied quota for which you want to list tags. You can get this information by using the Service Quotas console, or by listing the quotas using the list-service-quotas (https://docs.aws.amazon.com/cli/latest/reference/service-quotas/list-service-quotas.html) AWS CLI command or the ListServiceQuotas (https://docs.aws.amazon.com/servicequotas/2019-06-24/apireference/API_ListServiceQuotas.html) AWS API operation.
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -919,15 +935,16 @@ export def "put-service-quota-increase-request-into-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  quota_code: any
-  service_code: any
-  aws_region: any
-  desired_value: any
-]: any -> record<ServiceQuotaIncreaseRequestInTemplate: record<ServiceCode: record, ServiceName: record, QuotaCode: record, QuotaName: record, DesiredValue: record, AwsRegion: record, Unit: record, GlobalQuota: record>> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  quota_code: string # The quota identifier.
+  service_code: string # The service identifier.
+  aws_region: string # The AWS Region.
+  desired_value: float # The new, increased value for the quota. (format: double)
+]: any -> record<ServiceQuotaIncreaseRequestInTemplate: record<ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, AwsRegion: string, Unit: string, GlobalQuota: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.PutServiceQuotaIncreaseRequestIntoTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"QuotaCode": $quota_code, "ServiceCode": $service_code, "AwsRegion": $aws_region, "DesiredValue": $desired_value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -970,14 +987,15 @@ export def "request-service-quota-increase" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  service_code: any
-  quota_code: any
-  desired_value: any
-]: any -> record<RequestedQuota: record<Id: record, CaseId: record, ServiceCode: record, ServiceName: record, QuotaCode: record, QuotaName: record, DesiredValue: record, Status: record, Created: record, LastUpdated: record, Requester: record, QuotaArn: record, GlobalQuota: record, Unit: record>> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  service_code: string # The service identifier.
+  quota_code: string # The quota identifier.
+  desired_value: float # The new, increased value for the quota. (format: double)
+]: any -> record<RequestedQuota: record<Id: string, CaseId: string, ServiceCode: string, ServiceName: string, QuotaCode: string, QuotaName: string, DesiredValue: float, Status: string, Created: string, LastUpdated: string, Requester: string, QuotaArn: string, GlobalQuota: bool, Unit: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.RequestServiceQuotaIncrease")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceCode": $service_code, "QuotaCode": $quota_code, "DesiredValue": $desired_value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1003,6 +1021,7 @@ export def "request-service-quota-increase" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1020,13 +1039,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  resource_arn: string # The Amazon Resource Name (ARN) for the applied quota. You can get this information by using the Service Quotas console, or by listing the quotas using the list-service-quotas (https://docs.aws.amazon.com/cli/latest/reference/service-quotas/list-service-quotas.html) AWS CLI command or the ListServiceQuotas (https://docs.aws.amazon.com/servicequotas/2019-06-24/apireference/API_ListServiceQuotas.html) AWS API operation.
+  tags: list # The tags that you want to add to the resource. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1069,13 +1089,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  resource_arn: string # The Amazon Resource Name (ARN) for the applied quota that you want to untag. You can get this information by using the Service Quotas console, or by listing the quotas using the list-service-quotas (https://docs.aws.amazon.com/cli/latest/reference/service-quotas/list-service-quotas.html) AWS CLI command or the ListServiceQuotas (https://docs.aws.amazon.com/servicequotas/2019-06-24/apireference/API_ListServiceQuotas.html) AWS API operation.
+  tag_keys: list<string> # The keys of the tags that you want to remove from the resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ServiceQuotasV20190624.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

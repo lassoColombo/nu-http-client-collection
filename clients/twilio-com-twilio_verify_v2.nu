@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -110,6 +110,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # Completers for enum parameters
 def channel-completer [] { ["call" "email" "sms" "whatsapp"] }
 def status-completer [] { ["converted" "unconverted"] }
+def form-type-completer [] { ["form-push"] }
 def factor-type-completer [] { ["push"] }
 def status-completer-1 [] { ["approved" "denied" "expired" "pending"] }
 def order-completer [] { ["asc" "desc"] }
@@ -271,7 +272,7 @@ export def "fetch-verification-attempt" [
 # GET /v2/Forms/{FormType}
 # operationId: FetchForm
 export def "fetch-form" [
-  form_type: string
+  form_type: string@form-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1832,7 +1833,7 @@ export def "create-verification-check" [
   --amount: string # The amount of the associated PSD2 compliant transaction. Requires the PSD2 Service flag enabled.
   --code: string # The 4-10 character string being verified.
   --payee: string # The payee of the associated PSD2 compliant transaction. Requires the PSD2 Service flag enabled.
-  --body-to: string # The phone number or [email](https://www.twilio.com/docs/verify/email) to verify. Either this parameter or the `verification_sid` must be specified. Phone numbers must be in [E.164 format](https://www.twilio.com/docs/glossary/what-e164).
+  --to: string # The phone number or [email](https://www.twilio.com/docs/verify/email) to verify. Either this parameter or the `verification_sid` must be specified. Phone numbers must be in [E.164 format](https://www.twilio.com/docs/glossary/what-e164).
   --verification-sid: string # A SID that uniquely identifies the Verification Check. Either this parameter or the `to` phone number/[email](https://www.twilio.com/docs/verify/email) must be specified.
 ]: any -> record<account_sid: string, amount: string, channel: string, date_created: string, date_updated: string, payee: string, service_sid: string, sid: string, sna_attempts_error_codes: list<any>, status: string, to: string, valid: bool> {
   let input = $in
@@ -1840,7 +1841,7 @@ export def "create-verification-check" [
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/VerificationCheck") $auth.query)
-  let req_body = {"Amount": $amount, "Code": $code, "Payee": $payee, "To": $body_to, "VerificationSid": $verification_sid} | compact
+  let req_body = {"Amount": $amount, "Code": $code, "Payee": $payee, "To": $to, "VerificationSid": $verification_sid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1888,14 +1889,14 @@ export def "create-verification" [
   --send-digits: string # The digits to send after a phone call is answered, for example, to dial an extension. For more information, see the Programmable Voice documentation of [sendDigits](https://www.twilio.com/docs/voice/twiml/number#attributes-sendDigits).
   --template-custom-substitutions: string # A stringified JSON object in which the keys are the template's special variables and the values are the variables substitutions.
   --template-sid: string # The message [template](https://www.twilio.com/docs/verify/api/templates). If provided, will override the default template for the Service. SMS and Voice channels only.
-  --body-to: string # The phone number or [email](https://www.twilio.com/docs/verify/email) to verify. Phone numbers must be in [E.164 format](https://www.twilio.com/docs/glossary/what-e164).
+  to: string # The phone number or [email](https://www.twilio.com/docs/verify/email) to verify. Phone numbers must be in [E.164 format](https://www.twilio.com/docs/glossary/what-e164).
 ]: any -> record<account_sid: string, amount: string, channel: string, date_created: string, date_updated: string, lookup: any, payee: string, send_code_attempts: list<any>, service_sid: string, sid: string, sna: any, status: string, to: string, url: string, valid: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v2/Services/{service_sid}/Verifications") $auth.query)
-  let req_body = {"Amount": $amount, "AppHash": $app_hash, "Channel": $channel, "ChannelConfiguration": $channel_configuration, "CustomCode": $custom_code, "CustomFriendlyName": $custom_friendly_name, "CustomMessage": $custom_message, "DeviceIp": $device_ip, "Locale": $locale, "Payee": $payee, "RateLimits": $rate_limits, "SendDigits": $send_digits, "TemplateCustomSubstitutions": $template_custom_substitutions, "TemplateSid": $template_sid, "To": $body_to} | compact
+  let req_body = {"Amount": $amount, "AppHash": $app_hash, "Channel": $channel, "ChannelConfiguration": $channel_configuration, "CustomCode": $custom_code, "CustomFriendlyName": $custom_friendly_name, "CustomMessage": $custom_message, "DeviceIp": $device_ip, "Locale": $locale, "Payee": $payee, "RateLimits": $rate_limits, "SendDigits": $send_digits, "TemplateCustomSubstitutions": $template_custom_substitutions, "TemplateSid": $template_sid, "To": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

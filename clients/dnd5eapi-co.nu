@@ -93,6 +93,25 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["https://www.dnd5eapi.co" "http://localhost:3000"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def index-completer [] { ["cha" "con" "dex" "int" "str" "wis"] }
+def index-completer-1 [] { ["chaotic-evil" "chaotic-good" "chaotic-neutral" "lawful-evil" "lawful-good" "lawful-neutral" "neutral" "neutral-evil" "neutral-good"] }
+def index-completer-2 [] { ["acolyte"] }
+def index-completer-3 [] { ["barbarian" "bard" "cleric" "druid" "fighter" "monk" "paladin" "ranger" "rogue" "sorcerer" "warlock" "wizard"] }
+def index-completer-4 [] { ["blinded" "charmed" "deafened" "exhaustion" "frightened" "grappled" "incapacitated" "invisible" "paralyzed" "petrified" "poisoned" "prone" "restrained" "stunned" "unconscious"] }
+def index-completer-5 [] { ["acid" "bludgeoning" "cold" "fire" "force" "lightning" "necrotic" "piercing" "poison" "psychic" "radiant" "slashing" "thunder"] }
+def index-completer-6 [] { ["grappler"] }
+def index-completer-7 [] { ["abyssal" "celestial" "common" "deep-speech" "draconic" "dwarvish" "elvish" "giant" "gnomish" "goblin" "halfling" "infernal" "orc" "primordial" "sylvan" "undercommon"] }
+def index-completer-8 [] { ["abjuration" "conjuration" "divination" "enchantment" "evocation" "illusion" "necromancy" "transmutation"] }
+def index-completer-9 [] { ["dragonborn" "dwarf" "elf" "gnome" "half-elf" "half-orc" "halfling" "human" "tiefling"] }
+def index-completer-10 [] { ["ability-checks" "ability-scores-and-modifiers" "actions-in-combat" "advantage-and-disadvantage" "between-adventures" "casting-a-spell" "cover" "damage-and-healing" "diseases" "fantasy-historical-pantheons" "madness" "making-an-attack" "mounted-combat" "movement" "movement-and-position" "objects" "poisons" "proficiency-bonus" "resting" "saving-throws" "sentient-magic-items" "standard-exchange-rates" "the-environment" "the-order-of-combat" "the-planes-of-existence" "time" "traps" "underwater-combat" "using-each-ability" "what-is-a-spell"] }
+def index-completer-11 [] { ["adventuring" "appendix" "combat" "equipment" "spellcasting" "using-ability-scores"] }
+def index-completer-12 [] { ["acrobatics" "animal-handling" "arcana" "athletics" "deception" "history" "insight" "intimidation" "investigation" "medicine" "nature" "perception" "performance" "persuasion" "religion" "sleight-of-hand" "stealth" "survival"] }
+def index-completer-13 [] { ["berserker" "champion" "devotion" "draconic" "evocation" "fiend" "hunter" "land" "life" "lore" "open-hand" "thief"] }
+def index-completer-14 [] { ["high-elf" "hill-dwarf" "lightfoot-halfling" "rock-gnome"] }
+def index-completer-15 [] { ["artificers-lore" "brave" "breath-weapon" "damage-resistance" "darkvision" "draconic-ancestry" "draconic-ancestry-black" "draconic-ancestry-blue" "draconic-ancestry-brass" "draconic-ancestry-bronze" "draconic-ancestry-copper" "draconic-ancestry-gold" "draconic-ancestry-green" "draconic-ancestry-red" "draconic-ancestry-silver" "draconic-ancestry-white" "dwarven-combat-training" "dwarven-resilience" "dwarven-toughness" "elf-weapon-training" "extra-language" "fey-ancestry" "gnome-cunning" "halfling-nimbleness" "hellish-resistance" "high-elf-cantrip" "infernal-legacy" "keen-senses" "lucky" "menacing" "naturally-stealthy" "relentless-endurance" "savage-attacks" "skill-versatility" "stonecunning" "tinker" "tool-proficiency" "trance"] }
+def index-completer-16 [] { ["ammunition" "finesse" "heavy" "light" "loading" "monk" "reach" "special" "thrown" "two-handed" "versatile"] }
+def endpoint-completer [] { ["ability-scores" "alignments" "backgrounds" "classes" "conditions" "damage-types" "equipment" "equipment-categories" "feats" "features" "languages" "magic-items" "magic-schools" "monsters" "proficiencies" "races" "rule-sections" "rules" "skills" "spells" "subclasses" "subraces" "traits" "weapon-properties"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -154,7 +173,7 @@ export def "get-api" [
 #
 # GET /api/ability-scores/{index}
 export def "get-api-ability-scores-index" [
-  index: string
+  index: string@index-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +208,7 @@ export def "get-api-ability-scores-index" [
 #
 # GET /api/alignments/{index}
 export def "get-api-alignments-index" [
-  index: string
+  index: string@index-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,7 +243,7 @@ export def "get-api-alignments-index" [
 #
 # GET /api/backgrounds/{index}
 export def "get-api-backgrounds-index" [
-  index: string
+  index: string@index-completer-2
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,7 +278,7 @@ export def "get-api-backgrounds-index" [
 #
 # GET /api/classes/{index}
 export def "get-api-classes-index" [
-  index: string
+  index: string@index-completer-3
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +313,7 @@ export def "get-api-classes-index" [
 #
 # GET /api/classes/{index}/features
 export def "get-api-classes-index-features" [
-  index: string
+  index: string@index-completer-3
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,7 +348,7 @@ export def "get-api-classes-index-features" [
 #
 # GET /api/classes/{index}/levels
 export def "get-api-classes-index-levels" [
-  index: string
+  index: string@index-completer-3
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +385,7 @@ export def "get-api-classes-index-levels" [
 #
 # GET /api/classes/{index}/levels/{class_level}
 export def "get-api-classes-index-levels-class-level" [
-  index: string
+  index: string@index-completer-3
   class_level: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -403,7 +422,7 @@ export def "get-api-classes-index-levels-class-level" [
 #
 # GET /api/classes/{index}/levels/{class_level}/features
 export def "get-api-classes-index-levels-class-level-features" [
-  index: string
+  index: string@index-completer-3
   class_level: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -440,7 +459,7 @@ export def "get-api-classes-index-levels-class-level-features" [
 #
 # GET /api/classes/{index}/levels/{spell_level}/spells
 export def "get-api-classes-index-levels-spell-level-spells" [
-  index: string
+  index: string@index-completer-3
   spell_level: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -477,7 +496,7 @@ export def "get-api-classes-index-levels-spell-level-spells" [
 #
 # GET /api/classes/{index}/multi-classing
 export def "get-api-classes-index-multi-classing" [
-  index: string
+  index: string@index-completer-3
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -512,7 +531,7 @@ export def "get-api-classes-index-multi-classing" [
 #
 # GET /api/classes/{index}/proficiencies
 export def "get-api-classes-index-proficiencies" [
-  index: string
+  index: string@index-completer-3
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,7 +566,7 @@ export def "get-api-classes-index-proficiencies" [
 #
 # GET /api/classes/{index}/spellcasting
 export def "get-api-classes-index-spellcasting" [
-  index: string
+  index: string@index-completer-3
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -582,7 +601,7 @@ export def "get-api-classes-index-spellcasting" [
 #
 # GET /api/classes/{index}/spells
 export def "get-api-classes-index-spells" [
-  index: string
+  index: string@index-completer-3
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,7 +636,7 @@ export def "get-api-classes-index-spells" [
 #
 # GET /api/classes/{index}/subclasses
 export def "get-api-classes-index-subclasses" [
-  index: string
+  index: string@index-completer-3
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -652,7 +671,7 @@ export def "get-api-classes-index-subclasses" [
 #
 # GET /api/conditions/{index}
 export def "get-api-conditions-index" [
-  index: string
+  index: string@index-completer-4
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -687,7 +706,7 @@ export def "get-api-conditions-index" [
 #
 # GET /api/damage-types/{index}
 export def "get-api-damage-types-index" [
-  index: string
+  index: string@index-completer-5
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -792,7 +811,7 @@ export def "get-api-equipment-index" [
 #
 # GET /api/feats/{index}
 export def "get-api-feats-index" [
-  index: string
+  index: string@index-completer-6
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -862,7 +881,7 @@ export def "get-api-features-index" [
 #
 # GET /api/languages/{index}
 export def "get-api-languages-index" [
-  index: string
+  index: string@index-completer-7
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -932,7 +951,7 @@ export def "get-api-magic-items-index" [
 #
 # GET /api/magic-schools/{index}
 export def "get-api-magic-schools-index" [
-  index: string
+  index: string@index-completer-8
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1072,7 +1091,7 @@ export def "get-api-proficiencies-index" [
 #
 # GET /api/races/{index}
 export def "get-api-races-index" [
-  index: string
+  index: string@index-completer-9
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1107,7 +1126,7 @@ export def "get-api-races-index" [
 #
 # GET /api/races/{index}/proficiencies
 export def "get-api-races-index-proficiencies" [
-  index: string
+  index: string@index-completer-9
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1142,7 +1161,7 @@ export def "get-api-races-index-proficiencies" [
 #
 # GET /api/races/{index}/subraces
 export def "get-api-races-index-subraces" [
-  index: string
+  index: string@index-completer-9
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1177,7 +1196,7 @@ export def "get-api-races-index-subraces" [
 #
 # GET /api/races/{index}/traits
 export def "get-api-races-index-traits" [
-  index: string
+  index: string@index-completer-9
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1212,7 +1231,7 @@ export def "get-api-races-index-traits" [
 #
 # GET /api/rule-sections/{index}
 export def "get-api-rule-sections-index" [
-  index: string
+  index: string@index-completer-10
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1247,7 +1266,7 @@ export def "get-api-rule-sections-index" [
 #
 # GET /api/rules/{index}
 export def "get-api-rules-index" [
-  index: string
+  index: string@index-completer-11
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1282,7 +1301,7 @@ export def "get-api-rules-index" [
 #
 # GET /api/skills/{index}
 export def "get-api-skills-index" [
-  index: string
+  index: string@index-completer-12
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1388,7 +1407,7 @@ export def "get-api-spells-index" [
 #
 # GET /api/subclasses/{index}
 export def "get-api-subclasses-index" [
-  index: string
+  index: string@index-completer-13
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1423,7 +1442,7 @@ export def "get-api-subclasses-index" [
 #
 # GET /api/subclasses/{index}/features
 export def "get-api-subclasses-index-features" [
-  index: string
+  index: string@index-completer-13
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1458,7 +1477,7 @@ export def "get-api-subclasses-index-features" [
 #
 # GET /api/subclasses/{index}/levels
 export def "get-api-subclasses-index-levels" [
-  index: string
+  index: string@index-completer-13
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1493,7 +1512,7 @@ export def "get-api-subclasses-index-levels" [
 #
 # GET /api/subclasses/{index}/levels/{subclass_level}
 export def "get-api-subclasses-index-levels-subclass-level" [
-  index: string
+  index: string@index-completer-13
   subclass_level: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1530,7 +1549,7 @@ export def "get-api-subclasses-index-levels-subclass-level" [
 #
 # GET /api/subclasses/{index}/levels/{subclass_level}/features
 export def "get-api-subclasses-index-levels-subclass-level-features" [
-  index: string
+  index: string@index-completer-13
   subclass_level: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1567,7 +1586,7 @@ export def "get-api-subclasses-index-levels-subclass-level-features" [
 #
 # GET /api/subraces/{index}
 export def "get-api-subraces-index" [
-  index: string
+  index: string@index-completer-14
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1602,7 +1621,7 @@ export def "get-api-subraces-index" [
 #
 # GET /api/subraces/{index}/proficiencies
 export def "get-api-subraces-index-proficiencies" [
-  index: string
+  index: string@index-completer-14
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1637,7 +1656,7 @@ export def "get-api-subraces-index-proficiencies" [
 #
 # GET /api/subraces/{index}/traits
 export def "get-api-subraces-index-traits" [
-  index: string
+  index: string@index-completer-14
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1672,7 +1691,7 @@ export def "get-api-subraces-index-traits" [
 #
 # GET /api/traits/{index}
 export def "get-api-traits-index" [
-  index: string
+  index: string@index-completer-15
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1707,7 +1726,7 @@ export def "get-api-traits-index" [
 #
 # GET /api/weapon-properties/{index}
 export def "get-api-weapon-properties-index" [
-  index: string
+  index: string@index-completer-16
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1742,7 +1761,7 @@ export def "get-api-weapon-properties-index" [
 #
 # GET /api/{endpoint}
 export def "get-api-endpoint" [
-  endpoint: string
+  endpoint: string@endpoint-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

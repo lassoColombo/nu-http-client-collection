@@ -1460,13 +1460,13 @@ export def "post-forwarding-rules" [
   --destination: record # shape: {destinationId?: int, destinationName?: string, destinationType?: string}
   --id: int # format: int64
   --keep-images: oneof<nothing, bool>
-  --body-source: record # shape: {sourceId?: int, sourceName?: string, sourceType?: string}
+  --source: record # shape: {sourceId?: int, sourceName?: string, sourceType?: string}
 ]: any -> record<destination: record<destinationId: int, destinationName: string, destinationType: string>, id: int, keepImages: bool, source: record<sourceId: int, sourceName: string, sourceType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/forwarding/rules" $auth.query)
-  let req_body = {"destination": $destination, "id": $id, "keepImages": $keep_images, "source": $body_source} | compact
+  let req_body = {"destination": $destination, "id": $id, "keepImages": $keep_images, "source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1508,8 +1508,8 @@ export def "post-images" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["dataset"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["dataset"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1575,10 +1575,11 @@ export def "get-images-export" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: int # ID of export set to download (format: int64)
+  --id: int # ID of export set to download (required, format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/images/export" $qp $auth.query)
   let accept_val = "application/zip"
@@ -1649,13 +1650,14 @@ export def "post-images-jpeg" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --studyid: int # ID of study to add new series to (format: int64)
+  --studyid: int # ID of study to add new series to (required, format: int64)
   --description: string # DICOM series description of the resulting secondary capture series
   --body: record
 ]: any -> record<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($studyid == null) { error make --unspanned { msg: "required query parameter 'studyid' missing: pass --studyid" } }
   let qp = [(serialize-qp "studyid" $studyid "scalar") (serialize-qp "description" $description "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/images/jpeg" $qp $auth.query)
   let req_body = $body
@@ -2202,8 +2204,8 @@ export def "post-import-sessions-id-images" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["dataset"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["dataset"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2467,10 +2469,11 @@ export def "get-metadata-images" [
   --accept: string@accept-completer # Response content type
   --startindex: int # start index of returned slice of images (format: int64, default: 0)
   --count: int # size of returned slice of images (format: int64, default: 20)
-  --seriesid: int # reference to series to list images for (format: int64)
+  --seriesid: int # reference to series to list images for (required, format: int64)
 ]: nothing -> table<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($seriesid == null) { error make --unspanned { msg: "required query parameter 'seriesid' missing: pass --seriesid" } }
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "seriesid" $seriesid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metadata/images" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2750,13 +2753,14 @@ export def "get-metadata-series" [
   --accept: string@accept-completer # Response content type
   --startindex: int # start index of returned slice of series (format: int64, default: 0)
   --count: int # size of returned slice of series (format: int64, default: 20)
-  --studyid: int # reference to study to list series for (format: int64)
+  --studyid: int # reference to study to list series for (required, format: int64)
   --sources: string # filter the results by matching on one or more series sources. Examples of sources are user, box, directory or scp. The list of sources to filter results by must have the form TYPE1:ID1,TYPE2:ID2,...,TYPEN:IDN. For instance, the argument sources=box:1,user:5 shows results either sent from (slice)box with id 1 or uploaded by user with id 5.
   --seriestypes: string # filter the results by matching on one or more series types. The supplied list of series types must be a comma separated list of series type ids. For instance, the argument seriestypes=3,7,22 shows series assigned to either of the series types with ids 3, 7 and 22.
   --seriestags: string # filter the results by matching on one or more series tags. The supplied list of series tags must be a comma separated list of series tag ids. For instance, the argument seriestags=6,2,11 shows series with either of the series tags with ids 6, 2 and 11.
 ]: nothing -> table<bodyPartExamined: record<value: string>, frameOfReferenceUID: record<value: string>, id: int, manufacturer: record<value: string>, modality: record<value: string>, protocolName: record<value: string>, seriesDate: record<value: string>, seriesDescription: record<value: string>, seriesInstanceUID: record<value: string>, stationName: record<value: string>, studyId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($studyid == null) { error make --unspanned { msg: "required query parameter 'studyid' missing: pass --studyid" } }
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "studyid" $studyid "scalar") (serialize-qp "sources" $sources "scalar") (serialize-qp "seriestypes" $seriestypes "scalar") (serialize-qp "seriestags" $seriestags "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metadata/series" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3205,13 +3209,14 @@ export def "get-metadata-studies" [
   --accept: string@accept-completer # Response content type
   --startindex: int # start index of returned slice of studies (format: int64, default: 0)
   --count: int # size of returned slice of studies (format: int64, default: 20)
-  --patientid: int # reference to patient to list studies for (format: int64)
+  --patientid: int # reference to patient to list studies for (required, format: int64)
   --sources: string # filter the results by matching on one or more underlying series sources. Examples of sources are user, box, directory or scp. The list of sources to filter results by must have the form TYPE1:ID1,TYPE2:ID2,...,TYPEN:IDN. For instance, the argument sources=box:1,user:5 shows results either sent from (slice)box with id 1 or uploaded by user with id 5.
   --seriestypes: string # filter the results by matching on one or more underlying series types. The supplied list of series types must be a comma separated list of series type ids. For instance, the argument seriestypes=3,7,22 shows results including series assigned to either of the series types with ids 3, 7 and 22.
   --seriestags: string # filter the results by matching on one or more underlying series tags. The supplied list of series tags must be a comma separated list of series tag ids. For instance, the argument seriestags=6,2,11 shows results including series with either of the series tags with ids 6, 2 and 11.
 ]: nothing -> table<accessionNumber: record<value: string>, id: int, patientAge: record<value: string>, patientId: int, studyDate: record<value: string>, studyDescription: record<value: string>, studyID: record<value: string>, studyInstanceUID: record<value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($patientid == null) { error make --unspanned { msg: "required query parameter 'patientid' missing: pass --patientid" } }
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "patientid" $patientid "scalar") (serialize-qp "sources" $sources "scalar") (serialize-qp "seriestypes" $seriestypes "scalar") (serialize-qp "seriestags" $seriestags "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metadata/studies" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3710,10 +3715,11 @@ export def "get-seriestypes-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --seriestypeid: int # ID of series type to list rules for (format: int64)
+  --seriestypeid: int # ID of series type to list rules for (required, format: int64)
 ]: nothing -> table<id: int, seriesTypeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($seriestypeid == null) { error make --unspanned { msg: "required query parameter 'seriestypeid' missing: pass --seriestypeid" } }
   let qp = [(serialize-qp "seriestypeid" $seriestypeid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/seriestypes/rules" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3906,6 +3912,7 @@ export def "post-seriestypes-rules-id-attributes" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/seriestypes/rules/{id}/attributes") $auth.query)
   let req_body = {"element": $element, "group": $group, "id": $body_id, "path": $path, "seriesTypeRuleId": $series_type_rule_id, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "id") == null) { error make --unspanned { msg: "required body field 'id' missing: pass --body-id or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -4187,15 +4194,18 @@ export def "post-transactions-token-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --transactionid: int # the ID of the client's outgoing transaction (format: int64)
-  --sequencenumber: int # the index of this image in the transaction (format: int64)
-  --totalimagecount: int # the total number of images in this transaction (format: int64)
+  --transactionid: int # the ID of the client's outgoing transaction (required, format: int64)
+  --sequencenumber: int # the index of this image in the transaction (required, format: int64)
+  --totalimagecount: int # the total number of images in this transaction (required, format: int64)
   --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
+  if ($transactionid == null) { error make --unspanned { msg: "required query parameter 'transactionid' missing: pass --transactionid" } }
+  if ($sequencenumber == null) { error make --unspanned { msg: "required query parameter 'sequencenumber' missing: pass --sequencenumber" } }
+  if ($totalimagecount == null) { error make --unspanned { msg: "required query parameter 'totalimagecount' missing: pass --totalimagecount" } }
   let qp = [(serialize-qp "transactionid" $transactionid "scalar") (serialize-qp "sequencenumber" $sequencenumber "scalar") (serialize-qp "totalimagecount" $totalimagecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/transactions/{token_arg}/image") $qp $auth.query)
   let req_body = $body
@@ -4230,12 +4240,14 @@ export def "get-transactions-token-outgoing" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --transactionid: int # the ID of the outgoing transaction (format: int64)
-  --imageid: int # the ID of the outgoing transaction image (format: int64)
+  --transactionid: int # the ID of the outgoing transaction (required, format: int64)
+  --imageid: int # the ID of the outgoing transaction image (required, format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
+  if ($transactionid == null) { error make --unspanned { msg: "required query parameter 'transactionid' missing: pass --transactionid" } }
+  if ($imageid == null) { error make --unspanned { msg: "required query parameter 'imageid' missing: pass --imageid" } }
   let qp = [(serialize-qp "transactionid" $transactionid "scalar") (serialize-qp "imageid" $imageid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/transactions/{token_arg}/outgoing") $qp $auth.query)
   let accept_val = "application/octet-stream"
@@ -4390,11 +4402,12 @@ export def "get-transactions-token-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --transactionid: int # the ID of the client's outgoing transaction (format: int64)
+  --transactionid: int # the ID of the client's outgoing transaction (required, format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
+  if ($transactionid == null) { error make --unspanned { msg: "required query parameter 'transactionid' missing: pass --transactionid" } }
   let qp = [(serialize-qp "transactionid" $transactionid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/transactions/{token_arg}/status") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4428,13 +4441,14 @@ export def "put-transactions-token-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --transactionid: int # the ID of the client's outgoing transaction (format: int64)
+  --transactionid: int # the ID of the client's outgoing transaction (required, format: int64)
   --body: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
+  if ($transactionid == null) { error make --unspanned { msg: "required query parameter 'transactionid' missing: pass --transactionid" } }
   let qp = [(serialize-qp "transactionid" $transactionid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/transactions/{token_arg}/status") $qp $auth.query)
   let req_body = $body

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -135,11 +135,13 @@ export def "get-company-board-members" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-code: string # Country code for the company
-  --company-id: string # Company identification for the company
+  --country-code: string # Country code for the company (required)
+  --company-id: string # Company identification for the company (required)
 ]: nothing -> record<boardMembers: table<boardMemberCompanyId: string, firstName: string, fromDate: string, fullName: string, givenName: string, middleName: string, personalNumber: string, roleCode: string, roleName: string, surName: string, toDate: string>, changeDate: string, companyId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country_code == null) { error make --unspanned { msg: "required query parameter 'countryCode' missing: pass --country-code" } }
+  if ($company_id == null) { error make --unspanned { msg: "required query parameter 'companyId' missing: pass --company-id" } }
   let qp = [(serialize-qp "countryCode" $country_code "scalar") (serialize-qp "companyId" $company_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-board-members" $qp $auth.query)
   let accept_val = "application/json"
@@ -169,12 +171,13 @@ export def "post-company-board-members" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-code: string # Country code for the company
+  --country-code: string # Country code for the company (required)
   --company-ids: list<string>
 ]: any -> record<companies: table<boardMembers: list, changeDate: string, companyId: string>, responseInfo: record<hitCount: int, noMatchIds: list<string>, requestCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country_code == null) { error make --unspanned { msg: "required query parameter 'countryCode' missing: pass --country-code" } }
   let qp = [(serialize-qp "countryCode" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-board-members" $qp $auth.query)
   let req_body = {"companyIds": $company_ids} | compact
@@ -206,12 +209,15 @@ export def "get-company-credit-decision" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-code: string # Country code for the company
-  --company-id: string # Company identification for the company
-  --template: string # Template for credit decision
+  --country-code: string # Country code for the company (required)
+  --company-id: string # Company identification for the company (required)
+  --template: string # Template for credit decision (required)
 ]: nothing -> record<address: string, companyId: string, rejections: record<causeOfReject: string, rejectComment: string, rejectText: string>, statusCode: string, statusText: string, town: string, zipCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country_code == null) { error make --unspanned { msg: "required query parameter 'countryCode' missing: pass --country-code" } }
+  if ($company_id == null) { error make --unspanned { msg: "required query parameter 'companyId' missing: pass --company-id" } }
+  if ($template == null) { error make --unspanned { msg: "required query parameter 'template' missing: pass --template" } }
   let qp = [(serialize-qp "countryCode" $country_code "scalar") (serialize-qp "companyId" $company_id "scalar") (serialize-qp "template" $template "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-credit-decision" $qp $auth.query)
   let accept_val = "application/json"
@@ -241,11 +247,13 @@ export def "get-company-economy-overview" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-code: string # Country code for the company
-  --company-id: string # Company identification for the company
+  --country-code: string # Country code for the company (required)
+  --company-id: string # Company identification for the company (required)
 ]: nothing -> record<bsCashAndBankBalances: string, bsShareCapital: string, bsTotalAssets: string, bsTotalEquity: string, changeDate: string, companyId: string, kpiNetMarginPercent: string, kpiQuickRatioPercent: string, kpiSolidityPercent: string, nbrOfEmployees: string, nbrOfEmployeesInterval: string, nbrOfEmployeesOfficeInterval: string, netTurnover: string, plNetIncome: string, plOperatingProfit: string, plProfitLossAfterFinItems: string, turnoverInterval: string, turnoverPerEmployee: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country_code == null) { error make --unspanned { msg: "required query parameter 'countryCode' missing: pass --country-code" } }
+  if ($company_id == null) { error make --unspanned { msg: "required query parameter 'companyId' missing: pass --company-id" } }
   let qp = [(serialize-qp "countryCode" $country_code "scalar") (serialize-qp "companyId" $company_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-economy-overview" $qp $auth.query)
   let accept_val = "application/json"
@@ -275,12 +283,13 @@ export def "post-company-economy-overview" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-code: string # Country code for the company
+  --country-code: string # Country code for the company (required)
   --company-ids: list<string>
 ]: any -> record<companies: table<bsCashAndBankBalances: string, bsShareCapital: string, bsTotalAssets: string, bsTotalEquity: string, changeDate: string, companyId: string, kpiNetMarginPercent: string, kpiQuickRatioPercent: string, kpiSolidityPercent: string, nbrOfEmployees: string, nbrOfEmployeesInterval: string, nbrOfEmployeesOfficeInterval: string, netTurnover: string, plNetIncome: string, plOperatingProfit: string, plProfitLossAfterFinItems: string, turnoverInterval: string, turnoverPerEmployee: string>, responseInfo: record<hitCount: int, noMatchIds: list<string>, requestCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country_code == null) { error make --unspanned { msg: "required query parameter 'countryCode' missing: pass --country-code" } }
   let qp = [(serialize-qp "countryCode" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-economy-overview" $qp $auth.query)
   let req_body = {"companyIds": $company_ids} | compact
@@ -314,12 +323,13 @@ export def "post-company-event" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-code: string # Country code for the company
+  --country-code: string # Country code for the company (required)
   --requests: list # item shape: {companyId?: string, date?: string}
 ]: any -> record<responses: table<changeDate: string, code: string, companyId: string, dataSet: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country_code == null) { error make --unspanned { msg: "required query parameter 'countryCode' missing: pass --country-code" } }
   let qp = [(serialize-qp "countryCode" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-event" $qp $auth.query)
   let req_body = {"requests": $requests} | compact
@@ -351,11 +361,13 @@ export def "get-company-overview" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-code: string # Country code for the company
-  --company-id: string # Company identification for the company
+  --country-code: string # Country code for the company (required)
+  --company-id: string # Company identification for the company (required)
 ]: nothing -> record<address: string, changeDate: string, coAddress: string, commune: string, companyHolder: string, companyId: string, companyName: string, companyRegistrationDate: string, county: string, email: string, employerContributionReg: string, faxNumber: string, industryCode: string, industryText: string, legalGroupCode: string, legalGroupText: string, numberCompanyUnits: int, numberEmployees: string, phoneNumber: string, preliminaryTaxReg: string, severalCompanyName: bool, statusCode: string, statusDateFrom: string, statusTextDetailed: string, statusTextHigh: string, topDirectorFunction: string, topDirectorName: string, town: string, vatReg: string, vepChangedDate: string, visitAddress: string, visitCommune: string, visitCounty: string, visitStreet: string, visitStreetNumber: string, visitStreetUnit: string, visitTown: string, visitZipCode: string, webAddress: string, zipCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country_code == null) { error make --unspanned { msg: "required query parameter 'countryCode' missing: pass --country-code" } }
+  if ($company_id == null) { error make --unspanned { msg: "required query parameter 'companyId' missing: pass --company-id" } }
   let qp = [(serialize-qp "countryCode" $country_code "scalar") (serialize-qp "companyId" $company_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-overview" $qp $auth.query)
   let accept_val = "application/json"
@@ -385,12 +397,13 @@ export def "post-company-overview" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-code: string # Country code for the company
+  --country-code: string # Country code for the company (required)
   --company-ids: list<string>
 ]: any -> record<companies: table<address: string, changeDate: string, coAddress: string, commune: string, companyHolder: string, companyId: string, companyName: string, companyRegistrationDate: string, county: string, email: string, employerContributionReg: string, faxNumber: string, industryCode: string, industryText: string, legalGroupCode: string, legalGroupText: string, numberCompanyUnits: int, numberEmployees: string, phoneNumber: string, preliminaryTaxReg: string, severalCompanyName: bool, statusCode: string, statusDateFrom: string, statusTextDetailed: string, statusTextHigh: string, topDirectorFunction: string, topDirectorName: string, town: string, vatReg: string, vepChangedDate: string, visitAddress: string, visitCommune: string, visitCounty: string, visitStreet: string, visitStreetNumber: string, visitStreetUnit: string, visitTown: string, visitZipCode: string, webAddress: string, zipCode: string>, responseInfo: record<hitCount: int, noMatchIds: list<string>, requestCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country_code == null) { error make --unspanned { msg: "required query parameter 'countryCode' missing: pass --country-code" } }
   let qp = [(serialize-qp "countryCode" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-overview" $qp $auth.query)
   let req_body = {"companyIds": $company_ids} | compact
@@ -422,11 +435,13 @@ export def "get-company-signatory" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-code: string # Country code for the company
-  --company-id: string # Company identification for the company
+  --country-code: string # Country code for the company (required)
+  --company-id: string # Company identification for the company (required)
 ]: nothing -> record<changeDate: string, companyId: string, companySignatory: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country_code == null) { error make --unspanned { msg: "required query parameter 'countryCode' missing: pass --country-code" } }
+  if ($company_id == null) { error make --unspanned { msg: "required query parameter 'companyId' missing: pass --company-id" } }
   let qp = [(serialize-qp "countryCode" $country_code "scalar") (serialize-qp "companyId" $company_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-signatory" $qp $auth.query)
   let accept_val = "application/json"
@@ -456,12 +471,13 @@ export def "post-company-signatory" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-code: string # Country code for the company
+  --country-code: string # Country code for the company (required)
   --company-ids: list<string>
 ]: any -> record<companies: table<changeDate: string, companyId: string, companySignatory: string>, responseInfo: record<hitCount: int, noMatchIds: list<string>, requestCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country_code == null) { error make --unspanned { msg: "required query parameter 'countryCode' missing: pass --country-code" } }
   let qp = [(serialize-qp "countryCode" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-signatory" $qp $auth.query)
   let req_body = {"companyIds": $company_ids} | compact
@@ -493,12 +509,13 @@ export def "get-company-simple-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-code: string # Country code for the company
+  --country-code: string # Country code for the company (required)
   --company-name: string # Company name
   --town: string # Town
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country_code == null) { error make --unspanned { msg: "required query parameter 'countryCode' missing: pass --country-code" } }
   let qp = [(serialize-qp "countryCode" $country_code "scalar") (serialize-qp "companyName" $company_name "scalar") (serialize-qp "town" $town "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-simple-search" $qp $auth.query)
   let accept_val = "application/json"

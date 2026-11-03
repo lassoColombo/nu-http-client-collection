@@ -134,22 +134,23 @@ export def "get-countries" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --market-id: string # MarketId in which the request is being made, and for which responses should be localized (format: bcp-47)
+  --market-id: string # MarketId in which the request is being made, and for which responses should be localized (required, format: bcp-47)
   --region-type-id: int # Restrict countries to this region type; required if regionName is supplied
   --region-name: string # Restrict countries to this region name; required if regionTypeId is supplied
-  --qp-sort: string@sort-completer # The term to sort the result countries by. (default: key)
+  --sort: string@sort-completer # The term to sort the result countries by. (default: key)
   --order: string@order-completer # The direction to sort the result countries by. (default: ascending)
 ]: nothing -> table<callingCode: string, countryKey: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "marketId" $market_id "scalar") (serialize-qp "regionTypeId" $region_type_id "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  if ($market_id == null) { error make --unspanned { msg: "required query parameter 'marketId' missing: pass --market-id" } }
+  let qp = [(serialize-qp "marketId" $market_id "scalar") (serialize-qp "regionTypeId" $region_type_id "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/countries" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"marketId": $market_id, "regionTypeId": $region_type_id, "regionName": $region_name, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"marketId": $market_id, "regionTypeId": $region_type_id, "regionName": $region_name, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -175,21 +176,22 @@ export def "get-country" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --market-id: string # MarketId in which the request is being made, and for which responses should be localized (format: bcp-47)
-  --qp-sort: string@sort-completer # The term to sort the result country states by. (default: key)
+  --market-id: string # MarketId in which the request is being made, and for which responses should be localized (required, format: bcp-47)
+  --sort: string@sort-completer # The term to sort the result country states by. (default: key)
   --order: string@order-completer # The direction to sort the result country states by. (default: ascending)
 ]: nothing -> table<callingCode: string, countryKey: string, label: string, states: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country_key | is-empty) { error make --unspanned { msg: "path parameter 'countryKey' must be non-empty" } }
-  let qp = [(serialize-qp "marketId" $market_id "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  if ($market_id == null) { error make --unspanned { msg: "required query parameter 'marketId' missing: pass --market-id" } }
+  let qp = [(serialize-qp "marketId" $market_id "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({country_key: (encode-path-segment $country_key)} | format pattern "/v1/countries/{country_key}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"marketId": $market_id, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"marketId": $market_id, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null

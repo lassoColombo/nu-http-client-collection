@@ -100,6 +100,10 @@ def base-url-completer [] { ["https://webservice.bridgedb.org" "http://webservic
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def organism-completer [] { ["Anopheles gambiae" "Arabidopsis thaliana" "Aspergillus niger" "Bacillus subtilis" "Barley" "Black mold" "Bos taurus" "Caenorhabditis elegans" "Canis familiaris" "Chicken" "Chimpanzee" "Ciona intestinalis" "Cow" "Danio rerio" "Dog" "Drosophila melanogaster" "Equus caballus" "Escherichia coli" "Frog" "Fruit fly" "Fusarium graminearum" "Gallus gallus" "Gibberella zeae" "Glycine max" "Homo sapiens" "Hordeum vulgare" "Horse" "Human" "Indian Rice" "Macaca mulatta" "Maize" "Mosquito" "Mouse" "Mus musculus" "Mycobacterium tuberculosis" "Ornithorhynchus anatinus" "Oryza indica" "Oryza sativa" "Pan troglodytes" "Pig" "Platypus" "Populus trichocarpa" "Rat" "Rattus norvegicus" "Rhesus Monkey" "Rice" "Saccharomyces cerevisiae" "Sea Squirt" "Solanum lycopersicum" "Soybean" "Sus scrofa" "Tomato" "Tuberculosis" "Vitis vinifera" "Western Balsam Poplar" "Wine Grape" "Worm" "Xenopus tropicalis" "Yeast" "Zea mays" "Zebra fish"] }
+def system-code-completer [] { ["Ag" "Ca" "Ce" "Cg" "Ch" "Ck" "Cks" "Cpc" "Cs" "E" "Eco" "En" "H" "Ik" "Il" "L" "Lm" "Ma" "Mb" "Mc" "Om" "Pd" "Q" "Re" "Rf" "Rh" "Rk" "S" "T" "U" "Uc" "Up" "Wd" "Wg" "Wi" "X"] }
+def source-system-code-completer [] { ["Ag" "Ca" "Ce" "Cg" "Ch" "Ck" "Cks" "Cpc" "Cs" "E" "Eco" "En" "H" "Ik" "Il" "L" "Lm" "Ma" "Mb" "Mc" "Om" "Pd" "Q" "Re" "Rf" "Rh" "Rk" "S" "T" "U" "Uc" "Up" "Wd" "Wg" "Wi" "X"] }
+def target-system-code-completer [] { ["Ag" "Ca" "Ce" "Cg" "Ch" "Ck" "Cks" "Cpc" "Cs" "E" "Eco" "En" "H" "Ik" "Il" "L" "Lm" "Ma" "Mb" "Mc" "Om" "Pd" "Q" "Re" "Rf" "Rh" "Rk" "S" "T" "U" "Uc" "Up" "Wd" "Wg" "Wi" "X"] }
 def data-source-completer [] { ["Ag" "Ca" "Ce" "Cg" "Ch" "Ck" "Cks" "Cpc" "Cs" "E" "Eco" "En" "H" "Ik" "Il" "L" "Lm" "Ma" "Mb" "Mc" "Om" "Pd" "Q" "Re" "Rf" "Rh" "Rk" "S" "T" "U" "Uc" "Up" "Wd" "Wg" "Wi" "X"] }
 
 # List all available API commands with their parameters
@@ -129,7 +133,7 @@ export def commands []: nothing -> table {
 #
 # GET /{organism}/attributeSearch/{query}
 export def "get-organism-attribute-search-query" [
-  organism: string
+  organism: string@organism-completer
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -169,7 +173,7 @@ export def "get-organism-attribute-search-query" [
 #
 # GET /{organism}/attributeSet
 export def "get-organism-attribute-set" [
-  organism: string
+  organism: string@organism-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,8 +208,8 @@ export def "get-organism-attribute-set" [
 #
 # GET /{organism}/attributes/{systemCode}/{identifier}
 export def "get-organism-attributes-system-code-identifier" [
-  organism: string
-  system_code: string
+  organism: string@organism-completer
+  system_code: string@system-code-completer
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -245,7 +249,7 @@ export def "get-organism-attributes-system-code-identifier" [
 #
 # GET /{organism}/isFreeSearchSupported
 export def "get-organism-is-free-search-supported" [
-  organism: string
+  organism: string@organism-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,9 +284,9 @@ export def "get-organism-is-free-search-supported" [
 #
 # GET /{organism}/isMappingSupported/{sourceSystemCode}/{targetSystemCode}
 export def "get-organism-is-mapping-supported-source-system-code-target-system-code" [
-  organism: string
-  source_system_code: string
-  target_system_code: string
+  organism: string@organism-completer
+  source_system_code: string@source-system-code-completer
+  target_system_code: string@target-system-code-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,7 +323,7 @@ export def "get-organism-is-mapping-supported-source-system-code-target-system-c
 #
 # GET /{organism}/properties
 export def "get-organism-properties" [
-  organism: string
+  organism: string@organism-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +358,7 @@ export def "get-organism-properties" [
 #
 # GET /{organism}/search/{query}
 export def "get-organism-search-query" [
-  organism: string
+  organism: string@organism-completer
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -393,7 +397,7 @@ export def "get-organism-search-query" [
 #
 # GET /{organism}/sourceDataSources
 export def "get-organism-source-data-sources" [
-  organism: string
+  organism: string@organism-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,7 +432,7 @@ export def "get-organism-source-data-sources" [
 #
 # GET /{organism}/targetDataSources
 export def "get-organism-target-data-sources" [
-  organism: string
+  organism: string@organism-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,8 +467,8 @@ export def "get-organism-target-data-sources" [
 #
 # GET /{organism}/xrefExists/{systemCode}/{identifier}
 export def "get-organism-xref-exists-system-code-identifier" [
-  organism: string
-  system_code: string
+  organism: string@organism-completer
+  system_code: string@system-code-completer
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -502,8 +506,8 @@ export def "get-organism-xref-exists-system-code-identifier" [
 #
 # GET /{organism}/xrefs/{systemCode}/{identifier}
 export def "get-organism-xrefs-system-code-identifier" [
-  organism: string
-  system_code: string
+  organism: string@organism-completer
+  system_code: string@system-code-completer
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -543,7 +547,7 @@ export def "get-organism-xrefs-system-code-identifier" [
 #
 # POST /{organism}/xrefsBatch
 export def "post-organism-xrefs-batch" [
-  organism: string
+  organism: string@organism-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,8 +588,8 @@ export def "post-organism-xrefs-batch" [
 #
 # POST /{organism}/xrefsBatch/{systemCode}
 export def "post-organism-xrefs-batch-system-code" [
-  organism: string
-  system_code: string
+  organism: string@organism-completer
+  system_code: string@system-code-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

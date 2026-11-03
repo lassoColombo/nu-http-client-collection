@@ -131,11 +131,13 @@ export def "getemailinfo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register
-  --email: string # Email address to retrieve validation information
+  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register (required)
+  --email: string # Email address to retrieve validation information (required)
 ]: nothing -> record<Code: string, Credits: string, Email: string, Geolocation: string, Info: string, IsDisposable: string, IsEducational: string, IsGeneric: string, IsGovernment: string, IsOrganizational: string, IsVulgar: string, Response: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($license == null) { error make --unspanned { msg: "required query parameter 'license' missing: pass --license" } }
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
   let qp = [(serialize-qp "license" $license "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getemailinfo" $qp $auth.query)
   let accept_val = "application/json"

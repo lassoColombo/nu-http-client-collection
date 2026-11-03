@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -101,6 +101,7 @@ def x-amz-target-completer-1 [] { ["IoTSecuredTunneling.DescribeTunnel"] }
 def x-amz-target-completer-2 [] { ["IoTSecuredTunneling.ListTagsForResource"] }
 def x-amz-target-completer-3 [] { ["IoTSecuredTunneling.ListTunnels"] }
 def x-amz-target-completer-4 [] { ["IoTSecuredTunneling.OpenTunnel"] }
+def client-mode-completer [] { ["ALL" "DESTINATION" "SOURCE"] }
 def x-amz-target-completer-5 [] { ["IoTSecuredTunneling.RotateTunnelAccessToken"] }
 def x-amz-target-completer-6 [] { ["IoTSecuredTunneling.TagResource"] }
 def x-amz-target-completer-7 [] { ["IoTSecuredTunneling.UntagResource"] }
@@ -149,13 +150,14 @@ export def "close-tunnel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  tunnel_id: any
-  --delete: any
+  --x-amz-target: string@x-amz-target-completer # required
+  tunnel_id: string # The ID of the tunnel to close.
+  --delete: oneof<nothing, bool> # When set to true, IoT Secure Tunneling deletes the tunnel data immediately.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IoTSecuredTunneling.CloseTunnel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"tunnelId": $tunnel_id, "delete": $delete} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -198,12 +200,13 @@ export def "describe-tunnel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  tunnel_id: any
-]: any -> record<tunnel: record<tunnelId: record, tunnelArn: record, status: record, sourceConnectionState: record<status: record, lastUpdatedAt: record>, destinationConnectionState: record<status: record, lastUpdatedAt: record>, description: record, destinationConfig: record<thingName: record, services: record>, timeoutConfig: record<maxLifetimeTimeoutMinutes: record>, tags: record, createdAt: record, lastUpdatedAt: record>> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  tunnel_id: string # The tunnel to describe.
+]: any -> record<tunnel: record<tunnelId: string, tunnelArn: string, status: string, sourceConnectionState: record<status: string, lastUpdatedAt: string>, destinationConnectionState: record<status: string, lastUpdatedAt: string>, description: string, destinationConfig: record<thingName: string, services: list>, timeoutConfig: record<maxLifetimeTimeoutMinutes: int>, tags: list<record>, createdAt: string, lastUpdatedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IoTSecuredTunneling.DescribeTunnel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"tunnelId": $tunnel_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -246,12 +249,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  resource_arn: any
-]: any -> record<tags: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  resource_arn: string # The resource ARN.
+]: any -> record<tags: table<key: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IoTSecuredTunneling.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -296,14 +300,15 @@ export def "list-tunnels" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  --thing-name: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<tunnelSummaries: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  --thing-name: string # The name of the IoT thing associated with the destination device.
+  --max-results-body: int # The maximum number of results to return at once. (body field)
+  --next-token-body: string # To retrieve the next set of results, the nextToken value from a previous response; otherwise null to receive the first set of results. (body field)
+]: any -> record<tunnelSummaries: table<tunnelId: string, tunnelArn: string, status: string, description: string, createdAt: string, lastUpdatedAt: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IoTSecuredTunneling.ListTunnels")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"thingName": $thing_name, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
@@ -330,6 +335,9 @@ export def "list-tunnels" [
 #
 # POST /
 # operationId: OpenTunnel
+# --tags item shape: {key: string, value: string}
+# --destinationConfig shape: {thingName?: string, services: list<string>}
+# --timeoutConfig shape: {maxLifetimeTimeoutMinutes?: int}
 export def "open-tunnel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,15 +355,16 @@ export def "open-tunnel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  --description: any
-  --tags: any
-  --destination-config: any
-  --timeout-config: any
-]: any -> record<tunnelId: record, tunnelArn: record, sourceAccessToken: record, destinationAccessToken: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  --description: string # A short text description of the tunnel.
+  --tags: list # A collection of tag metadata. — item shape: {key: string, value: string}
+  --destination-config: record # The destination configuration. — shape: {thingName?: string, services: list<string>}
+  --timeout-config: record # Tunnel timeout configuration. — shape: {maxLifetimeTimeoutMinutes?: int}
+]: any -> record<tunnelId: string, tunnelArn: string, sourceAccessToken: string, destinationAccessToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IoTSecuredTunneling.OpenTunnel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"description": $description, "tags": $tags, "destinationConfig": $destination_config, "timeoutConfig": $timeout_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -381,7 +390,7 @@ export def "open-tunnel" [
 #
 # POST /
 # operationId: RotateTunnelAccessToken
-# --destinationConfig shape: {thingName?: any, services: any}
+# --destinationConfig shape: {thingName?: string, services: list<string>}
 export def "rotate-tunnel-access-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -399,14 +408,15 @@ export def "rotate-tunnel-access-token" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  tunnel_id: any
-  client_mode: any
-  --destination-config: record # The destination configuration. — shape: {thingName?: any, services: any}
-]: any -> record<tunnelArn: record, sourceAccessToken: record, destinationAccessToken: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  tunnel_id: string # The tunnel for which you want to rotate the access tokens.
+  client_mode: string@client-mode-completer # The mode of the client that will use the client token, which can be either the source or destination, or both source and destination.
+  --destination-config: record # The destination configuration. — shape: {thingName?: string, services: list<string>}
+]: any -> record<tunnelArn: string, sourceAccessToken: string, destinationAccessToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IoTSecuredTunneling.RotateTunnelAccessToken")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"tunnelId": $tunnel_id, "clientMode": $client_mode, "destinationConfig": $destination_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -432,6 +442,7 @@ export def "rotate-tunnel-access-token" [
 #
 # POST /
 # operationId: TagResource
+# --tags item shape: {key: string, value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -449,13 +460,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  resource_arn: string # The ARN of the resource.
+  tags: list # The tags for the resource. — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IoTSecuredTunneling.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -498,13 +510,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  resource_arn: string # The resource ARN.
+  tag_keys: list<string> # The keys of the tags to remove.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "IoTSecuredTunneling.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -141,13 +141,14 @@ export def "diagnostics-list-hosting-environment-detector-responses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/hostingEnvironments/{name}/detectors") $qp $auth.query)
   let accept_val = "application/json"
@@ -187,14 +188,15 @@ export def "diagnostics-get-hosting-environment-detector-response" [
   --start-time: string # Start Time (format: date-time)
   --end-time: string # End Time (format: date-time)
   --time-grain: string # Time Grain
-  --api-version: string # API Version
-]: nothing -> record<properties: record<dataset: list<record>, metadata: record<category: string, description: string, subCategory: string, supportTopicId: string>>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<properties: record<dataset: list<record>, metadata: record<category: string, description: string, subCategory: string, supportTopicId: string>>, id: string, kind: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($detector_name | is-empty) { error make --unspanned { msg: "path parameter 'detectorName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "timeGrain" $time_grain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), detector_name: (encode-path-segment $detector_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/hostingEnvironments/{name}/detectors/{detector_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -230,13 +232,14 @@ export def "diagnostics-list-site-detector-responses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/detectors") $qp $auth.query)
   let accept_val = "application/json"
@@ -276,14 +279,15 @@ export def "diagnostics-get-site-detector-response" [
   --start-time: string # Start Time (format: date-time)
   --end-time: string # End Time (format: date-time)
   --time-grain: string # Time Grain
-  --api-version: string # API Version
-]: nothing -> record<properties: record<dataset: list<record>, metadata: record<category: string, description: string, subCategory: string, supportTopicId: string>>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<properties: record<dataset: list<record>, metadata: record<category: string, description: string, subCategory: string, supportTopicId: string>>, id: string, kind: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   if ($detector_name | is-empty) { error make --unspanned { msg: "path parameter 'detectorName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "timeGrain" $time_grain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), detector_name: (encode-path-segment $detector_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/detectors/{detector_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -319,13 +323,14 @@ export def "diagnostics-list-site-diagnostic-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/diagnostics") $qp $auth.query)
   let accept_val = "application/json"
@@ -362,14 +367,15 @@ export def "diagnostics-get-site-diagnostic-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<description: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<properties: record<description: string>, id: string, kind: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   if ($diagnostic_category | is-empty) { error make --unspanned { msg: "path parameter 'diagnosticCategory' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), diagnostic_category: (encode-path-segment $diagnostic_category)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/diagnostics/{diagnostic_category}") $qp $auth.query)
   let accept_val = "application/json"
@@ -406,14 +412,15 @@ export def "diagnostics-list-site-analyses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   if ($diagnostic_category | is-empty) { error make --unspanned { msg: "path parameter 'diagnosticCategory' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), diagnostic_category: (encode-path-segment $diagnostic_category)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/diagnostics/{diagnostic_category}/analyses") $qp $auth.query)
   let accept_val = "application/json"
@@ -451,8 +458,8 @@ export def "diagnostics-get-site-analysis" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<abnormalTimePeriods: list<record>, endTime: string, nonCorrelatedDetectors: list<record>, payload: list<record>, startTime: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<properties: record<abnormalTimePeriods: list<record>, endTime: string, nonCorrelatedDetectors: list<record>, payload: list<record>, startTime: string>, id: string, kind: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -460,6 +467,7 @@ export def "diagnostics-get-site-analysis" [
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   if ($diagnostic_category | is-empty) { error make --unspanned { msg: "path parameter 'diagnosticCategory' must be non-empty" } }
   if ($analysis_name | is-empty) { error make --unspanned { msg: "path parameter 'analysisName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), diagnostic_category: (encode-path-segment $diagnostic_category), analysis_name: (encode-path-segment $analysis_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/diagnostics/{diagnostic_category}/analyses/{analysis_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -500,8 +508,8 @@ export def "diagnostics-execute-site-analysis" [
   --start-time: string # Start Time (format: date-time)
   --end-time: string # End Time (format: date-time)
   --time-grain: string # Time Grain
-  --api-version: string # API Version
-]: nothing -> record<properties: record<abnormalTimePeriods: list<record>, endTime: string, nonCorrelatedDetectors: list<record>, payload: list<record>, startTime: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<properties: record<abnormalTimePeriods: list<record>, endTime: string, nonCorrelatedDetectors: list<record>, payload: list<record>, startTime: string>, id: string, kind: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -509,6 +517,7 @@ export def "diagnostics-execute-site-analysis" [
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   if ($diagnostic_category | is-empty) { error make --unspanned { msg: "path parameter 'diagnosticCategory' must be non-empty" } }
   if ($analysis_name | is-empty) { error make --unspanned { msg: "path parameter 'analysisName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "timeGrain" $time_grain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), diagnostic_category: (encode-path-segment $diagnostic_category), analysis_name: (encode-path-segment $analysis_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/diagnostics/{diagnostic_category}/analyses/{analysis_name}/execute") $qp $auth.query)
   let accept_val = "application/json"
@@ -545,14 +554,15 @@ export def "diagnostics-list-site-detectors" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   if ($diagnostic_category | is-empty) { error make --unspanned { msg: "path parameter 'diagnosticCategory' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), diagnostic_category: (encode-path-segment $diagnostic_category)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/diagnostics/{diagnostic_category}/detectors") $qp $auth.query)
   let accept_val = "application/json"
@@ -590,8 +600,8 @@ export def "diagnostics-get-site-detector" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -599,6 +609,7 @@ export def "diagnostics-get-site-detector" [
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   if ($diagnostic_category | is-empty) { error make --unspanned { msg: "path parameter 'diagnosticCategory' must be non-empty" } }
   if ($detector_name | is-empty) { error make --unspanned { msg: "path parameter 'detectorName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), diagnostic_category: (encode-path-segment $diagnostic_category), detector_name: (encode-path-segment $detector_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/diagnostics/{diagnostic_category}/detectors/{detector_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -639,8 +650,8 @@ export def "diagnostics-execute-site-detector" [
   --start-time: string # Start Time (format: date-time)
   --end-time: string # End Time (format: date-time)
   --time-grain: string # Time Grain
-  --api-version: string # API Version
-]: nothing -> record<properties: record<abnormalTimePeriods: list<record>, data: list<list>, detectorDefinition: record<properties: record>, endTime: string, issueDetected: bool, metrics: list<record>, responseMetaData: record<dataSource: record>, startTime: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<properties: record<abnormalTimePeriods: list<record>, data: list<list>, detectorDefinition: record<properties: record, id: string, kind: string, name: string, type: string>, endTime: string, issueDetected: bool, metrics: list<record>, responseMetaData: record<dataSource: record>, startTime: string>, id: string, kind: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -648,6 +659,7 @@ export def "diagnostics-execute-site-detector" [
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   if ($diagnostic_category | is-empty) { error make --unspanned { msg: "path parameter 'diagnosticCategory' must be non-empty" } }
   if ($detector_name | is-empty) { error make --unspanned { msg: "path parameter 'detectorName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "timeGrain" $time_grain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), diagnostic_category: (encode-path-segment $diagnostic_category), detector_name: (encode-path-segment $detector_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/diagnostics/{diagnostic_category}/detectors/{detector_name}/execute") $qp $auth.query)
   let accept_val = "application/json"
@@ -684,14 +696,15 @@ export def "diagnostics-list-site-detector-responses-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/detectors") $qp $auth.query)
   let accept_val = "application/json"
@@ -732,8 +745,8 @@ export def "diagnostics-get-site-detector-response-slot" [
   --start-time: string # Start Time (format: date-time)
   --end-time: string # End Time (format: date-time)
   --time-grain: string # Time Grain
-  --api-version: string # API Version
-]: nothing -> record<properties: record<dataset: list<record>, metadata: record<category: string, description: string, subCategory: string, supportTopicId: string>>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<properties: record<dataset: list<record>, metadata: record<category: string, description: string, subCategory: string, supportTopicId: string>>, id: string, kind: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -741,6 +754,7 @@ export def "diagnostics-get-site-detector-response-slot" [
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($detector_name | is-empty) { error make --unspanned { msg: "path parameter 'detectorName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "timeGrain" $time_grain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), slot: (encode-path-segment $slot), detector_name: (encode-path-segment $detector_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/detectors/{detector_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -777,14 +791,15 @@ export def "diagnostics-list-site-diagnostic-categories-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/diagnostics") $qp $auth.query)
   let accept_val = "application/json"
@@ -822,8 +837,8 @@ export def "diagnostics-get-site-diagnostic-category-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<description: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<properties: record<description: string>, id: string, kind: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -831,6 +846,7 @@ export def "diagnostics-get-site-diagnostic-category-slot" [
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($diagnostic_category | is-empty) { error make --unspanned { msg: "path parameter 'diagnosticCategory' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), slot: (encode-path-segment $slot), diagnostic_category: (encode-path-segment $diagnostic_category)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/diagnostics/{diagnostic_category}") $qp $auth.query)
   let accept_val = "application/json"
@@ -868,8 +884,8 @@ export def "diagnostics-list-site-analyses-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -877,6 +893,7 @@ export def "diagnostics-list-site-analyses-slot" [
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($diagnostic_category | is-empty) { error make --unspanned { msg: "path parameter 'diagnosticCategory' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), slot: (encode-path-segment $slot), diagnostic_category: (encode-path-segment $diagnostic_category)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/diagnostics/{diagnostic_category}/analyses") $qp $auth.query)
   let accept_val = "application/json"
@@ -915,8 +932,8 @@ export def "diagnostics-get-site-analysis-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<abnormalTimePeriods: list<record>, endTime: string, nonCorrelatedDetectors: list<record>, payload: list<record>, startTime: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<properties: record<abnormalTimePeriods: list<record>, endTime: string, nonCorrelatedDetectors: list<record>, payload: list<record>, startTime: string>, id: string, kind: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -925,6 +942,7 @@ export def "diagnostics-get-site-analysis-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($diagnostic_category | is-empty) { error make --unspanned { msg: "path parameter 'diagnosticCategory' must be non-empty" } }
   if ($analysis_name | is-empty) { error make --unspanned { msg: "path parameter 'analysisName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), slot: (encode-path-segment $slot), diagnostic_category: (encode-path-segment $diagnostic_category), analysis_name: (encode-path-segment $analysis_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/diagnostics/{diagnostic_category}/analyses/{analysis_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -966,8 +984,8 @@ export def "diagnostics-execute-site-analysis-slot" [
   --start-time: string # Start Time (format: date-time)
   --end-time: string # End Time (format: date-time)
   --time-grain: string # Time Grain
-  --api-version: string # API Version
-]: nothing -> record<properties: record<abnormalTimePeriods: list<record>, endTime: string, nonCorrelatedDetectors: list<record>, payload: list<record>, startTime: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<properties: record<abnormalTimePeriods: list<record>, endTime: string, nonCorrelatedDetectors: list<record>, payload: list<record>, startTime: string>, id: string, kind: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -976,6 +994,7 @@ export def "diagnostics-execute-site-analysis-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($diagnostic_category | is-empty) { error make --unspanned { msg: "path parameter 'diagnosticCategory' must be non-empty" } }
   if ($analysis_name | is-empty) { error make --unspanned { msg: "path parameter 'analysisName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "timeGrain" $time_grain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), slot: (encode-path-segment $slot), diagnostic_category: (encode-path-segment $diagnostic_category), analysis_name: (encode-path-segment $analysis_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/diagnostics/{diagnostic_category}/analyses/{analysis_name}/execute") $qp $auth.query)
   let accept_val = "application/json"
@@ -1013,8 +1032,8 @@ export def "diagnostics-list-site-detectors-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1022,6 +1041,7 @@ export def "diagnostics-list-site-detectors-slot" [
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($diagnostic_category | is-empty) { error make --unspanned { msg: "path parameter 'diagnosticCategory' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), slot: (encode-path-segment $slot), diagnostic_category: (encode-path-segment $diagnostic_category)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/diagnostics/{diagnostic_category}/detectors") $qp $auth.query)
   let accept_val = "application/json"
@@ -1060,8 +1080,8 @@ export def "diagnostics-get-site-detector-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1070,6 +1090,7 @@ export def "diagnostics-get-site-detector-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($diagnostic_category | is-empty) { error make --unspanned { msg: "path parameter 'diagnosticCategory' must be non-empty" } }
   if ($detector_name | is-empty) { error make --unspanned { msg: "path parameter 'detectorName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), slot: (encode-path-segment $slot), diagnostic_category: (encode-path-segment $diagnostic_category), detector_name: (encode-path-segment $detector_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/diagnostics/{diagnostic_category}/detectors/{detector_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1111,8 +1132,8 @@ export def "diagnostics-execute-site-detector-slot" [
   --start-time: string # Start Time (format: date-time)
   --end-time: string # End Time (format: date-time)
   --time-grain: string # Time Grain
-  --api-version: string # API Version
-]: nothing -> record<properties: record<abnormalTimePeriods: list<record>, data: list<list>, detectorDefinition: record<properties: record>, endTime: string, issueDetected: bool, metrics: list<record>, responseMetaData: record<dataSource: record>, startTime: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<properties: record<abnormalTimePeriods: list<record>, data: list<list>, detectorDefinition: record<properties: record, id: string, kind: string, name: string, type: string>, endTime: string, issueDetected: bool, metrics: list<record>, responseMetaData: record<dataSource: record>, startTime: string>, id: string, kind: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1121,6 +1142,7 @@ export def "diagnostics-execute-site-detector-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($diagnostic_category | is-empty) { error make --unspanned { msg: "path parameter 'diagnosticCategory' must be non-empty" } }
   if ($detector_name | is-empty) { error make --unspanned { msg: "path parameter 'detectorName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "timeGrain" $time_grain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), slot: (encode-path-segment $slot), diagnostic_category: (encode-path-segment $diagnostic_category), detector_name: (encode-path-segment $detector_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/diagnostics/{diagnostic_category}/detectors/{detector_name}/execute") $qp $auth.query)
   let accept_val = "application/json"

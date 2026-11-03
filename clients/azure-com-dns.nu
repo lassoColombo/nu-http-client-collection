@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -118,6 +118,8 @@ def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def record-type-completer [] { ["A" "AAAA" "CAA" "CNAME" "MX" "NS" "PTR" "SOA" "SRV" "TXT"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -158,11 +160,12 @@ export def "zones-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The maximum number of DNS zones to return. If not specified, returns up to 100 zones. (format: int32)
-  --api-version: string # Specifies the API version.
+  --api-version: string # Specifies the API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/dnszones") $qp $auth.query)
   let accept_val = "application/json"
@@ -197,13 +200,14 @@ export def "dns-resource-reference-get-by-target-resources" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the API version.
+  --api-version: string # Specifies the API version. (required)
   --properties: any # Represents the properties of the Dns Resource Reference Request. — shape: {targetResources?: list}
 ]: any -> record<properties: record<dnsResourceReferences: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/getDnsResourceReference") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -241,12 +245,13 @@ export def "zones-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The maximum number of record sets to return. If not specified, returns up to 100 record sets. (format: int32)
-  --api-version: string # Specifies the API version.
+  --api-version: string # Specifies the API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/dnsZones") $qp $auth.query)
   let accept_val = "application/json"
@@ -282,14 +287,15 @@ export def "zones-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the API version.
+  --api-version: string # Specifies the API version. (required)
   --if-match: string # The etag of the DNS zone. Omit this value to always delete the current zone. Specify the last-seen etag value to prevent accidentally deleting any concurrent changes.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($zone_name | is-empty) { error make --unspanned { msg: "path parameter 'zoneName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), zone_name: (encode-path-segment $zone_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/dnsZones/{zone_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -327,13 +333,14 @@ export def "zones-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the API version.
+  --api-version: string # Specifies the API version. (required)
 ]: nothing -> record<etag: string, properties: record<maxNumberOfRecordSets: int, nameServers: list<string>, numberOfRecordSets: int, registrationVirtualNetworks: list<record>, resolutionVirtualNetworks: list<record>, zoneType: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($zone_name | is-empty) { error make --unspanned { msg: "path parameter 'zoneName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), zone_name: (encode-path-segment $zone_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/dnsZones/{zone_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -369,7 +376,7 @@ export def "zones-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the API version.
+  --api-version: string # Specifies the API version. (required)
   --if-match: string # The etag of the DNS zone. Omit this value to always overwrite the current zone. Specify the last-seen etag value to prevent accidentally overwriting any concurrent changes.
   --tags: record # Resource tags.
 ]: any -> record<etag: string, properties: record<maxNumberOfRecordSets: int, nameServers: list<string>, numberOfRecordSets: int, registrationVirtualNetworks: list<record>, resolutionVirtualNetworks: list<record>, zoneType: string>, id: string, location: string, name: string, tags: record, type: string> {
@@ -379,6 +386,7 @@ export def "zones-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($zone_name | is-empty) { error make --unspanned { msg: "path parameter 'zoneName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), zone_name: (encode-path-segment $zone_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/dnsZones/{zone_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -419,7 +427,7 @@ export def "zones-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the API version.
+  --api-version: string # Specifies the API version. (required)
   --if-match: string # The etag of the DNS zone. Omit this value to always overwrite the current zone. Specify the last-seen etag value to prevent accidentally overwriting any concurrent changes.
   --if-none-match: string # Set to '*' to allow a new DNS zone to be created, but to prevent updating an existing zone. Other values will be ignored.
   --etag: string # The etag of the zone.
@@ -433,6 +441,7 @@ export def "zones-create-or-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($zone_name | is-empty) { error make --unspanned { msg: "path parameter 'zoneName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), zone_name: (encode-path-segment $zone_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/dnsZones/{zone_name}") $qp $auth.query)
   let req_body = {"etag": $etag, "properties": $properties, "location": $location, "tags": $tags} | compact
@@ -474,13 +483,14 @@ export def "record-sets-list-all-by-dns-zone" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The maximum number of record sets to return. If not specified, returns up to 100 record sets. (format: int32)
   --recordsetnamesuffix: string # The suffix label of the record set name that has to be used to filter the record set enumerations. If this parameter is specified, Enumeration will return only records that end with .
-  --api-version: string # Specifies the API version.
+  --api-version: string # Specifies the API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($zone_name | is-empty) { error make --unspanned { msg: "path parameter 'zoneName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$recordsetnamesuffix" $recordsetnamesuffix "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), zone_name: (encode-path-segment $zone_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/dnsZones/{zone_name}/all") $qp $auth.query)
   let accept_val = "application/json"
@@ -518,13 +528,14 @@ export def "record-sets-list-by-dns-zone" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The maximum number of record sets to return. If not specified, returns up to 100 record sets. (format: int32)
   --recordsetnamesuffix: string # The suffix label of the record set name that has to be used to filter the record set enumerations. If this parameter is specified, Enumeration will return only records that end with .
-  --api-version: string # Specifies the API version.
+  --api-version: string # Specifies the API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($zone_name | is-empty) { error make --unspanned { msg: "path parameter 'zoneName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$recordsetnamesuffix" $recordsetnamesuffix "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), zone_name: (encode-path-segment $zone_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/dnsZones/{zone_name}/recordsets") $qp $auth.query)
   let accept_val = "application/json"
@@ -551,7 +562,7 @@ export def "record-sets-list-by-type" [
   subscription_id: string
   resource_group_name: string
   zone_name: string
-  record_type: string
+  record_type: string@record-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -563,7 +574,7 @@ export def "record-sets-list-by-type" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The maximum number of record sets to return. If not specified, returns up to 100 record sets. (format: int32)
   --recordsetnamesuffix: string # The suffix label of the record set name that has to be used to filter the record set enumerations. If this parameter is specified, Enumeration will return only records that end with .
-  --api-version: string # Specifies the API version.
+  --api-version: string # Specifies the API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -571,6 +582,7 @@ export def "record-sets-list-by-type" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($zone_name | is-empty) { error make --unspanned { msg: "path parameter 'zoneName' must be non-empty" } }
   if ($record_type | is-empty) { error make --unspanned { msg: "path parameter 'recordType' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$recordsetnamesuffix" $recordsetnamesuffix "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), zone_name: (encode-path-segment $zone_name), record_type: (encode-path-segment $record_type)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/dnsZones/{zone_name}/{record_type}") $qp $auth.query)
   let accept_val = "application/json"
@@ -597,7 +609,7 @@ export def "record-sets-delete" [
   subscription_id: string
   resource_group_name: string
   zone_name: string
-  record_type: string
+  record_type: string@record-type-completer
   relative_record_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -608,9 +620,9 @@ export def "record-sets-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the API version.
+  --api-version: string # Specifies the API version. (required)
   --if-match: string # The etag of the record set. Omit this value to always delete the current record set. Specify the last-seen etag value to prevent accidentally deleting any concurrent changes.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -618,6 +630,7 @@ export def "record-sets-delete" [
   if ($zone_name | is-empty) { error make --unspanned { msg: "path parameter 'zoneName' must be non-empty" } }
   if ($record_type | is-empty) { error make --unspanned { msg: "path parameter 'recordType' must be non-empty" } }
   if ($relative_record_set_name | is-empty) { error make --unspanned { msg: "path parameter 'relativeRecordSetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), zone_name: (encode-path-segment $zone_name), record_type: (encode-path-segment $record_type), relative_record_set_name: (encode-path-segment $relative_record_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/dnsZones/{zone_name}/{record_type}/{relative_record_set_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -646,7 +659,7 @@ export def "record-sets-get" [
   subscription_id: string
   resource_group_name: string
   zone_name: string
-  record_type: string
+  record_type: string@record-type-completer
   relative_record_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -657,7 +670,7 @@ export def "record-sets-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the API version.
+  --api-version: string # Specifies the API version. (required)
 ]: nothing -> record<etag: string, id: string, name: string, properties: record<AAAARecords: list<record>, ARecords: list<record>, CNAMERecord: record<cname: string>, MXRecords: list<record>, NSRecords: list<record>, PTRRecords: list<record>, SOARecord: record<email: string, expireTime: int, host: string, minimumTTL: int, refreshTime: int, retryTime: int, serialNumber: int>, SRVRecords: list<record>, TTL: int, TXTRecords: list<record>, caaRecords: list<record>, fqdn: string, metadata: record, provisioningState: string, targetResource: record<id: string>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -666,6 +679,7 @@ export def "record-sets-get" [
   if ($zone_name | is-empty) { error make --unspanned { msg: "path parameter 'zoneName' must be non-empty" } }
   if ($record_type | is-empty) { error make --unspanned { msg: "path parameter 'recordType' must be non-empty" } }
   if ($relative_record_set_name | is-empty) { error make --unspanned { msg: "path parameter 'relativeRecordSetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), zone_name: (encode-path-segment $zone_name), record_type: (encode-path-segment $record_type), relative_record_set_name: (encode-path-segment $relative_record_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/dnsZones/{zone_name}/{record_type}/{relative_record_set_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -693,7 +707,7 @@ export def "record-sets-update" [
   subscription_id: string
   resource_group_name: string
   zone_name: string
-  record_type: string
+  record_type: string@record-type-completer
   relative_record_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -704,7 +718,7 @@ export def "record-sets-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the API version.
+  --api-version: string # Specifies the API version. (required)
   --if-match: string # The etag of the record set. Omit this value to always overwrite the current record set. Specify the last-seen etag value to prevent accidentally overwriting concurrent changes.
   --etag: string # The etag of the record set.
   --properties: any # Represents the properties of the records in the record set. — shape: {AAAARecords?: list, ARecords?: list, CNAMERecord?: any, MXRecords?: list, NSRecords?: list, PTRRecords?: list, SOARecord?: any, SRVRecords?: list, TTL?: int, TXTRecords?: list, caaRecords?: list, metadata?: record, targetResource?: any}
@@ -717,6 +731,7 @@ export def "record-sets-update" [
   if ($zone_name | is-empty) { error make --unspanned { msg: "path parameter 'zoneName' must be non-empty" } }
   if ($record_type | is-empty) { error make --unspanned { msg: "path parameter 'recordType' must be non-empty" } }
   if ($relative_record_set_name | is-empty) { error make --unspanned { msg: "path parameter 'relativeRecordSetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), zone_name: (encode-path-segment $zone_name), record_type: (encode-path-segment $record_type), relative_record_set_name: (encode-path-segment $relative_record_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/dnsZones/{zone_name}/{record_type}/{relative_record_set_name}") $qp $auth.query)
   let req_body = {"etag": $etag, "properties": $properties} | compact
@@ -748,7 +763,7 @@ export def "record-sets-create-or-update" [
   subscription_id: string
   resource_group_name: string
   zone_name: string
-  record_type: string
+  record_type: string@record-type-completer
   relative_record_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -759,7 +774,7 @@ export def "record-sets-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the API version.
+  --api-version: string # Specifies the API version. (required)
   --if-match: string # The etag of the record set. Omit this value to always overwrite the current record set. Specify the last-seen etag value to prevent accidentally overwriting any concurrent changes.
   --if-none-match: string # Set to '*' to allow a new record set to be created, but to prevent updating an existing record set. Other values will be ignored.
   --etag: string # The etag of the record set.
@@ -773,6 +788,7 @@ export def "record-sets-create-or-update" [
   if ($zone_name | is-empty) { error make --unspanned { msg: "path parameter 'zoneName' must be non-empty" } }
   if ($record_type | is-empty) { error make --unspanned { msg: "path parameter 'recordType' must be non-empty" } }
   if ($relative_record_set_name | is-empty) { error make --unspanned { msg: "path parameter 'relativeRecordSetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), zone_name: (encode-path-segment $zone_name), record_type: (encode-path-segment $record_type), relative_record_set_name: (encode-path-segment $relative_record_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/dnsZones/{zone_name}/{record_type}/{relative_record_set_name}") $qp $auth.query)
   let req_body = {"etag": $etag, "properties": $properties} | compact

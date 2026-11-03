@@ -164,13 +164,17 @@ export def "get-campagne" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --keyid: string # Clé API
-  --rapport-campagne: string@rapport-campagne-completer # Doit valoir "1"
-  --date-deb: string # date de debut au format YYYY-MM-DD hh:mm
-  --date-fin: string # date de fin au format YYYY-MM-DD hh:mm
+  --keyid: string # Clé API (required)
+  --rapport-campagne: string@rapport-campagne-completer # Doit valoir "1" (required)
+  --date-deb: string # date de debut au format YYYY-MM-DD hh:mm (required)
+  --date-fin: string # date de fin au format YYYY-MM-DD hh:mm (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($keyid == null) { error make --unspanned { msg: "required query parameter 'keyid' missing: pass --keyid" } }
+  let rapport_campagne = ($rapport_campagne | default "1")
+  if ($date_deb == null) { error make --unspanned { msg: "required query parameter 'date_deb' missing: pass --date-deb" } }
+  if ($date_fin == null) { error make --unspanned { msg: "required query parameter 'date_fin' missing: pass --date-fin" } }
   let qp = [(serialize-qp "keyid" $keyid "scalar") (serialize-qp "rapportCampagne" $rapport_campagne "scalar") (serialize-qp "date_deb" $date_deb "scalar") (serialize-qp "date_fin" $date_fin "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/campagne" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -253,11 +257,13 @@ export def "get-credit" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --keyid: string # Clé API (format: string)
-  --credit: string@credit-completer # Type de reponse demandée, 1 pour euro, 2 pour euro + estimation quantité
+  --keyid: string # Clé API (required, format: string)
+  --credit: string@credit-completer # Type de reponse demandée, 1 pour euro, 2 pour euro + estimation quantité (required)
 ]: nothing -> record<etat: record<credit: float, quantite: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($keyid == null) { error make --unspanned { msg: "required query parameter 'keyid' missing: pass --keyid" } }
+  if ($credit == null) { error make --unspanned { msg: "required query parameter 'credit' missing: pass --credit" } }
   let qp = [(serialize-qp "keyid" $keyid "scalar") (serialize-qp "credit" $credit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/credit" $qp $auth.query)
   let accept_val = "application/json"
@@ -290,12 +296,15 @@ export def "del-liste-noire" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --keyid: string # Clé API (format: string)
-  --del-liste-noire: string@del-liste-noire-completer # Doit valoir "1"
-  --num: string # numéro de mobile à supprimer (format: string)
+  --keyid: string # Clé API (required, format: string)
+  --del-liste-noire: string@del-liste-noire-completer # Doit valoir "1" (required)
+  --num: string # numéro de mobile à supprimer (required, format: string)
 ]: nothing -> record<etat: record<etat: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($keyid == null) { error make --unspanned { msg: "required query parameter 'keyid' missing: pass --keyid" } }
+  let del_liste_noire = ($del_liste_noire | default "1")
+  if ($num == null) { error make --unspanned { msg: "required query parameter 'num' missing: pass --num" } }
   let qp = [(serialize-qp "keyid" $keyid "scalar") (serialize-qp "delListeNoire" $del_liste_noire "scalar") (serialize-qp "num" $num "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dellistenoire" $qp $auth.query)
   let accept_val = "application/json"
@@ -328,11 +337,13 @@ export def "get-liste-noire" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --keyid: string # Clé API (format: string)
-  --get-liste-noire: string@get-liste-noire-completer # Doit valoir "1"
+  --keyid: string # Clé API (required, format: string)
+  --get-liste-noire: string@get-liste-noire-completer # Doit valoir "1" (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($keyid == null) { error make --unspanned { msg: "required query parameter 'keyid' missing: pass --keyid" } }
+  let get_liste_noire = ($get_liste_noire | default "1")
   let qp = [(serialize-qp "keyid" $keyid "scalar") (serialize-qp "getListeNoire" $get_liste_noire "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getlistenoire" $qp $auth.query)
   let accept_val = "application/json"
@@ -513,12 +524,15 @@ export def "set-liste-noire" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --keyid: string # Clé API (format: string)
-  --setliste-noire: string@setliste-noire-completer # Doit valoir "1"
-  --num: string # numéro de mobile à insérer en liste noire (format: string)
+  --keyid: string # Clé API (required, format: string)
+  --setliste-noire: string@setliste-noire-completer # Doit valoir "1" (required)
+  --num: string # numéro de mobile à insérer en liste noire (required, format: string)
 ]: nothing -> record<etat: record<etat: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($keyid == null) { error make --unspanned { msg: "required query parameter 'keyid' missing: pass --keyid" } }
+  let setliste_noire = ($setliste_noire | default "1")
+  if ($num == null) { error make --unspanned { msg: "required query parameter 'num' missing: pass --num" } }
   let qp = [(serialize-qp "keyid" $keyid "scalar") (serialize-qp "setlisteNoire" $setliste_noire "scalar") (serialize-qp "num" $num "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setlistenoire" $qp $auth.query)
   let accept_val = "application/json"

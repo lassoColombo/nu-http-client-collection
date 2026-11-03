@@ -186,7 +186,7 @@ export def "create-ticket" [
   --info-url: string # Reporter URL if housing additional information that may assist the abuse investigator (format: url)
   --intentional: oneof<nothing, bool> # Do you believe this is intentional abuse by the domain holder? (default: false)
   --proxy: string # The Proxy information required to view the abuse being reported. ie: Specific IP used, or country of IP viewing from
-  --body-source: string # The URL or IP where live abuse content is located at. ie: https://www.example.com/bad_stuff/bad.php
+  --source: string # The URL or IP where live abuse content is located at. ie: https://www.example.com/bad_stuff/bad.php
   --target: string # The brand/company the abuse is targeting. ie: brand name/bank name
   --type: string@type-completer # The type of abuse being reported.
 ]: any -> record<u_number: string> {
@@ -194,7 +194,7 @@ export def "create-ticket" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/abuse/tickets" $auth.query)
-  let req_body = {"info": $info, "infoUrl": $info_url, "intentional": $intentional, "proxy": $proxy, "source": $body_source, "target": $target, "type": $type} | compact
+  let req_body = {"info": $info, "infoUrl": $info_url, "intentional": $intentional, "proxy": $proxy, "source": $source, "target": $target, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

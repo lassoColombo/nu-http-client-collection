@@ -101,7 +101,10 @@ def base-url-completer [] { ["https://api.tomtom.com"] }
 def auth-scheme-completer [] { ["query-key"] }
 
 # Completers for enum parameters
+def version-number-completer [] { ["2"] }
+def ext-completer [] { ["json"] }
 def geometries-zoom-completer [] { ["0" "1" "10" "11" "12" "13" "14" "15" "16" "17" "18" "19" "2" "20" "21" "22" "3" "4" "5" "6" "7" "8" "9"] }
+def ext-completer-1 [] { ["js" "json" "jsonp" "xml"] }
 def view-completer [] { ["IL" "IN" "MA" "PK" "Unified"] }
 
 # List all available API commands with their parameters
@@ -131,8 +134,8 @@ export def commands []: nothing -> table {
 #
 # GET /search/{versionNumber}/additionalData.{ext}
 export def "get-search-version-number-additional-data-ext" [
-  version_number: int
-  ext: string
+  version_number: int@version-number-completer
+  ext: string@ext-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,13 +145,14 @@ export def "get-search-version-number-additional-data-ext" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --geometries: string # Comma separated list of geometry UUIDs, previously retrieved from an Search API request. (e.g. 00004631-3400-3c00-0000-0000673c4d2e,00004631-3400-3c00-0000-0000673c42fe)
+  --geometries: string # Comma separated list of geometry UUIDs, previously retrieved from an Search API request. (required, e.g. 00004631-3400-3c00-0000-0000673c4d2e,00004631-3400-3c00-0000-0000673c42fe)
   --geometries-zoom: int@geometries-zoom-completer # Defines the precision of the geometries.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'versionNumber' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
+  if ($geometries == null) { error make --unspanned { msg: "required query parameter 'geometries' missing: pass --geometries" } }
   let qp = [(serialize-qp "geometries" $geometries "scalar") (serialize-qp "geometriesZoom" $geometries_zoom "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/additionalData.{ext}") $qp $auth.query)
   let accept_val = "application/json"
@@ -173,9 +177,9 @@ export def "get-search-version-number-additional-data-ext" [
 # DEPRECATED
 @deprecated
 export def "get-search-version-number-c-s-category-ext" [
-  version_number: int
+  version_number: int@version-number-completer
   category: string
-  ext: string
+  ext: string@ext-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,9 +229,9 @@ export def "get-search-version-number-c-s-category-ext" [
 #
 # GET /search/{versionNumber}/categorySearch/{query}.{ext}
 export def "get-search-version-number-category-search-query-ext" [
-  version_number: int
+  version_number: int@version-number-completer
   query: string
-  ext: string
+  ext: string@ext-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,9 +282,9 @@ export def "get-search-version-number-category-search-query-ext" [
 # GET /search/{versionNumber}/geocode/{query}.{ext}
 @deprecated --flag store-result
 export def "get-search-version-number-geocode-query-ext" [
-  version_number: int
+  version_number: int@version-number-completer
   query: string
-  ext: string
+  ext: string@ext-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,8 +335,8 @@ export def "get-search-version-number-geocode-query-ext" [
 #
 # GET /search/{versionNumber}/geometryFilter.{ext}
 export def "get-search-version-number-geometry-filter-ext" [
-  version_number: int
-  ext: string
+  version_number: int@version-number-completer
+  ext: string@ext-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,13 +346,15 @@ export def "get-search-version-number-geometry-filter-ext" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --geometry-list: string # List of geometries to filter by. Available types are CIRCLE (with the radius expressed in meters) and POLYGON. (e.g. [{"type":"CIRCLE", "position":"40.80558, -73.96548", "radius":100}, {"type":"POLYGON", "vertices":["37.7524152343544, -122.43576049804686", "37.70660472542312, -122.43301391601562", "37.712059855877314, -122.36434936523438", "37.75350561243041, -122.37396240234374"]}])
-  --poi-list: string # List of POIs to filter. The only required attribute of a POI is position, everything else is optional and will be echoed back when passed in. (e.g. [{"poi":{"name":"S Restaurant Toms"},"address":{"freeformAddress":"2880 Broadway, New York, NY 10025"},"position":{"lat":40.80558,"lon":-73.96548}},{"poi":{"name":"Yasha Raman Corporation"},"address":{"freeformAddress":"940 Amsterdam Ave, New York, NY 10025"},"position":{"lat":40.80076,"lon":-73.96556}}])
+  --geometry-list: string # List of geometries to filter by. Available types are CIRCLE (with the radius expressed in meters) and POLYGON. (required, e.g. [{"type":"CIRCLE", "position":"40.80558, -73.96548", "radius":100}, {"type":"POLYGON", "vertices":["37.7524152343544, -122.43576049804686", "37.70660472542312, -122.43301391601562", "37.712059855877314, -122.36434936523438", "37.75350561243041, -122.37396240234374"]}])
+  --poi-list: string # List of POIs to filter. The only required attribute of a POI is position, everything else is optional and will be echoed back when passed in. (required, e.g. [{"poi":{"name":"S Restaurant Toms"},"address":{"freeformAddress":"2880 Broadway, New York, NY 10025"},"position":{"lat":40.80558,"lon":-73.96548}},{"poi":{"name":"Yasha Raman Corporation"},"address":{"freeformAddress":"940 Amsterdam Ave, New York, NY 10025"},"position":{"lat":40.80076,"lon":-73.96556}}])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'versionNumber' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
+  if ($geometry_list == null) { error make --unspanned { msg: "required query parameter 'geometryList' missing: pass --geometry-list" } }
+  if ($poi_list == null) { error make --unspanned { msg: "required query parameter 'poiList' missing: pass --poi-list" } }
   let qp = [(serialize-qp "geometryList" $geometry_list "scalar") (serialize-qp "poiList" $poi_list "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geometryFilter.{ext}") $qp $auth.query)
   let accept_val = "application/json"
@@ -373,8 +379,8 @@ export def "get-search-version-number-geometry-filter-ext" [
 # --geometryList item shape: {position?: string, radius?: int, type?: string, vertices?: list<string>}
 # --poiList item shape: {address?: record, poi?: record, position?: record}
 export def "post-search-version-number-geometry-filter-ext" [
-  version_number: int
-  ext: string
+  version_number: int@version-number-completer
+  ext: string@ext-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,9 +421,9 @@ export def "post-search-version-number-geometry-filter-ext" [
 #
 # GET /search/{versionNumber}/geometrySearch/{query}.{ext}
 export def "get-search-version-number-geometry-search-query-ext" [
-  version_number: int
+  version_number: int@version-number-completer
   query: string
-  ext: string
+  ext: string@ext-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,9 +467,9 @@ export def "get-search-version-number-geometry-search-query-ext" [
 # POST /search/{versionNumber}/geometrySearch/{query}.{ext}
 # --geometryList item shape: {position?: string, radius?: int, type?: string, vertices?: list<string>}
 export def "post-search-version-number-geometry-search-query-ext" [
-  version_number: int
+  version_number: int@version-number-completer
   query: string
-  ext: string
+  ext: string@ext-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -511,8 +517,8 @@ export def "post-search-version-number-geometry-search-query-ext" [
 @deprecated --flag top-left
 @deprecated --flag btm-right
 export def "get-search-version-number-nearby-search-ext" [
-  version_number: int
-  ext: string
+  version_number: int@version-number-completer
+  ext: string@ext-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,8 +528,8 @@ export def "get-search-version-number-nearby-search-ext" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lat: float # Latitude where results should be biased. NOTE: supplying a lat/lon without a radius will return search results biased to that point. (format: float, e.g. 37.337)
-  --lon: float # Longitude where results should be biased NOTE: supplying a lat/lon without a radius will return search results biased to that point. (format: float, e.g. -121.89)
+  --lat: float # Latitude where results should be biased. NOTE: supplying a lat/lon without a radius will return search results biased to that point. (required, format: float, e.g. 37.337)
+  --lon: float # Longitude where results should be biased NOTE: supplying a lat/lon without a radius will return search results biased to that point. (required, format: float, e.g. -121.89)
   --limit: int # Maximum number of search results that will be returned. (default: 10)
   --ofs: int # Starting offset of the returned results within the full result set. (default: 0)
   --country-set: string # Comma separated string of country codes. This will limit the search to the specified countries. (e.g. FR)
@@ -541,6 +547,8 @@ export def "get-search-version-number-nearby-search-ext" [
   let base = ($base_url | default $BASE_URL)
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'versionNumber' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lon == null) { error make --unspanned { msg: "required query parameter 'lon' missing: pass --lon" } }
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "minFuzzyLevel" $min_fuzzy_level "scalar") (serialize-qp "maxFuzzyLevel" $max_fuzzy_level "scalar") (serialize-qp "idxSet" $idx_set "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/nearbySearch/.{ext}") $qp $auth.query)
   let accept_val = "application/json"
@@ -563,9 +571,9 @@ export def "get-search-version-number-nearby-search-ext" [
 #
 # GET /search/{versionNumber}/poiSearch/{query}.{ext}
 export def "get-search-version-number-poi-search-query-ext" [
-  version_number: int
+  version_number: int@version-number-completer
   query: string
-  ext: string
+  ext: string@ext-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,9 +624,9 @@ export def "get-search-version-number-poi-search-query-ext" [
 # GET /search/{versionNumber}/reverseGeocode/crossStreet/{position}.{ext}
 @deprecated --flag spatial-keys
 export def "get-search-version-number-reverse-geocode-cross-street-position-ext" [
-  version_number: int
+  version_number: int@version-number-completer
   position: string
-  ext: string
+  ext: string@ext-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -662,9 +670,9 @@ export def "get-search-version-number-reverse-geocode-cross-street-position-ext"
 # GET /search/{versionNumber}/reverseGeocode/{position}.{ext}
 @deprecated --flag spatial-keys
 export def "get-search-version-number-reverse-geocode-position-ext" [
-  version_number: int
+  version_number: int@version-number-completer
   position: string
-  ext: string
+  ext: string@ext-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -712,10 +720,10 @@ export def "get-search-version-number-reverse-geocode-position-ext" [
 # DEPRECATED
 @deprecated
 export def "get-search-version-number-routed-filter-position-heading-ext" [
-  version_number: int
+  version_number: int@version-number-completer
   position: string
   heading: float
-  ext: string
+  ext: string@ext-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -725,7 +733,7 @@ export def "get-search-version-number-routed-filter-position-heading-ext" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --poi-list: string # List of POIs to filter. The only required attribute of a POI is position, everything else is optional and will be echoed back when passed in. (e.g. [{"poi":{"name":"Cleaire Advanced Emission Controls"},"address":{"freeformAddress":"7220 Trade St, San Diego, CA 92121"},"position":{"lat":"37.83274","lon":"-122.27631"}}])
+  --poi-list: string # List of POIs to filter. The only required attribute of a POI is position, everything else is optional and will be echoed back when passed in. (required, e.g. [{"poi":{"name":"Cleaire Advanced Emission Controls"},"address":{"freeformAddress":"7220 Trade St, San Diego, CA 92121"},"position":{"lat":"37.83274","lon":"-122.27631"}}])
   --routing-timeout: int # Only return results that arrive from routing engine within this time limit. (default: 4000)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
@@ -734,6 +742,7 @@ export def "get-search-version-number-routed-filter-position-heading-ext" [
   if ($position | is-empty) { error make --unspanned { msg: "path parameter 'position' must be non-empty" } }
   if ($heading | is-empty) { error make --unspanned { msg: "path parameter 'heading' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
+  if ($poi_list == null) { error make --unspanned { msg: "required query parameter 'poiList' missing: pass --poi-list" } }
   let qp = [(serialize-qp "poiList" $poi_list "scalar") (serialize-qp "routingTimeout" $routing_timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), position: (encode-path-segment $position), heading: (encode-path-segment $heading), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/routedFilter/{position}/{heading}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
@@ -759,10 +768,10 @@ export def "get-search-version-number-routed-filter-position-heading-ext" [
 # --poiList item shape: {address?: record, poi?: record, position?: record}
 @deprecated
 export def "post-search-version-number-routed-filter-position-heading-ext" [
-  version_number: int
+  version_number: int@version-number-completer
   position: string
   heading: float
-  ext: string
+  ext: string@ext-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -808,11 +817,11 @@ export def "post-search-version-number-routed-filter-position-heading-ext" [
 # DEPRECATED
 @deprecated
 export def "get-search-version-number-routed-search-query-position-heading-ext" [
-  version_number: int
+  version_number: int@version-number-completer
   query: string
   position: string
   heading: float
-  ext: string
+  ext: string@ext-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -861,9 +870,9 @@ export def "get-search-version-number-routed-search-query-position-heading-ext" 
 # DEPRECATED
 @deprecated
 export def "get-search-version-number-s-query-ext" [
-  version_number: int
+  version_number: int@version-number-completer
   query: string
-  ext: string
+  ext: string@ext-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -913,9 +922,9 @@ export def "get-search-version-number-s-query-ext" [
 #
 # GET /search/{versionNumber}/search/{query}.{ext}
 export def "get-search-version-number-search-query-ext" [
-  version_number: int
+  version_number: int@version-number-completer
   query: string
-  ext: string
+  ext: string@ext-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -969,9 +978,9 @@ export def "get-search-version-number-search-query-ext" [
 # POST /search/{versionNumber}/searchAlongRoute/{query}.{ext}
 # --route shape: {points?: list}
 export def "post-search-version-number-search-along-route-query-ext" [
-  version_number: int
+  version_number: int@version-number-completer
   query: string
-  ext: string
+  ext: string@ext-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -981,7 +990,7 @@ export def "post-search-version-number-search-along-route-query-ext" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --max-detour-time: int # Maximum detour time (e.g. 1200)
+  --max-detour-time: int # Maximum detour time (required, e.g. 1200)
   --limit: int # Maximum number of search results that will be returned. (default: 10)
   --route: record # shape: {points?: list}
 ]: any -> any {
@@ -991,6 +1000,7 @@ export def "post-search-version-number-search-along-route-query-ext" [
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'versionNumber' must be non-empty" } }
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
+  if ($max_detour_time == null) { error make --unspanned { msg: "required query parameter 'maxDetourTime' missing: pass --max-detour-time" } }
   let qp = [(serialize-qp "maxDetourTime" $max_detour_time "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/searchAlongRoute/{query}.{ext}") $qp $auth.query)
   let req_body = {"route": $route} | compact
@@ -1015,8 +1025,8 @@ export def "post-search-version-number-search-along-route-query-ext" [
 #
 # GET /search/{versionNumber}/structuredGeocode.{ext}
 export def "get-search-version-number-structured-geocode-ext" [
-  version_number: int
-  ext: string
+  version_number: int@version-number-completer
+  ext: string@ext-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1026,7 +1036,7 @@ export def "get-search-version-number-structured-geocode-ext" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-code: string # 2 or 3 letter country code (e.g.: FR, ES). (e.g. NL)
+  --country-code: string # 2 or 3 letter country code (e.g.: FR, ES). (required, e.g. NL)
   --limit: int # Maximum number of search results that will be returned. (default: 10)
   --ofs: int # Starting offset of the returned results within the full result set. (default: 0)
   --street-number: string # The street number for the structured address.
@@ -1045,6 +1055,7 @@ export def "get-search-version-number-structured-geocode-ext" [
   let base = ($base_url | default $BASE_URL)
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'versionNumber' must be non-empty" } }
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
+  if ($country_code == null) { error make --unspanned { msg: "required query parameter 'countryCode' missing: pass --country-code" } }
   let qp = [(serialize-qp "countryCode" $country_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "streetNumber" $street_number "scalar") (serialize-qp "streetName" $street_name "scalar") (serialize-qp "crossStreet" $cross_street "scalar") (serialize-qp "municipality" $municipality "scalar") (serialize-qp "municipalitySubdivision" $municipality_subdivision "scalar") (serialize-qp "countryTertiarySubdivision" $country_tertiary_subdivision "scalar") (serialize-qp "countrySecondarySubdivision" $country_secondary_subdivision "scalar") (serialize-qp "countrySubdivision" $country_subdivision "scalar") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/structuredGeocode.{ext}") $qp $auth.query)
   let accept_val = "application/json"

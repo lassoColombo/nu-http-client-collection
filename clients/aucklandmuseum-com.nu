@@ -301,12 +301,13 @@ export def "get-sparql" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --query: string # sparql query
+  --query: string # sparql query (required)
   --callback: string # The [JSON-P](http://json-p.org/) callback parameter (default: callback)
   --infer: oneof<nothing, bool> # Whether to get inferred results in the response (default: true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "infer" $infer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sparql" $qp $auth.query)
   let accept_val = ($accept | default "application/sparql-results+json")

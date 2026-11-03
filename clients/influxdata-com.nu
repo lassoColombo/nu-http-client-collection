@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -516,7 +516,7 @@ export def "delete-buckets-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucketID' must be non-empty" } }
@@ -723,7 +723,7 @@ export def "delete-buckets-id-labels-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucketID' must be non-empty" } }
@@ -847,7 +847,7 @@ export def "delete-buckets-id-members-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucketID' must be non-empty" } }
@@ -971,7 +971,7 @@ export def "delete-buckets-id-owners-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucketID' must be non-empty" } }
@@ -1011,11 +1011,12 @@ export def "get-checks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int
   --limit: int # default: 20
-  --org-id: string # Only show checks that belong to a specific organization ID.
+  --org-id: string # Only show checks that belong to a specific organization ID. (required)
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<checks: list<record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($org_id == null) { error make --unspanned { msg: "required query parameter 'orgID' missing: pass --org-id" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/checks" $qp $auth.query)
   let accept_val = "application/json"
@@ -1090,7 +1091,7 @@ export def "delete-checks-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($check_id | is-empty) { error make --unspanned { msg: "path parameter 'checkID' must be non-empty" } }
@@ -1339,7 +1340,7 @@ export def "delete-checks-id-labels-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($check_id | is-empty) { error make --unspanned { msg: "path parameter 'checkID' must be non-empty" } }
@@ -1425,7 +1426,7 @@ export def "get-dashboards" [
   --org-id: string # The identifier of the organization.
   --org: string # The name of the organization.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<dashboards: list<record>, links: record<next: string, prev: string, self: string>> {
+]: nothing -> record<dashboards: table<description: string, name: string, orgID: string, cells: list, id: string, labels: list, links: record, meta: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "descending" $descending "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "id" $id "multi") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "org" $org "scalar")] | flatten | str join "&"
@@ -1507,7 +1508,7 @@ export def "delete-dashboards-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardID' must be non-empty" } }
@@ -1591,7 +1592,7 @@ export def "patch-dashboards-id" [
   --cells: record # shape: {h?: int, id?: string, links?: record, viewID?: string, w?: int, x?: int, y?: int, name?: string, properties?: any}
   --description: string # optional, when provided will replace the description
   --name: string # optional, when provided will replace the name
-]: any -> record {
+]: any -> record<description: string, name: string, orgID: string, cells: table<h: int, id: string, links: record, viewID: string, w: int, x: int, y: int>, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<cells: string, labels: string, members: string, org: string, owners: string, self: string>, meta: record<createdAt: string, updatedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1682,7 +1683,7 @@ export def "put-dashboards-id-cells" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --body: list
-]: any -> record {
+]: any -> record<description: string, name: string, orgID: string, cells: table<h: int, id: string, links: record, viewID: string, w: int, x: int, y: int>, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<cells: string, labels: string, members: string, org: string, owners: string, self: string>, meta: record<createdAt: string, updatedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1725,7 +1726,7 @@ export def "delete-dashboards-id-cells-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardID' must be non-empty" } }
@@ -1984,7 +1985,7 @@ export def "delete-dashboards-id-labels-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardID' must be non-empty" } }
@@ -2108,7 +2109,7 @@ export def "delete-dashboards-id-members-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardID' must be non-empty" } }
@@ -2232,7 +2233,7 @@ export def "delete-dashboards-id-owners-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardID' must be non-empty" } }
@@ -2270,7 +2271,7 @@ export def "get-dbr-ps" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --org-id: string # Specifies the organization ID to filter on
+  --org-id: string # Specifies the organization ID to filter on (required)
   --id: string # Specifies the mapping ID to filter on
   --bucket-id: string # Specifies the bucket ID to filter on
   --default: oneof<nothing, bool> # Specifies filtering on default
@@ -2280,6 +2281,7 @@ export def "get-dbr-ps" [
 ]: nothing -> record<content: table<bucketID: string, database: string, default: bool, id: string, links: record, org: string, orgID: string, retention_policy: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($org_id == null) { error make --unspanned { msg: "required query parameter 'orgID' missing: pass --org-id" } }
   let qp = [(serialize-qp "orgID" $org_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "bucketID" $bucket_id "scalar") (serialize-qp "default" $default "scalar") (serialize-qp "db" $db "scalar") (serialize-qp "rp" $rp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dbrps" $qp $auth.query)
   let accept_val = "application/json"
@@ -2362,12 +2364,13 @@ export def "delete-dbrpid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --org-id: string # Specifies the organization ID of the mapping
+  --org-id: string # Specifies the organization ID of the mapping (required)
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dbrp_id | is-empty) { error make --unspanned { msg: "path parameter 'dbrpID' must be non-empty" } }
+  if ($org_id == null) { error make --unspanned { msg: "required query parameter 'orgID' missing: pass --org-id" } }
   let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({dbrp_id: (encode-path-segment $dbrp_id)} | format pattern "/dbrps/{dbrp_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2403,12 +2406,13 @@ export def "get-dbr-ps-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --org-id: string # Specifies the organization ID of the mapping
+  --org-id: string # Specifies the organization ID of the mapping (required)
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<bucketID: string, database: string, default: bool, id: string, links: record<next: string, prev: string, self: string>, org: string, orgID: string, retention_policy: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dbrp_id | is-empty) { error make --unspanned { msg: "path parameter 'dbrpID' must be non-empty" } }
+  if ($org_id == null) { error make --unspanned { msg: "required query parameter 'orgID' missing: pass --org-id" } }
   let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({dbrp_id: (encode-path-segment $dbrp_id)} | format pattern "/dbrps/{dbrp_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2444,7 +2448,7 @@ export def "patch-dbrpid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --org-id: string # Specifies the organization ID of the mapping
+  --org-id: string # Specifies the organization ID of the mapping (required)
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --database: string # InfluxDB v1 database
   --default: oneof<nothing, bool>
@@ -2455,6 +2459,7 @@ export def "patch-dbrpid" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dbrp_id | is-empty) { error make --unspanned { msg: "path parameter 'dbrpID' must be non-empty" } }
+  if ($org_id == null) { error make --unspanned { msg: "required query parameter 'orgID' missing: pass --org-id" } }
   let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({dbrp_id: (encode-path-segment $dbrp_id)} | format pattern "/dbrps/{dbrp_id}") $qp $auth.query)
   let req_body = {"database": $database, "default": $default, "links": $links, "retention_policy": $retention_policy} | compact
@@ -2499,7 +2504,7 @@ export def "post-delete" [
   --predicate: string # InfluxQL-like delete statement (e.g. tag1="value1" and (tag2="value2" and tag3!="value3"))
   start: string # RFC3339Nano (format: date-time)
   stop: string # RFC3339Nano (format: date-time)
-]: any -> record<code: string, err: string, message: string, op: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2627,7 +2632,7 @@ export def "delete-documents-templates-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateID' must be non-empty" } }
@@ -2833,7 +2838,7 @@ export def "delete-documents-templates-id-labels-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateID' must be non-empty" } }
@@ -3026,7 +3031,7 @@ export def "delete-labels-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($label_id | is-empty) { error make --unspanned { msg: "path parameter 'labelID' must be non-empty" } }
@@ -3185,7 +3190,7 @@ export def "put-me-password" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   password: string
-]: any -> record<code: string, err: string, message: string, op: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3226,11 +3231,12 @@ export def "get-notification-endpoints" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int
   --limit: int # default: 20
-  --org-id: string # Only show notification endpoints that belong to specific organization ID.
+  --org-id: string # Only show notification endpoints that belong to specific organization ID. (required)
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<next: string, prev: string, self: string>, notificationEndpoints: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($org_id == null) { error make --unspanned { msg: "required query parameter 'orgID' missing: pass --org-id" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notificationEndpoints" $qp $auth.query)
   let accept_val = "application/json"
@@ -3305,7 +3311,7 @@ export def "delete-notification-endpoints-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpointID' must be non-empty" } }
@@ -3554,7 +3560,7 @@ export def "delete-notification-endpoints-id-labels-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpointID' must be non-empty" } }
@@ -3594,13 +3600,14 @@ export def "get-notification-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int
   --limit: int # default: 20
-  --org-id: string # Only show notification rules that belong to a specific organization ID.
+  --org-id: string # Only show notification rules that belong to a specific organization ID. (required)
   --check-id: string # Only show notifications that belong to the specific check ID.
   --tag: string # Only return notification rules that "would match" statuses which contain the tag key value pairs provided. (e.g. env:prod)
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<next: string, prev: string, self: string>, notificationRules: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($org_id == null) { error make --unspanned { msg: "required query parameter 'orgID' missing: pass --org-id" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "checkID" $check_id "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notificationRules" $qp $auth.query)
   let accept_val = "application/json"
@@ -3675,7 +3682,7 @@ export def "delete-notification-rules-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleID' must be non-empty" } }
@@ -3924,7 +3931,7 @@ export def "delete-notification-rules-id-labels-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleID' must be non-empty" } }
@@ -4089,7 +4096,7 @@ export def "delete-orgs-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgID' must be non-empty" } }
@@ -4295,7 +4302,7 @@ export def "delete-orgs-id-members-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgID' must be non-empty" } }
@@ -4419,7 +4426,7 @@ export def "delete-orgs-id-owners-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgID' must be non-empty" } }
@@ -4499,7 +4506,7 @@ export def "patch-orgs-id-secrets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --body: record
-]: any -> record<code: string, err: string, message: string, op: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4542,7 +4549,7 @@ export def "post-orgs-id-secrets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --secrets: list<string>
-]: any -> record<code: string, err: string, message: string, op: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4588,7 +4595,7 @@ export def "post-query" [
   --org: string # Specifies the name of the organization executing the query. Takes either the ID or Name interchangeably. If both `orgID` and `org` are specified, `org` takes precedence.
   --org-id: string # Specifies the ID of the organization executing the query. If both `orgID` and `org` are specified, `org` takes precedence.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --accept-encoding: string@accept-encoding-completer # The Accept-Encoding request HTTP header advertises which content encoding, usually a compression algorithm, the client is able to understand.
+  --accept-encoding: string@accept-encoding-completer # The Accept-Encoding request HTTP header advertises which content encoding, usually a compression algorithm, the client is able to understand. (default: identity)
   --content-type: string@content-type-completer
   --dialect: record # Dialect are options to change the default CSV output format; https://www.w3.org/TR/2015/REC-tabular-metadata-20151217/#dialect-descriptions — shape: {annotations?: list<string>, commentPrefix?: string, dateTimeFormat?: "RFC3339"|"RFC3339Nano", delimiter?: string, header?: bool}
   --extern: record # Represents a source from a single file — shape: {body?: list, imports?: list, name?: string, package?: record, type?: string}
@@ -4852,7 +4859,7 @@ export def "get-scrapers" [
   --org-id: string # Specifies the organization ID of the scraper target.
   --org: string # Specifies the organization name of the scraper target.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<configurations: list<record>> {
+]: nothing -> record<configurations: table<allowInsecure: bool, bucketID: string, name: string, orgID: string, type: string, url: string, bucket: string, id: string, links: record, org: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "id" $id "multi") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "org" $org "scalar")] | flatten | str join "&"
@@ -4896,7 +4903,7 @@ export def "post-scrapers" [
   --org-id: string # The organization ID.
   --type: string@type-completer-1 # The type of the metrics to be parsed.
   --url: string # The URL of the metrics endpoint. (e.g. http://localhost:9090/metrics)
-]: any -> record {
+]: any -> record<allowInsecure: bool, bucketID: string, name: string, orgID: string, type: string, url: string, bucket: string, id: string, links: record<bucket: string, members: string, organization: string, owners: string, self: string>, org: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4937,7 +4944,7 @@ export def "delete-scrapers-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($scraper_target_id | is-empty) { error make --unspanned { msg: "path parameter 'scraperTargetID' must be non-empty" } }
@@ -4976,7 +4983,7 @@ export def "get-scrapers-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record {
+]: nothing -> record<allowInsecure: bool, bucketID: string, name: string, orgID: string, type: string, url: string, bucket: string, id: string, links: record<bucket: string, members: string, organization: string, owners: string, self: string>, org: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($scraper_target_id | is-empty) { error make --unspanned { msg: "path parameter 'scraperTargetID' must be non-empty" } }
@@ -5021,7 +5028,7 @@ export def "patch-scrapers-id" [
   --org-id: string # The organization ID.
   --type: string@type-completer-1 # The type of the metrics to be parsed.
   --url: string # The URL of the metrics endpoint. (e.g. http://localhost:9090/metrics)
-]: any -> record {
+]: any -> record<allowInsecure: bool, bucketID: string, name: string, orgID: string, type: string, url: string, bucket: string, id: string, links: record<bucket: string, members: string, organization: string, owners: string, self: string>, org: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5146,7 +5153,7 @@ export def "delete-scrapers-id-labels-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($scraper_target_id | is-empty) { error make --unspanned { msg: "path parameter 'scraperTargetID' must be non-empty" } }
@@ -5270,7 +5277,7 @@ export def "delete-scrapers-id-members-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($scraper_target_id | is-empty) { error make --unspanned { msg: "path parameter 'scraperTargetID' must be non-empty" } }
@@ -5394,7 +5401,7 @@ export def "delete-scrapers-id-owners-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($scraper_target_id | is-empty) { error make --unspanned { msg: "path parameter 'scraperTargetID' must be non-empty" } }
@@ -5518,7 +5525,7 @@ export def "post-signin" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signin" $auth.query)
@@ -5555,7 +5562,7 @@ export def "post-signout" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signout" $auth.query)
@@ -5688,7 +5695,7 @@ export def "delete-sources-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($source_id | is-empty) { error make --unspanned { msg: "path parameter 'sourceID' must be non-empty" } }
@@ -5902,12 +5909,13 @@ export def "list-stacks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --org-id: string # The organization id of the stacks
+  --org-id: string # The organization id of the stacks (required)
   --name: string # A collection of names to filter the list by.
   --stack-id: string # A collection of stackIDs to filter the list by.
 ]: nothing -> record<stacks: table<createdAt: string, events: list, id: string, orgID: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($org_id == null) { error make --unspanned { msg: "required query parameter 'orgID' missing: pass --org-id" } }
   let qp = [(serialize-qp "orgID" $org_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "stackID" $stack_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stacks" $qp $auth.query)
   let accept_val = "application/json"
@@ -5982,11 +5990,12 @@ export def "delete-stack" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --org-id: string # The identifier of the organization.
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+  --org-id: string # The identifier of the organization. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($stack_id | is-empty) { error make --unspanned { msg: "path parameter 'stack_id' must be non-empty" } }
+  if ($org_id == null) { error make --unspanned { msg: "required query parameter 'orgID' missing: pass --org-id" } }
   let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({stack_id: (encode-path-segment $stack_id)} | format pattern "/stacks/{stack_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -6227,7 +6236,7 @@ export def "delete-tasks-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskID' must be non-empty" } }
@@ -6437,7 +6446,7 @@ export def "delete-tasks-id-labels-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskID' must be non-empty" } }
@@ -6600,7 +6609,7 @@ export def "delete-tasks-id-members-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskID' must be non-empty" } }
@@ -6724,7 +6733,7 @@ export def "delete-tasks-id-owners-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskID' must be non-empty" } }
@@ -6852,7 +6861,7 @@ export def "delete-tasks-id-runs-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskID' must be non-empty" } }
@@ -7058,7 +7067,7 @@ export def "get-telegrafs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --org-id: string # The organization ID the Telegraf config belongs to.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<configurations: list<record>> {
+]: nothing -> record<configurations: table<config: string, description: string, metadata: record, name: string, orgID: string, id: string, labels: list, links: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
@@ -7102,7 +7111,7 @@ export def "post-telegrafs" [
   --metadata: record # shape: {buckets?: list<string>}
   --name: string
   --org-id: string
-]: any -> record {
+]: any -> record<config: string, description: string, metadata: record<buckets: list<string>>, name: string, orgID: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, owners: string, self: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7143,7 +7152,7 @@ export def "delete-telegrafs-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($telegraf_id | is-empty) { error make --unspanned { msg: "path parameter 'telegrafID' must be non-empty" } }
@@ -7183,8 +7192,8 @@ export def "get-telegrafs-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --hdr-accept: string@accept-completer-1
-]: nothing -> record {
+  --hdr-accept: string@accept-completer-1 # default: application/toml
+]: nothing -> record<config: string, description: string, metadata: record<buckets: list<string>>, name: string, orgID: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, owners: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($telegraf_id | is-empty) { error make --unspanned { msg: "path parameter 'telegrafID' must be non-empty" } }
@@ -7229,7 +7238,7 @@ export def "put-telegrafs-id" [
   --metadata: record # shape: {buckets?: list<string>}
   --name: string
   --org-id: string
-]: any -> record {
+]: any -> record<config: string, description: string, metadata: record<buckets: list<string>>, name: string, orgID: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, owners: string, self: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7354,7 +7363,7 @@ export def "delete-telegrafs-id-labels-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($telegraf_id | is-empty) { error make --unspanned { msg: "path parameter 'telegrafID' must be non-empty" } }
@@ -7478,7 +7487,7 @@ export def "delete-telegrafs-id-members-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($telegraf_id | is-empty) { error make --unspanned { msg: "path parameter 'telegrafID' must be non-empty" } }
@@ -7602,7 +7611,7 @@ export def "delete-telegrafs-id-owners-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($telegraf_id | is-empty) { error make --unspanned { msg: "path parameter 'telegrafID' must be non-empty" } }
@@ -7944,7 +7953,7 @@ export def "post-users-id-password" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   password: string
-]: any -> record<code: string, err: string, message: string, op: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -8344,7 +8353,7 @@ export def "delete-variables-id-labels-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-]: nothing -> record<code: string, err: string, message: string, op: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($variable_id | is-empty) { error make --unspanned { msg: "path parameter 'variableID' must be non-empty" } }
@@ -8382,20 +8391,22 @@ export def "post-write" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --org: string # Specifies the destination organization for writes. Takes either the ID or Name interchangeably. If both `orgID` and `org` are specified, `org` takes precedence.
+  --org: string # Specifies the destination organization for writes. Takes either the ID or Name interchangeably. If both `orgID` and `org` are specified, `org` takes precedence. (required)
   --org-id: string # Specifies the ID of the destination organization for writes. If both `orgID` and `org` are specified, `org` takes precedence.
-  --bucket: string # The destination bucket for writes.
+  --bucket: string # The destination bucket for writes. (required)
   --precision: string@precision-completer # The precision for the unix timestamps within the body line-protocol.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --content-encoding: string@content-encoding-completer # When present, its value indicates to the database that compression is applied to the line-protocol body.
-  --content-type: string@content-type-completer-2 # Content-Type is used to indicate the format of the data sent to the server.
+  --content-encoding: string@content-encoding-completer # When present, its value indicates to the database that compression is applied to the line-protocol body. (default: identity)
+  --content-type: string@content-type-completer-2 # Content-Type is used to indicate the format of the data sent to the server. (default: text/plain; charset=utf-8)
   --content-length: int # Content-Length is an entity header is indicating the size of the entity-body, in bytes, sent to the database. If the length is greater than the database max body configuration option, a 413 response is sent.
-  --hdr-accept: string@accept-completer-3 # Specifies the return content format.
+  --hdr-accept: string@accept-completer-3 # Specifies the return content format. (default: application/json)
   --body: string
-]: any -> record<code: string, err: string, message: string, op: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($org == null) { error make --unspanned { msg: "required query parameter 'org' missing: pass --org" } }
+  if ($bucket == null) { error make --unspanned { msg: "required query parameter 'bucket' missing: pass --bucket" } }
   let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "bucket" $bucket "scalar") (serialize-qp "precision" $precision "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/write" $qp $auth.query)
   let req_body = $body

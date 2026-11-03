@@ -142,7 +142,7 @@ export def "get-chart" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --cht: string@cht-completer # Chart type
+  --cht: string@cht-completer # Chart type (required)
   --chd: string # chart data
   --chds: string # data format with custom scaling
   --choe: string@choe-completer # QRCode data encoding
@@ -151,19 +151,19 @@ export def "get-chart" [
   --chxp: string # axis label positions
   --chof: string # Image output format (default: .png)
   --chs: string # Chart size (x)
-  --chdl: string # Text for each series, to display in the legend (default: )
+  --chdl: string # Text for each series, to display in the legend (default: "")
   --chdls: string # Chart legend text and style (default: 000000)
   --chg: string # Solid or dotted grid lines
   --chco: string # series colors (default: F56991,FF9F80,FFC48C,D1F2A5,EFFAB4)
-  --chtt: string # chart title (default: )
-  --chts: string # chart title colors and font size (default: )
-  --chxt: string # Display values on your axis lines or change which axes are shown (default: )
-  --chxl: string # Custom string axis labels on any axis (default: )
+  --chtt: string # chart title (default: "")
+  --chts: string # chart title colors and font size (default: "")
+  --chxt: string # Display values on your axis lines or change which axes are shown (default: "")
+  --chxl: string # Custom string axis labels on any axis (default: "")
   --chxs: string # Font size, color for axis labels, both custom labels and default label values
-  --chm: string # compound charts and line fills (default: )
-  --chls: string # line thickness and solid/dashed style (default: )
-  --chl: string # bar, pie slice, doughnut slice and polar slice chart labels (default: )
-  --chlps: string # Position and style of labels on data (default: )
+  --chm: string # compound charts and line fills (default: "")
+  --chls: string # line thickness and solid/dashed style (default: "")
+  --chl: string # bar, pie slice, doughnut slice and polar slice chart labels (required, default: "")
+  --chlps: string # Position and style of labels on data (default: "")
   --chma: string # chart margins
   --chdlp: string # Position of the legend and order of the legend entries (default: r)
   --chf: string # Background Fills (default: bg,s,FFFFFF)
@@ -183,6 +183,8 @@ export def "get-chart" [
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cht == null) { error make --unspanned { msg: "required query parameter 'cht' missing: pass --cht" } }
+  let chl = ($chl | default "")
   let qp = [(serialize-qp "cht" $cht "scalar") (serialize-qp "chd" $chd "scalar") (serialize-qp "chds" $chds "scalar") (serialize-qp "choe" $choe "scalar") (serialize-qp "chld" $chld "scalar") (serialize-qp "chxr" $chxr "scalar") (serialize-qp "chxp" $chxp "scalar") (serialize-qp "chof" $chof "scalar") (serialize-qp "chs" $chs "scalar") (serialize-qp "chdl" $chdl "scalar") (serialize-qp "chdls" $chdls "scalar") (serialize-qp "chg" $chg "scalar") (serialize-qp "chco" $chco "scalar") (serialize-qp "chtt" $chtt "scalar") (serialize-qp "chts" $chts "scalar") (serialize-qp "chxt" $chxt "scalar") (serialize-qp "chxl" $chxl "scalar") (serialize-qp "chxs" $chxs "scalar") (serialize-qp "chm" $chm "scalar") (serialize-qp "chls" $chls "scalar") (serialize-qp "chl" $chl "scalar") (serialize-qp "chlps" $chlps "scalar") (serialize-qp "chma" $chma "scalar") (serialize-qp "chdlp" $chdlp "scalar") (serialize-qp "chf" $chf "scalar") (serialize-qp "chbh" $chbh "scalar") (serialize-qp "chbr" $chbr "scalar") (serialize-qp "chan" $chan "scalar") (serialize-qp "chli" $chli "scalar") (serialize-qp "icac" $icac "scalar") (serialize-qp "ichm" $ichm "scalar") (serialize-qp "icff" $icff "scalar") (serialize-qp "icfs" $icfs "scalar") (serialize-qp "iclocale" $iclocale "scalar") (serialize-qp "icwt" $icwt "scalar") (serialize-qp "icretina" $icretina "scalar") (serialize-qp "icqrb" $icqrb "scalar") (serialize-qp "icqrf" $icqrf "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/chart" $qp $auth.query)
   let accept_val = ($accept | default "application/png")

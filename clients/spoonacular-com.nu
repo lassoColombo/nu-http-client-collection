@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {x-api-key: $token_val}, query: "", location: "header"} }
+    "x-api-key" => { {scheme: $scheme, headers: {"x-api-key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -182,11 +182,12 @@ export def "talk-to-chatbot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --text: string # The request / question / answer from the user to the chatbot. (e.g. donut recipes)
+  --text: string # The request / question / answer from the user to the chatbot. (required, e.g. donut recipes)
   --context-id: string # An arbitrary globally unique id for your conversation. The conversation can contain states so you should pass your context id if you want the bot to be able to remember the conversation. (e.g. 342938)
 ]: nothing -> record<answerText: string, media: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "contextId" $context_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/converse" $qp $auth.query)
   let accept_val = "application/json"
@@ -220,11 +221,12 @@ export def "get-conversation-suggests" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # A (partial) query from the user. The endpoint will return if it matches topics it can talk about. (e.g. tell)
+  --query: string # A (partial) query from the user. The endpoint will return if it matches topics it can talk about. (required, e.g. tell)
   --number: float # The number of suggestions to return (between 1 and 25). (e.g. 5)
 ]: nothing -> record<suggests: record<_: list<record>>, words: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/converse/suggest" $qp $auth.query)
   let accept_val = "application/json"
@@ -259,13 +261,15 @@ export def "search-custom-foods" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # The (natural language) search query. (e.g. burger)
-  --username: string # The username. (e.g. dsky)
-  --hash: string # The private hash for the username. (e.g. 4b5v4398573406)
+  --username: string # The username. (required, e.g. dsky)
+  --hash: string # The private hash for the username. (required, e.g. 4b5v4398573406)
   --offset: int # The number of results to skip (between 0 and 900).
   --number: int # The maximum number of items to return (between 1 and 100). Defaults to 10. (default: 10, e.g. 10)
 ]: nothing -> record<customFoods: table<id: int, imageUrl: string, price: float, servings: float, title: string>, number: int, offset: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
+  if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "hash" $hash "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/customFoods/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -343,10 +347,11 @@ export def "image-analysis-by-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --image-url: string # The URL of the image to be analyzed. (e.g. https://spoonacular.com/recipeImages/635350-240x150.jpg)
+  --image-url: string # The URL of the image to be analyzed. (required, e.g. https://spoonacular.com/recipeImages/635350-240x150.jpg)
 ]: nothing -> record<category: record<name: string, probability: float>, nutrition: record<calories: record<confidenceRange95Percent: record, standardDeviation: float, unit: string, value: float>, carbs: record<confidenceRange95Percent: record, standardDeviation: float, unit: string, value: float>, fat: record<confidenceRange95Percent: record, standardDeviation: float, unit: string, value: float>, protein: record<confidenceRange95Percent: record, standardDeviation: float, unit: string, value: float>, recipesUsed: int>, recipes: table<id: int, imageType: string, title: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($image_url == null) { error make --unspanned { msg: "required query parameter 'imageUrl' missing: pass --image-url" } }
   let qp = [(serialize-qp "imageUrl" $image_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/images/analyze" $qp $auth.query)
   let accept_val = "application/json"
@@ -380,10 +385,11 @@ export def "image-classification-by-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --image-url: string # The URL of the image to be classified. (e.g. https://spoonacular.com/recipeImages/635350-240x150.jpg)
+  --image-url: string # The URL of the image to be classified. (required, e.g. https://spoonacular.com/recipeImages/635350-240x150.jpg)
 ]: nothing -> record<category: string, probability: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($image_url == null) { error make --unspanned { msg: "required query parameter 'imageUrl' missing: pass --image-url" } }
   let qp = [(serialize-qp "imageUrl" $image_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/images/classify" $qp $auth.query)
   let accept_val = "application/json"
@@ -549,7 +555,7 @@ export def "ingredient-search" [
   --max-carbs-percent: float # The maximum percentage of carbs the food can have (between 0 and 100). (e.g. 90)
   --meta-information: oneof<nothing, bool> # Whether to return more meta information about the ingredients. (e.g. false)
   --intolerances: string # A comma-separated list of intolerances. All recipes returned must not contain ingredients that are not suitable for people with the intolerances entered. See a full list of supported intolerances. (e.g. egg)
-  --qp-sort: string # The strategy to sort recipes by. See a full list of supported sorting options. (e.g. calories)
+  --sort: string # The strategy to sort recipes by. See a full list of supported sorting options. (e.g. calories)
   --sort-direction: string # The direction in which to sort. Must be either 'asc' (ascending) or 'desc' (descending). (e.g. asc)
   --offset: int # The number of results to skip (between 0 and 900).
   --number: int # The maximum number of items to return (between 1 and 100). Defaults to 10. (default: 10, e.g. 10)
@@ -557,14 +563,14 @@ export def "ingredient-search" [
 ]: nothing -> record<number: int, offset: int, results: table<id: int, image: string, name: string>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "addChildren" $add_children "scalar") (serialize-qp "minProteinPercent" $min_protein_percent "scalar") (serialize-qp "maxProteinPercent" $max_protein_percent "scalar") (serialize-qp "minFatPercent" $min_fat_percent "scalar") (serialize-qp "maxFatPercent" $max_fat_percent "scalar") (serialize-qp "minCarbsPercent" $min_carbs_percent "scalar") (serialize-qp "maxCarbsPercent" $max_carbs_percent "scalar") (serialize-qp "metaInformation" $meta_information "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "addChildren" $add_children "scalar") (serialize-qp "minProteinPercent" $min_protein_percent "scalar") (serialize-qp "maxProteinPercent" $max_protein_percent "scalar") (serialize-qp "minFatPercent" $min_fat_percent "scalar") (serialize-qp "maxFatPercent" $max_fat_percent "scalar") (serialize-qp "minCarbsPercent" $min_carbs_percent "scalar") (serialize-qp "maxCarbsPercent" $max_carbs_percent "scalar") (serialize-qp "metaInformation" $meta_information "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/ingredients/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "addChildren": $add_children, "minProteinPercent": $min_protein_percent, "maxProteinPercent": $max_protein_percent, "minFatPercent": $min_fat_percent, "maxFatPercent": $max_fat_percent, "minCarbsPercent": $min_carbs_percent, "maxCarbsPercent": $max_carbs_percent, "metaInformation": $meta_information, "intolerances": $intolerances, "sort": $qp_sort, "sortDirection": $sort_direction, "offset": $offset, "number": $number, "language": $language} | compact)
+    query: ({"query": $query, "addChildren": $add_children, "minProteinPercent": $min_protein_percent, "maxProteinPercent": $max_protein_percent, "minFatPercent": $min_fat_percent, "maxFatPercent": $max_fat_percent, "minCarbsPercent": $min_carbs_percent, "maxCarbsPercent": $max_carbs_percent, "metaInformation": $meta_information, "intolerances": $intolerances, "sort": $sort, "sortDirection": $sort_direction, "offset": $offset, "number": $number, "language": $language} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -590,10 +596,11 @@ export def "get-ingredient-substitutes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ingredient-name: string # The name of the ingredient you want to replace. (e.g. butter)
+  --ingredient-name: string # The name of the ingredient you want to replace. (required, e.g. butter)
 ]: nothing -> record<ingredient: string, message: string, substitutes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($ingredient_name == null) { error make --unspanned { msg: "required query parameter 'ingredientName' missing: pass --ingredient-name" } }
   let qp = [(serialize-qp "ingredientName" $ingredient_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/ingredients/substitutes" $qp $auth.query)
   let accept_val = "application/json"
@@ -628,13 +635,15 @@ export def "compute-ingredient-amount" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nutrient: string # The target nutrient. See a list of supported nutrients. (e.g. protein)
-  --target: float # The target number of the given nutrient. (e.g. 2)
+  --nutrient: string # The target nutrient. See a list of supported nutrients. (required, e.g. protein)
+  --target: float # The target number of the given nutrient. (required, e.g. 2)
   --unit: string # The target unit. (e.g. oz)
 ]: nothing -> record<amount: float, unit: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($nutrient == null) { error make --unspanned { msg: "required query parameter 'nutrient' missing: pass --nutrient" } }
+  if ($target == null) { error make --unspanned { msg: "required query parameter 'target' missing: pass --target" } }
   let qp = [(serialize-qp "nutrient" $nutrient "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "unit" $unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/ingredients/{id}/amount") $qp $auth.query)
   let accept_val = "application/json"
@@ -659,7 +668,6 @@ export def "compute-ingredient-amount" [
 # Docs: https://spoonacular.com/food-api/docs#Get-Ingredient-Information — Read entire docs
 # operationId: getIngredientInformation
 export def "get-ingredient-information" [
-  id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -676,9 +684,8 @@ export def "get-ingredient-information" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "unit" $unit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/food/ingredients/{id}/information") $qp $auth.query)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/ingredients/{id}/information") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -701,7 +708,6 @@ export def "get-ingredient-information" [
 # Docs: https://spoonacular.com/food-api/docs#Get-Ingredient-Substitutes-by-ID — Read entire docs
 # operationId: getIngredientSubstitutesByID
 export def "get-ingredient-substitutes-by-id" [
-  id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -716,8 +722,7 @@ export def "get-ingredient-substitutes-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/food/ingredients/{id}/substitutes") $auth.query)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/ingredients/{id}/substitutes") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -832,11 +837,12 @@ export def "autocomplete-menu-item-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # The (partial) search query. (e.g. chicke)
+  --query: string # The (partial) search query. (required, e.g. chicke)
   --number: float # The number of results to return (between 1 and 25). (e.g. 10)
 ]: nothing -> record<results: table<id: int, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/menuItems/suggest" $qp $auth.query)
   let accept_val = "application/json"
@@ -861,7 +867,6 @@ export def "autocomplete-menu-item-search" [
 # Docs: https://spoonacular.com/food-api/docs#Get-Menu-Item-Information — Read entire docs
 # operationId: getMenuItemInformation
 export def "get-menu-item-information" [
-  id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -876,8 +881,7 @@ export def "get-menu-item-information" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/food/menuItems/{id}") $auth.query)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/menuItems/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1203,11 +1207,12 @@ export def "autocomplete-product-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # The (partial) search query. (e.g. chicke)
+  --query: string # The (partial) search query. (required, e.g. chicke)
   --number: int # The number of results to return (between 1 and 25). (e.g. 10)
 ]: nothing -> record<results: table<id: int, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/products/suggest" $qp $auth.query)
   let accept_val = "application/json"
@@ -1306,7 +1311,6 @@ export def "get-comparable-products" [
 # Docs: https://spoonacular.com/food-api/docs#Get-Product-Information — Read entire docs
 # operationId: getProductInformation
 export def "get-product-information" [
-  id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1321,8 +1325,7 @@ export def "get-product-information" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/food/products/{id}") $auth.query)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/products/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1524,19 +1527,19 @@ export def "search-restaurants" [
   --cuisine: string # The cuisine of the restaurant. (e.g. italian)
   --min-rating: float # The minimum rating of the restaurant between 0 and 5. (e.g. 4.4)
   --is-open: oneof<nothing, bool> # Whether the restaurant must be open at the time of search. (e.g. true)
-  --qp-sort: string # How to sort the results, one of the following 'cheapest', 'fastest', 'rating', 'distance' or the default 'relevance'. (e.g. distance)
+  --sort: string # How to sort the results, one of the following 'cheapest', 'fastest', 'rating', 'distance' or the default 'relevance'. (e.g. distance)
   --page: float # The page number of results. (e.g. 0)
 ]: nothing -> record<restaurants: table<_id: string, address: record, aggregated_rating_count: int, cuisines: list, delivery_enabled: bool, description: string, dollar_signs: int, food_photos: list, is_open: bool, local_hours: record, logo_photos: list, miles: float, name: string, offers_first_party_delivery: bool, offers_third_party_delivery: bool, phone_number: int, pickup_enabled: bool, store_photos: list, type: string, weighted_rating_value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "distance" $distance "scalar") (serialize-qp "budget" $budget "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "min-rating" $min_rating "scalar") (serialize-qp "is-open" $is_open "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "distance" $distance "scalar") (serialize-qp "budget" $budget "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "min-rating" $min_rating "scalar") (serialize-qp "is-open" $is_open "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/restaurants/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "lat": $lat, "lng": $lng, "distance": $distance, "budget": $budget, "cuisine": $cuisine, "min-rating": $min_rating, "is-open": $is_open, "sort": $qp_sort, "page": $page} | compact)
+    query: ({"query": $query, "lat": $lat, "lng": $lng, "distance": $distance, "budget": $budget, "cuisine": $cuisine, "min-rating": $min_rating, "is-open": $is_open, "sort": $sort, "page": $page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1562,12 +1565,13 @@ export def "search-all-food" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # The search query. (e.g. apple)
+  --query: string # The search query. (required, e.g. apple)
   --offset: int # The number of results to skip (between 0 and 900).
   --number: int # The maximum number of items to return (between 1 and 100). Defaults to 10. (default: 10, e.g. 10)
 ]: nothing -> record<limit: int, offset: int, query: string, searchResults: table<name: string, results: list, totalResults: int>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -1601,10 +1605,11 @@ export def "search-site-content" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # The query to search for. You can also use partial queries such as "spagh" to already find spaghetti recipes, articles, grocery products, and other content. (e.g. past)
+  --query: string # The query to search for. You can also use partial queries such as "spagh" to already find spaghetti recipes, articles, grocery products, and other content. (required, e.g. past)
 ]: nothing -> record<Articles: table<dataPoints: list, image: string, link: string, name: string>, Grocery_Products: table<dataPoints: list, image: string, link: string, name: string>, Menu_Items: table<dataPoints: list, image: string, link: string, name: string>, Recipes: table<dataPoints: list, image: string, link: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/site/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -1719,10 +1724,11 @@ export def "get-wine-description" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --wine: string # The name of the wine that should be paired, e.g. "merlot", "riesling", or "malbec". (e.g. merlot)
+  --wine: string # The name of the wine that should be paired, e.g. "merlot", "riesling", or "malbec". (required, e.g. merlot)
 ]: nothing -> record<wineDescription: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($wine == null) { error make --unspanned { msg: "required query parameter 'wine' missing: pass --wine" } }
   let qp = [(serialize-qp "wine" $wine "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/wine/description" $qp $auth.query)
   let accept_val = "application/json"
@@ -1756,10 +1762,11 @@ export def "get-dish-pairing-for-wine" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --wine: string # The type of wine that should be paired, e.g. "merlot", "riesling", or "malbec". (e.g. malbec)
+  --wine: string # The type of wine that should be paired, e.g. "merlot", "riesling", or "malbec". (required, e.g. malbec)
 ]: nothing -> record<pairings: list<string>, text: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($wine == null) { error make --unspanned { msg: "required query parameter 'wine' missing: pass --wine" } }
   let qp = [(serialize-qp "wine" $wine "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/wine/dishes" $qp $auth.query)
   let accept_val = "application/json"
@@ -1793,11 +1800,12 @@ export def "get-wine-pairing" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --food: string # The food to get a pairing for. This can be a dish ("steak"), an ingredient ("salmon"), or a cuisine ("italian"). (e.g. steak)
+  --food: string # The food to get a pairing for. This can be a dish ("steak"), an ingredient ("salmon"), or a cuisine ("italian"). (required, e.g. steak)
   --max-price: float # The maximum price for the specific wine recommendation in USD. (e.g. 50)
 ]: nothing -> record<pairedWines: list<string>, pairingText: string, productMatches: table<averageRating: float, description: any, id: int, imageUrl: string, link: string, price: string, ratingCount: int, score: float, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($food == null) { error make --unspanned { msg: "required query parameter 'food' missing: pass --food" } }
   let qp = [(serialize-qp "food" $food "scalar") (serialize-qp "maxPrice" $max_price "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/wine/pairing" $qp $auth.query)
   let accept_val = "application/json"
@@ -1831,13 +1839,14 @@ export def "get-wine-recommendation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --wine: string # The type of wine to get a specific product recommendation for. (e.g. merlot)
+  --wine: string # The type of wine to get a specific product recommendation for. (required, e.g. merlot)
   --max-price: float # The maximum price for the specific wine recommendation in USD. (e.g. 50)
   --min-rating: float # The minimum rating of the recommended wine between 0 and 1. For example, 0.8 equals 4 out of 5 stars. (e.g. 0.7)
   --number: float # The number of wine recommendations expected (between 1 and 100). (default: 10, e.g. 3)
 ]: nothing -> record<recommendedWines: table<averageRating: float, description: string, id: int, imageUrl: string, link: string, price: string, ratingCount: int, score: float, title: string>, totalFound: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($wine == null) { error make --unspanned { msg: "required query parameter 'wine' missing: pass --wine" } }
   let qp = [(serialize-qp "wine" $wine "scalar") (serialize-qp "maxPrice" $max_price "scalar") (serialize-qp "minRating" $min_rating "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/wine/recommendation" $qp $auth.query)
   let accept_val = "application/json"
@@ -1913,18 +1922,24 @@ export def "clear-meal-plan-day" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hash: string # The private hash for the username.
-  --body: record
+  --hash: string # The private hash for the username. (required)
+  --body-date: string # The date in the format yyyy-mm-dd. (e.g. 2020-06-01)
+  --hash-body: string # The private hash for the username. (e.g. 4b5v4398573406) (body field)
+  --body-username: string # The username. (e.g. dsky)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
+  if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), date: (encode-path-segment $date)} | format pattern "/mealplanner/{username}/day/{date}") $qp $auth.query)
-  let req_body = $body
+  let req_body = {"date": $body_date, "hash": $hash_body, "username": $body_username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "date") == null) { error make --unspanned { msg: "required body field 'date' missing: pass --body-date or pipe a record" } }
+  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --hash-body or pipe a record" } }
+  if (($req_body | get -o "username") == null) { error make --unspanned { msg: "required body field 'username' missing: pass --body-username or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1933,7 +1948,7 @@ export def "clear-meal-plan-day" [
     query: ({"hash": $hash} | compact)
     headers: $auth.headers
     body: $req_body
-    content_type: ""
+    content_type: "application/json"
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
@@ -1946,7 +1961,6 @@ export def "clear-meal-plan-day" [
 # POST /mealplanner/{username}/items
 # Docs: https://spoonacular.com/food-api/docs#Add-to-Meal-Plan — Read entire docs
 # operationId: addToMealPlan
-# --value shape: {ingredients: list}
 export def "add-to-meal-plan" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1958,21 +1972,21 @@ export def "add-to-meal-plan" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hash: string # The private hash for the username.
-  date: float
-  position: int
-  slot: int
-  type: string
-  value: record # shape: {ingredients: list}
+  --hash: string # The private hash for the username. (required)
+  --hash-body: string # The private hash for the username. (e.g. 4b5v4398573406) (body field)
+  --body-username: string # The username. (e.g. dsky)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/mealplanner/{username}/items") $qp $auth.query)
-  let req_body = {"date": $date, "position": $position, "slot": $slot, "type": $type, "value": $value} | compact
+  let req_body = {"hash": $hash_body, "username": $body_username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --hash-body or pipe a record" } }
+  if (($req_body | get -o "username") == null) { error make --unspanned { msg: "required body field 'username' missing: pass --body-username or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2006,18 +2020,24 @@ export def "delete-from-meal-plan" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hash: string # The private hash for the username.
-  --body: record
+  --hash: string # The private hash for the username. (required)
+  --hash-body: string # The private hash for the username. (e.g. 4b5v4398573406) (body field)
+  --body-id: float # The shopping list item id. (e.g. 15678)
+  --body-username: string # The username. (e.g. dsky)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/mealplanner/{username}/items/{id}") $qp $auth.query)
-  let req_body = $body
+  let req_body = {"hash": $hash_body, "id": $body_id, "username": $body_username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --hash-body or pipe a record" } }
+  if (($req_body | get -o "id") == null) { error make --unspanned { msg: "required body field 'id' missing: pass --body-id or pipe a record" } }
+  if (($req_body | get -o "username") == null) { error make --unspanned { msg: "required body field 'username' missing: pass --body-username or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2026,7 +2046,7 @@ export def "delete-from-meal-plan" [
     query: ({"hash": $hash} | compact)
     headers: $auth.headers
     body: $req_body
-    content_type: ""
+    content_type: "application/json"
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
@@ -2050,11 +2070,12 @@ export def "get-shopping-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hash: string # The private hash for the username.
+  --hash: string # The private hash for the username. (required)
 ]: nothing -> record<aisles: table<aisle: string, items: list>, cost: float, endDate: float, startDate: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/mealplanner/{username}/shopping-list") $qp $auth.query)
   let accept_val = "application/json"
@@ -2089,19 +2110,21 @@ export def "add-to-shopping-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hash: string # The private hash for the username.
-  aisle: string
-  item: string
-  --parse: oneof<nothing, bool>
+  --hash: string # The private hash for the username. (required)
+  --hash-body: string # The private hash for the username. (e.g. 4b5v4398573406) (body field)
+  --body-username: string # The username. (e.g. dsky)
 ]: any -> record<aisles: table<aisle: string, items: list>, cost: float, endDate: float, startDate: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/mealplanner/{username}/shopping-list/items") $qp $auth.query)
-  let req_body = {"aisle": $aisle, "item": $item, "parse": $parse} | compact
+  let req_body = {"hash": $hash_body, "username": $body_username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --hash-body or pipe a record" } }
+  if (($req_body | get -o "username") == null) { error make --unspanned { msg: "required body field 'username' missing: pass --body-username or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2135,18 +2158,24 @@ export def "delete-from-shopping-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hash: string # The private hash for the username.
-  --body: record
+  --hash: string # The private hash for the username. (required)
+  --hash-body: string # The private hash for the username. (e.g. 4b5v4398573406) (body field)
+  --body-id: float # The shopping list item id. (e.g. 15678)
+  --body-username: string # The username. (e.g. dsky)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/mealplanner/{username}/shopping-list/items/{id}") $qp $auth.query)
-  let req_body = $body
+  let req_body = {"hash": $hash_body, "id": $body_id, "username": $body_username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --hash-body or pipe a record" } }
+  if (($req_body | get -o "id") == null) { error make --unspanned { msg: "required body field 'id' missing: pass --body-id or pipe a record" } }
+  if (($req_body | get -o "username") == null) { error make --unspanned { msg: "required body field 'username' missing: pass --body-username or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2155,7 +2184,7 @@ export def "delete-from-shopping-list" [
     query: ({"hash": $hash} | compact)
     headers: $auth.headers
     body: $req_body
-    content_type: ""
+    content_type: "application/json"
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
@@ -2181,8 +2210,11 @@ export def "generate-shopping-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hash: string # The private hash for the username.
-  --body: record
+  --hash: string # The private hash for the username. (required)
+  --body-end-date: string # The end date in the format yyyy-mm-dd. (e.g. 2020-06-07)
+  --hash-body: string # The private hash for the username. (e.g. 4b5v4398573406) (body field)
+  --body-start-date: string # The start date in the format yyyy-mm-dd. (e.g. 2020-06-01)
+  --body-username: string # The username. (e.g. dsky)
 ]: any -> record<aisles: table<aisle: string, items: list>, cost: float, endDate: float, startDate: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2190,10 +2222,15 @@ export def "generate-shopping-list" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start-date' must be non-empty" } }
   if ($end_date | is-empty) { error make --unspanned { msg: "path parameter 'end-date' must be non-empty" } }
+  if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), start_date: (encode-path-segment $start_date), end_date: (encode-path-segment $end_date)} | format pattern "/mealplanner/{username}/shopping-list/{start_date}/{end_date}") $qp $auth.query)
-  let req_body = $body
+  let req_body = {"end-date": $body_end_date, "hash": $hash_body, "start-date": $body_start_date, "username": $body_username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "end-date") == null) { error make --unspanned { msg: "required body field 'end-date' missing: pass --body-end-date or pipe a record" } }
+  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --hash-body or pipe a record" } }
+  if (($req_body | get -o "start-date") == null) { error make --unspanned { msg: "required body field 'start-date' missing: pass --body-start-date or pipe a record" } }
+  if (($req_body | get -o "username") == null) { error make --unspanned { msg: "required body field 'username' missing: pass --body-username or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2202,7 +2239,7 @@ export def "generate-shopping-list" [
     query: ({"hash": $hash} | compact)
     headers: $auth.headers
     body: $req_body
-    content_type: ""
+    content_type: "application/json"
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
@@ -2226,11 +2263,12 @@ export def "get-meal-plan-templates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hash: string # The private hash for the username.
+  --hash: string # The private hash for the username. (required)
 ]: nothing -> record<templates: table<id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/mealplanner/{username}/templates") $qp $auth.query)
   let accept_val = "application/json"
@@ -2256,7 +2294,6 @@ export def "get-meal-plan-templates" [
 # operationId: addMealPlanTemplate
 export def "add-meal-plan-template" [
   username: string
-  username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2266,18 +2303,21 @@ export def "add-meal-plan-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hash: string # The private hash for the username. (e.g. 4b5v4398573406)
-  --body: record
+  --hash: string # The private hash for the username. (required, e.g. 4b5v4398573406)
+  --hash-body: string # The private hash for the username. (e.g. 4b5v4398573406) (body field)
+  --body-username: string # The username. (e.g. dsky)
 ]: any -> record<items: table<day: int, position: int, slot: int, type: string, value: record>, name: string, publishAsPublic: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
-  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: (encode-path-segment $username), username: (encode-path-segment $username)} | format pattern "/mealplanner/{username}/templates") $qp $auth.query)
-  let req_body = $body
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/mealplanner/{username}/templates") $qp $auth.query)
+  let req_body = {"hash": $hash_body, "username": $body_username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --hash-body or pipe a record" } }
+  if (($req_body | get -o "username") == null) { error make --unspanned { msg: "required body field 'username' missing: pass --body-username or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2286,7 +2326,7 @@ export def "add-meal-plan-template" [
     query: ({"hash": $hash} | compact)
     headers: $auth.headers
     body: $req_body
-    content_type: ""
+    content_type: "application/json"
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
@@ -2301,8 +2341,6 @@ export def "add-meal-plan-template" [
 # operationId: deleteMealPlanTemplate
 export def "delete-meal-plan-template" [
   username: string
-  username: string
-  id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2313,20 +2351,24 @@ export def "delete-meal-plan-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hash: string # The private hash for the username. (e.g. 4b5v4398573406)
-  --body: record
+  --hash: string # The private hash for the username. (required, e.g. 4b5v4398573406)
+  --hash-body: string # The private hash for the username. (e.g. 4b5v4398573406) (body field)
+  --body-id: float # The shopping list item id. (e.g. 15678)
+  --body-username: string # The username. (e.g. dsky)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
-  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: (encode-path-segment $username), username: (encode-path-segment $username), id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/mealplanner/{username}/templates/{id}") $qp $auth.query)
-  let req_body = $body
+  let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/mealplanner/{username}/templates/{id}") $qp $auth.query)
+  let req_body = {"hash": $hash_body, "id": $body_id, "username": $body_username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --hash-body or pipe a record" } }
+  if (($req_body | get -o "id") == null) { error make --unspanned { msg: "required body field 'id' missing: pass --body-id or pipe a record" } }
+  if (($req_body | get -o "username") == null) { error make --unspanned { msg: "required body field 'username' missing: pass --body-username or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2335,7 +2377,7 @@ export def "delete-meal-plan-template" [
     query: ({"hash": $hash} | compact)
     headers: $auth.headers
     body: $req_body
-    content_type: ""
+    content_type: "application/json"
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
@@ -2360,12 +2402,13 @@ export def "get-meal-plan-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hash: string # The private hash for the username.
+  --hash: string # The private hash for the username. (required)
 ]: nothing -> record<days: table<day: string, items: list, nutritionSummary: record, nutritionSummaryBreakfast: record, nutritionSummaryDinner: record, nutritionSummaryLunch: record>, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/mealplanner/{username}/templates/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2401,12 +2444,13 @@ export def "get-meal-plan-week" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hash: string # The private hash for the username.
+  --hash: string # The private hash for the username. (required)
 ]: nothing -> record<days: table<date: float, day: string, items: list, nutritionSummary: record, nutritionSummaryBreakfast: record, nutritionSummaryDinner: record, nutritionSummaryLunch: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start-date' must be non-empty" } }
+  if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), start_date: (encode-path-segment $start_date)} | format pattern "/mealplanner/{username}/week/{start_date}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2443,17 +2487,16 @@ export def "analyze-recipe" [
   --language: string # The input language, either "en" or "de". (e.g. en)
   --include-nutrition: oneof<nothing, bool> # Whether nutrition data should be added to correctly parsed ingredients. (e.g. false)
   --include-taste: oneof<nothing, bool> # Whether taste data should be added to correctly parsed ingredients. (e.g. false)
-  --ingredients: list<string>
-  --instructions: string
-  --servings: int
-  --title: string
+  --include-nutrition-body: oneof<nothing, bool> # Whether nutrition data should be added to correctly parsed ingredients. (e.g. false) (body field)
+  --include-taste-body: oneof<nothing, bool> # Whether taste data should be added to correctly parsed ingredients. (e.g. false) (body field)
+  --language-body: string # The input language, either "en" or "de". (e.g. en) (body field)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "includeNutrition" $include_nutrition "scalar") (serialize-qp "includeTaste" $include_taste "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/analyze" $qp $auth.query)
-  let req_body = {"ingredients": $ingredients, "instructions": $instructions, "servings": $servings, "title": $title} | compact
+  let req_body = {"includeNutrition": $include_nutrition_body, "includeTaste": $include_taste_body, "language": $language_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2587,7 +2630,7 @@ export def "search-recipes" [
   --title-match: string # Enter text that must be found in the title of the recipes. (e.g. Crock Pot)
   --max-ready-time: float # The maximum time in minutes it should take to prepare and cook the recipe. (e.g. 20)
   --ignore-pantry: oneof<nothing, bool> # Whether to ignore typical pantry items, such as water, salt, flour, etc. (default: false, e.g. false)
-  --qp-sort: string # The strategy to sort recipes by. See a full list of supported sorting options. (e.g. calories)
+  --sort: string # The strategy to sort recipes by. See a full list of supported sorting options. (e.g. calories)
   --sort-direction: string # The direction in which to sort. Must be either 'asc' (ascending) or 'desc' (descending). (e.g. asc)
   --min-carbs: float # The minimum amount of carbohydrates in grams the recipe must have. (e.g. 10)
   --max-carbs: float # The maximum amount of carbohydrates in grams the recipe can have. (e.g. 100)
@@ -2667,14 +2710,14 @@ export def "search-recipes" [
 ]: nothing -> record<number: int, offset: int, results: table<calories: float, carbs: string, fat: string, id: int, image: string, imageType: string, protein: string, title: string>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "excludeCuisine" $exclude_cuisine "scalar") (serialize-qp "diet" $diet "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "equipment" $equipment "scalar") (serialize-qp "includeIngredients" $include_ingredients "scalar") (serialize-qp "excludeIngredients" $exclude_ingredients "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "instructionsRequired" $instructions_required "scalar") (serialize-qp "fillIngredients" $fill_ingredients "scalar") (serialize-qp "addRecipeInformation" $add_recipe_information "scalar") (serialize-qp "addRecipeNutrition" $add_recipe_nutrition "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "recipeBoxId" $recipe_box_id "scalar") (serialize-qp "titleMatch" $title_match "scalar") (serialize-qp "maxReadyTime" $max_ready_time "scalar") (serialize-qp "ignorePantry" $ignore_pantry "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "minCarbs" $min_carbs "scalar") (serialize-qp "maxCarbs" $max_carbs "scalar") (serialize-qp "minProtein" $min_protein "scalar") (serialize-qp "maxProtein" $max_protein "scalar") (serialize-qp "minCalories" $min_calories "scalar") (serialize-qp "maxCalories" $max_calories "scalar") (serialize-qp "minFat" $min_fat "scalar") (serialize-qp "maxFat" $max_fat "scalar") (serialize-qp "minAlcohol" $min_alcohol "scalar") (serialize-qp "maxAlcohol" $max_alcohol "scalar") (serialize-qp "minCaffeine" $min_caffeine "scalar") (serialize-qp "maxCaffeine" $max_caffeine "scalar") (serialize-qp "minCopper" $min_copper "scalar") (serialize-qp "maxCopper" $max_copper "scalar") (serialize-qp "minCalcium" $min_calcium "scalar") (serialize-qp "maxCalcium" $max_calcium "scalar") (serialize-qp "minCholine" $min_choline "scalar") (serialize-qp "maxCholine" $max_choline "scalar") (serialize-qp "minCholesterol" $min_cholesterol "scalar") (serialize-qp "maxCholesterol" $max_cholesterol "scalar") (serialize-qp "minFluoride" $min_fluoride "scalar") (serialize-qp "maxFluoride" $max_fluoride "scalar") (serialize-qp "minSaturatedFat" $min_saturated_fat "scalar") (serialize-qp "maxSaturatedFat" $max_saturated_fat "scalar") (serialize-qp "minVitaminA" $min_vitamin_a "scalar") (serialize-qp "maxVitaminA" $max_vitamin_a "scalar") (serialize-qp "minVitaminC" $min_vitamin_c "scalar") (serialize-qp "maxVitaminC" $max_vitamin_c "scalar") (serialize-qp "minVitaminD" $min_vitamin_d "scalar") (serialize-qp "maxVitaminD" $max_vitamin_d "scalar") (serialize-qp "minVitaminE" $min_vitamin_e "scalar") (serialize-qp "maxVitaminE" $max_vitamin_e "scalar") (serialize-qp "minVitaminK" $min_vitamin_k "scalar") (serialize-qp "maxVitaminK" $max_vitamin_k "scalar") (serialize-qp "minVitaminB1" $min_vitamin_b1 "scalar") (serialize-qp "maxVitaminB1" $max_vitamin_b1 "scalar") (serialize-qp "minVitaminB2" $min_vitamin_b2 "scalar") (serialize-qp "maxVitaminB2" $max_vitamin_b2 "scalar") (serialize-qp "minVitaminB5" $min_vitamin_b5 "scalar") (serialize-qp "maxVitaminB5" $max_vitamin_b5 "scalar") (serialize-qp "minVitaminB3" $min_vitamin_b3 "scalar") (serialize-qp "maxVitaminB3" $max_vitamin_b3 "scalar") (serialize-qp "minVitaminB6" $min_vitamin_b6 "scalar") (serialize-qp "maxVitaminB6" $max_vitamin_b6 "scalar") (serialize-qp "minVitaminB12" $min_vitamin_b12 "scalar") (serialize-qp "maxVitaminB12" $max_vitamin_b12 "scalar") (serialize-qp "minFiber" $min_fiber "scalar") (serialize-qp "maxFiber" $max_fiber "scalar") (serialize-qp "minFolate" $min_folate "scalar") (serialize-qp "maxFolate" $max_folate "scalar") (serialize-qp "minFolicAcid" $min_folic_acid "scalar") (serialize-qp "maxFolicAcid" $max_folic_acid "scalar") (serialize-qp "minIodine" $min_iodine "scalar") (serialize-qp "maxIodine" $max_iodine "scalar") (serialize-qp "minIron" $min_iron "scalar") (serialize-qp "maxIron" $max_iron "scalar") (serialize-qp "minMagnesium" $min_magnesium "scalar") (serialize-qp "maxMagnesium" $max_magnesium "scalar") (serialize-qp "minManganese" $min_manganese "scalar") (serialize-qp "maxManganese" $max_manganese "scalar") (serialize-qp "minPhosphorus" $min_phosphorus "scalar") (serialize-qp "maxPhosphorus" $max_phosphorus "scalar") (serialize-qp "minPotassium" $min_potassium "scalar") (serialize-qp "maxPotassium" $max_potassium "scalar") (serialize-qp "minSelenium" $min_selenium "scalar") (serialize-qp "maxSelenium" $max_selenium "scalar") (serialize-qp "minSodium" $min_sodium "scalar") (serialize-qp "maxSodium" $max_sodium "scalar") (serialize-qp "minSugar" $min_sugar "scalar") (serialize-qp "maxSugar" $max_sugar "scalar") (serialize-qp "minZinc" $min_zinc "scalar") (serialize-qp "maxZinc" $max_zinc "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "limitLicense" $limit_license "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "excludeCuisine" $exclude_cuisine "scalar") (serialize-qp "diet" $diet "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "equipment" $equipment "scalar") (serialize-qp "includeIngredients" $include_ingredients "scalar") (serialize-qp "excludeIngredients" $exclude_ingredients "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "instructionsRequired" $instructions_required "scalar") (serialize-qp "fillIngredients" $fill_ingredients "scalar") (serialize-qp "addRecipeInformation" $add_recipe_information "scalar") (serialize-qp "addRecipeNutrition" $add_recipe_nutrition "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "recipeBoxId" $recipe_box_id "scalar") (serialize-qp "titleMatch" $title_match "scalar") (serialize-qp "maxReadyTime" $max_ready_time "scalar") (serialize-qp "ignorePantry" $ignore_pantry "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "minCarbs" $min_carbs "scalar") (serialize-qp "maxCarbs" $max_carbs "scalar") (serialize-qp "minProtein" $min_protein "scalar") (serialize-qp "maxProtein" $max_protein "scalar") (serialize-qp "minCalories" $min_calories "scalar") (serialize-qp "maxCalories" $max_calories "scalar") (serialize-qp "minFat" $min_fat "scalar") (serialize-qp "maxFat" $max_fat "scalar") (serialize-qp "minAlcohol" $min_alcohol "scalar") (serialize-qp "maxAlcohol" $max_alcohol "scalar") (serialize-qp "minCaffeine" $min_caffeine "scalar") (serialize-qp "maxCaffeine" $max_caffeine "scalar") (serialize-qp "minCopper" $min_copper "scalar") (serialize-qp "maxCopper" $max_copper "scalar") (serialize-qp "minCalcium" $min_calcium "scalar") (serialize-qp "maxCalcium" $max_calcium "scalar") (serialize-qp "minCholine" $min_choline "scalar") (serialize-qp "maxCholine" $max_choline "scalar") (serialize-qp "minCholesterol" $min_cholesterol "scalar") (serialize-qp "maxCholesterol" $max_cholesterol "scalar") (serialize-qp "minFluoride" $min_fluoride "scalar") (serialize-qp "maxFluoride" $max_fluoride "scalar") (serialize-qp "minSaturatedFat" $min_saturated_fat "scalar") (serialize-qp "maxSaturatedFat" $max_saturated_fat "scalar") (serialize-qp "minVitaminA" $min_vitamin_a "scalar") (serialize-qp "maxVitaminA" $max_vitamin_a "scalar") (serialize-qp "minVitaminC" $min_vitamin_c "scalar") (serialize-qp "maxVitaminC" $max_vitamin_c "scalar") (serialize-qp "minVitaminD" $min_vitamin_d "scalar") (serialize-qp "maxVitaminD" $max_vitamin_d "scalar") (serialize-qp "minVitaminE" $min_vitamin_e "scalar") (serialize-qp "maxVitaminE" $max_vitamin_e "scalar") (serialize-qp "minVitaminK" $min_vitamin_k "scalar") (serialize-qp "maxVitaminK" $max_vitamin_k "scalar") (serialize-qp "minVitaminB1" $min_vitamin_b1 "scalar") (serialize-qp "maxVitaminB1" $max_vitamin_b1 "scalar") (serialize-qp "minVitaminB2" $min_vitamin_b2 "scalar") (serialize-qp "maxVitaminB2" $max_vitamin_b2 "scalar") (serialize-qp "minVitaminB5" $min_vitamin_b5 "scalar") (serialize-qp "maxVitaminB5" $max_vitamin_b5 "scalar") (serialize-qp "minVitaminB3" $min_vitamin_b3 "scalar") (serialize-qp "maxVitaminB3" $max_vitamin_b3 "scalar") (serialize-qp "minVitaminB6" $min_vitamin_b6 "scalar") (serialize-qp "maxVitaminB6" $max_vitamin_b6 "scalar") (serialize-qp "minVitaminB12" $min_vitamin_b12 "scalar") (serialize-qp "maxVitaminB12" $max_vitamin_b12 "scalar") (serialize-qp "minFiber" $min_fiber "scalar") (serialize-qp "maxFiber" $max_fiber "scalar") (serialize-qp "minFolate" $min_folate "scalar") (serialize-qp "maxFolate" $max_folate "scalar") (serialize-qp "minFolicAcid" $min_folic_acid "scalar") (serialize-qp "maxFolicAcid" $max_folic_acid "scalar") (serialize-qp "minIodine" $min_iodine "scalar") (serialize-qp "maxIodine" $max_iodine "scalar") (serialize-qp "minIron" $min_iron "scalar") (serialize-qp "maxIron" $max_iron "scalar") (serialize-qp "minMagnesium" $min_magnesium "scalar") (serialize-qp "maxMagnesium" $max_magnesium "scalar") (serialize-qp "minManganese" $min_manganese "scalar") (serialize-qp "maxManganese" $max_manganese "scalar") (serialize-qp "minPhosphorus" $min_phosphorus "scalar") (serialize-qp "maxPhosphorus" $max_phosphorus "scalar") (serialize-qp "minPotassium" $min_potassium "scalar") (serialize-qp "maxPotassium" $max_potassium "scalar") (serialize-qp "minSelenium" $min_selenium "scalar") (serialize-qp "maxSelenium" $max_selenium "scalar") (serialize-qp "minSodium" $min_sodium "scalar") (serialize-qp "maxSodium" $max_sodium "scalar") (serialize-qp "minSugar" $min_sugar "scalar") (serialize-qp "maxSugar" $max_sugar "scalar") (serialize-qp "minZinc" $min_zinc "scalar") (serialize-qp "maxZinc" $max_zinc "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "limitLicense" $limit_license "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/complexSearch" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "cuisine": $cuisine, "excludeCuisine": $exclude_cuisine, "diet": $diet, "intolerances": $intolerances, "equipment": $equipment, "includeIngredients": $include_ingredients, "excludeIngredients": $exclude_ingredients, "type": $type, "instructionsRequired": $instructions_required, "fillIngredients": $fill_ingredients, "addRecipeInformation": $add_recipe_information, "addRecipeNutrition": $add_recipe_nutrition, "author": $author, "tags": $tags, "recipeBoxId": $recipe_box_id, "titleMatch": $title_match, "maxReadyTime": $max_ready_time, "ignorePantry": $ignore_pantry, "sort": $qp_sort, "sortDirection": $sort_direction, "minCarbs": $min_carbs, "maxCarbs": $max_carbs, "minProtein": $min_protein, "maxProtein": $max_protein, "minCalories": $min_calories, "maxCalories": $max_calories, "minFat": $min_fat, "maxFat": $max_fat, "minAlcohol": $min_alcohol, "maxAlcohol": $max_alcohol, "minCaffeine": $min_caffeine, "maxCaffeine": $max_caffeine, "minCopper": $min_copper, "maxCopper": $max_copper, "minCalcium": $min_calcium, "maxCalcium": $max_calcium, "minCholine": $min_choline, "maxCholine": $max_choline, "minCholesterol": $min_cholesterol, "maxCholesterol": $max_cholesterol, "minFluoride": $min_fluoride, "maxFluoride": $max_fluoride, "minSaturatedFat": $min_saturated_fat, "maxSaturatedFat": $max_saturated_fat, "minVitaminA": $min_vitamin_a, "maxVitaminA": $max_vitamin_a, "minVitaminC": $min_vitamin_c, "maxVitaminC": $max_vitamin_c, "minVitaminD": $min_vitamin_d, "maxVitaminD": $max_vitamin_d, "minVitaminE": $min_vitamin_e, "maxVitaminE": $max_vitamin_e, "minVitaminK": $min_vitamin_k, "maxVitaminK": $max_vitamin_k, "minVitaminB1": $min_vitamin_b1, "maxVitaminB1": $max_vitamin_b1, "minVitaminB2": $min_vitamin_b2, "maxVitaminB2": $max_vitamin_b2, "minVitaminB5": $min_vitamin_b5, "maxVitaminB5": $max_vitamin_b5, "minVitaminB3": $min_vitamin_b3, "maxVitaminB3": $max_vitamin_b3, "minVitaminB6": $min_vitamin_b6, "maxVitaminB6": $max_vitamin_b6, "minVitaminB12": $min_vitamin_b12, "maxVitaminB12": $max_vitamin_b12, "minFiber": $min_fiber, "maxFiber": $max_fiber, "minFolate": $min_folate, "maxFolate": $max_folate, "minFolicAcid": $min_folic_acid, "maxFolicAcid": $max_folic_acid, "minIodine": $min_iodine, "maxIodine": $max_iodine, "minIron": $min_iron, "maxIron": $max_iron, "minMagnesium": $min_magnesium, "maxMagnesium": $max_magnesium, "minManganese": $min_manganese, "maxManganese": $max_manganese, "minPhosphorus": $min_phosphorus, "maxPhosphorus": $max_phosphorus, "minPotassium": $min_potassium, "maxPotassium": $max_potassium, "minSelenium": $min_selenium, "maxSelenium": $max_selenium, "minSodium": $min_sodium, "maxSodium": $max_sodium, "minSugar": $min_sugar, "maxSugar": $max_sugar, "minZinc": $min_zinc, "maxZinc": $max_zinc, "offset": $offset, "number": $number, "limitLicense": $limit_license} | compact)
+    query: ({"query": $query, "cuisine": $cuisine, "excludeCuisine": $exclude_cuisine, "diet": $diet, "intolerances": $intolerances, "equipment": $equipment, "includeIngredients": $include_ingredients, "excludeIngredients": $exclude_ingredients, "type": $type, "instructionsRequired": $instructions_required, "fillIngredients": $fill_ingredients, "addRecipeInformation": $add_recipe_information, "addRecipeNutrition": $add_recipe_nutrition, "author": $author, "tags": $tags, "recipeBoxId": $recipe_box_id, "titleMatch": $title_match, "maxReadyTime": $max_ready_time, "ignorePantry": $ignore_pantry, "sort": $sort, "sortDirection": $sort_direction, "minCarbs": $min_carbs, "maxCarbs": $max_carbs, "minProtein": $min_protein, "maxProtein": $max_protein, "minCalories": $min_calories, "maxCalories": $max_calories, "minFat": $min_fat, "maxFat": $max_fat, "minAlcohol": $min_alcohol, "maxAlcohol": $max_alcohol, "minCaffeine": $min_caffeine, "maxCaffeine": $max_caffeine, "minCopper": $min_copper, "maxCopper": $max_copper, "minCalcium": $min_calcium, "maxCalcium": $max_calcium, "minCholine": $min_choline, "maxCholine": $max_choline, "minCholesterol": $min_cholesterol, "maxCholesterol": $max_cholesterol, "minFluoride": $min_fluoride, "maxFluoride": $max_fluoride, "minSaturatedFat": $min_saturated_fat, "maxSaturatedFat": $max_saturated_fat, "minVitaminA": $min_vitamin_a, "maxVitaminA": $max_vitamin_a, "minVitaminC": $min_vitamin_c, "maxVitaminC": $max_vitamin_c, "minVitaminD": $min_vitamin_d, "maxVitaminD": $max_vitamin_d, "minVitaminE": $min_vitamin_e, "maxVitaminE": $max_vitamin_e, "minVitaminK": $min_vitamin_k, "maxVitaminK": $max_vitamin_k, "minVitaminB1": $min_vitamin_b1, "maxVitaminB1": $max_vitamin_b1, "minVitaminB2": $min_vitamin_b2, "maxVitaminB2": $max_vitamin_b2, "minVitaminB5": $min_vitamin_b5, "maxVitaminB5": $max_vitamin_b5, "minVitaminB3": $min_vitamin_b3, "maxVitaminB3": $max_vitamin_b3, "minVitaminB6": $min_vitamin_b6, "maxVitaminB6": $max_vitamin_b6, "minVitaminB12": $min_vitamin_b12, "maxVitaminB12": $max_vitamin_b12, "minFiber": $min_fiber, "maxFiber": $max_fiber, "minFolate": $min_folate, "maxFolate": $max_folate, "minFolicAcid": $min_folic_acid, "maxFolicAcid": $max_folic_acid, "minIodine": $min_iodine, "maxIodine": $max_iodine, "minIron": $min_iron, "maxIron": $max_iron, "minMagnesium": $min_magnesium, "maxMagnesium": $max_magnesium, "minManganese": $min_manganese, "maxManganese": $max_manganese, "minPhosphorus": $min_phosphorus, "maxPhosphorus": $max_phosphorus, "minPotassium": $min_potassium, "maxPotassium": $max_potassium, "minSelenium": $min_selenium, "maxSelenium": $max_selenium, "minSodium": $min_sodium, "maxSodium": $max_sodium, "minSugar": $min_sugar, "maxSugar": $max_sugar, "minZinc": $min_zinc, "maxZinc": $max_zinc, "offset": $offset, "number": $number, "limitLicense": $limit_license} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2700,13 +2743,17 @@ export def "convert-amounts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ingredient-name: string # The ingredient which you want to convert. (e.g. flour)
-  --source-amount: float # The amount from which you want to convert, e.g. the 2.5 in "2.5 cups of flour to grams". (e.g. 2.5)
-  --source-unit: string # The unit from which you want to convert, e.g. the grams in "2.5 cups of flour to grams". You can also use "piece", e.g. "3.4 oz tomatoes to piece" (e.g. cups)
-  --target-unit: string # The unit to which you want to convert, e.g. the grams in "2.5 cups of flour to grams". You can also use "piece", e.g. "3.4 oz tomatoes to piece" (e.g. grams)
+  --ingredient-name: string # The ingredient which you want to convert. (required, e.g. flour)
+  --source-amount: float # The amount from which you want to convert, e.g. the 2.5 in "2.5 cups of flour to grams". (required, e.g. 2.5)
+  --source-unit: string # The unit from which you want to convert, e.g. the grams in "2.5 cups of flour to grams". You can also use "piece", e.g. "3.4 oz tomatoes to piece" (required, e.g. cups)
+  --target-unit: string # The unit to which you want to convert, e.g. the grams in "2.5 cups of flour to grams". You can also use "piece", e.g. "3.4 oz tomatoes to piece" (required, e.g. grams)
 ]: nothing -> record<answer: string, sourceAmount: float, sourceUnit: string, targetAmount: float, targetUnit: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($ingredient_name == null) { error make --unspanned { msg: "required query parameter 'ingredientName' missing: pass --ingredient-name" } }
+  if ($source_amount == null) { error make --unspanned { msg: "required query parameter 'sourceAmount' missing: pass --source-amount" } }
+  if ($source_unit == null) { error make --unspanned { msg: "required query parameter 'sourceUnit' missing: pass --source-unit" } }
+  if ($target_unit == null) { error make --unspanned { msg: "required query parameter 'targetUnit' missing: pass --target-unit" } }
   let qp = [(serialize-qp "ingredientName" $ingredient_name "scalar") (serialize-qp "sourceAmount" $source_amount "scalar") (serialize-qp "sourceUnit" $source_unit "scalar") (serialize-qp "targetUnit" $target_unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/convert" $qp $auth.query)
   let accept_val = "application/json"
@@ -2784,7 +2831,7 @@ export def "extract-recipe-from-website" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # The URL of the recipe page. (e.g. https://foodista.com/recipe/ZHK4KPB6/chocolate-crinkle-cookies)
+  --url: string # The URL of the recipe page. (required, e.g. https://foodista.com/recipe/ZHK4KPB6/chocolate-crinkle-cookies)
   --force-extraction: oneof<nothing, bool> # If true, the extraction will be triggered whether we already know the recipe or not. Use this only if information is missing as this operation is slower. (e.g. true)
   --analyze: oneof<nothing, bool> # If true, the recipe will be analyzed and classified resolving in more data such as cuisines, dish types, and more. (e.g. false)
   --include-nutrition: oneof<nothing, bool> # Include nutrition data in the recipe information. Nutrition data is per serving. If you want the nutrition data for the entire recipe, just multiply by the number of servings. (default: false)
@@ -2792,6 +2839,7 @@ export def "extract-recipe-from-website" [
 ]: nothing -> record<aggregateLikes: int, analyzedInstructions: list<record>, cheap: bool, creditsText: string, cuisines: list<string>, dairyFree: bool, diets: list<string>, dishTypes: list<string>, extendedIngredients: table<aisle: string, amount: float, consitency: string, id: int, image: string, measures: record, meta: list, name: string, original: string, originalName: string, unit: string>, gaps: string, glutenFree: bool, healthScore: float, id: int, image: string, imageType: string, instructions: string, ketogenic: bool, license: string, lowFodmap: bool, occasions: list<string>, pricePerServing: float, readyInMinutes: int, servings: float, sourceName: string, sourceUrl: string, spoonacularScore: float, spoonacularSourceUrl: string, summary: string, sustainable: bool, title: string, vegan: bool, vegetarian: bool, veryHealthy: bool, veryPopular: bool, weightWatcherSmartPoints: float, whole30: bool, winePairing: record<pairedWines: list<string>, pairingText: string, productMatches: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "forceExtraction" $force_extraction "scalar") (serialize-qp "analyze" $analyze "scalar") (serialize-qp "includeNutrition" $include_nutrition "scalar") (serialize-qp "includeTaste" $include_taste "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/extract" $qp $auth.query)
   let accept_val = "application/json"
@@ -2978,10 +3026,11 @@ export def "guess-nutrition-by-dish-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --title: string # The title of the dish. (e.g. Spaghetti Aglio et Olio)
+  --title: string # The title of the dish. (required, e.g. Spaghetti Aglio et Olio)
 ]: nothing -> record<calories: record<confidenceRange95Percent: record<max: float, min: float>, standardDeviation: float, unit: string, value: float>, carbs: record<confidenceRange95Percent: record<max: float, min: float>, standardDeviation: float, unit: string, value: float>, fat: record<confidenceRange95Percent: record<max: float, min: float>, standardDeviation: float, unit: string, value: float>, protein: record<confidenceRange95Percent: record<max: float, min: float>, standardDeviation: float, unit: string, value: float>, recipesUsed: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($title == null) { error make --unspanned { msg: "required query parameter 'title' missing: pass --title" } }
   let qp = [(serialize-qp "title" $title "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/guessNutrition" $qp $auth.query)
   let accept_val = "application/json"
@@ -3015,11 +3064,12 @@ export def "get-recipe-information-bulk" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # A comma-separated list of recipe ids. (e.g. 715538,716429)
+  --ids: string # A comma-separated list of recipe ids. (required, e.g. 715538,716429)
   --include-nutrition: oneof<nothing, bool> # Include nutrition data in the recipe information. Nutrition data is per serving. If you want the nutrition data for the entire recipe, just multiply by the number of servings. (default: false)
 ]: nothing -> table<aggregateLikes: int, analyzedInstructions: list<string>, cheap: bool, creditsText: string, cuisines: list<string>, dairyFree: bool, diets: list<string>, dishTypes: list<string>, extendedIngredients: list<record>, gaps: string, glutenFree: bool, healthScore: float, id: int, image: string, imageType: string, instructions: string, ketogenic: bool, license: string, lowFodmap: bool, occasions: list<string>, pricePerServing: float, readyInMinutes: int, servings: float, sourceName: string, sourceUrl: string, spoonacularScore: float, spoonacularSourceUrl: string, summary: string, sustainable: bool, title: string, vegan: bool, vegetarian: bool, veryHealthy: bool, veryPopular: bool, weightWatcherSmartPoints: float, whole30: bool, winePairing: record<pairedWines: list, pairingText: string, productMatches: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar") (serialize-qp "includeNutrition" $include_nutrition "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/informationBulk" $qp $auth.query)
   let accept_val = "application/json"
@@ -3099,10 +3149,11 @@ export def "analyze-a-recipe-search-query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The recipe search query. (e.g. salmon with fusilli and no nuts)
+  --q: string # The recipe search query. (required, e.g. salmon with fusilli and no nuts)
 ]: nothing -> record<cuisines: list<string>, dishes: table<image: string, name: string>, ingredients: table<image: string, include: bool, name: string>, modifiers: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/queries/analyze" $qp $auth.query)
   let accept_val = "application/json"
@@ -3136,10 +3187,11 @@ export def "quick-answer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The nutrition related question. (e.g. How much vitamin c is in 2 apples?)
+  --q: string # The nutrition related question. (required, e.g. How much vitamin c is in 2 apples?)
 ]: nothing -> record<answer: string, image: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/quickAnswer" $qp $auth.query)
   let accept_val = "application/json"
@@ -3411,8 +3463,8 @@ export def "create-recipe-card" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let effective_ct = ($content_type | default "multipart/form-data")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
@@ -3484,7 +3536,6 @@ export def "visualize-recipe-taste" [
 # Docs: https://spoonacular.com/food-api/docs#Get-Analyzed-Recipe-Instructions — Read entire docs
 # operationId: getAnalyzedRecipeInstructions
 export def "get-analyzed-recipe-instructions" [
-  id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3500,9 +3551,8 @@ export def "get-analyzed-recipe-instructions" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "stepBreakdown" $step_breakdown "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/recipes/{id}/analyzedInstructions") $qp $auth.query)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/analyzedInstructions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3606,7 +3656,6 @@ export def "visualize-recipe-equipment-by-id" [
 # Docs: https://spoonacular.com/food-api/docs#Equipment-by-ID — Read entire docs
 # operationId: getRecipeEquipmentByID
 export def "get-recipe-equipment-by-id" [
-  id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3621,8 +3670,7 @@ export def "get-recipe-equipment-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/recipes/{id}/equipmentWidget.json") $auth.query)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/equipmentWidget.json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3761,7 +3809,6 @@ export def "visualize-recipe-ingredients-by-id" [
 # Docs: https://spoonacular.com/food-api/docs#Ingredients-by-ID — Read entire docs
 # operationId: getRecipeIngredientsByID
 export def "get-recipe-ingredients-by-id" [
-  id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3776,8 +3823,7 @@ export def "get-recipe-ingredients-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/recipes/{id}/ingredientWidget.json") $auth.query)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/ingredientWidget.json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3964,7 +4010,6 @@ export def "visualize-recipe-nutrition-by-id" [
 # Docs: https://spoonacular.com/food-api/docs#Nutrition-by-ID — Read entire docs
 # operationId: getRecipeNutritionWidgetByID
 export def "get-recipe-nutrition-widget-by-id" [
-  id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3979,8 +4024,7 @@ export def "get-recipe-nutrition-widget-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/recipes/{id}/nutritionWidget.json") $auth.query)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/nutritionWidget.json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -4079,7 +4123,6 @@ export def "visualize-recipe-price-breakdown-by-id" [
 # Docs: https://spoonacular.com/food-api/docs#Price-Breakdown-by-ID — Read entire docs
 # operationId: getRecipePriceBreakdownByID
 export def "get-recipe-price-breakdown-by-id" [
-  id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4094,8 +4137,7 @@ export def "get-recipe-price-breakdown-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/recipes/{id}/priceBreakdownWidget.json") $auth.query)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/priceBreakdownWidget.json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -4195,7 +4237,6 @@ export def "get-similar-recipes" [
 # Docs: https://spoonacular.com/food-api/docs#Summarize-Recipe — Read entire docs
 # operationId: summarizeRecipe
 export def "summarize-recipe" [
-  id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4210,8 +4251,7 @@ export def "summarize-recipe" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/recipes/{id}/summary") $auth.query)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/summary") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -4274,7 +4314,6 @@ export def "visualize-recipe-taste-by-id" [
 # Docs: https://spoonacular.com/food-api/docs#Taste-by-ID — Read entire docs
 # operationId: getRecipeTasteByID
 export def "get-recipe-taste-by-id" [
-  id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4290,9 +4329,8 @@ export def "get-recipe-taste-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "normalize" $normalize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/recipes/{id}/tasteWidget.json") $qp $auth.query)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/tasteWidget.json") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -4364,16 +4402,13 @@ export def "connect-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  email: string
-  first_name: string
-  last_name: string
-  username: string
+  --body: record
 ]: any -> record<hash: string, username: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/connect" $auth.query)
-  let req_body = {"email": $email, "firstName": $first_name, "lastName": $last_name, "username": $username} | compact
+  let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

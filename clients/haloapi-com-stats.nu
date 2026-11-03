@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     "query-subscription-key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "subscription-key")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -502,11 +502,12 @@ export def "halo-5-player-service-records-arena" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --players: string # A comma-separated list of Gamertags. Up to 32 Gamertags may be specified.
+  --players: string # A comma-separated list of Gamertags. Up to 32 Gamertags may be specified. (required)
   --season-id: string # When specified, this indicates the Season to request the Arena Playlist Stats for. If this is not specified, the default is the current Season. Seasons are available via the Metadata API. Social (Unranked) Arena Playlist Stats can be retrieved by specifying "NonSeasonal".
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($players == null) { error make --unspanned { msg: "required query parameter 'players' missing: pass --players" } }
   let qp = [(serialize-qp "players" $players "scalar") (serialize-qp "seasonId" $season_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/h5/servicerecords/arena" $qp $auth.query)
   let accept_val = "application/json"
@@ -539,10 +540,11 @@ export def "halo-5-player-service-records-campaign" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --players: string # A comma-separated list of Gamertags. Up to 32 Gamertags may be specified.
+  --players: string # A comma-separated list of Gamertags. Up to 32 Gamertags may be specified. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($players == null) { error make --unspanned { msg: "required query parameter 'players' missing: pass --players" } }
   let qp = [(serialize-qp "players" $players "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/h5/servicerecords/campaign" $qp $auth.query)
   let accept_val = "application/json"
@@ -575,10 +577,11 @@ export def "halo-5-player-service-records-custom" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --players: string # A comma-separated list of Gamertags. Up to 32 Gamertags may be specified.
+  --players: string # A comma-separated list of Gamertags. Up to 32 Gamertags may be specified. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($players == null) { error make --unspanned { msg: "required query parameter 'players' missing: pass --players" } }
   let qp = [(serialize-qp "players" $players "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/h5/servicerecords/custom" $qp $auth.query)
   let accept_val = "application/json"
@@ -611,10 +614,11 @@ export def "halo-5-player-service-records-custom-local" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --players: string # A comma-separated list of Gamertags. Up to 32 Gamertags may be specified.
+  --players: string # A comma-separated list of Gamertags. Up to 32 Gamertags may be specified. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($players == null) { error make --unspanned { msg: "required query parameter 'players' missing: pass --players" } }
   let qp = [(serialize-qp "players" $players "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/h5/servicerecords/customlocal" $qp $auth.query)
   let accept_val = "application/json"
@@ -647,10 +651,11 @@ export def "halo-5-player-service-records-warzone" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --players: string # A comma-separated list of Gamertags. Up to 32 Gamertags may be specified.
+  --players: string # A comma-separated list of Gamertags. Up to 32 Gamertags may be specified. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($players == null) { error make --unspanned { msg: "required query parameter 'players' missing: pass --players" } }
   let qp = [(serialize-qp "players" $players "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/h5/servicerecords/warzone" $qp $auth.query)
   let accept_val = "application/json"
@@ -796,10 +801,11 @@ export def "halo-5-pc-player-service-records-custom" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --players: string # A comma-separated list of Gamertags. Up to 32 Gamertags may be specified.
+  --players: string # A comma-separated list of Gamertags. Up to 32 Gamertags may be specified. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($players == null) { error make --unspanned { msg: "required query parameter 'players' missing: pass --players" } }
   let qp = [(serialize-qp "players" $players "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/h5pc/servicerecords/custom" $qp $auth.query)
   let accept_val = "application/json"
@@ -1095,11 +1101,12 @@ export def "halo-wars-2-player-playlist-ratings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --players: string # A comma-separated list of Gamertags. Up to 6 Gamertags may be specified.
+  --players: string # A comma-separated list of Gamertags. Up to 6 Gamertags may be specified. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
+  if ($players == null) { error make --unspanned { msg: "required query parameter 'players' missing: pass --players" } }
   let qp = [(serialize-qp "players" $players "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/hw2/playlist/{playlist_id}/rating") $qp $auth.query)
   let accept_val = "application/json"
@@ -1132,10 +1139,11 @@ export def "halo-wars-2-player-x-ps" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --players: string # A comma-separated list of Gamertags. Up to 6 Gamertags may be specified.
+  --players: string # A comma-separated list of Gamertags. Up to 6 Gamertags may be specified. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($players == null) { error make --unspanned { msg: "required query parameter 'players' missing: pass --players" } }
   let qp = [(serialize-qp "players" $players "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hw2/xp" $qp $auth.query)
   let accept_val = "application/json"

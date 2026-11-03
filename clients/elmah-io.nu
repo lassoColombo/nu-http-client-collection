@@ -1,4 +1,4 @@
-# Auto-generated client for elmah.io API vv3
+# Auto-generated client for elmah.io API v3
 # Source: https://api.apis.guru/v2/specs/elmah.io/v3/openapi.json
 # Auth: --token flag or $env.ELMAH_IO_API_TOKEN
 
@@ -593,16 +593,16 @@ export def "messages-delete-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-from: string # Search from this date. (format: date-time)
+  --from: string # Search from this date. (format: date-time)
   --query: string # Lucene query.
-  --body-to: string # Search to this date. (format: date-time)
+  --to: string # Search to this date. (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($log_id | is-empty) { error make --unspanned { msg: "path parameter 'logId' must be non-empty" } }
   let full_url = (build-url $base ({log_id: (encode-path-segment $log_id)} | format pattern "/v3/messages/{log_id}") $auth.query)
-  let req_body = {"from": $body_from, "query": $query, "to": $body_to} | compact
+  let req_body = {"from": $from, "query": $query, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -639,21 +639,21 @@ export def "messages-get-all" [
   --page-index: int # The page number of the result. (format: int32, default: 0)
   --page-size: int # The number of messages to load (max 100) or 15 if not set. (format: int32, default: 15)
   --query: string # A full-text or Lucene query to limit the messages by.
-  --qp-from: string # A start date and time to search from (not included). (format: date-time)
-  --qp-to: string # An end date and time to search to (not included). (format: date-time)
+  --from: string # A start date and time to search from (not included). (format: date-time)
+  --to: string # An end date and time to search to (not included). (format: date-time)
   --include-headers: oneof<nothing, bool> # Include headers like server variables and cookies in the result (slower). (default: false)
 ]: nothing -> record<messages: table<application: string, breadcrumbs: list, category: string, code: string, cookies: list, correlationId: string, data: list, dateTime: string, detail: string, form: list, hostname: string, id: string, method: string, queryString: list, serverVariables: list, severity: string, source: string, statusCode: int, title: string, titleTemplate: string, type: string, url: string, user: string, version: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($log_id | is-empty) { error make --unspanned { msg: "path parameter 'logId' must be non-empty" } }
-  let qp = [(serialize-qp "pageIndex" $page_index "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "includeHeaders" $include_headers "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageIndex" $page_index "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "includeHeaders" $include_headers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({log_id: (encode-path-segment $log_id)} | format pattern "/v3/messages/{log_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"pageIndex": $page_index, "pageSize": $page_size, "query": $query, "from": $qp_from, "to": $qp_to, "includeHeaders": $include_headers} | compact)
+    query: ({"pageIndex": $page_index, "pageSize": $page_size, "query": $query, "from": $from, "to": $to, "includeHeaders": $include_headers} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -701,7 +701,7 @@ export def "messages-create" [
   --query-string: list # A key/value pair of query string parameters. This property makes sense if logging message related to a HTTP request. — item shape: {key?: string, value?: string}
   --server-variables: list # A key/value pair of server values. Server variables are typically related to handling requests in a webserver but could be used for other types of information as well. — item shape: {key?: string, value?: string}
   --severity: string # An enum value representing the severity of this message. The following values are allowed: Verbose, Debug, Information, Warning, Error, Fatal
-  --body-source: string # The source of the code logging the message. This could be the assembly name.
+  --source: string # The source of the code logging the message. This could be the assembly name.
   --status-code: int # If the message logged relates to a HTTP status code, you can put the code in this property. This would probably only be relevant for errors, but could be used for logging successful status codes as well. (format: int32)
   --title: string # The textual title or headline of the message to log.
   --title-template: string # The title template of the message to log. This property can be used from logging frameworks that supports structured logging like: "{user} says {quote}". In the example, titleTemplate will be this string and title will be "Gilfoyle says It's not magic. It's talent and sweat".
@@ -715,7 +715,7 @@ export def "messages-create" [
   let base = ($base_url | default $BASE_URL)
   if ($log_id | is-empty) { error make --unspanned { msg: "path parameter 'logId' must be non-empty" } }
   let full_url = (build-url $base ({log_id: (encode-path-segment $log_id)} | format pattern "/v3/messages/{log_id}") $auth.query)
-  let req_body = {"application": $application, "breadcrumbs": $breadcrumbs, "category": $category, "code": $code, "cookies": $cookies, "correlationId": $correlation_id, "data": $data, "dateTime": $date_time, "detail": $detail, "form": $form, "hostname": $hostname, "method": $method, "queryString": $query_string, "serverVariables": $server_variables, "severity": $severity, "source": $body_source, "statusCode": $status_code, "title": $title, "titleTemplate": $title_template, "type": $type, "url": $url, "user": $user, "version": $version} | compact
+  let req_body = {"application": $application, "breadcrumbs": $breadcrumbs, "category": $category, "code": $code, "cookies": $cookies, "correlationId": $correlation_id, "data": $data, "dateTime": $date_time, "detail": $detail, "form": $form, "hostname": $hostname, "method": $method, "queryString": $query_string, "serverVariables": $server_variables, "severity": $severity, "source": $source, "statusCode": $status_code, "title": $title, "titleTemplate": $title_template, "type": $type, "url": $url, "user": $user, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -789,16 +789,16 @@ export def "messages-fix-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-from: string # Search from this date. (format: date-time)
+  --from: string # Search from this date. (format: date-time)
   --query: string # Lucene query.
-  --body-to: string # Search to this date. (format: date-time)
+  --to: string # Search to this date. (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($log_id | is-empty) { error make --unspanned { msg: "path parameter 'logId' must be non-empty" } }
   let full_url = (build-url $base ({log_id: (encode-path-segment $log_id)} | format pattern "/v3/messages/{log_id}/_fix") $auth.query)
-  let req_body = {"from": $body_from, "query": $query, "to": $body_to} | compact
+  let req_body = {"from": $from, "query": $query, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -999,8 +999,8 @@ export def "source-maps-create-or-update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["MinifiedJavaScript" "SourceMap"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["MinifiedJavaScript" "SourceMap"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url

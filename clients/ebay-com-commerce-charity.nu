@@ -1,4 +1,4 @@
-# Auto-generated client for Charity API vv1.2.1
+# Auto-generated client for Charity API v1.2.1
 # Source: https://api.apis.guru/v2/specs/ebay.com/commerce-charity/v1.2.1/openapi.json
 # Auth: --token flag or $env.CHARITY_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -136,10 +136,11 @@ export def "get-charity-orgs" [
   --offset: string # The number of items that will be skipped in the result set. This is used with the limit field to control the pagination of the output.For example, if the offset is set to 0 and the limit is set to 10, the method will retrieve items 1 through 10 from the list of items returned. If the offset is set to 10 and the limit is set to 10, the method will retrieve items 11 through 20 from the list of items returned.Valid Values: 0-10,000Default: 0
   --q: string # A query string that matches the keywords in name, mission statement, or description.
   --registration-ids: string # A comma-separated list of charitable organization registration IDs.Note: Do not specify this parameter for query-based searches. Specify either the q or registration_ids parameter, but not both.Maximum Limit: 20
-  --x-ebay-c-marketplace-id: string # A header used to specify the eBay marketplace ID.Valid Values: EBAY_GB and EBAY_US
+  --x-ebay-c-marketplace-id: string # A header used to specify the eBay marketplace ID.Valid Values: EBAY_GB and EBAY_US (required)
 ]: nothing -> record<charityOrgs: table<charityOrgId: string, description: string, location: record, logoImage: record, missionStatement: string, name: string, registrationId: string, website: string>, href: string, limit: int, next: string, offset: int, prev: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "registration_ids" $registration_ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/charity_org" $qp $auth.query)
   let accept_val = "application/json"
@@ -175,11 +176,12 @@ export def "get-charity-org" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-ebay-c-marketplace-id: string # A header used to specify the eBay marketplace ID.Valid Values: EBAY_GB and EBAY_US
+  --x-ebay-c-marketplace-id: string # A header used to specify the eBay marketplace ID.Valid Values: EBAY_GB and EBAY_US (required)
 ]: nothing -> record<charityOrgId: string, description: string, location: record<address: record<city: string, country: string, postalCode: string, stateOrProvince: string>, geoCoordinates: record<latitude: float, longitude: float>>, logoImage: record<height: string, imageUrl: string, width: string>, missionStatement: string, name: string, registrationId: string, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charity_org_id | is-empty) { error make --unspanned { msg: "path parameter 'charity_org_id' must be non-empty" } }
+  if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
   let full_url = (build-url $base ({charity_org_id: (encode-path-segment $charity_org_id)} | format pattern "/charity_org/{charity_org_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

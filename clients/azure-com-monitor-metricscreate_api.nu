@@ -138,9 +138,9 @@ export def "metrics-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Supports application/json and application/x-ndjson
-  --content-length: int # Content length of the payload
-  --authorization: string # Authorization token issue for issued for audience "https:\\monitoring.azure.com\"
+  --content-type: string # Supports application/json and application/x-ndjson (required)
+  --content-length: int # Content length of the payload (required, format: int32)
+  --authorization: string # Authorization token issue for issued for audience "https:\\monitoring.azure.com\" (required)
   data: record # shape: {baseData: record}
   time: string # Gets or sets Time property (in ISO 8601 format)
 ]: any -> record<apiFailureResponse: record<error: record<code: string, message: string>>, statusCode: int> {
@@ -152,6 +152,8 @@ export def "metrics-create" [
   if ($resource_provider | is-empty) { error make --unspanned { msg: "path parameter 'resourceProvider' must be non-empty" } }
   if ($resource_type_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceTypeName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($content_length == null) { error make --unspanned { msg: "required header parameter 'Content-Length' missing: pass --content-length" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_provider: (encode-path-segment $resource_provider), resource_type_name: (encode-path-segment $resource_type_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{resource_provider}/{resource_type_name}/{resource_name}/metrics") $auth.query)
   let req_body = {"data": $data, "time": $time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -149,12 +149,13 @@ export def "describe-report-creation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
+  --x-amz-target: string@x-amz-target-completer # required
   --body: record
-]: any -> record<Status: record, S3Location: record, ErrorMessage: record> {
+]: any -> record<Status: string, S3Location: string, ErrorMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ResourceGroupsTaggingAPI_20170126.DescribeReportCreation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -199,18 +200,19 @@ export def "get-compliance-summary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  --target-id-filters: any
-  --region-filters: any
-  --resource-type-filters: any
-  --tag-key-filters: any
-  --group-by: any
-  --max-results-body: any #  (body field)
-  --pagination-token-body: any #  (body field)
-]: any -> record<SummaryList: record, PaginationToken: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  --target-id-filters: list<string> # Specifies target identifiers (usually, specific account IDs) to limit the output by. If you use this parameter, the count of returned noncompliant resources includes only resources with the specified target IDs.
+  --region-filters: list<string> # Specifies a list of Amazon Web Services Regions to limit the output to. If you use this parameter, the count of returned noncompliant resources includes only resources in the specified Regions.
+  --resource-type-filters: list<string> # Specifies that you want the response to include information for only resources of the specified types. The format of each resource type is service[:resourceType]. For example, specifying a resource type of ec2 returns all Amazon EC2 resources (which includes EC2 instances). Specifying a resource type of ec2:instance returns only EC2 instances. The string for each service name and resource type is the same as that embedded in a resource's Amazon Resource Name (ARN). Consult the Amazon Web Services General Reference (https://docs.aws.amazon.com/general/latest/gr/) for the following: For a list of service name strings, see Amazon Web Services Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html#genref-aws-service-namespaces). For resource type strings, see Example ARNs (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html#arns-syntax). For more information about ARNs, see Amazon Resource Names (ARNs) and Amazon Web Services Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html). You can specify multiple resource types by using a comma separated array. The array can include up to 100 items. Note that the length constraint requirement applies to each resource type filter.
+  --tag-key-filters: list<string> # Specifies that you want the response to include information for only resources that have tags with the specified tag keys. If you use this parameter, the count of returned noncompliant resources includes only resources that have the specified tag keys.
+  --group-by: list<string> # Specifies a list of attributes to group the counts of noncompliant resources by. If supplied, the counts are sorted by those attributes.
+  --max-results-body: int # Specifies the maximum number of results to be returned in each page. A query can return fewer than this maximum, even if there are more results still to return. You should always check the PaginationToken response value to see if there are more results. You can specify a minimum of 1 and a maximum value of 100. (body field)
+  --pagination-token-body: string # Specifies a PaginationToken response value from a previous request to indicate that you want the next page of results. Leave this parameter empty in your initial request. (body field)
+]: any -> record<SummaryList: table<LastUpdated: string, TargetId: string, TargetIdType: string, Region: string, ResourceType: string, NonCompliantResources: int>, PaginationToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ResourceGroupsTaggingAPI_20170126.GetComplianceSummary")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "PaginationToken" $pagination_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"TargetIdFilters": $target_id_filters, "RegionFilters": $region_filters, "ResourceTypeFilters": $resource_type_filters, "TagKeyFilters": $tag_key_filters, "GroupBy": $group_by, "MaxResults": $max_results_body, "PaginationToken": $pagination_token_body} | compact
@@ -237,6 +239,7 @@ export def "get-compliance-summary" [
 #
 # POST /
 # operationId: GetResources
+# --TagFilters item shape: {Key?: string, Values?: list<string>}
 export def "get-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,19 +259,20 @@ export def "get-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  --pagination-token-body: any #  (body field)
-  --tag-filters: any
-  --resources-per-page-body: any #  (body field)
-  --tags-per-page: any
-  --resource-type-filters: any
-  --include-compliance-details: any
-  --exclude-compliant-resources: any
-  --resource-arn-list: any
-]: any -> record<PaginationToken: record, ResourceTagMappingList: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  --pagination-token-body: string # Specifies a PaginationToken response value from a previous request to indicate that you want the next page of results. Leave this parameter empty in your initial request. (body field)
+  --tag-filters: list # Specifies a list of TagFilters (keys and values) to restrict the output to only those resources that have tags with the specified keys and, if included, the specified values. Each TagFilter must contain a key with values optional. A request can include up to 50 keys, and each key can include up to 20 values. Note the following when deciding how to use TagFilters: If you don't specify a TagFilter, the response includes all resources that are currently tagged or ever had a tag. Resources that currently don't have tags are shown with an empty tag set, like this: "Tags": []. If you specify more than one filter in a single request, the response returns only those resources that satisfy all filters. If you specify a filter that contains more than one value for a key, the response returns resources that match any of the specified values for that key. If you don't specify a value for a key, the response returns all resources that are tagged with that key, with any or no value. For example, for the following filters: filter1= {keyA,{value1}}, filter2={keyB,{value2,value3,value4}}, filter3= {keyC}: GetResources({filter1}) returns resources tagged with key1=value1 GetResources({filter2}) returns resources tagged with key2=value2 or key2=value3 or key2=value4 GetResources({filter3}) returns resources tagged with any tag with the key key3, and with any or no value GetResources({filter1,filter2,filter3}) returns resources tagged with (key1=value1) and (key2=value2 or key2=value3 or key2=value4) and (key3, any or no value) — item shape: {Key?: string, Values?: list<string>}
+  --resources-per-page-body: int # Specifies the maximum number of results to be returned in each page. A query can return fewer than this maximum, even if there are more results still to return. You should always check the PaginationToken response value to see if there are more results. You can specify a minimum of 1 and a maximum value of 100. (body field)
+  --tags-per-page: int # Amazon Web Services recommends using ResourcesPerPage instead of this parameter. A limit that restricts the number of tags (key and value pairs) returned by GetResources in paginated output. A resource with no tags is counted as having one tag (one key and value pair). GetResources does not split a resource and its associated tags across pages. If the specified TagsPerPage would cause such a break, a PaginationToken is returned in place of the affected resource and its tags. Use that token in another request to get the remaining data. For example, if you specify a TagsPerPage of 100 and the account has 22 resources with 10 tags each (meaning that each resource has 10 key and value pairs), the output will consist of three pages. The first page displays the first 10 resources, each with its 10 tags. The second page displays the next 10 resources, each with its 10 tags. The third page displays the remaining 2 resources, each with its 10 tags. You can set TagsPerPage to a minimum of 100 items up to a maximum of 500 items.
+  --resource-type-filters: list<string> # Specifies the resource types that you want included in the response. The format of each resource type is service[:resourceType]. For example, specifying a resource type of ec2 returns all Amazon EC2 resources (which includes EC2 instances). Specifying a resource type of ec2:instance returns only EC2 instances. The string for each service name and resource type is the same as that embedded in a resource's Amazon Resource Name (ARN). For the list of services whose resources you can use in this parameter, see Services that support the Resource Groups Tagging API (https://docs.aws.amazon.com/resourcegroupstagging/latest/APIReference/supported-services.html). You can specify multiple resource types by using an array. The array can include up to 100 items. Note that the length constraint requirement applies to each resource type filter. For example, the following string would limit the response to only Amazon EC2 instances, Amazon S3 buckets, or any Audit Manager resource: ec2:instance,s3:bucket,auditmanager
+  --include-compliance-details: oneof<nothing, bool> # Specifies whether to include details regarding the compliance with the effective tag policy. Set this to true to determine whether resources are compliant with the tag policy and to get details.
+  --exclude-compliant-resources: oneof<nothing, bool> # Specifies whether to exclude resources that are compliant with the tag policy. Set this to true if you are interested in retrieving information on noncompliant resources only. You can use this parameter only if the IncludeComplianceDetails parameter is also set to true.
+  --resource-arn-list: list<string> # Specifies a list of ARNs of resources for which you want to retrieve tag data. You can't specify both this parameter and any of the pagination parameters (ResourcesPerPage, TagsPerPage, PaginationToken) in the same request. If you specify both, you get an Invalid Parameter exception. If a resource specified by this parameter doesn't exist, it doesn't generate an error; it simply isn't included in the response. An ARN (Amazon Resource Name) uniquely identifies a resource. For more information, see Amazon Resource Names (ARNs) and Amazon Web Services Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) in the Amazon Web Services General Reference.
+]: any -> record<PaginationToken: string, ResourceTagMappingList: table<ResourceARN: string, Tags: list, ComplianceDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ResourceGroupsTaggingAPI_20170126.GetResources")
   let qp = [(serialize-qp "ResourcesPerPage" $resources_per_page "scalar") (serialize-qp "PaginationToken" $pagination_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"PaginationToken": $pagination_token_body, "TagFilters": $tag_filters, "ResourcesPerPage": $resources_per_page_body, "TagsPerPage": $tags_per_page, "ResourceTypeFilters": $resource_type_filters, "IncludeComplianceDetails": $include_compliance_details, "ExcludeCompliantResources": $exclude_compliant_resources, "ResourceARNList": $resource_arn_list} | compact
@@ -313,12 +317,13 @@ export def "get-tag-keys" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  --pagination-token-body: any #  (body field)
-]: any -> record<PaginationToken: record, TagKeys: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  --pagination-token-body: string # Specifies a PaginationToken response value from a previous request to indicate that you want the next page of results. Leave this parameter empty in your initial request. (body field)
+]: any -> record<PaginationToken: string, TagKeys: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ResourceGroupsTaggingAPI_20170126.GetTagKeys")
   let qp = [(serialize-qp "PaginationToken" $pagination_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"PaginationToken": $pagination_token_body} | compact
@@ -363,13 +368,14 @@ export def "get-tag-values" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  --pagination-token-body: any #  (body field)
-  key: any
-]: any -> record<PaginationToken: record, TagValues: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  --pagination-token-body: string # Specifies a PaginationToken response value from a previous request to indicate that you want the next page of results. Leave this parameter empty in your initial request. (body field)
+  key: string # Specifies the tag key for which you want to list all existing values that are currently used in the specified Amazon Web Services Region for the calling account.
+]: any -> record<PaginationToken: string, TagValues: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ResourceGroupsTaggingAPI_20170126.GetTagValues")
   let qp = [(serialize-qp "PaginationToken" $pagination_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"PaginationToken": $pagination_token_body, "Key": $key} | compact
@@ -413,12 +419,13 @@ export def "start-report-creation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  s3_bucket: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  s3_bucket: string # The name of the Amazon S3 bucket where the report will be stored; for example: awsexamplebucket For more information on S3 bucket requirements, including an example bucket policy, see the example S3 bucket policy on this page.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ResourceGroupsTaggingAPI_20170126.StartReportCreation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"S3Bucket": $s3_bucket} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -461,13 +468,14 @@ export def "tag-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  resource_arn_list: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  resource_arn_list: list<string> # Specifies the list of ARNs of the resources that you want to apply tags to. An ARN (Amazon Resource Name) uniquely identifies a resource. For more information, see Amazon Resource Names (ARNs) and Amazon Web Services Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) in the Amazon Web Services General Reference.
+  tags: record # Specifies a list of tags that you want to add to the specified resources. A tag consists of a key and a value that you define.
 ]: any -> record<FailedResourcesMap: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ResourceGroupsTaggingAPI_20170126.TagResources")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARNList": $resource_arn_list, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -510,13 +518,14 @@ export def "untag-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  resource_arn_list: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  resource_arn_list: list<string> # Specifies a list of ARNs of the resources that you want to remove tags from. An ARN (Amazon Resource Name) uniquely identifies a resource. For more information, see Amazon Resource Names (ARNs) and Amazon Web Services Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) in the Amazon Web Services General Reference.
+  tag_keys: list<string> # Specifies a list of tag keys that you want to remove from the specified resources.
 ]: any -> record<FailedResourcesMap: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ResourceGroupsTaggingAPI_20170126.UntagResources")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARNList": $resource_arn_list, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

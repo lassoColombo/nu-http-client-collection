@@ -99,6 +99,11 @@ def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: 
 def base-url-completer [] { ["https://api.icons8.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def platform-completer [] { ["android" "androidL" "color" "ios7" "office" "win10" "win8"] }
+def language-completer [] { ["de-DE" "en-US" "es-ES" "fr-FR" "it-IT" "pl-PL" "pt-BR" "ru-RU"] }
+def platform-completer-1 [] { ["Dusk_Wired" "all" "android" "androidL" "color" "cotton" "doodle" "dotty" "dusk" "flat_round" "ios11" "ios7" "nolan" "office" "p1em" "ultraviolet" "win10" "win8"] }
+def language-completer-1 [] { ["de-DE" "en-US" "es-ES" "fr-FR" "it-IT" "ja-JP" "pl-PL" "pt-BR" "ru-RU" "zh-CN"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -128,8 +133,8 @@ export def commands []: nothing -> table {
 # GET /api/iconsets/v3/categories?platform={platform}&language={language}
 # operationId: Categories
 export def "categories" [
-  platform: string
-  language: string
+  platform: string@platform-completer
+  language: string@language-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -144,7 +149,7 @@ export def "categories" [
   let base = ($base_url | default $BASE_URL)
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   if ($language | is-empty) { error make --unspanned { msg: "path parameter 'language' must be non-empty" } }
-  let full_url = (build-url $base ({platform: (encode-path-segment $platform), language: (encode-path-segment $language)} | format pattern "/api/iconsets/v3/categories?platform={platform}&language={language}") $auth.query)
+  let full_url = (build-url $base ({platform: (encode-path-segment $platform), language: (encode-path-segment $language)} | format pattern "/api/iconsets/v3/categories") "platform={platform}&language={language}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -170,8 +175,8 @@ export def "by-category" [
   subcategory: string
   amount: float
   offset: float
-  platform: string
-  language: string
+  platform: string@platform-completer
+  language: string@language-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +195,7 @@ export def "by-category" [
   if ($offset | is-empty) { error make --unspanned { msg: "path parameter 'offset' must be non-empty" } }
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   if ($language | is-empty) { error make --unspanned { msg: "path parameter 'language' must be non-empty" } }
-  let full_url = (build-url $base ({category: (encode-path-segment $category), subcategory: (encode-path-segment $subcategory), amount: (encode-path-segment $amount), offset: (encode-path-segment $offset), platform: (encode-path-segment $platform), language: (encode-path-segment $language)} | format pattern "/api/iconsets/v3/category?category={category}&subcategory={subcategory}&amount={amount}&offset={offset}&platform={platform}&language={language}") $auth.query)
+  let full_url = (build-url $base ({category: (encode-path-segment $category), subcategory: (encode-path-segment $subcategory), amount: (encode-path-segment $amount), offset: (encode-path-segment $offset), platform: (encode-path-segment $platform), language: (encode-path-segment $language)} | format pattern "/api/iconsets/v3/category") "category={category}&subcategory={subcategory}&amount={amount}&offset={offset}&platform={platform}&language={language}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -212,11 +217,10 @@ export def "by-category" [
 # GET /api/iconsets/v3/latest?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}
 # operationId: Latest
 export def "latest" [
-  term: any
   amount: float
   offset: float
-  platform: string
-  language: string
+  platform: string@platform-completer
+  language: string@language-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,12 +233,11 @@ export def "latest" [
 ]: nothing -> record<parameters: record<amount: float, language: string, offset: string, platform: string, term: string>, result: record<latest: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  if ($term | is-empty) { error make --unspanned { msg: "path parameter 'term' must be non-empty" } }
   if ($amount | is-empty) { error make --unspanned { msg: "path parameter 'amount' must be non-empty" } }
   if ($offset | is-empty) { error make --unspanned { msg: "path parameter 'offset' must be non-empty" } }
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   if ($language | is-empty) { error make --unspanned { msg: "path parameter 'language' must be non-empty" } }
-  let full_url = (build-url $base ({term: (encode-path-segment $term), amount: (encode-path-segment $amount), offset: (encode-path-segment $offset), platform: (encode-path-segment $platform), language: (encode-path-segment $language)} | format pattern "/api/iconsets/v3/latest?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}") $auth.query)
+  let full_url = (build-url $base ({amount: (encode-path-segment $amount), offset: (encode-path-segment $offset), platform: (encode-path-segment $platform), language: (encode-path-segment $language)} | format pattern "/api/iconsets/v3/latest") "term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -258,10 +261,10 @@ export def "latest" [
 export def "by-keyword-v3" [
   term: string
   amount: float
-  offset: float
-  platform: string
-  language: string
   exact_amount: bool
+  offset: float
+  platform: string@platform-completer
+  language: string@language-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,11 +279,11 @@ export def "by-keyword-v3" [
   let base = ($base_url | default $BASE_URL)
   if ($term | is-empty) { error make --unspanned { msg: "path parameter 'term' must be non-empty" } }
   if ($amount | is-empty) { error make --unspanned { msg: "path parameter 'amount' must be non-empty" } }
+  if ($exact_amount | is-empty) { error make --unspanned { msg: "path parameter 'exact_amount' must be non-empty" } }
   if ($offset | is-empty) { error make --unspanned { msg: "path parameter 'offset' must be non-empty" } }
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   if ($language | is-empty) { error make --unspanned { msg: "path parameter 'language' must be non-empty" } }
-  if ($exact_amount | is-empty) { error make --unspanned { msg: "path parameter 'exact_amount' must be non-empty" } }
-  let full_url = (build-url $base ({term: (encode-path-segment $term), amount: (encode-path-segment $amount), offset: (encode-path-segment $offset), platform: (encode-path-segment $platform), language: (encode-path-segment $language), exact_amount: (encode-path-segment $exact_amount)} | format pattern "/api/iconsets/v3/search?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}&exact_amount={exact_amount}") $auth.query)
+  let full_url = (build-url $base ({term: (encode-path-segment $term), amount: (encode-path-segment $amount), exact_amount: (encode-path-segment $exact_amount), offset: (encode-path-segment $offset), platform: (encode-path-segment $platform), language: (encode-path-segment $language)} | format pattern "/api/iconsets/v3/search") "term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}&exact_amount={exact_amount}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -316,7 +319,7 @@ export def "totals" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($since | is-empty) { error make --unspanned { msg: "path parameter 'since' must be non-empty" } }
-  let full_url = (build-url $base ({since: (encode-path-segment $since)} | format pattern "/api/iconsets/v3/total?since={since}") $auth.query)
+  let full_url = (build-url $base ({since: (encode-path-segment $since)} | format pattern "/api/iconsets/v3/total") "since={since}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -341,9 +344,8 @@ export def "by-keyword-v4" [
   term: string
   amount: float
   offset: float
-  platform: string
-  language: string
-  exact_amount: any
+  platform: string@platform-completer-1
+  language: string@language-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,8 +363,7 @@ export def "by-keyword-v4" [
   if ($offset | is-empty) { error make --unspanned { msg: "path parameter 'offset' must be non-empty" } }
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
   if ($language | is-empty) { error make --unspanned { msg: "path parameter 'language' must be non-empty" } }
-  if ($exact_amount | is-empty) { error make --unspanned { msg: "path parameter 'exact_amount' must be non-empty" } }
-  let full_url = (build-url $base ({term: (encode-path-segment $term), amount: (encode-path-segment $amount), offset: (encode-path-segment $offset), platform: (encode-path-segment $platform), language: (encode-path-segment $language), exact_amount: (encode-path-segment $exact_amount)} | format pattern "/api/iconsets/v4/search?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}&exact_amount={exact_amount}") $auth.query)
+  let full_url = (build-url $base ({term: (encode-path-segment $term), amount: (encode-path-segment $amount), offset: (encode-path-segment $offset), platform: (encode-path-segment $platform), language: (encode-path-segment $language)} | format pattern "/api/iconsets/v4/search") "term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}&exact_amount={exact_amount}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

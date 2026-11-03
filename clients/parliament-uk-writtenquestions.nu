@@ -1,4 +1,4 @@
-# Auto-generated client for Written Questions Service API vv1
+# Auto-generated client for Written Questions Service API v1
 # Source: https://api.apis.guru/v2/specs/parliament.uk/writtenquestions/v1/openapi.json
 # Auth: --token flag or $env.WRITTEN_QUESTIONS_SERVICE_API_TOKEN
 

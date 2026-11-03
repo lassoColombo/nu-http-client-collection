@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -147,22 +147,22 @@ export def "search-apis" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # free text query to match (default: )
+  --query: string # free text query to match (default: "")
   --limit: int # the maximum number of APIs to return (default: 10)
   --offset: int # the offset where to start from when fetching a limited number of APIs (default: 0)
-  --qp-sort: string@sort-completer # sort criteria or result set * NAME - * UPATED * CREATED * OWNER (default: NAME)
+  --sort: string@sort-completer # sort criteria or result set * NAME - * UPATED * CREATED * OWNER (default: NAME)
   --order: string@order-completer # sort order (default: ASC)
 ]: nothing -> table<created: string, description: string, modified: string, name: string, owner: string, swagger: record, url: string, versions: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apis" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "limit": $limit, "offset": $offset, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"query": $query, "limit": $limit, "offset": $offset, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -188,20 +188,20 @@ export def "get-owner-apis" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer # sort criteria or result set * NAME - * UPATED * CREATED * OWNER (default: NAME)
+  --sort: string@sort-completer # sort criteria or result set * NAME - * UPATED * CREATED * OWNER (default: NAME)
   --order: string@order-completer # sort order (default: ASC)
 ]: nothing -> table<created: string, description: string, modified: string, name: string, owner: string, swagger: record, url: string, versions: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner)} | format pattern "/apis/{owner}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "order": $order} | compact)
+    query: ({"sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null

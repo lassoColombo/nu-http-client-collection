@@ -132,12 +132,13 @@ export def "upsell-air-offers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-http-method-override: string # the HTTP method to apply
+  --x-http-method-override: string # the HTTP method to apply (required, default: GET)
   --body: any
-]: any -> any {
+]: any -> record<data: table<disablePricing: bool, fareRules: record, id: string, instantTicketingRequired: bool, itineraries: list, lastTicketingDate: string, nonHomogeneous: bool, numberOfBookableSeats: float, oneWay: bool, paymentCardRequired: bool, price: record, pricingOptions: record, source: string, travelerPricings: list, type: string, validatingAirlineCodes: list>, dictionaries: record<aircraft: any, carriers: any, currencies: any, locations: any>, meta: record<count: int, oneWayUpselledCombinations: list<record>>, warnings: table<code: int, detail: string, source: record, status: int, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_http_method_override = ($x_http_method_override | default "GET")
   let full_url = (build-url $base "/shopping/flight-offers/upselling" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }

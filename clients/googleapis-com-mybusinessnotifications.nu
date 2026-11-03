@@ -1,4 +1,4 @@
-# Auto-generated client for My Business Notifications API vv1
+# Auto-generated client for My Business Notifications API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/mybusinessnotifications/v1/openapi.json
 # Auth: --token flag or $env.MY_BUSINESS_NOTIFICATIONS_API_TOKEN
 

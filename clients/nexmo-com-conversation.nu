@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -202,7 +202,7 @@ export def "create-conversation" [
   --image-url: string # A link to an image for conversations' and users' avatars (format: url, e.g. https://example.com/image.png)
   --name: string # Unique name for a conversation (e.g. customer_chat)
   --properties: record # Conversation properties — shape: {ttl?: float}
-]: any -> any {
+]: any -> record<href: string, id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -240,7 +240,7 @@ export def "delete-conversation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($conversation_id | is-empty) { error make --unspanned { msg: "path parameter 'conversation_id' must be non-empty" } }
@@ -317,7 +317,7 @@ export def "replace-conversation" [
   --image-url: string # A link to an image for conversations' and users' avatars (format: url, e.g. https://example.com/image.png)
   --name: string # Unique name for a conversation (e.g. customer_chat)
   --properties: record # Conversation properties — shape: {ttl?: float}
-]: any -> any {
+]: any -> record<href: string, id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -395,8 +395,8 @@ export def "create-event" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record # Event Body (e.g. {text: My Text})
-  --body-from: string # Member ID (e.g. MEM-63f61863-4a51-4f6b-86e1-46edebio0391)
-  --body-to: string # Member ID (e.g. MEM-63f61863-4a51-4f6b-86e1-46edebio0391)
+  from: string # Member ID (e.g. MEM-63f61863-4a51-4f6b-86e1-46edebio0391)
+  --to: string # Member ID (e.g. MEM-63f61863-4a51-4f6b-86e1-46edebio0391)
   type: string # Event type (e.g. text)
 ]: any -> record<href: string, id: string, timestamp: string> {
   let input = $in
@@ -404,7 +404,7 @@ export def "create-event" [
   let base = ($base_url | default $BASE_URL)
   if ($conversation_id | is-empty) { error make --unspanned { msg: "path parameter 'conversation_id' must be non-empty" } }
   let full_url = (build-url $base ({conversation_id: (encode-path-segment $conversation_id)} | format pattern "/conversations/{conversation_id}/events") $auth.query)
-  let req_body = {"body": $body, "from": $body_from, "to": $body_to, "type": $type} | compact
+  let req_body = {"body": $body, "from": $from, "to": $to, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -438,7 +438,7 @@ export def "delete-event" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($conversation_id | is-empty) { error make --unspanned { msg: "path parameter 'conversation_id' must be non-empty" } }
@@ -599,7 +599,7 @@ export def "delete-member" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($conversation_id | is-empty) { error make --unspanned { msg: "path parameter 'conversation_id' must be non-empty" } }
@@ -722,14 +722,14 @@ export def "record-conversation" [
   --event-method: string # The HTTP method used to send event information to event_url. (default: POST, e.g. POST)
   --event-url: list<string> # The webhook endpoint where recording progress events are sent to. (e.g. [https://example.com/event])
   --format: string@format-completer # Record the Conversation in a specific format. (default: mp3, e.g. mp3)
-  --body-split: string # Record the sent and received audio in separate channels of a stereo recording (default: conversation, e.g. conversation)
+  --split: string # Record the sent and received audio in separate channels of a stereo recording (default: conversation, e.g. conversation)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.nexmo.com/v1")
   if ($conversation_id | is-empty) { error make --unspanned { msg: "path parameter 'conversation_id' must be non-empty" } }
   let full_url = (build-url $base ({conversation_id: (encode-path-segment $conversation_id)} | format pattern "/conversations/{conversation_id}/record") $auth.query)
-  let req_body = {"action": $action, "event_method": $event_method, "event_url": $event_url, "format": $format, "split": $body_split} | compact
+  let req_body = {"action": $action, "event_method": $event_method, "event_url": $event_url, "format": $format, "split": $split} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -796,7 +796,7 @@ export def "delete-leg" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leg_id | is-empty) { error make --unspanned { msg: "path parameter 'leg_id' must be non-empty" } }
@@ -908,7 +908,7 @@ export def "delete-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }

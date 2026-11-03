@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -149,11 +149,13 @@ export def "get-account-balance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-key: string # Your Vonage API key. You can find this in the [dashboard](https://dashboard.nexmo.com) (e.g. abcd1234)
-  --api-secret: string # Your Vonage API secret. You can find this in the [dashboard](https://dashboard.nexmo.com) (e.g. ABCDEFGH01234abc)
+  --api-key: string # Your Vonage API key. You can find this in the [dashboard](https://dashboard.nexmo.com) (required, e.g. abcd1234)
+  --api-secret: string # Your Vonage API secret. You can find this in the [dashboard](https://dashboard.nexmo.com) (required, e.g. ABCDEFGH01234abc)
 ]: nothing -> record<autoReload: bool, value: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://rest.nexmo.com")
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($api_secret == null) { error make --unspanned { msg: "required query parameter 'api_secret' missing: pass --api-secret" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/get-balance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -186,8 +188,8 @@ export def "register-sender" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # Your Vonage API key. You can find this in the [dashboard](https://dashboard.nexmo.com) (e.g. abcd1234)
-  --api-secret: string # Your Vonage API secret. You can find this in the [dashboard](https://dashboard.nexmo.com) (e.g. ABCDEFGH01234abc)
+  --api-key: string # Your Vonage API key. You can find this in the [dashboard](https://dashboard.nexmo.com) (required, e.g. abcd1234)
+  --api-secret: string # Your Vonage API secret. You can find this in the [dashboard](https://dashboard.nexmo.com) (required, e.g. ABCDEFGH01234abc)
   --application-ids: record # An optional array of additional ApplicationID's that the value is to be assigned to. (e.g. [6ec9eb7de1d34e77ac2c0ad597c9554a, 5dba5838689f402dba0c77957e2181f3])
   --name: string # An optional name to be attached to this binding (e.g. my-email-link)
   provider: string@provider-completer # The delivery method by which the value would be assigned. Always `email` (format: enum, e.g. email)
@@ -196,6 +198,8 @@ export def "register-sender" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://rest.nexmo.com")
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($api_secret == null) { error make --unspanned { msg: "required query parameter 'api_secret' missing: pass --api-secret" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/register-sender" $qp $auth.query)
   let req_body = {"application_ids": $application_ids, "name": $name, "provider": $provider, "value": $value} | compact
@@ -231,14 +235,16 @@ export def "change-account-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-key: string # Your Vonage API key. You can find this in the [dashboard](https://dashboard.nexmo.com) (e.g. abcd1234)
-  --api-secret: string # Your Vonage API secret. You can find this in the [dashboard](https://dashboard.nexmo.com) (e.g. ABCDEFGH01234abc)
+  --api-key: string # Your Vonage API key. You can find this in the [dashboard](https://dashboard.nexmo.com) (required, e.g. abcd1234)
+  --api-secret: string # Your Vonage API secret. You can find this in the [dashboard](https://dashboard.nexmo.com) (required, e.g. ABCDEFGH01234abc)
   --dr-call-back-url: string # The webhook URL that Vonage makes a request to when a delivery receipt is available for an SMS sent by one of your Vonage numbers. Send an empty string to unset this value. (format: url, e.g. https://example.com/webhooks/delivery-receipt)
   --mo-call-back-url: string # The default webhook URL for inbound SMS. If an SMS is received at a Vonage number that does not have its own inbound SMS webhook configured, Vonage makes a request here. Send an empty string to unset this value. (format: url, e.g. https://example.com/webhooks/inbound-sms)
 ]: any -> record<dr_callback_url: string, max_calls_per_second: int, max_inbound_request: int, max_outbound_request: int, mo_callback_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://rest.nexmo.com")
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($api_secret == null) { error make --unspanned { msg: "required query parameter 'api_secret' missing: pass --api-secret" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/settings" $qp $auth.query)
   let req_body = {"drCallBackUrl": $dr_call_back_url, "moCallBackUrl": $mo_call_back_url} | compact
@@ -276,13 +282,15 @@ export def "top-up-account-balance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-key: string # Your Vonage API key. You can find this in the [dashboard](https://dashboard.nexmo.com) (e.g. abcd1234)
-  --api-secret: string # Your Vonage API secret. You can find this in the [dashboard](https://dashboard.nexmo.com) (e.g. ABCDEFGH01234abc)
+  --api-key: string # Your Vonage API key. You can find this in the [dashboard](https://dashboard.nexmo.com) (required, e.g. abcd1234)
+  --api-secret: string # Your Vonage API secret. You can find this in the [dashboard](https://dashboard.nexmo.com) (required, e.g. ABCDEFGH01234abc)
   trx: string # The transaction reference of the transaction when balance was added and auto-reload was enabled on your account. (e.g. 8ef2447e69604f642ae59363aa5f781b)
 ]: any -> record<error_code: any, error_code_label: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://rest.nexmo.com")
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($api_secret == null) { error make --unspanned { msg: "required query parameter 'api_secret' missing: pass --api-secret" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/top-up" $qp $auth.query)
   let req_body = {"trx": $trx} | compact

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -101,14 +101,19 @@ def x-amz-target-completer-1 [] { ["DirectoryService_20150416.AddIpRoutes"] }
 def x-amz-target-completer-2 [] { ["DirectoryService_20150416.AddRegion"] }
 def x-amz-target-completer-3 [] { ["DirectoryService_20150416.AddTagsToResource"] }
 def x-amz-target-completer-4 [] { ["DirectoryService_20150416.CancelSchemaExtension"] }
+def size-completer [] { ["Large" "Small"] }
 def x-amz-target-completer-5 [] { ["DirectoryService_20150416.ConnectDirectory"] }
 def x-amz-target-completer-6 [] { ["DirectoryService_20150416.CreateAlias"] }
 def x-amz-target-completer-7 [] { ["DirectoryService_20150416.CreateComputer"] }
 def x-amz-target-completer-8 [] { ["DirectoryService_20150416.CreateConditionalForwarder"] }
 def x-amz-target-completer-9 [] { ["DirectoryService_20150416.CreateDirectory"] }
 def x-amz-target-completer-10 [] { ["DirectoryService_20150416.CreateLogSubscription"] }
+def edition-completer [] { ["Enterprise" "Standard"] }
 def x-amz-target-completer-11 [] { ["DirectoryService_20150416.CreateMicrosoftAD"] }
 def x-amz-target-completer-12 [] { ["DirectoryService_20150416.CreateSnapshot"] }
+def trust-direction-completer [] { ["One-Way: Incoming" "One-Way: Outgoing" "Two-Way"] }
+def trust-type-completer [] { ["External" "Forest"] }
+def selective-auth-completer [] { ["Disabled" "Enabled"] }
 def x-amz-target-completer-13 [] { ["DirectoryService_20150416.CreateTrust"] }
 def x-amz-target-completer-14 [] { ["DirectoryService_20150416.DeleteConditionalForwarder"] }
 def x-amz-target-completer-15 [] { ["DirectoryService_20150416.DeleteDirectory"] }
@@ -118,17 +123,21 @@ def x-amz-target-completer-18 [] { ["DirectoryService_20150416.DeleteTrust"] }
 def x-amz-target-completer-19 [] { ["DirectoryService_20150416.DeregisterCertificate"] }
 def x-amz-target-completer-20 [] { ["DirectoryService_20150416.DeregisterEventTopic"] }
 def x-amz-target-completer-21 [] { ["DirectoryService_20150416.DescribeCertificate"] }
+def type-completer [] { ["SmartCard" "SmartCardOrPassword"] }
 def x-amz-target-completer-22 [] { ["DirectoryService_20150416.DescribeClientAuthenticationSettings"] }
 def x-amz-target-completer-23 [] { ["DirectoryService_20150416.DescribeConditionalForwarders"] }
 def x-amz-target-completer-24 [] { ["DirectoryService_20150416.DescribeDirectories"] }
 def x-amz-target-completer-25 [] { ["DirectoryService_20150416.DescribeDomainControllers"] }
 def x-amz-target-completer-26 [] { ["DirectoryService_20150416.DescribeEventTopics"] }
+def type-completer-1 [] { ["Client"] }
 def x-amz-target-completer-27 [] { ["DirectoryService_20150416.DescribeLDAPSSettings"] }
 def x-amz-target-completer-28 [] { ["DirectoryService_20150416.DescribeRegions"] }
+def status-completer [] { ["Default" "Failed" "Requested" "Updated" "Updating"] }
 def x-amz-target-completer-29 [] { ["DirectoryService_20150416.DescribeSettings"] }
 def x-amz-target-completer-30 [] { ["DirectoryService_20150416.DescribeSharedDirectories"] }
 def x-amz-target-completer-31 [] { ["DirectoryService_20150416.DescribeSnapshots"] }
 def x-amz-target-completer-32 [] { ["DirectoryService_20150416.DescribeTrusts"] }
+def update-type-completer [] { ["OS"] }
 def x-amz-target-completer-33 [] { ["DirectoryService_20150416.DescribeUpdateDirectory"] }
 def x-amz-target-completer-34 [] { ["DirectoryService_20150416.DisableClientAuthentication"] }
 def x-amz-target-completer-35 [] { ["DirectoryService_20150416.DisableLDAPS"] }
@@ -145,6 +154,7 @@ def x-amz-target-completer-45 [] { ["DirectoryService_20150416.ListIpRoutes"] }
 def x-amz-target-completer-46 [] { ["DirectoryService_20150416.ListLogSubscriptions"] }
 def x-amz-target-completer-47 [] { ["DirectoryService_20150416.ListSchemaExtensions"] }
 def x-amz-target-completer-48 [] { ["DirectoryService_20150416.ListTagsForResource"] }
+def type-completer-2 [] { ["ClientCertAuth" "ClientLDAPS"] }
 def x-amz-target-completer-49 [] { ["DirectoryService_20150416.RegisterCertificate"] }
 def x-amz-target-completer-50 [] { ["DirectoryService_20150416.RegisterEventTopic"] }
 def x-amz-target-completer-51 [] { ["DirectoryService_20150416.RejectSharedDirectory"] }
@@ -153,6 +163,7 @@ def x-amz-target-completer-53 [] { ["DirectoryService_20150416.RemoveRegion"] }
 def x-amz-target-completer-54 [] { ["DirectoryService_20150416.RemoveTagsFromResource"] }
 def x-amz-target-completer-55 [] { ["DirectoryService_20150416.ResetUserPassword"] }
 def x-amz-target-completer-56 [] { ["DirectoryService_20150416.RestoreFromSnapshot"] }
+def share-method-completer [] { ["HANDSHAKE" "ORGANIZATIONS"] }
 def x-amz-target-completer-57 [] { ["DirectoryService_20150416.ShareDirectory"] }
 def x-amz-target-completer-58 [] { ["DirectoryService_20150416.StartSchemaExtension"] }
 def x-amz-target-completer-59 [] { ["DirectoryService_20150416.UnshareDirectory"] }
@@ -208,12 +219,13 @@ export def "accept-shared-directory" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  shared_directory_id: any
-]: any -> record<SharedDirectory: record<OwnerAccountId: record, OwnerDirectoryId: record, ShareMethod: record, SharedAccountId: record, SharedDirectoryId: record, ShareStatus: record, ShareNotes: record, CreatedDateTime: record, LastUpdatedDateTime: record>> {
+  --x-amz-target: string@x-amz-target-completer # required
+  shared_directory_id: string # Identifier of the shared directory in the directory consumer account. This identifier is different for each directory owner account.
+]: any -> record<SharedDirectory: record<OwnerAccountId: string, OwnerDirectoryId: string, ShareMethod: string, SharedAccountId: string, SharedDirectoryId: string, ShareStatus: string, ShareNotes: string, CreatedDateTime: string, LastUpdatedDateTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.AcceptSharedDirectory")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SharedDirectoryId": $shared_directory_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -239,6 +251,7 @@ export def "accept-shared-directory" [
 #
 # POST /
 # operationId: AddIpRoutes
+# --IpRoutes item shape: {CidrIp?: string, Description?: string}
 export def "add-ip-routes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,14 +269,15 @@ export def "add-ip-routes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  directory_id: any
-  ip_routes: any
-  --update-security-group-for-directory-controllers: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  directory_id: string # Identifier (ID) of the directory to which to add the address block.
+  ip_routes: list # IP address blocks, using CIDR format, of the traffic to route. This is often the IP address block of the DNS server used for your self-managed domain. — item shape: {CidrIp?: string, Description?: string}
+  --update-security-group-for-directory-controllers: oneof<nothing, bool> # If set to true, updates the inbound and outbound rules of the security group that has the description: "Amazon Web Services created security group for directory ID directory controllers." Following are the new rules: Inbound: Type: Custom UDP Rule, Protocol: UDP, Range: 88, Source: 0.0.0.0/0 Type: Custom UDP Rule, Protocol: UDP, Range: 123, Source: 0.0.0.0/0 Type: Custom UDP Rule, Protocol: UDP, Range: 138, Source: 0.0.0.0/0 Type: Custom UDP Rule, Protocol: UDP, Range: 389, Source: 0.0.0.0/0 Type: Custom UDP Rule, Protocol: UDP, Range: 464, Source: 0.0.0.0/0 Type: Custom UDP Rule, Protocol: UDP, Range: 445, Source: 0.0.0.0/0 Type: Custom TCP Rule, Protocol: TCP, Range: 88, Source: 0.0.0.0/0 Type: Custom TCP Rule, Protocol: TCP, Range: 135, Source: 0.0.0.0/0 Type: Custom TCP Rule, Protocol: TCP, Range: 445, Source: 0.0.0.0/0 Type: Custom TCP Rule, Protocol: TCP, Range: 464, Source: 0.0.0.0/0 Type: Custom TCP Rule, Protocol: TCP, Range: 636, Source: 0.0.0.0/0 Type: Custom TCP Rule, Protocol: TCP, Range: 1024-65535, Source: 0.0.0.0/0 Type: Custom TCP Rule, Protocol: TCP, Range: 3268-33269, Source: 0.0.0.0/0 Type: DNS (UDP), Protocol: UDP, Range: 53, Source: 0.0.0.0/0 Type: DNS (TCP), Protocol: TCP, Range: 53, Source: 0.0.0.0/0 Type: LDAP, Protocol: TCP, Range: 389, Source: 0.0.0.0/0 Type: All ICMP, Protocol: All, Range: N/A, Source: 0.0.0.0/0 Outbound: Type: All traffic, Protocol: All, Range: All, Destination: 0.0.0.0/0 These security rules impact an internal network interface that is not exposed publicly.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.AddIpRoutes")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "IpRoutes": $ip_routes, "UpdateSecurityGroupForDirectoryControllers": $update_security_group_for_directory_controllers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -289,7 +303,7 @@ export def "add-ip-routes" [
 #
 # POST /
 # operationId: AddRegion
-# --VPCSettings shape: {VpcId: any, SubnetIds: any}
+# --VPCSettings shape: {VpcId: string, SubnetIds: list<string>}
 export def "add-region" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,14 +321,15 @@ export def "add-region" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  directory_id: any
-  region_name: any
-  vpc_settings: record # Contains VPC information for the CreateDirectory or CreateMicrosoftAD operation. — shape: {VpcId: any, SubnetIds: any}
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  directory_id: string # The identifier of the directory to which you want to add Region replication.
+  region_name: string # The name of the Region where you want to add domain controllers for replication. For example, us-east-1.
+  vpc_settings: record # Contains VPC information for the CreateDirectory or CreateMicrosoftAD operation. — shape: {VpcId: string, SubnetIds: list<string>}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.AddRegion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "RegionName": $region_name, "VPCSettings": $vpc_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -340,6 +355,7 @@ export def "add-region" [
 #
 # POST /
 # operationId: AddTagsToResource
+# --Tags item shape: {Key: string, Value: string}
 export def "add-tags-to-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -357,13 +373,14 @@ export def "add-tags-to-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  resource_id: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  resource_id: string # Identifier (ID) for the directory to which to add the tag.
+  tags: list # The tags to be assigned to the directory. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.AddTagsToResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -406,13 +423,14 @@ export def "cancel-schema-extension" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  directory_id: any
-  schema_extension_id: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  directory_id: string # The identifier of the directory whose schema extension will be canceled.
+  schema_extension_id: string # The identifier of the schema extension that will be canceled.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.CancelSchemaExtension")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "SchemaExtensionId": $schema_extension_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -438,6 +456,8 @@ export def "cancel-schema-extension" [
 #
 # POST /
 # operationId: ConnectDirectory
+# --ConnectSettings shape: {VpcId: string, SubnetIds: list<string>, CustomerDnsIps: list<string>, CustomerUserName: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "connect-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -455,18 +475,19 @@ export def "connect-directory" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  name: any
-  --short-name: any
-  password: any
-  --description: any
-  size: any
-  connect_settings: any
-  --tags: any
-]: any -> record<DirectoryId: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  name: string # The fully qualified name of your self-managed directory, such as corp.example.com.
+  --short-name: string # The NetBIOS name of your self-managed directory, such as CORP.
+  password: string # The password for your self-managed user account. (format: password)
+  --description: string # A description for the directory.
+  size: string@size-completer # The size of the directory.
+  connect_settings: record # Contains information for the ConnectDirectory operation when an AD Connector directory is being created. — shape: {VpcId: string, SubnetIds: list<string>, CustomerDnsIps: list<string>, CustomerUserName: string}
+  --tags: list # The tags to be assigned to AD Connector. — item shape: {Key: string, Value: string}
+]: any -> record<DirectoryId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.ConnectDirectory")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "ShortName": $short_name, "Password": $password, "Description": $description, "Size": $size, "ConnectSettings": $connect_settings, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -509,13 +530,14 @@ export def "create-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  directory_id: any
-  alias: any
-]: any -> record<DirectoryId: record, Alias: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  directory_id: string # The identifier of the directory for which to create the alias.
+  alias: string # The requested alias. The alias must be unique amongst all aliases in Amazon Web Services. This operation throws an EntityAlreadyExistsException error if the alias already exists.
+]: any -> record<DirectoryId: string, Alias: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.CreateAlias")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "Alias": $alias} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -541,6 +563,7 @@ export def "create-alias" [
 #
 # POST /
 # operationId: CreateComputer
+# --ComputerAttributes item shape: {Name?: string, Value?: string}
 export def "create-computer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -558,16 +581,17 @@ export def "create-computer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  directory_id: any
-  computer_name: any
-  password: any
-  --organizational-unit-distinguished-name: any
-  --computer-attributes: any
-]: any -> record<Computer: record<ComputerId: record, ComputerName: record, ComputerAttributes: record>> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  directory_id: string # The identifier of the directory in which to create the computer account.
+  computer_name: string # The name of the computer account.
+  password: string # A one-time password that is used to join the computer to the directory. You should generate a random, strong password to use for this parameter. (format: password)
+  --organizational-unit-distinguished-name: string # The fully-qualified distinguished name of the organizational unit to place the computer account in.
+  --computer-attributes: list # An array of Attribute objects that contain any LDAP attributes to apply to the computer account. — item shape: {Name?: string, Value?: string}
+]: any -> record<Computer: record<ComputerId: string, ComputerName: string, ComputerAttributes: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.CreateComputer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "ComputerName": $computer_name, "Password": $password, "OrganizationalUnitDistinguishedName": $organizational_unit_distinguished_name, "ComputerAttributes": $computer_attributes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -610,14 +634,15 @@ export def "create-conditional-forwarder" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  directory_id: any
-  remote_domain_name: any
-  dns_ip_addrs: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  directory_id: string # The directory ID of the Amazon Web Services directory for which you are creating the conditional forwarder.
+  remote_domain_name: string # The fully qualified domain name (FQDN) of the remote domain with which you will set up a trust relationship.
+  dns_ip_addrs: list<string> # The IP addresses of the remote DNS server associated with RemoteDomainName.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.CreateConditionalForwarder")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "RemoteDomainName": $remote_domain_name, "DnsIpAddrs": $dns_ip_addrs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -643,6 +668,8 @@ export def "create-conditional-forwarder" [
 #
 # POST /
 # operationId: CreateDirectory
+# --VpcSettings shape: {VpcId: string, SubnetIds: list<string>}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -660,18 +687,19 @@ export def "create-directory" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  name: any
-  --short-name: any
-  password: any
-  --description: any
-  size: any
-  --vpc-settings: any
-  --tags: any
-]: any -> record<DirectoryId: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  name: string # The fully qualified name for the directory, such as corp.example.com.
+  --short-name: string # The NetBIOS name of the directory, such as CORP.
+  password: string # The password for the directory administrator. The directory creation process creates a directory administrator account with the user name Administrator and this password. If you need to change the password for the administrator account, you can use the ResetUserPassword API call. The regex pattern for this string is made up of the following conditions: Length (?=^.{8,64}$) – Must be between 8 and 64 characters AND any 3 of the following password complexity rules required by Active Directory: Numbers and upper case and lowercase (?=.*\d)(?=.*[A-Z])(?=.*[a-z]) Numbers and special characters and lower case (?=.*\d)(?=.*[^A-Za-z0-9\s])(?=.*[a-z]) Special characters and upper case and lower case (?=.*[^A-Za-z0-9\s])(?=.*[A-Z])(?=.*[a-z]) Numbers and upper case and special characters (?=.*\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9\s]) For additional information about how Active Directory passwords are enforced, see Password must meet complexity requirements (https://docs.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/password-must-meet-complexity-requirements) on the Microsoft website. (format: password)
+  --description: string # A description for the directory.
+  size: string@size-completer # The size of the directory.
+  --vpc-settings: record # Contains VPC information for the CreateDirectory or CreateMicrosoftAD operation. — shape: {VpcId: string, SubnetIds: list<string>}
+  --tags: list # The tags to be assigned to the Simple AD directory. — item shape: {Key: string, Value: string}
+]: any -> record<DirectoryId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.CreateDirectory")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "ShortName": $short_name, "Password": $password, "Description": $description, "Size": $size, "VpcSettings": $vpc_settings, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -714,13 +742,14 @@ export def "create-log-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  directory_id: any
-  log_group_name: any
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  directory_id: string # Identifier of the directory to which you want to subscribe and receive real-time logs to your specified CloudWatch log group.
+  log_group_name: string # The name of the CloudWatch log group where the real-time domain controller logs are forwarded.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.CreateLogSubscription")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "LogGroupName": $log_group_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -746,6 +775,8 @@ export def "create-log-subscription" [
 #
 # POST /
 # operationId: CreateMicrosoftAD
+# --VpcSettings shape: {VpcId: string, SubnetIds: list<string>}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-microsoft-ad" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -763,18 +794,19 @@ export def "create-microsoft-ad" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  name: any
-  --short-name: any
-  password: any
-  --description: any
-  vpc_settings: any
-  --edition: any
-  --tags: any
-]: any -> record<DirectoryId: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  name: string # The fully qualified domain name for the Managed Microsoft AD directory, such as corp.example.com. This name will resolve inside your VPC only. It does not need to be publicly resolvable.
+  --short-name: string # The NetBIOS name for your domain, such as CORP. If you don't specify a NetBIOS name, it will default to the first part of your directory DNS. For example, CORP for the directory DNS corp.example.com.
+  password: string # The password for the default administrative user named Admin. If you need to change the password for the administrator account, you can use the ResetUserPassword API call. (format: password)
+  --description: string # A description for the directory. This label will appear on the Amazon Web Services console Directory Details page after the directory is created.
+  vpc_settings: record # Contains VPC information for the CreateDirectory or CreateMicrosoftAD operation. — shape: {VpcId: string, SubnetIds: list<string>}
+  --edition: string@edition-completer # Managed Microsoft AD is available in two editions: Standard and Enterprise. Enterprise is the default.
+  --tags: list # The tags to be assigned to the Managed Microsoft AD directory. — item shape: {Key: string, Value: string}
+]: any -> record<DirectoryId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.CreateMicrosoftAD")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "ShortName": $short_name, "Password": $password, "Description": $description, "VpcSettings": $vpc_settings, "Edition": $edition, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -817,13 +849,14 @@ export def "create-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  directory_id: any
-  --name: any
-]: any -> record<SnapshotId: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  directory_id: string # The identifier of the directory of which to take a snapshot.
+  --name: string # The descriptive name to apply to the snapshot.
+]: any -> record<SnapshotId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.CreateSnapshot")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -866,18 +899,19 @@ export def "create-trust" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  directory_id: any
-  remote_domain_name: any
-  trust_password: any
-  trust_direction: any
-  --trust-type: any
-  --conditional-forwarder-ip-addrs: any
-  --selective-auth: any
-]: any -> record<TrustId: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  directory_id: string # The Directory ID of the Managed Microsoft AD directory for which to establish the trust relationship.
+  remote_domain_name: string # The Fully Qualified Domain Name (FQDN) of the external domain for which to create the trust relationship.
+  trust_password: string # The trust password. The must be the same password that was used when creating the trust relationship on the external domain. (format: password)
+  trust_direction: string@trust-direction-completer # The direction of the trust relationship.
+  --trust-type: string@trust-type-completer # The trust relationship type. Forest is the default.
+  --conditional-forwarder-ip-addrs: list<string> # The IP addresses of the remote DNS server associated with RemoteDomainName.
+  --selective-auth: string@selective-auth-completer # Optional parameter to enable selective authentication for the trust.
+]: any -> record<TrustId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.CreateTrust")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "RemoteDomainName": $remote_domain_name, "TrustPassword": $trust_password, "TrustDirection": $trust_direction, "TrustType": $trust_type, "ConditionalForwarderIpAddrs": $conditional_forwarder_ip_addrs, "SelectiveAuth": $selective_auth} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -920,13 +954,14 @@ export def "delete-conditional-forwarder" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  directory_id: any
-  remote_domain_name: any
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  directory_id: string # The directory ID for which you are deleting the conditional forwarder.
+  remote_domain_name: string # The fully qualified domain name (FQDN) of the remote domain with which you are deleting the conditional forwarder.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DeleteConditionalForwarder")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "RemoteDomainName": $remote_domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -969,12 +1004,13 @@ export def "delete-directory" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  directory_id: any
-]: any -> record<DirectoryId: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  directory_id: string # The identifier of the directory to delete.
+]: any -> record<DirectoryId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DeleteDirectory")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1017,12 +1053,13 @@ export def "delete-log-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  directory_id: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  directory_id: string # Identifier of the directory whose log subscription you want to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DeleteLogSubscription")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1065,12 +1102,13 @@ export def "delete-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  snapshot_id: any
-]: any -> record<SnapshotId: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  snapshot_id: string # The identifier of the directory snapshot to be deleted.
+]: any -> record<SnapshotId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DeleteSnapshot")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SnapshotId": $snapshot_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1113,13 +1151,14 @@ export def "delete-trust" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  trust_id: any
-  --delete-associated-conditional-forwarder: any
-]: any -> record<TrustId: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  trust_id: string # The Trust ID of the trust relationship to be deleted.
+  --delete-associated-conditional-forwarder: oneof<nothing, bool> # Delete a conditional forwarder as part of a DeleteTrustRequest.
+]: any -> record<TrustId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DeleteTrust")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TrustId": $trust_id, "DeleteAssociatedConditionalForwarder": $delete_associated_conditional_forwarder} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1162,13 +1201,14 @@ export def "deregister-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  directory_id: any
-  certificate_id: any
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  directory_id: string # The identifier of the directory.
+  certificate_id: string # The identifier of the certificate.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DeregisterCertificate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "CertificateId": $certificate_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1211,13 +1251,14 @@ export def "deregister-event-topic" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  directory_id: any
-  topic_name: any
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  directory_id: string # The Directory ID to remove as a publisher. This directory will no longer send messages to the specified Amazon SNS topic.
+  topic_name: string # The name of the Amazon SNS topic from which to remove the directory as a publisher.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DeregisterEventTopic")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "TopicName": $topic_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1260,13 +1301,14 @@ export def "describe-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  directory_id: any
-  certificate_id: any
-]: any -> record<Certificate: record<CertificateId: record, State: record, StateReason: record, CommonName: record, RegisteredDateTime: record, ExpiryDateTime: record, Type: record, ClientCertAuthSettings: record<OCSPUrl: record>>> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  directory_id: string # The identifier of the directory.
+  certificate_id: string # The identifier of the certificate.
+]: any -> record<Certificate: record<CertificateId: string, State: string, StateReason: string, CommonName: string, RegisteredDateTime: string, ExpiryDateTime: string, Type: string, ClientCertAuthSettings: record<OCSPUrl: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DescribeCertificate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "CertificateId": $certificate_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1311,15 +1353,16 @@ export def "describe-client-authentication-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  directory_id: any
-  --type: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<ClientAuthenticationSettingsInfo: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  directory_id: string # The identifier of the directory for which to retrieve information.
+  --type: string@type-completer # The type of client authentication for which to retrieve information. If no type is specified, a list of all client authentication types that are supported for the specified directory is retrieved.
+  --next-token-body: string # The DescribeClientAuthenticationSettingsResult.NextToken value from a previous call to DescribeClientAuthenticationSettings. Pass null if this is the first call. (body field)
+  --limit-body: int # The maximum number of items to return. If this value is zero, the maximum number of items is specified by the limitations of the operation. (body field)
+]: any -> record<ClientAuthenticationSettingsInfo: table<Type: string, Status: string, LastUpdatedDateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DescribeClientAuthenticationSettings")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DirectoryId": $directory_id, "Type": $type, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -1363,13 +1406,14 @@ export def "describe-conditional-forwarders" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  directory_id: any
-  --remote-domain-names: any
-]: any -> record<ConditionalForwarders: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  directory_id: string # The directory ID for which to get the list of associated conditional forwarders.
+  --remote-domain-names: list<string> # The fully qualified domain names (FQDN) of the remote domains for which to get the list of associated conditional forwarders. If this member is null, all conditional forwarders are returned.
+]: any -> record<ConditionalForwarders: table<RemoteDomainName: string, DnsIpAddrs: list, ReplicationScope: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DescribeConditionalForwarders")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "RemoteDomainNames": $remote_domain_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1414,14 +1458,15 @@ export def "describe-directories" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  --directory-ids: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<DirectoryDescriptions: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  --directory-ids: list<string> # A list of directory identifiers.
+  --next-token-body: string # The DescribeDirectoriesResult.NextToken value from a previous call to DescribeDirectories. Pass null if this is the first call. (body field)
+  --limit-body: int # The maximum number of items to return. If this value is zero, the maximum number of items is specified by the limitations of the operation. (body field)
+]: any -> record<DirectoryDescriptions: table<DirectoryId: string, Name: string, ShortName: string, Size: string, Edition: string, Alias: string, AccessUrl: string, Description: string, DnsIpAddrs: list, Stage: string, ShareStatus: string, ShareMethod: string, ShareNotes: string, LaunchTime: string, StageLastUpdatedDateTime: string, Type: string, VpcSettings: record, ConnectSettings: record, RadiusSettings: record, RadiusStatus: string, StageReason: string, SsoEnabled: bool, DesiredNumberOfDomainControllers: int, OwnerDirectoryDescription: record, RegionsInfo: record, OsVersion: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DescribeDirectories")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DirectoryIds": $directory_ids, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -1467,15 +1512,16 @@ export def "describe-domain-controllers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  directory_id: any
-  --domain-controller-ids: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<DomainControllers: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  directory_id: string # Identifier of the directory for which to retrieve the domain controller information.
+  --domain-controller-ids: list<string> # A list of identifiers for the domain controllers whose information will be provided.
+  --next-token-body: string # The DescribeDomainControllers.NextToken value from a previous call to DescribeDomainControllers. Pass null if this is the first call. (body field)
+  --limit-body: int # The maximum number of items to return. (body field)
+]: any -> record<DomainControllers: table<DirectoryId: string, DomainControllerId: string, DnsIpAddr: string, VpcId: string, SubnetId: string, AvailabilityZone: string, Status: string, StatusReason: string, LaunchTime: string, StatusLastUpdatedDateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DescribeDomainControllers")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DirectoryId": $directory_id, "DomainControllerIds": $domain_controller_ids, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -1519,13 +1565,14 @@ export def "describe-event-topics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  --directory-id: any
-  --topic-names: any
-]: any -> record<EventTopics: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  --directory-id: string # The Directory ID for which to get the list of associated Amazon SNS topics. If this member is null, associations for all Directory IDs are returned.
+  --topic-names: list<string> # A list of Amazon SNS topic names for which to obtain the information. If this member is null, all associations for the specified Directory ID are returned. An empty list results in an InvalidParameterException being thrown.
+]: any -> record<EventTopics: table<DirectoryId: string, TopicName: string, TopicArn: string, CreatedDateTime: string, Status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DescribeEventTopics")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "TopicNames": $topic_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1570,15 +1617,16 @@ export def "describe-ldaps-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  directory_id: any
-  --type: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<LDAPSSettingsInfo: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  directory_id: string # The identifier of the directory.
+  --type: string@type-completer-1 # The type of LDAP security to enable. Currently only the value Client is supported.
+  --next-token-body: string # The type of next token used for pagination. (body field)
+  --limit-body: int # Specifies the number of items that should be displayed on one page. (body field)
+]: any -> record<LDAPSSettingsInfo: table<LDAPSStatus: string, LDAPSStatusReason: string, LastUpdatedDateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DescribeLDAPSSettings")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DirectoryId": $directory_id, "Type": $type, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -1623,14 +1671,15 @@ export def "describe-regions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  directory_id: any
-  --region-name: any
-  --next-token-body: any #  (body field)
-]: any -> record<RegionsDescription: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  directory_id: string # The identifier of the directory.
+  --region-name: string # The name of the Region. For example, us-east-1.
+  --next-token-body: string # The DescribeRegionsResult.NextToken value from a previous call to DescribeRegions. Pass null if this is the first call. (body field)
+]: any -> record<RegionsDescription: table<DirectoryId: string, RegionName: string, RegionType: string, Status: string, VpcSettings: record, DesiredNumberOfDomainControllers: int, LaunchTime: string, StatusLastUpdatedDateTime: string, LastUpdatedDateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DescribeRegions")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DirectoryId": $directory_id, "RegionName": $region_name, "NextToken": $next_token_body} | compact
@@ -1674,14 +1723,15 @@ export def "describe-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  directory_id: any
-  --status: any
-  --next-token: any
-]: any -> record<DirectoryId: record, SettingEntries: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  directory_id: string # The identifier of the directory for which to retrieve information.
+  --status: string@status-completer # The status of the directory settings for which to retrieve information.
+  --next-token: string # The DescribeSettingsResult.NextToken value from a previous call to DescribeSettings. Pass null if this is the first call.
+]: any -> record<DirectoryId: string, SettingEntries: table<Type: string, Name: string, AllowedValues: string, AppliedValue: string, RequestedValue: string, RequestStatus: string, RequestDetailedStatus: record, RequestStatusMessage: string, LastUpdatedDateTime: string, LastRequestedDateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DescribeSettings")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "Status": $status, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1726,15 +1776,16 @@ export def "describe-shared-directories" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  owner_directory_id: any
-  --shared-directory-ids: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<SharedDirectories: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  owner_directory_id: string # Returns the identifier of the directory in the directory owner account.
+  --shared-directory-ids: list<string> # A list of directory identifiers.
+  --next-token-body: string # The DescribeSharedDirectoriesResult.NextToken value from a previous call to DescribeSharedDirectories. Pass null if this is the first call. (body field)
+  --limit-body: int # The number of shared directories to return in the response object. (body field)
+]: any -> record<SharedDirectories: table<OwnerAccountId: string, OwnerDirectoryId: string, ShareMethod: string, SharedAccountId: string, SharedDirectoryId: string, ShareStatus: string, ShareNotes: string, CreatedDateTime: string, LastUpdatedDateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DescribeSharedDirectories")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OwnerDirectoryId": $owner_directory_id, "SharedDirectoryIds": $shared_directory_ids, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -1780,15 +1831,16 @@ export def "describe-snapshots" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  --directory-id: any
-  --snapshot-ids: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<Snapshots: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  --directory-id: string # The identifier of the directory for which to retrieve snapshot information.
+  --snapshot-ids: list<string> # A list of directory snapshot identifiers.
+  --next-token-body: string # The DescribeSnapshotsResult.NextToken value from a previous call to DescribeSnapshots. Pass null if this is the first call. (body field)
+  --limit-body: int # The maximum number of objects to return. (body field)
+]: any -> record<Snapshots: table<DirectoryId: string, SnapshotId: string, Type: string, Name: string, Status: string, StartTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DescribeSnapshots")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DirectoryId": $directory_id, "SnapshotIds": $snapshot_ids, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -1834,15 +1886,16 @@ export def "describe-trusts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  --directory-id: any
-  --trust-ids: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<Trusts: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  --directory-id: string # The Directory ID of the Amazon Web Services directory that is a part of the requested trust relationship.
+  --trust-ids: list<string> # A list of identifiers of the trust relationships for which to obtain the information. If this member is null, all trust relationships that belong to the current account are returned. An empty list results in an InvalidParameterException being thrown.
+  --next-token-body: string # The DescribeTrustsResult.NextToken value from a previous call to DescribeTrusts. Pass null if this is the first call. (body field)
+  --limit-body: int # The maximum number of objects to return. (body field)
+]: any -> record<Trusts: table<DirectoryId: string, TrustId: string, RemoteDomainName: string, TrustType: string, TrustDirection: string, TrustState: string, CreatedDateTime: string, LastUpdatedDateTime: string, StateLastUpdatedDateTime: string, TrustStateReason: string, SelectiveAuth: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DescribeTrusts")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DirectoryId": $directory_id, "TrustIds": $trust_ids, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -1887,15 +1940,16 @@ export def "describe-update-directory" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  directory_id: any
-  update_type: any
-  --region-name: any
-  --next-token-body: any #  (body field)
-]: any -> record<UpdateActivities: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  directory_id: string # The unique identifier of the directory.
+  update_type: string@update-type-completer # The type of updates you want to describe for the directory.
+  --region-name: string # The name of the Region.
+  --next-token-body: string # The DescribeUpdateDirectoryResult. NextToken value from a previous call to DescribeUpdateDirectory. Pass null if this is the first call. (body field)
+]: any -> record<UpdateActivities: table<Region: string, Status: string, StatusReason: string, InitiatedBy: string, NewValue: record, PreviousValue: record, StartTime: string, LastUpdatedDateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DescribeUpdateDirectory")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DirectoryId": $directory_id, "UpdateType": $update_type, "RegionName": $region_name, "NextToken": $next_token_body} | compact
@@ -1939,13 +1993,14 @@ export def "disable-client-authentication" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  directory_id: any
-  type: any
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  directory_id: string # The identifier of the directory
+  type: string@type-completer # The type of client authentication to disable. Currently, only the parameter, SmartCard is supported.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DisableClientAuthentication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "Type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1988,13 +2043,14 @@ export def "disable-ldaps" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  directory_id: any
-  type: any
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  directory_id: string # The identifier of the directory.
+  type: string@type-completer-1 # The type of LDAP security to enable. Currently only the value Client is supported.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DisableLDAPS")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "Type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2037,12 +2093,13 @@ export def "disable-radius" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  directory_id: any
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  directory_id: string # The identifier of the directory for which to disable MFA.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DisableRadius")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2085,14 +2142,15 @@ export def "disable-sso" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  directory_id: any
-  --user-name: any
-  --password: any
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  directory_id: string # The identifier of the directory for which to disable single-sign on.
+  --user-name: string # The username of an alternate account to use to disable single-sign on. This is only used for AD Connector directories. This account must have privileges to remove a service principal name. If the AD Connector service account does not have privileges to remove a service principal name, you can specify an alternate account with the UserName and Password parameters. These credentials are only used to disable single sign-on and are not stored by the service. The AD Connector service account is not changed.
+  --password: string # The password of an alternate account to use to disable single-sign on. This is only used for AD Connector directories. For more information, see the UserName parameter. (format: password)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.DisableSso")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "UserName": $user_name, "Password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2135,13 +2193,14 @@ export def "enable-client-authentication" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  directory_id: any
-  type: any
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  directory_id: string # The identifier of the specified directory.
+  type: string@type-completer # The type of client authentication to enable. Currently only the value SmartCard is supported. Smart card authentication in AD Connector requires that you enable Kerberos Constrained Delegation for the Service User to the LDAP service in your self-managed AD.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.EnableClientAuthentication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "Type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2184,13 +2243,14 @@ export def "enable-ldaps" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  directory_id: any
-  type: any
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  directory_id: string # The identifier of the directory.
+  type: string@type-completer-1 # The type of LDAP security to enable. Currently only the value Client is supported.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.EnableLDAPS")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "Type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2216,6 +2276,7 @@ export def "enable-ldaps" [
 #
 # POST /
 # operationId: EnableRadius
+# --RadiusSettings shape: {RadiusServers?: list<string>, RadiusPort?: int, RadiusTimeout?: int, RadiusRetries?: int, SharedSecret?: string, AuthenticationProtocol?: "PAP"|"CHAP"|"MS-CHAPv1"|"MS-CHAPv2", DisplayLabel?: string, UseSameUsername?: bool}
 export def "enable-radius" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2233,13 +2294,14 @@ export def "enable-radius" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  directory_id: any
-  radius_settings: any
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  directory_id: string # The identifier of the directory for which to enable MFA.
+  radius_settings: record # Contains information about a Remote Authentication Dial In User Service (RADIUS) server. — shape: {RadiusServers?: list<string>, RadiusPort?: int, RadiusTimeout?: int, RadiusRetries?: int, SharedSecret?: string, AuthenticationProtocol?: "PAP"|"CHAP"|"MS-CHAPv1"|"MS-CHAPv2", DisplayLabel?: string, UseSameUsername?: bool}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.EnableRadius")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "RadiusSettings": $radius_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2282,14 +2344,15 @@ export def "enable-sso" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  directory_id: any
-  --user-name: any
-  --password: any
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  directory_id: string # The identifier of the directory for which to enable single-sign on.
+  --user-name: string # The username of an alternate account to use to enable single-sign on. This is only used for AD Connector directories. This account must have privileges to add a service principal name. If the AD Connector service account does not have privileges to add a service principal name, you can specify an alternate account with the UserName and Password parameters. These credentials are only used to enable single sign-on and are not stored by the service. The AD Connector service account is not changed.
+  --password: string # The password of an alternate account to use to enable single-sign on. This is only used for AD Connector directories. For more information, see the UserName parameter. (format: password)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.EnableSso")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "UserName": $user_name, "Password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2332,12 +2395,13 @@ export def "get-directory-limits" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
+  --x-amz-target: string@x-amz-target-completer-42 # required
   --body: record
-]: any -> record<DirectoryLimits: record<CloudOnlyDirectoriesLimit: record, CloudOnlyDirectoriesCurrentCount: record, CloudOnlyDirectoriesLimitReached: record, CloudOnlyMicrosoftADLimit: record, CloudOnlyMicrosoftADCurrentCount: record, CloudOnlyMicrosoftADLimitReached: record, ConnectedDirectoriesLimit: record, ConnectedDirectoriesCurrentCount: record, ConnectedDirectoriesLimitReached: record>> {
+]: any -> record<DirectoryLimits: record<CloudOnlyDirectoriesLimit: int, CloudOnlyDirectoriesCurrentCount: int, CloudOnlyDirectoriesLimitReached: bool, CloudOnlyMicrosoftADLimit: int, CloudOnlyMicrosoftADCurrentCount: int, CloudOnlyMicrosoftADLimitReached: bool, ConnectedDirectoriesLimit: int, ConnectedDirectoriesCurrentCount: int, ConnectedDirectoriesLimitReached: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.GetDirectoryLimits")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2380,12 +2444,13 @@ export def "get-snapshot-limits" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  directory_id: any
-]: any -> record<SnapshotLimits: record<ManualSnapshotsLimit: record, ManualSnapshotsCurrentCount: record, ManualSnapshotsLimitReached: record>> {
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  directory_id: string # Contains the identifier of the directory to obtain the limits for.
+]: any -> record<SnapshotLimits: record<ManualSnapshotsLimit: int, ManualSnapshotsCurrentCount: int, ManualSnapshotsLimitReached: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.GetSnapshotLimits")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2430,14 +2495,15 @@ export def "list-certificates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  directory_id: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<NextToken: record, CertificatesInfo: record> {
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  directory_id: string # The identifier of the directory.
+  --next-token-body: string # A token for requesting another page of certificates if the NextToken response element indicates that more certificates are available. Use the value of the returned NextToken element in your request until the token comes back as null. Pass null if this is the first call. (body field)
+  --limit-body: int # The number of items that should show up on one page (body field)
+]: any -> record<NextToken: string, CertificatesInfo: table<CertificateId: string, CommonName: string, State: string, ExpiryDateTime: string, Type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.ListCertificates")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DirectoryId": $directory_id, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -2483,14 +2549,15 @@ export def "list-ip-routes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  directory_id: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<IpRoutesInfo: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  directory_id: string # Identifier (ID) of the directory for which you want to retrieve the IP addresses.
+  --next-token-body: string # The ListIpRoutes.NextToken value from a previous call to ListIpRoutes. Pass null if this is the first call. (body field)
+  --limit-body: int # Maximum number of items to return. If this value is zero, the maximum number of items is specified by the limitations of the operation. (body field)
+]: any -> record<IpRoutesInfo: table<DirectoryId: string, CidrIp: string, IpRouteStatusMsg: string, AddedDateTime: string, IpRouteStatusReason: string, Description: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.ListIpRoutes")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DirectoryId": $directory_id, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -2536,14 +2603,15 @@ export def "list-log-subscriptions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  --directory-id: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<LogSubscriptions: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  --directory-id: string # If a DirectoryID is provided, lists only the log subscription associated with that directory. If no DirectoryId is provided, lists all log subscriptions associated with your Amazon Web Services account. If there are no log subscriptions for the Amazon Web Services account or the directory, an empty list will be returned.
+  --next-token-body: string # The token for the next set of items to return. (body field)
+  --limit-body: int # The maximum number of items returned. (body field)
+]: any -> record<LogSubscriptions: table<DirectoryId: string, LogGroupName: string, SubscriptionCreatedDateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.ListLogSubscriptions")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DirectoryId": $directory_id, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -2589,14 +2657,15 @@ export def "list-schema-extensions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  directory_id: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<SchemaExtensionsInfo: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  directory_id: string # The identifier of the directory from which to retrieve the schema extension information.
+  --next-token-body: string # The ListSchemaExtensions.NextToken value from a previous call to ListSchemaExtensions. Pass null if this is the first call. (body field)
+  --limit-body: int # The maximum number of items to return. (body field)
+]: any -> record<SchemaExtensionsInfo: table<DirectoryId: string, SchemaExtensionId: string, Description: string, SchemaExtensionStatus: string, SchemaExtensionStatusReason: string, StartDateTime: string, EndDateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.ListSchemaExtensions")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DirectoryId": $directory_id, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -2642,14 +2711,15 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-48
-  resource_id: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<Tags: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-48 # required
+  resource_id: string # Identifier (ID) of the directory for which you want to retrieve tags.
+  --next-token-body: string # Reserved for future use. (body field)
+  --limit-body: int # Reserved for future use. (body field)
+]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.ListTagsForResource")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ResourceId": $resource_id, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -2676,6 +2746,7 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: RegisterCertificate
+# --ClientCertAuthSettings shape: {OCSPUrl?: string}
 export def "register-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2693,15 +2764,16 @@ export def "register-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-49
-  directory_id: any
-  certificate_data: any
-  --type: any
-  --client-cert-auth-settings: any
-]: any -> record<CertificateId: record> {
+  --x-amz-target: string@x-amz-target-completer-49 # required
+  directory_id: string # The identifier of the directory.
+  certificate_data: string # The certificate PEM string that needs to be registered.
+  --type: string@type-completer-2 # The function that the registered certificate performs. Valid values include ClientLDAPS or ClientCertAuth. The default value is ClientLDAPS.
+  --client-cert-auth-settings: record # Contains information about the client certificate authentication settings for the RegisterCertificate and DescribeCertificate operations. — shape: {OCSPUrl?: string}
+]: any -> record<CertificateId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.RegisterCertificate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "CertificateData": $certificate_data, "Type": $type, "ClientCertAuthSettings": $client_cert_auth_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2744,13 +2816,14 @@ export def "register-event-topic" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-50
-  directory_id: any
-  topic_name: any
+  --x-amz-target: string@x-amz-target-completer-50 # required
+  directory_id: string # The Directory ID that will publish status messages to the Amazon SNS topic.
+  topic_name: string # The Amazon SNS topic name to which the directory will publish status messages. This Amazon SNS topic must be in the same region as the specified Directory ID.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.RegisterEventTopic")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "TopicName": $topic_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2793,12 +2866,13 @@ export def "reject-shared-directory" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-51
-  shared_directory_id: any
-]: any -> record<SharedDirectoryId: record> {
+  --x-amz-target: string@x-amz-target-completer-51 # required
+  shared_directory_id: string # Identifier of the shared directory in the directory consumer account. This identifier is different for each directory owner account.
+]: any -> record<SharedDirectoryId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.RejectSharedDirectory")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SharedDirectoryId": $shared_directory_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2841,13 +2915,14 @@ export def "remove-ip-routes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-52
-  directory_id: any
-  cidr_ips: any
+  --x-amz-target: string@x-amz-target-completer-52 # required
+  directory_id: string # Identifier (ID) of the directory from which you want to remove the IP addresses.
+  cidr_ips: list<string> # IP address blocks that you want to remove.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.RemoveIpRoutes")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "CidrIps": $cidr_ips} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2890,12 +2965,13 @@ export def "remove-region" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-53
-  directory_id: any
+  --x-amz-target: string@x-amz-target-completer-53 # required
+  directory_id: string # The identifier of the directory for which you want to remove Region replication.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.RemoveRegion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2938,13 +3014,14 @@ export def "remove-tags-from-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-54
-  resource_id: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-54 # required
+  resource_id: string # Identifier (ID) of the directory from which to remove the tag.
+  tag_keys: list<string> # The tag key (name) of the tag to be removed.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.RemoveTagsFromResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2987,14 +3064,15 @@ export def "reset-user-password" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-55
-  directory_id: any
-  user_name: any
-  new_password: any
+  --x-amz-target: string@x-amz-target-completer-55 # required
+  directory_id: string # Identifier of the Managed Microsoft AD or Simple AD directory in which the user resides.
+  user_name: string # The user name of the user whose password will be reset.
+  new_password: string # The new password that will be reset. (format: password)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.ResetUserPassword")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "UserName": $user_name, "NewPassword": $new_password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3037,12 +3115,13 @@ export def "restore-from-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-56
-  snapshot_id: any
+  --x-amz-target: string@x-amz-target-completer-56 # required
+  snapshot_id: string # The identifier of the snapshot to restore from.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.RestoreFromSnapshot")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SnapshotId": $snapshot_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3068,6 +3147,7 @@ export def "restore-from-snapshot" [
 #
 # POST /
 # operationId: ShareDirectory
+# --ShareTarget shape: {Id: string, Type: "ACCOUNT"}
 export def "share-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3085,15 +3165,16 @@ export def "share-directory" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-57
-  directory_id: any
-  --share-notes: any
-  share_target: any
-  share_method: any
-]: any -> record<SharedDirectoryId: record> {
+  --x-amz-target: string@x-amz-target-completer-57 # required
+  directory_id: string # Identifier of the Managed Microsoft AD directory that you want to share with other Amazon Web Services accounts.
+  --share-notes: string # A directory share request that is sent by the directory owner to the directory consumer. The request includes a typed message to help the directory consumer administrator determine whether to approve or reject the share invitation. (format: password)
+  share_target: record # Identifier that contains details about the directory consumer account. — shape: {Id: string, Type: "ACCOUNT"}
+  share_method: string@share-method-completer # The method used when sharing a directory to determine whether the directory should be shared within your Amazon Web Services organization (ORGANIZATIONS) or with any Amazon Web Services account by sending a directory sharing request (HANDSHAKE).
+]: any -> record<SharedDirectoryId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.ShareDirectory")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "ShareNotes": $share_notes, "ShareTarget": $share_target, "ShareMethod": $share_method} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3136,18 +3217,20 @@ export def "start-schema-extension" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-58
-  directory_id: any
-  create_snapshot_before_schema_extension: any
-  ldif_content: any
-  description: any
-]: any -> record<SchemaExtensionId: record> {
+  --x-amz-target: string@x-amz-target-completer-58 # required
+  directory_id: string # The identifier of the directory for which the schema extension will be applied to.
+  --create-snapshot-before-schema-extension: oneof<nothing, bool> # If true, creates a snapshot of the directory before applying the schema extension.
+  ldif_content: string # The LDIF file represented as a string. To construct the LdifContent string, precede each line as it would be formatted in an ldif file with \n. See the example request below for more details. The file size can be no larger than 1MB.
+  description: string # A description of the schema extension.
+]: any -> record<SchemaExtensionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.StartSchemaExtension")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "CreateSnapshotBeforeSchemaExtension": $create_snapshot_before_schema_extension, "LdifContent": $ldif_content, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "CreateSnapshotBeforeSchemaExtension") == null) { error make --unspanned { msg: "required body field 'CreateSnapshotBeforeSchemaExtension' missing: pass --create-snapshot-before-schema-extension or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -3170,6 +3253,7 @@ export def "start-schema-extension" [
 #
 # POST /
 # operationId: UnshareDirectory
+# --UnshareTarget shape: {Id: string, Type: "ACCOUNT"}
 export def "unshare-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3187,13 +3271,14 @@ export def "unshare-directory" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-59
-  directory_id: any
-  unshare_target: any
-]: any -> record<SharedDirectoryId: record> {
+  --x-amz-target: string@x-amz-target-completer-59 # required
+  directory_id: string # The identifier of the Managed Microsoft AD directory that you want to stop sharing.
+  unshare_target: record # Identifier that contains details about the directory consumer account with whom the directory is being unshared. — shape: {Id: string, Type: "ACCOUNT"}
+]: any -> record<SharedDirectoryId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.UnshareDirectory")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "UnshareTarget": $unshare_target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3236,14 +3321,15 @@ export def "update-conditional-forwarder" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-60
-  directory_id: any
-  remote_domain_name: any
-  dns_ip_addrs: any
+  --x-amz-target: string@x-amz-target-completer-60 # required
+  directory_id: string # The directory ID of the Amazon Web Services directory for which to update the conditional forwarder.
+  remote_domain_name: string # The fully qualified domain name (FQDN) of the remote domain with which you will set up a trust relationship.
+  dns_ip_addrs: list<string> # The updated IP addresses of the remote DNS server associated with the conditional forwarder.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.UpdateConditionalForwarder")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "RemoteDomainName": $remote_domain_name, "DnsIpAddrs": $dns_ip_addrs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3269,6 +3355,7 @@ export def "update-conditional-forwarder" [
 #
 # POST /
 # operationId: UpdateDirectorySetup
+# --OSUpdateSettings shape: {OSVersion?: "SERVER_2012"|"SERVER_2019"}
 export def "update-directory-setup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3286,15 +3373,16 @@ export def "update-directory-setup" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-61
-  directory_id: any
-  update_type: any
-  --os-update-settings: any
-  --create-snapshot-before-update: any
+  --x-amz-target: string@x-amz-target-completer-61 # required
+  directory_id: string # The identifier of the directory on which you want to perform the update.
+  update_type: string@update-type-completer # The type of update that needs to be performed on the directory. For example, OS.
+  --os-update-settings: record # OS version that the directory needs to be updated to. — shape: {OSVersion?: "SERVER_2012"|"SERVER_2019"}
+  --create-snapshot-before-update: oneof<nothing, bool> # The boolean that specifies if a snapshot for the directory needs to be taken before updating the directory.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.UpdateDirectorySetup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "UpdateType": $update_type, "OSUpdateSettings": $os_update_settings, "CreateSnapshotBeforeUpdate": $create_snapshot_before_update} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3337,13 +3425,14 @@ export def "update-number-of-domain-controllers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-62
-  directory_id: any
-  desired_number: any
+  --x-amz-target: string@x-amz-target-completer-62 # required
+  directory_id: string # Identifier of the directory to which the domain controllers will be added or removed.
+  desired_number: int # The number of domain controllers desired in the directory.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.UpdateNumberOfDomainControllers")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "DesiredNumber": $desired_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3369,6 +3458,7 @@ export def "update-number-of-domain-controllers" [
 #
 # POST /
 # operationId: UpdateRadius
+# --RadiusSettings shape: {RadiusServers?: list<string>, RadiusPort?: int, RadiusTimeout?: int, RadiusRetries?: int, SharedSecret?: string, AuthenticationProtocol?: "PAP"|"CHAP"|"MS-CHAPv1"|"MS-CHAPv2", DisplayLabel?: string, UseSameUsername?: bool}
 export def "update-radius" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3386,13 +3476,14 @@ export def "update-radius" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-63
-  directory_id: any
-  radius_settings: any
+  --x-amz-target: string@x-amz-target-completer-63 # required
+  directory_id: string # The identifier of the directory for which to update the RADIUS server information.
+  radius_settings: record # Contains information about a Remote Authentication Dial In User Service (RADIUS) server. — shape: {RadiusServers?: list<string>, RadiusPort?: int, RadiusTimeout?: int, RadiusRetries?: int, SharedSecret?: string, AuthenticationProtocol?: "PAP"|"CHAP"|"MS-CHAPv1"|"MS-CHAPv2", DisplayLabel?: string, UseSameUsername?: bool}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.UpdateRadius")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "RadiusSettings": $radius_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3418,6 +3509,7 @@ export def "update-radius" [
 #
 # POST /
 # operationId: UpdateSettings
+# --Settings item shape: {Name: string, Value: string}
 export def "update-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3435,13 +3527,14 @@ export def "update-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-64
-  directory_id: any
-  settings: any
-]: any -> record<DirectoryId: record> {
+  --x-amz-target: string@x-amz-target-completer-64 # required
+  directory_id: string # The identifier of the directory for which to update settings.
+  settings: list # The list of Setting objects. — item shape: {Name: string, Value: string}
+]: any -> record<DirectoryId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.UpdateSettings")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "Settings": $settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3484,13 +3577,14 @@ export def "update-trust" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-65
-  trust_id: any
-  --selective-auth: any
-]: any -> record<RequestId: string, TrustId: record> {
+  --x-amz-target: string@x-amz-target-completer-65 # required
+  trust_id: string # Identifier of the trust relationship.
+  --selective-auth: string@selective-auth-completer # Updates selective authentication for the trust.
+]: any -> record<RequestId: string, TrustId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.UpdateTrust")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TrustId": $trust_id, "SelectiveAuth": $selective_auth} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3533,12 +3627,13 @@ export def "verify-trust" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-66
-  trust_id: any
-]: any -> record<TrustId: record> {
+  --x-amz-target: string@x-amz-target-completer-66 # required
+  trust_id: string # The unique Trust ID of the trust relationship to verify.
+]: any -> record<TrustId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DirectoryService_20150416.VerifyTrust")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TrustId": $trust_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

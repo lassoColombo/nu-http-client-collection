@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -135,14 +135,14 @@ export def "get-call-logs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-gte: string # Filter records by start date (greater equal or equal to) (e.g. 2019-01-01 00:00:00)
-  --start-lte: string # Filter records by start date (less equal or equal to) (e.g. 2019-01-01 00:00:00)
+  --start-gte: string # Filter records by start date (greater equal or equal to) (required, e.g. 2019-01-01 00:00:00)
+  --start-lte: string # Filter records by start date (less equal or equal to) (required, e.g. 2019-01-01 00:00:00)
   --end-gte: string # Filter records by end date (greater equal or equal to) (e.g. 2019-01-01 00:00:00)
   --end-lte: string # Filter records by end date (less equal or equal to) (e.g. 2019-01-01 00:00:00)
-  --page-size: float # Number of records per page (default: 10, e.g. 10)
-  --page: float # Current page number (default: 0, e.g. 10)
-  --qp-to: string # Filter by called number (e.g. 17325550100)
-  --qp-from: string # Filter by source number (e.g. 17325550100)
+  --page-size: float # Number of records per page (required, default: 10, e.g. 10)
+  --page: float # Current page number (required, default: 0, e.g. 10)
+  --to: string # Filter by called number (e.g. 17325550100)
+  --from: string # Filter by source number (e.g. 17325550100)
   --source-user: string # Filter by source user
   --destination-user: string # Filter by destination user
   --direction: string@direction-completer # Filter by call direction. (e.g. Inbound)
@@ -150,14 +150,18 @@ export def "get-call-logs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account_id' must be non-empty" } }
-  let qp = [(serialize-qp "start:gte" $start_gte "scalar") (serialize-qp "start:lte" $start_lte "scalar") (serialize-qp "end:gte" $end_gte "scalar") (serialize-qp "end:lte" $end_lte "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "source_user" $source_user "scalar") (serialize-qp "destination_user" $destination_user "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
+  if ($start_gte == null) { error make --unspanned { msg: "required query parameter 'start:gte' missing: pass --start-gte" } }
+  if ($start_lte == null) { error make --unspanned { msg: "required query parameter 'start:lte' missing: pass --start-lte" } }
+  let page_size = ($page_size | default 10)
+  let page = ($page | default 0)
+  let qp = [(serialize-qp "start:gte" $start_gte "scalar") (serialize-qp "start:lte" $start_lte "scalar") (serialize-qp "end:gte" $end_gte "scalar") (serialize-qp "end:lte" $end_lte "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "source_user" $source_user "scalar") (serialize-qp "destination_user" $destination_user "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/call-logs") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start:gte": $start_gte, "start:lte": $start_lte, "end:gte": $end_gte, "end:lte": $end_lte, "page_size": $page_size, "page": $page, "to": $qp_to, "from": $qp_from, "source_user": $source_user, "destination_user": $destination_user, "direction": $direction} | compact)
+    query: ({"start:gte": $start_gte, "start:lte": $start_lte, "end:gte": $end_gte, "end:lte": $end_lte, "page_size": $page_size, "page": $page, "to": $to, "from": $from, "source_user": $source_user, "destination_user": $destination_user, "direction": $direction} | compact)
     headers: $auth.headers
     body: null
     content_type: null

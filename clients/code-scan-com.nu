@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -138,10 +138,11 @@ export def "get-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --job-id: string # Id of the Job to retrieve
+  --job-id: string # Id of the Job to retrieve (required)
 ]: nothing -> record<alert: string, alertDescription: string, analysisMode: string, commit: string, created: string, emailReportTo: string, finished: string, jobId: string, projectBranch: string, projectKey: string, started: string, status: string, url: string, version: string, warnings: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id == null) { error make --unspanned { msg: "required query parameter 'jobId' missing: pass --job-id" } }
   let qp = [(serialize-qp "jobId" $job_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/job" $qp $auth.query)
   let accept_val = "application/json"

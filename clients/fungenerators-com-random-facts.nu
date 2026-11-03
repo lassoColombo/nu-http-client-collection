@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-fungenerators-api-secret" => { {scheme: $scheme, headers: {X-Fungenerators-Api-Secret: $token_val}, query: "", location: "header"} }
+    "x-fungenerators-api-secret" => { {scheme: $scheme, headers: {"X-Fungenerators-Api-Secret": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -143,10 +143,11 @@ export def "delete-fact" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Fact ID (format: string)
+  --id: string # Fact ID (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fact" $qp $auth.query)
   let accept_val = "application/json"
@@ -213,13 +214,17 @@ export def "put-fact" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fact: string # Fact Text (format: string)
-  --category: string # Category of the fact (format: string)
-  --subcategory: string # Sub Category of the fact (format: string)
-  --tags: string # Tags (format: string)
+  --fact: string # Fact Text (required, format: string)
+  --category: string # Category of the fact (required, format: string)
+  --subcategory: string # Sub Category of the fact (required, format: string)
+  --tags: string # Tags (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($fact == null) { error make --unspanned { msg: "required query parameter 'fact' missing: pass --fact" } }
+  if ($category == null) { error make --unspanned { msg: "required query parameter 'category' missing: pass --category" } }
+  if ($subcategory == null) { error make --unspanned { msg: "required query parameter 'subcategory' missing: pass --subcategory" } }
+  if ($tags == null) { error make --unspanned { msg: "required query parameter 'tags' missing: pass --tags" } }
   let qp = [(serialize-qp "fact" $fact "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "subcategory" $subcategory "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fact" $qp $auth.query)
   let accept_val = "application/json"
@@ -354,10 +359,11 @@ export def "get-fact-numbers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --number: int # Number value (format: integer)
+  --number: int # Number value (required, format: integer)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fact/numbers" $qp $auth.query)
   let accept_val = "application/json"

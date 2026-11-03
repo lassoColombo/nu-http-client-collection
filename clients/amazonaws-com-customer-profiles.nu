@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -167,7 +167,7 @@ export def "add-profile-key" [
   profile_id: string # The unique identifier of a customer profile.
   key_name: string # A searchable identifier of a customer profile. The predefined keys you can use include: _account, _profileId, _assetId, _caseId, _orderId, _fullName, _phone, _email, _ctrContactId, _marketoLeadId, _salesforceAccountId, _salesforceContactId, _salesforceAssetId, _zendeskUserId, _zendeskExternalId, _zendeskTicketId, _serviceNowSystemId, _serviceNowIncidentId, _segmentUserId, _shopifyCustomerId, _shopifyOrderId.
   values: list<string> # A list of key values.
-]: any -> record<KeyName: record, Values: record> {
+]: any -> record<KeyName: string, Values: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -197,7 +197,7 @@ export def "add-profile-key" [
 #
 # POST /domains/{DomainName}
 # operationId: CreateDomain
-# --Matching shape: {Enabled?: any, JobSchedule?: any, AutoMerging?: any, ExportingConfig?: any}
+# --Matching shape: {Enabled?: bool, JobSchedule?: record, AutoMerging?: record, ExportingConfig?: record}
 export def "create-domain" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -219,9 +219,9 @@ export def "create-domain" [
   default_expiration_days: int # The default number of days until the data within the domain expires.
   --default-encryption-key: string # The default encryption key, which is an AWS managed key, is used when no specific type of encryption key is specified. It is used to encrypt all data before it is placed in permanent or semi-permanent storage.
   --dead-letter-queue-url: string # The URL of the SQS dead letter queue, which is used for reporting errors associated with ingesting data from third party applications. You must set up a policy on the DeadLetterQueue for the SendMessage operation to enable Amazon Connect Customer Profiles to send messages to the DeadLetterQueue.
-  --matching: record # The flag that enables the matching process of duplicate profiles. — shape: {Enabled?: any, JobSchedule?: any, AutoMerging?: any, ExportingConfig?: any}
+  --matching: record # The flag that enables the matching process of duplicate profiles. — shape: {Enabled?: bool, JobSchedule?: record, AutoMerging?: record, ExportingConfig?: record}
   --tags: record # The tags used to organize, track, or control access for this resource.
-]: any -> record<DomainName: record, DefaultExpirationDays: record, DefaultEncryptionKey: record, DeadLetterQueueUrl: record, Matching: record<Enabled: record, JobSchedule: record<DayOfTheWeek: record, Time: record>, AutoMerging: record<Enabled: record, Consolidation: record, ConflictResolution: record, MinAllowedConfidenceScoreForMerging: record>, ExportingConfig: record<S3Exporting: record>>, CreatedAt: record, LastUpdatedAt: record, Tags: record> {
+]: any -> record<DomainName: string, DefaultExpirationDays: int, DefaultEncryptionKey: string, DeadLetterQueueUrl: string, Matching: record<Enabled: bool, JobSchedule: record<DayOfTheWeek: string, Time: string>, AutoMerging: record<Enabled: bool, Consolidation: record, ConflictResolution: record, MinAllowedConfidenceScoreForMerging: float>, ExportingConfig: record<S3Exporting: record>>, CreatedAt: string, LastUpdatedAt: string, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -269,7 +269,7 @@ export def "delete-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Message: record> {
+]: nothing -> record<Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -314,7 +314,7 @@ export def "get-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainName: record, DefaultExpirationDays: record, DefaultEncryptionKey: record, DeadLetterQueueUrl: record, Stats: record<ProfileCount: record, MeteringProfileCount: record, ObjectCount: record, TotalSize: record>, Matching: record<Enabled: record, JobSchedule: record<DayOfTheWeek: record, Time: record>, AutoMerging: record<Enabled: record, Consolidation: record, ConflictResolution: record, MinAllowedConfidenceScoreForMerging: record>, ExportingConfig: record<S3Exporting: record>>, CreatedAt: record, LastUpdatedAt: record, Tags: record> {
+]: nothing -> record<DomainName: string, DefaultExpirationDays: int, DefaultEncryptionKey: string, DeadLetterQueueUrl: string, Stats: record<ProfileCount: int, MeteringProfileCount: int, ObjectCount: int, TotalSize: int>, Matching: record<Enabled: bool, JobSchedule: record<DayOfTheWeek: string, Time: string>, AutoMerging: record<Enabled: bool, Consolidation: record, ConflictResolution: record, MinAllowedConfidenceScoreForMerging: float>, ExportingConfig: record<S3Exporting: record>>, CreatedAt: string, LastUpdatedAt: string, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -341,7 +341,7 @@ export def "get-domain" [
 #
 # PUT /domains/{DomainName}
 # operationId: UpdateDomain
-# --Matching shape: {Enabled?: any, JobSchedule?: any, AutoMerging?: any, ExportingConfig?: any}
+# --Matching shape: {Enabled?: bool, JobSchedule?: record, AutoMerging?: record, ExportingConfig?: record}
 export def "update-domain" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -363,9 +363,9 @@ export def "update-domain" [
   --default-expiration-days: int # The default number of days until the data within the domain expires.
   --default-encryption-key: string # The default encryption key, which is an AWS managed key, is used when no specific type of encryption key is specified. It is used to encrypt all data before it is placed in permanent or semi-permanent storage. If specified as an empty string, it will clear any existing value.
   --dead-letter-queue-url: string # The URL of the SQS dead letter queue, which is used for reporting errors associated with ingesting data from third party applications. If specified as an empty string, it will clear any existing value. You must set up a policy on the DeadLetterQueue for the SendMessage operation to enable Amazon Connect Customer Profiles to send messages to the DeadLetterQueue.
-  --matching: record # The flag that enables the matching process of duplicate profiles. — shape: {Enabled?: any, JobSchedule?: any, AutoMerging?: any, ExportingConfig?: any}
+  --matching: record # The flag that enables the matching process of duplicate profiles. — shape: {Enabled?: bool, JobSchedule?: record, AutoMerging?: record, ExportingConfig?: record}
   --tags: record # The tags used to organize, track, or control access for this resource.
-]: any -> record<DomainName: record, DefaultExpirationDays: record, DefaultEncryptionKey: record, DeadLetterQueueUrl: record, Matching: record<Enabled: record, JobSchedule: record<DayOfTheWeek: record, Time: record>, AutoMerging: record<Enabled: record, Consolidation: record, ConflictResolution: record, MinAllowedConfidenceScoreForMerging: record>, ExportingConfig: record<S3Exporting: record>>, CreatedAt: record, LastUpdatedAt: record, Tags: record> {
+]: any -> record<DomainName: string, DefaultExpirationDays: int, DefaultEncryptionKey: string, DeadLetterQueueUrl: string, Matching: record<Enabled: bool, JobSchedule: record<DayOfTheWeek: string, Time: string>, AutoMerging: record<Enabled: bool, Consolidation: record, ConflictResolution: record, MinAllowedConfidenceScoreForMerging: float>, ExportingConfig: record<S3Exporting: record>>, CreatedAt: string, LastUpdatedAt: string, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -395,7 +395,7 @@ export def "update-domain" [
 #
 # POST /domains/{DomainName}/workflows/integrations
 # operationId: CreateIntegrationWorkflow
-# --IntegrationConfig shape: {AppflowIntegration?: any}
+# --IntegrationConfig shape: {AppflowIntegration?: record}
 export def "create-integration-workflow" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -415,11 +415,11 @@ export def "create-integration-workflow" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   workflow_type: string@workflow-type-completer # The type of workflow. The only supported value is APPFLOW_INTEGRATION.
-  integration_config: record # Configuration data for integration workflow. — shape: {AppflowIntegration?: any}
+  integration_config: record # Configuration data for integration workflow. — shape: {AppflowIntegration?: record}
   object_type_name: string # The name of the profile object type.
   role_arn: string # The Amazon Resource Name (ARN) of the IAM role. Customer Profiles assumes this role to create resources on your behalf as part of workflow execution.
   --tags: record # The tags used to organize, track, or control access for this resource.
-]: any -> record<WorkflowId: record, Message: record> {
+]: any -> record<WorkflowId: string, Message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -449,10 +449,10 @@ export def "create-integration-workflow" [
 #
 # POST /domains/{DomainName}/profiles
 # operationId: CreateProfile
-# --Address shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-# --ShippingAddress shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-# --MailingAddress shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-# --BillingAddress shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
+# --Address shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
+# --ShippingAddress shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
+# --MailingAddress shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
+# --BillingAddress shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
 @deprecated --flag party-type
 @deprecated --flag gender
 export def "create-profile" [
@@ -489,14 +489,14 @@ export def "create-profile" [
   --email-address: string # The customer’s email address, which has not been specified as a personal or business address.
   --personal-email-address: string # The customer’s personal email address.
   --business-email-address: string # The customer’s business email address.
-  --address: record # A generic address associated with the customer that is not mailing, shipping, or billing. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-  --shipping-address: record # A generic address associated with the customer that is not mailing, shipping, or billing. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-  --mailing-address: record # A generic address associated with the customer that is not mailing, shipping, or billing. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-  --billing-address: record # A generic address associated with the customer that is not mailing, shipping, or billing. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
+  --address: record # A generic address associated with the customer that is not mailing, shipping, or billing. — shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
+  --shipping-address: record # A generic address associated with the customer that is not mailing, shipping, or billing. — shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
+  --mailing-address: record # A generic address associated with the customer that is not mailing, shipping, or billing. — shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
+  --billing-address: record # A generic address associated with the customer that is not mailing, shipping, or billing. — shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
   --attributes: record # A key value pair of attributes of a customer profile.
   --party-type-string: string # An alternative to PartyType which accepts any string as input.
   --gender-string: string # An alternative to Gender which accepts any string as input.
-]: any -> record<ProfileId: record> {
+]: any -> record<ProfileId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -526,10 +526,10 @@ export def "create-profile" [
 #
 # PUT /domains/{DomainName}/profiles
 # operationId: UpdateProfile
-# --Address shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-# --ShippingAddress shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-# --MailingAddress shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-# --BillingAddress shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
+# --Address shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
+# --ShippingAddress shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
+# --MailingAddress shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
+# --BillingAddress shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
 @deprecated --flag party-type
 @deprecated --flag gender
 export def "update-profile" [
@@ -567,14 +567,14 @@ export def "update-profile" [
   --email-address: string # The customer’s email address, which has not been specified as a personal or business address.
   --personal-email-address: string # The customer’s personal email address.
   --business-email-address: string # The customer’s business email address.
-  --address: record # Updates associated with the address properties of a customer profile. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-  --shipping-address: record # Updates associated with the address properties of a customer profile. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-  --mailing-address: record # Updates associated with the address properties of a customer profile. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-  --billing-address: record # Updates associated with the address properties of a customer profile. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
+  --address: record # Updates associated with the address properties of a customer profile. — shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
+  --shipping-address: record # Updates associated with the address properties of a customer profile. — shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
+  --mailing-address: record # Updates associated with the address properties of a customer profile. — shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
+  --billing-address: record # Updates associated with the address properties of a customer profile. — shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
   --attributes: record # A key value pair of attributes of a customer profile.
   --party-type-string: string # An alternative to PartyType which accepts any string as input.
   --gender-string: string # An alternative to Gender which accepts any string as input.
-]: any -> record<ProfileId: record> {
+]: any -> record<ProfileId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -623,7 +623,7 @@ export def "delete-integration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   uri: string # The URI of the S3 bucket or any other type of data source.
-]: any -> record<Message: record> {
+]: any -> record<Message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -672,7 +672,7 @@ export def "delete-profile" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   profile_id: string # The unique identifier of a customer profile.
-]: any -> record<Message: record> {
+]: any -> record<Message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -723,7 +723,7 @@ export def "delete-profile-key" [
   profile_id: string # The unique identifier of a customer profile.
   key_name: string # A searchable identifier of a customer profile.
   values: list<string> # A list of key values.
-]: any -> record<Message: record> {
+]: any -> record<Message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -774,7 +774,7 @@ export def "delete-profile-object" [
   profile_id: string # The unique identifier of a customer profile.
   profile_object_unique_key: string # The unique identifier of the profile object generated by the service.
   object_type_name: string # The name of the profile object type.
-]: any -> record<Message: record> {
+]: any -> record<Message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -823,7 +823,7 @@ export def "delete-profile-object-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Message: record> {
+]: nothing -> record<Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -870,7 +870,7 @@ export def "get-profile-object-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ObjectTypeName: record, Description: record, TemplateId: record, ExpirationDays: record, EncryptionKey: record, AllowProfileCreation: record, SourceLastUpdatedTimestampFormat: record, Fields: record, Keys: record, CreatedAt: record, LastUpdatedAt: record, Tags: record> {
+]: nothing -> record<ObjectTypeName: string, Description: string, TemplateId: string, ExpirationDays: int, EncryptionKey: string, AllowProfileCreation: bool, SourceLastUpdatedTimestampFormat: string, Fields: record, Keys: record, CreatedAt: string, LastUpdatedAt: string, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -926,7 +926,7 @@ export def "put-profile-object-type" [
   --fields: record # A map of the name and ObjectType field.
   --keys: record # A list of unique keys that can be used to map data to the profile.
   --tags: record # The tags used to organize, track, or control access for this resource.
-]: any -> record<ObjectTypeName: record, Description: record, TemplateId: record, ExpirationDays: record, EncryptionKey: record, AllowProfileCreation: record, SourceLastUpdatedTimestampFormat: record, Fields: record, Keys: record, CreatedAt: record, LastUpdatedAt: record, Tags: record> {
+]: any -> record<ObjectTypeName: string, Description: string, TemplateId: string, ExpirationDays: int, EncryptionKey: string, AllowProfileCreation: bool, SourceLastUpdatedTimestampFormat: string, Fields: record, Keys: record, CreatedAt: string, LastUpdatedAt: string, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1023,7 +1023,7 @@ export def "get-workflow" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<WorkflowId: record, WorkflowType: record, Status: record, ErrorDescription: record, StartDate: record, LastUpdatedAt: record, Attributes: record<AppflowIntegration: record<SourceConnectorType: record, ConnectorProfileName: record, RoleArn: record>>, Metrics: record<AppflowIntegration: record<RecordsProcessed: record, StepsCompleted: record, TotalSteps: record>>> {
+]: nothing -> record<WorkflowId: string, WorkflowType: string, Status: string, ErrorDescription: string, StartDate: string, LastUpdatedAt: string, Attributes: record<AppflowIntegration: record<SourceConnectorType: string, ConnectorProfileName: string, RoleArn: string>>, Metrics: record<AppflowIntegration: record<RecordsProcessed: int, StepsCompleted: int, TotalSteps: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1051,8 +1051,8 @@ export def "get-workflow" [
 #
 # POST /domains/{DomainName}/identity-resolution-jobs/auto-merging-preview
 # operationId: GetAutoMergingPreview
-# --Consolidation shape: {MatchingAttributesList?: any}
-# --ConflictResolution shape: {ConflictResolvingModel?: any, SourceName?: any}
+# --Consolidation shape: {MatchingAttributesList?: list}
+# --ConflictResolution shape: {ConflictResolvingModel?: "RECENCY"|"SOURCE", SourceName?: string}
 export def "get-auto-merging-preview" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1071,10 +1071,10 @@ export def "get-auto-merging-preview" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  consolidation: record # The matching criteria to be used during the auto-merging process. — shape: {MatchingAttributesList?: any}
-  conflict_resolution: record # How the auto-merging process should resolve conflicts between different profiles. — shape: {ConflictResolvingModel?: any, SourceName?: any}
+  consolidation: record # The matching criteria to be used during the auto-merging process. — shape: {MatchingAttributesList?: list}
+  conflict_resolution: record # How the auto-merging process should resolve conflicts between different profiles. — shape: {ConflictResolvingModel?: "RECENCY"|"SOURCE", SourceName?: string}
   --min-allowed-confidence-score-for-merging: float # Minimum confidence score required for profiles within a matching group to be merged during the auto-merge process. (format: double)
-]: any -> record<DomainName: record, NumberOfMatchesInSample: record, NumberOfProfilesInSample: record, NumberOfProfilesWillBeMerged: record> {
+]: any -> record<DomainName: string, NumberOfMatchesInSample: int, NumberOfProfilesInSample: int, NumberOfProfilesWillBeMerged: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1123,7 +1123,7 @@ export def "get-identity-resolution-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainName: record, JobId: record, Status: record, Message: record, JobStartTime: record, JobEndTime: record, LastUpdatedAt: record, JobExpirationTime: record, AutoMerging: record<Enabled: record, Consolidation: record<MatchingAttributesList: record>, ConflictResolution: record<ConflictResolvingModel: record, SourceName: record>, MinAllowedConfidenceScoreForMerging: record>, ExportingLocation: record<S3Exporting: record<S3BucketName: record, S3KeyName: record>>, JobStats: record<NumberOfProfilesReviewed: record, NumberOfMatchesFound: record, NumberOfMergesDone: record>> {
+]: nothing -> record<DomainName: string, JobId: string, Status: string, Message: string, JobStartTime: string, JobEndTime: string, LastUpdatedAt: string, JobExpirationTime: string, AutoMerging: record<Enabled: bool, Consolidation: record<MatchingAttributesList: list>, ConflictResolution: record<ConflictResolvingModel: string, SourceName: string>, MinAllowedConfidenceScoreForMerging: float>, ExportingLocation: record<S3Exporting: record<S3BucketName: string, S3KeyName: string>>, JobStats: record<NumberOfProfilesReviewed: int, NumberOfMatchesFound: int, NumberOfMergesDone: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1170,7 +1170,7 @@ export def "get-integration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   uri: string # The URI of the S3 bucket or any other type of data source.
-]: any -> record<DomainName: record, Uri: record, ObjectTypeName: record, CreatedAt: record, LastUpdatedAt: record, Tags: record, ObjectTypeNames: record, WorkflowId: record, IsUnstructured: record> {
+]: any -> record<DomainName: string, Uri: string, ObjectTypeName: string, CreatedAt: string, LastUpdatedAt: string, Tags: record, ObjectTypeNames: record, WorkflowId: string, IsUnstructured: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1221,7 +1221,7 @@ export def "list-integrations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: record, NextToken: record> {
+]: nothing -> record<Items: table<DomainName: string, Uri: string, ObjectTypeName: string, CreatedAt: string, LastUpdatedAt: string, Tags: record, ObjectTypeNames: record, WorkflowId: string, IsUnstructured: bool>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1249,7 +1249,7 @@ export def "list-integrations" [
 #
 # PUT /domains/{DomainName}/integrations
 # operationId: PutIntegration
-# --FlowDefinition shape: {Description?: any, FlowName?: any, KmsArn?: any, SourceFlowConfig?: any, Tasks?: any, TriggerConfig?: any}
+# --FlowDefinition shape: {Description?: string, FlowName?: string, KmsArn?: string, SourceFlowConfig?: record, Tasks?: list, TriggerConfig?: record}
 export def "put-integration" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1271,9 +1271,9 @@ export def "put-integration" [
   --uri: string # The URI of the S3 bucket or any other type of data source.
   --object-type-name: string # The name of the profile object type.
   --tags: record # The tags used to organize, track, or control access for this resource.
-  --flow-definition: record # The configurations that control how Customer Profiles retrieves data from the source, Amazon AppFlow. Customer Profiles uses this information to create an AppFlow flow on behalf of customers. — shape: {Description?: any, FlowName?: any, KmsArn?: any, SourceFlowConfig?: any, Tasks?: any, TriggerConfig?: any}
+  --flow-definition: record # The configurations that control how Customer Profiles retrieves data from the source, Amazon AppFlow. Customer Profiles uses this information to create an AppFlow flow on behalf of customers. — shape: {Description?: string, FlowName?: string, KmsArn?: string, SourceFlowConfig?: record, Tasks?: list, TriggerConfig?: record}
   --object-type-names: record # A map in which each key is an event type from an external application such as Segment or Shopify, and each value is an ObjectTypeName (template) used to ingest the event. It supports the following event types: SegmentIdentify, ShopifyCreateCustomers, ShopifyUpdateCustomers, ShopifyCreateDraftOrders, ShopifyUpdateDraftOrders, ShopifyCreateOrders, and ShopifyUpdatedOrders.
-]: any -> record<DomainName: record, Uri: record, ObjectTypeName: record, CreatedAt: record, LastUpdatedAt: record, Tags: record, ObjectTypeNames: record, WorkflowId: record, IsUnstructured: record> {
+]: any -> record<DomainName: string, Uri: string, ObjectTypeName: string, CreatedAt: string, LastUpdatedAt: string, Tags: record, ObjectTypeNames: record, WorkflowId: string, IsUnstructured: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1323,7 +1323,7 @@ export def "get-matches" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, MatchGenerationDate: record, PotentialMatches: record, Matches: record> {
+]: nothing -> record<NextToken: string, MatchGenerationDate: string, PotentialMatches: int, Matches: table<MatchId: string, ProfileIds: list, ConfidenceScore: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1369,7 +1369,7 @@ export def "get-profile-object-type-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TemplateId: record, SourceName: record, SourceObject: record, AllowProfileCreation: record, SourceLastUpdatedTimestampFormat: record, Fields: record, Keys: record> {
+]: nothing -> record<TemplateId: string, SourceName: string, SourceObject: string, AllowProfileCreation: bool, SourceLastUpdatedTimestampFormat: string, Fields: record, Keys: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'TemplateId' must be non-empty" } }
@@ -1417,7 +1417,7 @@ export def "get-workflow-steps" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<WorkflowId: record, WorkflowType: record, Items: record, NextToken: record> {
+]: nothing -> record<WorkflowId: string, WorkflowType: string, Items: table<AppflowIntegration: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1467,7 +1467,7 @@ export def "list-account-integrations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   uri: string # The URI of the S3 bucket or any other type of data source.
-]: any -> record<Items: record, NextToken: record> {
+]: any -> record<Items: table<DomainName: string, Uri: string, ObjectTypeName: string, CreatedAt: string, LastUpdatedAt: string, Tags: record, ObjectTypeNames: record, WorkflowId: string, IsUnstructured: bool>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1516,7 +1516,7 @@ export def "list-domains" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: record, NextToken: record> {
+]: nothing -> record<Items: table<DomainName: string, CreatedAt: string, LastUpdatedAt: string, Tags: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
@@ -1563,7 +1563,7 @@ export def "list-identity-resolution-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<IdentityResolutionJobsList: record, NextToken: record> {
+]: nothing -> record<IdentityResolutionJobsList: table<DomainName: string, JobId: string, Status: string, JobStartTime: string, JobEndTime: string, JobStats: record, ExportingLocation: record, Message: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1610,7 +1610,7 @@ export def "list-profile-object-type-templates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: record, NextToken: record> {
+]: nothing -> record<Items: table<TemplateId: string, SourceName: string, SourceObject: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
@@ -1657,7 +1657,7 @@ export def "list-profile-object-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: record, NextToken: record> {
+]: nothing -> record<Items: table<ObjectTypeName: string, Description: string, CreatedAt: string, LastUpdatedAt: string, Tags: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1685,7 +1685,7 @@ export def "list-profile-object-types" [
 #
 # POST /domains/{DomainName}/profiles/objects
 # operationId: ListProfileObjects
-# --ObjectFilter shape: {KeyName?: any, Values?: any}
+# --ObjectFilter shape: {KeyName?: string, Values?: list<string>}
 export def "list-profile-objects" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1708,8 +1708,8 @@ export def "list-profile-objects" [
   --x-amz-signed-headers: string
   object_type_name: string # The name of the profile object type.
   profile_id: string # The unique identifier of a customer profile.
-  --object-filter: record # The filter applied to ListProfileObjects response to include profile objects with the specified index values. This filter is only supported for ObjectTypeName _asset, _case and _order. — shape: {KeyName?: any, Values?: any}
-]: any -> record<Items: record, NextToken: record> {
+  --object-filter: record # The filter applied to ListProfileObjects response to include profile objects with the specified index values. This filter is only supported for ObjectTypeName _asset, _case and _order. — shape: {KeyName?: string, Values?: list<string>}
+]: any -> record<Items: table<ObjectTypeName: string, ProfileObjectUniqueKey: string, Object: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1760,7 +1760,7 @@ export def "put-profile-object" [
   --x-amz-signed-headers: string
   object_type_name: string # The name of the profile object type.
   object: string # A string that is serialized from a JSON object.
-]: any -> record<ProfileObjectUniqueKey: record> {
+]: any -> record<ProfileObjectUniqueKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1908,7 +1908,7 @@ export def "list-workflows" [
   --status: string@status-completer # Status of workflow execution.
   --query-start-date: string # Retrieve workflows started after timestamp. (format: date-time)
   --query-end-date: string # Retrieve workflows ended after timestamp. (format: date-time)
-]: any -> record<Items: record, NextToken: record> {
+]: any -> record<Items: table<WorkflowType: string, WorkflowId: string, Status: string, StatusDescription: string, CreatedAt: string, LastUpdatedAt: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1939,7 +1939,7 @@ export def "list-workflows" [
 #
 # POST /domains/{DomainName}/profiles/objects/merge
 # operationId: MergeProfiles
-# --FieldSourceProfileIds shape: {AccountNumber?: any, AdditionalInformation?: any, PartyType?: any, BusinessName?: any, FirstName?: any, MiddleName?: any, LastName?: any, BirthDate?: any, Gender?: any, PhoneNumber?: any, MobilePhoneNumber?: any, HomePhoneNumber?: any, BusinessPhoneNumber?: any, EmailAddress?: any, PersonalEmailAddress?: any, BusinessEmailAddress?: any, Address?: any, ShippingAddress?: any, MailingAddress?: any, BillingAddress?: any, Attributes?: any}
+# --FieldSourceProfileIds shape: {AccountNumber?: string, AdditionalInformation?: string, PartyType?: string, BusinessName?: string, FirstName?: string, MiddleName?: string, LastName?: string, BirthDate?: string, Gender?: string, PhoneNumber?: string, MobilePhoneNumber?: string, HomePhoneNumber?: string, BusinessPhoneNumber?: string, EmailAddress?: string, PersonalEmailAddress?: string, BusinessEmailAddress?: string, Address?: string, ShippingAddress?: string, MailingAddress?: string, BillingAddress?: string, Attributes?: record}
 export def "merge-profiles" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1960,8 +1960,8 @@ export def "merge-profiles" [
   --x-amz-signed-headers: string
   main_profile_id: string # The identifier of the profile to be taken.
   profile_ids_to_be_merged: list<string> # The identifier of the profile to be merged into MainProfileId.
-  --field-source-profile-ids: record # A duplicate customer profile that is to be merged into a main profile. — shape: {AccountNumber?: any, AdditionalInformation?: any, PartyType?: any, BusinessName?: any, FirstName?: any, MiddleName?: any, LastName?: any, BirthDate?: any, Gender?: any, PhoneNumber?: any, MobilePhoneNumber?: any, HomePhoneNumber?: any, BusinessPhoneNumber?: any, EmailAddress?: any, PersonalEmailAddress?: any, BusinessEmailAddress?: any, Address?: any, ShippingAddress?: any, MailingAddress?: any, BillingAddress?: any, Attributes?: any}
-]: any -> record<Message: record> {
+  --field-source-profile-ids: record # A duplicate customer profile that is to be merged into a main profile. — shape: {AccountNumber?: string, AdditionalInformation?: string, PartyType?: string, BusinessName?: string, FirstName?: string, MiddleName?: string, LastName?: string, BirthDate?: string, Gender?: string, PhoneNumber?: string, MobilePhoneNumber?: string, HomePhoneNumber?: string, BusinessPhoneNumber?: string, EmailAddress?: string, PersonalEmailAddress?: string, BusinessEmailAddress?: string, Address?: string, ShippingAddress?: string, MailingAddress?: string, BillingAddress?: string, Attributes?: record}
+]: any -> record<Message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1991,7 +1991,7 @@ export def "merge-profiles" [
 #
 # POST /domains/{DomainName}/profiles/search
 # operationId: SearchProfiles
-# --AdditionalSearchKeys item shape: {KeyName: any, Values: any}
+# --AdditionalSearchKeys item shape: {KeyName: string, Values: list<string>}
 export def "search-profiles" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2014,9 +2014,9 @@ export def "search-profiles" [
   --x-amz-signed-headers: string
   key_name: string # A searchable identifier of a customer profile. The predefined keys you can use to search include: _account, _profileId, _assetId, _caseId, _orderId, _fullName, _phone, _email, _ctrContactId, _marketoLeadId, _salesforceAccountId, _salesforceContactId, _salesforceAssetId, _zendeskUserId, _zendeskExternalId, _zendeskTicketId, _serviceNowSystemId, _serviceNowIncidentId, _segmentUserId, _shopifyCustomerId, _shopifyOrderId.
   values: list<string> # A list of key values.
-  --additional-search-keys: list # A list of AdditionalSearchKey objects that are each searchable identifiers of a profile. Each AdditionalSearchKey object contains a KeyName and a list of Values associated with that specific key (i.e., a key-value(s) pair). These additional search keys will be used in conjunction with the LogicalOperator and the required KeyName and Values parameters to search for profiles that satisfy the search criteria. — item shape: {KeyName: any, Values: any}
+  --additional-search-keys: list # A list of AdditionalSearchKey objects that are each searchable identifiers of a profile. Each AdditionalSearchKey object contains a KeyName and a list of Values associated with that specific key (i.e., a key-value(s) pair). These additional search keys will be used in conjunction with the LogicalOperator and the required KeyName and Values parameters to search for profiles that satisfy the search criteria. — item shape: {KeyName: string, Values: list<string>}
   --logical-operator: string@logical-operator-completer # Relationship between all specified search keys that will be used to search for profiles. This includes the required KeyName and Values parameters as well as any key-value(s) pairs specified in the AdditionalSearchKeys list. This parameter influences which profiles will be returned in the response in the following manner: AND - The response only includes profiles that match all of the search keys. OR - The response includes profiles that match at least one of the search keys. The OR relationship is the default behavior if this parameter is not included in the request.
-]: any -> record<Items: record, NextToken: record> {
+]: any -> record<Items: table<ProfileId: string, AccountNumber: string, AdditionalInformation: string, PartyType: string, BusinessName: string, FirstName: string, MiddleName: string, LastName: string, BirthDate: string, Gender: string, PhoneNumber: string, MobilePhoneNumber: string, HomePhoneNumber: string, BusinessPhoneNumber: string, EmailAddress: string, PersonalEmailAddress: string, BusinessEmailAddress: string, Address: record, ShippingAddress: record, MailingAddress: record, BillingAddress: record, Attributes: record, FoundByItems: list, PartyTypeString: string, GenderString: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2058,7 +2058,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The list of tag keys to remove from the resource.
+  --tag-keys: list # The list of tag keys to remove from the resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2070,6 +2070,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

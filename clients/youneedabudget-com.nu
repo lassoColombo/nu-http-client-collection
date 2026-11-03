@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -1083,6 +1083,7 @@ export def "update-transactions" [
 #
 # POST /budgets/{budget_id}/transactions
 # operationId: createTransaction
+# --transaction shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
 # --transactions item shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
 export def "create-transaction" [
   budget_id: string
@@ -1095,7 +1096,7 @@ export def "create-transaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --transaction: any
+  --transaction: record # shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
   --transactions: list # item shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
 ]: any -> record<data: record<duplicate_import_ids: list<string>, server_knowledge: int, transaction: record<account_id: string, amount: int, approved: bool, category_id: string, cleared: string, date: string, debt_transaction_type: string, deleted: bool, flag_color: string, id: string, import_id: string, import_payee_name: string, import_payee_name_original: string, matched_transaction_id: string, memo: string, payee_id: string, transfer_account_id: string, transfer_transaction_id: string, account_name: string, category_name: string, payee_name: string, subtransactions: list>, transaction_ids: list<string>, transactions: list<record>>> {
   let input = $in
@@ -1278,6 +1279,7 @@ export def "get-transaction-by-id" [
 #
 # PUT /budgets/{budget_id}/transactions/{transaction_id}
 # operationId: updateTransaction
+# --transaction shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
 export def "update-transaction" [
   budget_id: string
   transaction_id: string
@@ -1290,7 +1292,7 @@ export def "update-transaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  transaction: any
+  transaction: record # shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
 ]: any -> record<data: record<transaction: record<account_id: string, amount: int, approved: bool, category_id: string, cleared: string, date: string, debt_transaction_type: string, deleted: bool, flag_color: string, id: string, import_id: string, import_payee_name: string, import_payee_name_original: string, matched_transaction_id: string, memo: string, payee_id: string, transfer_account_id: string, transfer_transaction_id: string, account_name: string, category_name: string, payee_name: string, subtransactions: list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

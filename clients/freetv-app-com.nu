@@ -1,4 +1,4 @@
-# Auto-generated client for News Plugin vv1
+# Auto-generated client for News Plugin v1
 # Source: https://api.apis.guru/v2/specs/freetv-app.com/v1/openapi.json
 # Auth: --token flag or $env.NEWS_PLUGIN_TOKEN
 
@@ -134,11 +134,13 @@ export def "get-latest-news" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --mobile: int@mobile-completer
-  --funcs: string@funcs-completer
+  --mobile: int@mobile-completer # required
+  --funcs: string@funcs-completer # required
 ]: nothing -> record<getLatestNewsForChatGPT: table<created: string, ref: string, thumbnail: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let mobile = ($mobile | default 1)
+  let funcs = ($funcs | default "getLatestNewsForChatGPT")
   let qp = [(serialize-qp "mobile" $mobile "scalar") (serialize-qp "funcs" $funcs "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/services" $qp $auth.query)
   let accept_val = "application/json"

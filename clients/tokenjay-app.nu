@@ -206,13 +206,16 @@ export def "ergo-pay-create-babel-box" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --token-id: string
-  --erg-amount: int # format: int64
-  --token-amount: int # format: int64
+  --token-id: string # required
+  --erg-amount: int # required, format: int64
+  --token-amount: int # required, format: int64
 ]: nothing -> record<address: string, addresses: list<string>, message: string, messageSeverity: string, reducedTx: string, reducedTxList: list<string>, replyTo: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
+  if ($token_id == null) { error make --unspanned { msg: "required query parameter 'tokenId' missing: pass --token-id" } }
+  if ($erg_amount == null) { error make --unspanned { msg: "required query parameter 'ergAmount' missing: pass --erg-amount" } }
+  if ($token_amount == null) { error make --unspanned { msg: "required query parameter 'tokenAmount' missing: pass --token-amount" } }
   let qp = [(serialize-qp "tokenId" $token_id "scalar") (serialize-qp "ergAmount" $erg_amount "scalar") (serialize-qp "tokenAmount" $token_amount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/createbabel/{address}") $qp $auth.query)
   let accept_val = "*/*"
@@ -708,13 +711,15 @@ export def "do-sigma-rsv-exchange" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --amount: int # format: int64
-  --address: string
+  --amount: int # required, format: int64
+  --address: string # required
   --check-rate: int # format: int64, default: 0
   --execution-fee: int # format: int64, default: 0
 ]: nothing -> record<address: string, addresses: list<string>, message: string, messageSeverity: string, reducedTx: string, reducedTxList: list<string>, replyTo: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($amount == null) { error make --unspanned { msg: "required query parameter 'amount' missing: pass --amount" } }
+  if ($address == null) { error make --unspanned { msg: "required query parameter 'address' missing: pass --address" } }
   let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "address" $address "scalar") (serialize-qp "checkRate" $check_rate "scalar") (serialize-qp "executionFee" $execution_fee "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sigrsv/exchange/" $qp $auth.query)
   let accept_val = "*/*"
@@ -817,13 +822,15 @@ export def "do-sigma-usd-exchange" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --amount: int # format: int64
-  --address: string
+  --amount: int # required, format: int64
+  --address: string # required
   --check-rate: int # format: int64, default: 0
   --execution-fee: int # format: int64, default: 0
 ]: nothing -> record<address: string, addresses: list<string>, message: string, messageSeverity: string, reducedTx: string, reducedTxList: list<string>, replyTo: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($amount == null) { error make --unspanned { msg: "required query parameter 'amount' missing: pass --amount" } }
+  if ($address == null) { error make --unspanned { msg: "required query parameter 'address' missing: pass --address" } }
   let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "address" $address "scalar") (serialize-qp "checkRate" $check_rate "scalar") (serialize-qp "executionFee" $execution_fee "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sigusd/exchange/" $qp $auth.query)
   let accept_val = "*/*"

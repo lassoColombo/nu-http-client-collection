@@ -519,13 +519,15 @@ export def "register-retrieve" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --email: string # Email address
-  --password: string # Password
+  --email: string # Email address (required)
+  --password: string # Password (required)
   --first-name: string # First name
   --last-name: string # Last name
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
+  if ($password == null) { error make --unspanned { msg: "required query parameter 'password' missing: pass --password" } }
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/register" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

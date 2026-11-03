@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -385,7 +385,7 @@ export def "artifacts-delete-meta-data-in-container" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hard-delete: oneof<nothing, bool> # If set to true. The delete cannot be revert at later time. (default: false)
-]: nothing -> record<correlation: record, environment: string, error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>, location: string, time: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -533,7 +533,7 @@ export def "artifacts-delete-batch-meta-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hard-delete: oneof<nothing, bool> # If set to true, the delete cannot be reverted at a later time. (default: false)
   paths: list # List of Artifact Paths. — item shape: {path: string}
-]: any -> record<correlation: record, environment: string, error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>, location: string, time: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -775,7 +775,7 @@ export def "artifacts-delete-meta-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --path: string # The Artifact Path.
   --hard-delete: oneof<nothing, bool> # If set to true. The delete cannot be revert at later time. (default: false)
-]: nothing -> record<correlation: record, environment: string, error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>, location: string, time: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -820,7 +820,7 @@ export def "artifacts-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --path: string # The Artifact Path.
+  --path: string # The Artifact Path. (required)
 ]: nothing -> record<artifactId: string, container: string, createdTime: string, dataPath: record<dataStoreName: string, relativePath: string, sqlDataPath: record<sqlQuery: string, sqlStoredProcedureName: string, sqlStoredProcedureParams: list, sqlTableName: string>>, etag: string, origin: string, path: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -829,6 +829,7 @@ export def "artifacts-get" [
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($origin | is-empty) { error make --unspanned { msg: "path parameter 'origin' must be non-empty" } }
   if ($container | is-empty) { error make --unspanned { msg: "path parameter 'container' must be non-empty" } }
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), origin: (encode-path-segment $origin), container: (encode-path-segment $container)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/metadata") $qp $auth.query)
   let accept_val = "application/json"

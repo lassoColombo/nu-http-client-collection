@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -107,6 +107,7 @@ def x-amz-target-completer-6 [] { ["CloudHsmFrontendService.DeleteLunaClient"] }
 def x-amz-target-completer-7 [] { ["CloudHsmFrontendService.DescribeHapg"] }
 def x-amz-target-completer-8 [] { ["CloudHsmFrontendService.DescribeHsm"] }
 def x-amz-target-completer-9 [] { ["CloudHsmFrontendService.DescribeLunaClient"] }
+def client-version-completer [] { ["5.1" "5.3"] }
 def x-amz-target-completer-10 [] { ["CloudHsmFrontendService.GetConfig"] }
 def x-amz-target-completer-11 [] { ["CloudHsmFrontendService.ListAvailableZones"] }
 def x-amz-target-completer-12 [] { ["CloudHsmFrontendService.ListHapgs"] }
@@ -145,6 +146,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddTagsToResource
+# --TagList item shape: {Key: string, Value: string}
 export def "add-tags-to-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,13 +164,14 @@ export def "add-tags-to-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  resource_arn: any
-  tag_list: any
-]: any -> record<Status: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the AWS CloudHSM resource to tag.
+  tag_list: list # One or more tags. — item shape: {Key: string, Value: string}
+]: any -> record<Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.AddTagsToResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagList": $tag_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -211,12 +214,13 @@ export def "create-hapg" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  label: any
-]: any -> record<HapgArn: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  label: string # The label of the new high-availability partition group.
+]: any -> record<HapgArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.CreateHapg")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Label": $label} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -259,19 +263,20 @@ export def "create-hsm" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  subnet_id: any
-  ssh_key: any
-  --eni-ip: any
-  iam_role_arn: any
-  --external-id: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  subnet_id: string # The identifier of the subnet in your VPC in which to place the HSM.
+  ssh_key: string # The SSH public key to install on the HSM.
+  --eni-ip: string # The IP address to assign to the HSM's ENI. If an IP address is not specified, an IP address will be randomly chosen from the CIDR range of the subnet.
+  iam_role_arn: string # The ARN of an IAM role to enable the AWS CloudHSM service to allocate an ENI on your behalf.
+  --external-id: string # The external ID from IamRoleArn, if present.
   subscription_type: string@subscription-type-completer # Specifies the type of subscription for the HSM. PRODUCTION - The HSM is being used in a production environment. TRIAL - The HSM is being used in a product trial.
-  --client-token: any
-  --syslog-ip: any
-]: any -> record<HsmArn: record> {
+  --client-token: string # A user-defined token to ensure idempotence. Subsequent calls to this operation with the same token will be ignored.
+  --syslog-ip: string # The IP address for the syslog monitoring server. The AWS CloudHSM service only supports one syslog monitoring server.
+]: any -> record<HsmArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.CreateHsm")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SubnetId": $subnet_id, "SshKey": $ssh_key, "EniIp": $eni_ip, "IamRoleArn": $iam_role_arn, "ExternalId": $external_id, "SubscriptionType": $subscription_type, "ClientToken": $client_token, "SyslogIp": $syslog_ip} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -314,13 +319,14 @@ export def "create-luna-client" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  --label: any
-  certificate: any
-]: any -> record<ClientArn: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  --label: string # The label for the client.
+  certificate: string # The contents of a Base64-Encoded X.509 v3 certificate to be installed on the HSMs used by this client.
+]: any -> record<ClientArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.CreateLunaClient")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Label": $label, "Certificate": $certificate} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -363,12 +369,13 @@ export def "delete-hapg" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  hapg_arn: any
-]: any -> record<Status: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  hapg_arn: string # The ARN of the high-availability partition group to delete.
+]: any -> record<Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.DeleteHapg")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HapgArn": $hapg_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -411,12 +418,13 @@ export def "delete-hsm" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  hsm_arn: any
-]: any -> record<Status: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  hsm_arn: string # An ARN that identifies an HSM.
+]: any -> record<Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.DeleteHsm")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HsmArn": $hsm_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -459,12 +467,13 @@ export def "delete-luna-client" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  client_arn: any
-]: any -> record<Status: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  client_arn: string # The ARN of the client to delete.
+]: any -> record<Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.DeleteLunaClient")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClientArn": $client_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -507,12 +516,13 @@ export def "describe-hapg" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  hapg_arn: any
-]: any -> record<HapgArn: record, HapgSerial: record, HsmsLastActionFailed: record, HsmsPendingDeletion: record, HsmsPendingRegistration: record, Label: record, LastModifiedTimestamp: record, PartitionSerialList: record, State: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  hapg_arn: string # The ARN of the high-availability partition group to describe.
+]: any -> record<HapgArn: string, HapgSerial: string, HsmsLastActionFailed: list<string>, HsmsPendingDeletion: list<string>, HsmsPendingRegistration: list<string>, Label: string, LastModifiedTimestamp: string, PartitionSerialList: list<string>, State: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.DescribeHapg")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HapgArn": $hapg_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -555,13 +565,14 @@ export def "describe-hsm" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  --hsm-arn: any
-  --hsm-serial-number: any
-]: any -> record<HsmArn: record, Status: record, StatusDetails: record, AvailabilityZone: record, EniId: record, EniIp: record, SubscriptionType: string, SubscriptionStartDate: record, SubscriptionEndDate: record, VpcId: record, SubnetId: record, IamRoleArn: record, SerialNumber: record, VendorName: record, HsmType: record, SoftwareVersion: record, SshPublicKey: record, SshKeyLastUpdated: record, ServerCertUri: record, ServerCertLastUpdated: record, Partitions: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  --hsm-arn: string # An ARN that identifies an HSM.
+  --hsm-serial-number: string # The serial number of the HSM. Either the HsmArn or the HsmSerialNumber parameter must be specified.
+]: any -> record<HsmArn: string, Status: string, StatusDetails: string, AvailabilityZone: string, EniId: string, EniIp: string, SubscriptionType: string, SubscriptionStartDate: string, SubscriptionEndDate: string, VpcId: string, SubnetId: string, IamRoleArn: string, SerialNumber: string, VendorName: string, HsmType: string, SoftwareVersion: string, SshPublicKey: string, SshKeyLastUpdated: string, ServerCertUri: string, ServerCertLastUpdated: string, Partitions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.DescribeHsm")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HsmArn": $hsm_arn, "HsmSerialNumber": $hsm_serial_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -604,13 +615,14 @@ export def "describe-luna-client" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  --client-arn: any
-  --certificate-fingerprint: any
-]: any -> record<ClientArn: record, Certificate: record, CertificateFingerprint: record, LastModifiedTimestamp: record, Label: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  --client-arn: string # The ARN of the client.
+  --certificate-fingerprint: string # The certificate fingerprint.
+]: any -> record<ClientArn: string, Certificate: string, CertificateFingerprint: string, LastModifiedTimestamp: string, Label: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.DescribeLunaClient")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClientArn": $client_arn, "CertificateFingerprint": $certificate_fingerprint} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -653,14 +665,15 @@ export def "get-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  client_arn: any
-  client_version: any
-  hapg_list: any
-]: any -> record<ConfigType: record, ConfigFile: record, ConfigCred: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  client_arn: string # The ARN of the client.
+  client_version: string@client-version-completer # The client version.
+  hapg_list: list<string> # A list of ARNs that identify the high-availability partition groups that are associated with the client.
+]: any -> record<ConfigType: string, ConfigFile: string, ConfigCred: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.GetConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClientArn": $client_arn, "ClientVersion": $client_version, "HapgList": $hapg_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -703,12 +716,13 @@ export def "list-available-zones" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
+  --x-amz-target: string@x-amz-target-completer-11 # required
   --body: record
-]: any -> record<AZList: record> {
+]: any -> record<AZList: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.ListAvailableZones")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -751,12 +765,13 @@ export def "list-hapgs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  --next-token: any
-]: any -> record<HapgList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  --next-token: string # The NextToken value from a previous call to ListHapgs. Pass null if this is the first call.
+]: any -> record<HapgList: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.ListHapgs")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -799,12 +814,13 @@ export def "list-hsms" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  --next-token: any
-]: any -> record<HsmList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  --next-token: string # The NextToken value from a previous call to ListHsms. Pass null if this is the first call.
+]: any -> record<HsmList: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.ListHsms")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -847,12 +863,13 @@ export def "list-luna-clients" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  --next-token: any
-]: any -> record<ClientList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  --next-token: string # The NextToken value from a previous call to ListLunaClients. Pass null if this is the first call.
+]: any -> record<ClientList: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.ListLunaClients")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -895,12 +912,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  resource_arn: any
-]: any -> record<TagList: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the AWS CloudHSM resource.
+]: any -> record<TagList: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -943,14 +961,15 @@ export def "modify-hapg" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  hapg_arn: any
-  --label: any
-  --partition-serial-list: any
-]: any -> record<HapgArn: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  hapg_arn: string # The ARN of the high-availability partition group to modify.
+  --label: string # The new label for the high-availability partition group.
+  --partition-serial-list: list<string> # The list of partition serial numbers to make members of the high-availability partition group.
+]: any -> record<HapgArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.ModifyHapg")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HapgArn": $hapg_arn, "Label": $label, "PartitionSerialList": $partition_serial_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -993,17 +1012,18 @@ export def "modify-hsm" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  hsm_arn: any
-  --subnet-id: any
-  --eni-ip: any
-  --iam-role-arn: any
-  --external-id: any
-  --syslog-ip: any
-]: any -> record<HsmArn: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  hsm_arn: string # An ARN that identifies an HSM.
+  --subnet-id: string # The new identifier of the subnet that the HSM is in. The new subnet must be in the same Availability Zone as the current subnet.
+  --eni-ip: string # The new IP address for the elastic network interface (ENI) attached to the HSM. If the HSM is moved to a different subnet, and an IP address is not specified, an IP address will be randomly chosen from the CIDR range of the new subnet.
+  --iam-role-arn: string # The new IAM role ARN.
+  --external-id: string # The new external ID.
+  --syslog-ip: string # The new IP address for the syslog monitoring server. The AWS CloudHSM service only supports one syslog monitoring server.
+]: any -> record<HsmArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.ModifyHsm")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HsmArn": $hsm_arn, "SubnetId": $subnet_id, "EniIp": $eni_ip, "IamRoleArn": $iam_role_arn, "ExternalId": $external_id, "SyslogIp": $syslog_ip} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1046,13 +1066,14 @@ export def "modify-luna-client" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  client_arn: any
-  certificate: any
-]: any -> record<ClientArn: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  client_arn: string # The ARN of the client.
+  certificate: string # The new certificate for the client.
+]: any -> record<ClientArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.ModifyLunaClient")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClientArn": $client_arn, "Certificate": $certificate} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1095,13 +1116,14 @@ export def "remove-tags-from-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  resource_arn: any
-  tag_key_list: any
-]: any -> record<Status: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the AWS CloudHSM resource.
+  tag_key_list: list<string> # The tag key or keys to remove. Specify only the tag key to remove (not the value). To overwrite the value for an existing tag, use AddTagsToResource.
+]: any -> record<Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CloudHsmFrontendService.RemoveTagsFromResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagKeyList": $tag_key_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -158,7 +158,7 @@ export def "claim-devices-by-claim-code" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ClaimCode: record, Total: record> {
+]: nothing -> record<ClaimCode: string, Total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($claim_code | is-empty) { error make --unspanned { msg: "path parameter 'claimCode' must be non-empty" } }
@@ -203,7 +203,7 @@ export def "describe-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DeviceDescription: record<Arn: record, Attributes: record, DeviceId: record, Enabled: record, RemainingLife: record, Type: record, Tags: record>> {
+]: nothing -> record<DeviceDescription: record<Arn: string, Attributes: record, DeviceId: string, Enabled: bool, RemainingLife: float, Type: string, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -249,7 +249,7 @@ export def "finalize-device-claim" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --tags: record # A collection of key/value pairs defining the resource tags. For example, { "tags": {"key1": "value1", "key2": "value2"} }. For more information, see AWS Tagging Strategies (https://aws.amazon.com/answers/account-management/aws-tagging-strategies/).
-]: any -> record<State: record> {
+]: any -> record<State: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -297,7 +297,7 @@ export def "get-device-methods" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DeviceMethods: record> {
+]: nothing -> record<DeviceMethods: table<DeviceType: string, MethodName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -324,7 +324,7 @@ export def "get-device-methods" [
 #
 # POST /devices/{deviceId}/methods
 # operationId: InvokeDeviceMethod
-# --deviceMethod shape: {DeviceType?: any, MethodName?: any}
+# --deviceMethod shape: {DeviceType?: string, MethodName?: string}
 export def "invoke-device-method" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -343,9 +343,9 @@ export def "invoke-device-method" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --device-method: record # The device method to invoke. — shape: {DeviceType?: any, MethodName?: any}
+  --device-method: record # The device method to invoke. — shape: {DeviceType?: string, MethodName?: string}
   --device-method-parameters: string # A JSON encoded string containing the device method request parameters.
-]: any -> record<DeviceMethodResponse: record> {
+]: any -> record<DeviceMethodResponse: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -393,7 +393,7 @@ export def "initiate-device-claim" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<State: record> {
+]: nothing -> record<State: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -431,10 +431,10 @@ export def "list-device-events" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --from-time-stamp: string # The start date for the device event query, in ISO8061 format. For example, 2018-03-28T15:45:12.880Z (format: date-time)
+  --from-time-stamp: string # The start date for the device event query, in ISO8061 format. For example, 2018-03-28T15:45:12.880Z (required, format: date-time)
   --max-results: int # The maximum number of results to return per request. If not set, a default value of 100 is used.
   --next-token: string # The token to retrieve the next set of results.
-  --to-time-stamp: string # The end date for the device event query, in ISO8061 format. For example, 2018-03-28T15:45:12.880Z (format: date-time)
+  --to-time-stamp: string # The end date for the device event query, in ISO8061 format. For example, 2018-03-28T15:45:12.880Z (required, format: date-time)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -442,10 +442,12 @@ export def "list-device-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Events: record, NextToken: record> {
+]: nothing -> record<Events: table<Device: record, StdEvent: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
+  if ($from_time_stamp == null) { error make --unspanned { msg: "required query parameter 'fromTimeStamp' missing: pass --from-time-stamp" } }
+  if ($to_time_stamp == null) { error make --unspanned { msg: "required query parameter 'toTimeStamp' missing: pass --to-time-stamp" } }
   let qp = [(serialize-qp "fromTimeStamp" $from_time_stamp "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "toTimeStamp" $to_time_stamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/devices/{device_id}/events") $qp $auth.query)
   let accept_val = "application/json"
@@ -490,7 +492,7 @@ export def "list-devices" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Devices: record, NextToken: record> {
+]: nothing -> record<Devices: table<Arn: string, Attributes: record, DeviceId: string, Enabled: bool, RemainingLife: float, Type: string, Tags: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deviceType" $device_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -629,7 +631,7 @@ export def "unclaim-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<State: record> {
+]: nothing -> record<State: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -667,7 +669,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # A collections of tag keys. For example, {"key1","key2"}
+  --tag-keys: list # A collections of tag keys. For example, {"key1","key2"} (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -679,6 +681,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resource-arn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

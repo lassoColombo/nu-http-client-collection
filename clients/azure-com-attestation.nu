@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -216,11 +216,13 @@ export def "policy-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API version.
-  --tee: string@tee-completer # Specifies the trusted execution environment to be used to validate the evidence
+  --api-version: string@api-version-completer # Client API version. (required)
+  --tee: string@tee-completer # Specifies the trusted execution environment to be used to validate the evidence (required)
 ]: nothing -> record<policy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2018-09-01-preview")
+  if ($tee == null) { error make --unspanned { msg: "required query parameter 'tee' missing: pass --tee" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "tee" $tee "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/operations/policy/current" $qp $auth.query)
   let accept_val = "application/json"
@@ -253,13 +255,15 @@ export def "policy-reset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API version.
-  --tee: string@tee-completer # Specifies the trusted execution environment to be used to validate the evidence
+  --api-version: string@api-version-completer # Client API version. (required)
+  --tee: string@tee-completer # Specifies the trusted execution environment to be used to validate the evidence (required)
   --body: string
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2018-09-01-preview")
+  if ($tee == null) { error make --unspanned { msg: "required query parameter 'tee' missing: pass --tee" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "tee" $tee "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/operations/policy/current" $qp $auth.query)
   let req_body = $body
@@ -294,13 +298,15 @@ export def "policy-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API version.
-  --tee: string@tee-completer # Specifies the trusted execution environment to be used to validate the evidence
+  --api-version: string@api-version-completer # Client API version. (required)
+  --tee: string@tee-completer # Specifies the trusted execution environment to be used to validate the evidence (required)
   --body: string
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2018-09-01-preview")
+  if ($tee == null) { error make --unspanned { msg: "required query parameter 'tee' missing: pass --tee" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "tee" $tee "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/operations/policy/current" $qp $auth.query)
   let req_body = $body
@@ -336,13 +342,15 @@ export def "policy-prepare-to-set" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string@api-version-completer # Client API version.
-  --tee: string@tee-completer # Specifies the trusted execution environment to be used to validate the evidence
+  --api-version: string@api-version-completer # Client API version. (required)
+  --tee: string@tee-completer # Specifies the trusted execution environment to be used to validate the evidence (required)
   --body: string
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2018-09-01-preview")
+  if ($tee == null) { error make --unspanned { msg: "required query parameter 'tee' missing: pass --tee" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "tee" $tee "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/operations/policy/updatepolicy" $qp $auth.query)
   let req_body = $body

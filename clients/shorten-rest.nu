@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {x-api-key: $token_val}, query: "", location: "header"} }
+    "x-api-key" => { {scheme: $scheme, headers: {"x-api-key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -151,10 +151,11 @@ export def "delete-alias" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # domain which alias belongs to (string without `http/https` or `/`) (default: short.fyi, e.g. your.domain.com)
-  --alias-name: string # alias (without `/` at the beginning) (e.g. aBcDe012)
+  --alias-name: string # alias (without `/` at the beginning) (required, e.g. aBcDe012)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($alias_name == null) { error make --unspanned { msg: "required query parameter 'aliasName' missing: pass --alias-name" } }
   let qp = [(serialize-qp "domainName" $domain_name "scalar") (serialize-qp "aliasName" $alias_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aliases" $qp $auth.query)
   let accept_val = "application/json"
@@ -188,10 +189,11 @@ export def "get-alias" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # domain which alias belongs to (string without `http/https` or `/`) (default: short.fyi, e.g. your.domain.com)
-  --alias-name: string # alias value (without `/` at the beginning) (e.g. aBcDe012)
+  --alias-name: string # alias value (without `/` at the beginning) (required, e.g. aBcDe012)
 ]: nothing -> record<createdAt: int, destinations: table<country: string, os: string, url: string>, domainName: string, metatags: table<content: string, name: string>, name: string, snippets: table<id: string, parameters: record>, updatedAt: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($alias_name == null) { error make --unspanned { msg: "required query parameter 'aliasName' missing: pass --alias-name" } }
   let qp = [(serialize-qp "domainName" $domain_name "scalar") (serialize-qp "aliasName" $alias_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aliases" $qp $auth.query)
   let accept_val = "application/json"
@@ -274,7 +276,7 @@ export def "update-alias" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # domain which alias belongs to (string without `http/https` or `/`) (default: short.fyi, e.g. your.domain.com)
-  --alias-name: string # alias (without `/` at the beginning) (e.g. aBcDe012)
+  --alias-name: string # alias (without `/` at the beginning) (required, e.g. aBcDe012)
   --destinations: list # item shape: {country?: string, os?: string, url: string}
   --metatags: list # item shape: {content: string, name: string}
   --snippets: list # item shape: {id: string, parameters?: record}
@@ -282,6 +284,7 @@ export def "update-alias" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($alias_name == null) { error make --unspanned { msg: "required query parameter 'aliasName' missing: pass --alias-name" } }
   let qp = [(serialize-qp "domainName" $domain_name "scalar") (serialize-qp "aliasName" $alias_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aliases" $qp $auth.query)
   let req_body = {"destinations": $destinations, "metatags": $metatags, "snippets": $snippets} | compact

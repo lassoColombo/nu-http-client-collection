@@ -1,4 +1,4 @@
-# Auto-generated client for House of Commons Oral and Written Questions API vv1
+# Auto-generated client for House of Commons Oral and Written Questions API v1
 # Source: https://api.apis.guru/v2/specs/parliament.uk/oralquestions/v1/openapi.json
 # Auth: --token flag or $env.HOUSE_OF_COMMONS_ORAL_AND_WRITTEN_QUESTIONS_API_TOKEN
 

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -150,7 +150,7 @@ export def "get-blocked-numbers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --min-id: int # Records with an `id` that is greater or equal to min-id will be returned. The default value is `0`. You can add 1 to an id that you previously retrieved, to return subsequent records. (format: int32)
   --limit: int # The maximum number of records to return. The default value is `10000`. The value cannot be greater than 10000. (format: int32)
-]: nothing -> record<id: float, phoneNumber: record> {
+]: nothing -> record<id: float, phoneNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "min-id" $min_id "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -341,20 +341,22 @@ export def "get-messages-send" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-to: string # The phone number of the recipient.
-  --body: string # The text you want to send.
+  --to: string # The phone number of the recipient. (required)
+  --body: string # The text you want to send. (required)
   --deduplication-id: int # Refer to the `deduplication-id` parameter. (format: int-32)
 ]: nothing -> table<body: any, creditCost: float, encoding: string, from: string, id: string, messageClass: int, numberOfParts: int, protocolId: int, relatedSentMessageId: string, status: record<id: string, subtype: string, type: string>, submission: record<date: string, id: string>, to: string, type: string, userSuppliedId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "to" $qp_to "scalar") (serialize-qp "body" $body "scalar") (serialize-qp "deduplication-id" $deduplication_id "scalar")] | flatten | str join "&"
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  if ($body == null) { error make --unspanned { msg: "required query parameter 'body' missing: pass --body" } }
+  let qp = [(serialize-qp "to" $to "scalar") (serialize-qp "body" $body "scalar") (serialize-qp "deduplication-id" $deduplication_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/messages/send" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"to": $qp_to, "body": $body, "deduplication-id": $deduplication_id} | compact)
+    query: ({"to": $to, "body": $body, "deduplication-id": $deduplication_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null

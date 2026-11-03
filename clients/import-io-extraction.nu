@@ -132,11 +132,12 @@ export def "get-extractor-extractor-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # url
+  --url: string # url (required)
 ]: nothing -> record<error: string, exceptionType: string, extractorData: record, pageData: record, runtimeConfigId: string, sequenceNumber: int, timestamp: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-_apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($extractor_id | is-empty) { error make --unspanned { msg: "path parameter 'extractorId' must be non-empty" } }
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({extractor_id: (encode-path-segment $extractor_id)} | format pattern "/extractor/{extractor_id}") $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"

@@ -1071,7 +1071,7 @@ export def "get-all-user-rides" [
   let base = ($base_url | default $BASE_URL)
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
   if ($per_page | is-empty) { error make --unspanned { msg: "path parameter 'per_page' must be non-empty" } }
-  let full_url = (build-url $base ({page: (encode-path-segment $page), per_page: (encode-path-segment $per_page)} | format pattern "/rides?page={page}&per_page={per_page}") $auth.query)
+  let full_url = (build-url $base ({page: (encode-path-segment $page), per_page: (encode-path-segment $per_page)} | format pattern "/rides") "page={page}&per_page={per_page}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
@@ -1095,8 +1095,6 @@ export def "get-all-user-rides" [
 # POST /rides?page={page}&per_page={per_page}
 # operationId: Create a ride
 export def "create-a-ride" [
-  page: any
-  per_page: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1111,9 +1109,7 @@ export def "create-a-ride" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
-  if ($per_page | is-empty) { error make --unspanned { msg: "path parameter 'per_page' must be non-empty" } }
-  let full_url = (build-url $base ({page: (encode-path-segment $page), per_page: (encode-path-segment $per_page)} | format pattern "/rides?page={page}&per_page={per_page}") $auth.query)
+  let full_url = (build-url $base "/rides" "page={page}&per_page={per_page}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact

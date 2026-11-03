@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -100,6 +100,8 @@ def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: 
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def adaptive-network-hardening-enforce-action-completer [] { ["enforce"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -143,7 +145,7 @@ export def "adaptive-network-hardenings-list-by-extended-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
+  --api-version: string # API version for the operation (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -152,6 +154,7 @@ export def "adaptive-network-hardenings-list-by-extended-resource" [
   if ($resource_namespace | is-empty) { error make --unspanned { msg: "path parameter 'resourceNamespace' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_namespace: (encode-path-segment $resource_namespace), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/{resource_namespace}/{resource_type}/{resource_name}/providers/Microsoft.Security/adaptiveNetworkHardenings") $qp $auth.query)
   let accept_val = "application/json"
@@ -190,7 +193,7 @@ export def "adaptive-network-hardenings-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
+  --api-version: string # API version for the operation (required)
 ]: nothing -> record<properties: record<effectiveNetworkSecurityGroups: list<record>, rules: list<record>, rulesCalculationTime: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -200,6 +203,7 @@ export def "adaptive-network-hardenings-get" [
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($adaptive_network_hardening_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'adaptiveNetworkHardeningResourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_namespace: (encode-path-segment $resource_namespace), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name), adaptive_network_hardening_resource_name: (encode-path-segment $adaptive_network_hardening_resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/{resource_namespace}/{resource_type}/{resource_name}/providers/Microsoft.Security/adaptiveNetworkHardenings/{adaptive_network_hardening_resource_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -230,7 +234,7 @@ export def "adaptive-network-hardenings-enforce" [
   resource_type: string
   resource_name: string
   adaptive_network_hardening_resource_name: string
-  adaptive_network_hardening_enforce_action: string
+  adaptive_network_hardening_enforce_action: string@adaptive-network-hardening-enforce-action-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,10 +244,10 @@ export def "adaptive-network-hardenings-enforce" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
+  --api-version: string # API version for the operation (required)
   network_security_groups: list<string> # The Azure resource IDs of the effective network security groups that will be updated with the created security rules from the Adaptive Network Hardening rules
   rules: list # The rules to enforce — item shape: {destinationPort?: int, direction?: "Inbound"|"Outbound", ipAddresses?: list<string>, name?: string, protocols?: list<string>}
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -254,6 +258,7 @@ export def "adaptive-network-hardenings-enforce" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($adaptive_network_hardening_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'adaptiveNetworkHardeningResourceName' must be non-empty" } }
   if ($adaptive_network_hardening_enforce_action | is-empty) { error make --unspanned { msg: "path parameter 'adaptiveNetworkHardeningEnforceAction' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_namespace: (encode-path-segment $resource_namespace), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name), adaptive_network_hardening_resource_name: (encode-path-segment $adaptive_network_hardening_resource_name), adaptive_network_hardening_enforce_action: (encode-path-segment $adaptive_network_hardening_enforce_action)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/{resource_namespace}/{resource_type}/{resource_name}/providers/Microsoft.Security/adaptiveNetworkHardenings/{adaptive_network_hardening_resource_name}/{adaptive_network_hardening_enforce_action}") $qp $auth.query)
   let req_body = {"networkSecurityGroups": $network_security_groups, "rules": $rules} | compact

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -128,6 +128,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: BatchMeterUsage
+# --UsageRecords item shape: {Timestamp: string, CustomerIdentifier: string, Dimension: string, Quantity?: int, UsageAllocations?: list}
 export def "batch-meter-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -145,13 +146,14 @@ export def "batch-meter-usage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  usage_records: any
-  product_code: any
-]: any -> record<Results: record, UnprocessedRecords: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  usage_records: list # The set of UsageRecords to submit. BatchMeterUsage accepts up to 25 UsageRecords at a time. — item shape: {Timestamp: string, CustomerIdentifier: string, Dimension: string, Quantity?: int, UsageAllocations?: list}
+  product_code: string # Product code is used to uniquely identify a product in AWS Marketplace. The product code should be the same as the one used during the publishing of a new product.
+]: any -> record<Results: table<UsageRecord: record, MeteringRecordId: string, Status: string>, UnprocessedRecords: table<Timestamp: string, CustomerIdentifier: string, Dimension: string, Quantity: int, UsageAllocations: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMPMeteringService.BatchMeterUsage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UsageRecords": $usage_records, "ProductCode": $product_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -177,6 +179,7 @@ export def "batch-meter-usage" [
 #
 # POST /
 # operationId: MeterUsage
+# --UsageAllocations item shape: {AllocatedUsageQuantity: int, Tags?: list}
 export def "meter-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,17 +197,18 @@ export def "meter-usage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  product_code: any
-  timestamp: any
-  usage_dimension: any
-  --usage-quantity: any
-  --body-dry-run: any
-  --usage-allocations: any
-]: any -> record<MeteringRecordId: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  product_code: string # Product code is used to uniquely identify a product in AWS Marketplace. The product code should be the same as the one used during the publishing of a new product.
+  timestamp: string # Timestamp, in UTC, for which the usage is being reported. Your application can meter usage for up to one hour in the past. Make sure the timestamp value is not before the start of the software usage. (format: date-time)
+  usage_dimension: string # It will be one of the fcp dimension name provided during the publishing of the product.
+  --usage-quantity: int # Consumption value for the hour. Defaults to 0 if not specified.
+  --body-dry-run: oneof<nothing, bool> # Checks whether you have the permissions required for the action, but does not make the request. If you have the permissions, the request returns DryRunOperation; otherwise, it returns UnauthorizedException. Defaults to false if not specified.
+  --usage-allocations: list # The set of UsageAllocations to submit. The sum of all UsageAllocation quantities must equal the UsageQuantity of the MeterUsage request, and each UsageAllocation must have a unique set of tags (include no tags). — item shape: {AllocatedUsageQuantity: int, Tags?: list}
+]: any -> record<MeteringRecordId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMPMeteringService.MeterUsage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProductCode": $product_code, "Timestamp": $timestamp, "UsageDimension": $usage_dimension, "UsageQuantity": $usage_quantity, "DryRun": $body_dry_run, "UsageAllocations": $usage_allocations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -247,14 +251,15 @@ export def "register-usage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  product_code: any
-  public_key_version: any
-  --nonce: any
-]: any -> record<PublicKeyRotationTimestamp: record, Signature: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  product_code: string # Product code is used to uniquely identify a product in AWS Marketplace. The product code should be the same as the one used during the publishing of a new product.
+  public_key_version: int # Public Key Version provided by AWS Marketplace
+  --nonce: string # (Optional) To scope down the registration to a specific running software instance and guard against replay attacks.
+]: any -> record<PublicKeyRotationTimestamp: string, Signature: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMPMeteringService.RegisterUsage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProductCode": $product_code, "PublicKeyVersion": $public_key_version, "Nonce": $nonce} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -297,12 +302,13 @@ export def "resolve-customer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  registration_token: any
-]: any -> record<CustomerIdentifier: record, ProductCode: record, CustomerAWSAccountId: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  registration_token: string # When a buyer visits your website during the registration process, the buyer submits a registration token through the browser. The registration token is resolved to obtain a CustomerIdentifier along with the CustomerAWSAccountId and ProductCode.
+]: any -> record<CustomerIdentifier: string, ProductCode: string, CustomerAWSAccountId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMPMeteringService.ResolveCustomer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RegistrationToken": $registration_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

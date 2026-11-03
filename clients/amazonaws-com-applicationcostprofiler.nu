@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -161,7 +161,7 @@ export def "delete-report-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<reportId: record> {
+]: nothing -> record<reportId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
@@ -206,7 +206,7 @@ export def "get-report-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<reportId: record, reportDescription: record, reportFrequency: record, format: record, destinationS3Location: record<bucket: record, prefix: record>, createdAt: record, lastUpdated: record> {
+]: nothing -> record<reportId: string, reportDescription: string, reportFrequency: string, format: string, destinationS3Location: record<bucket: string, prefix: string>, createdAt: string, lastUpdated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
@@ -233,7 +233,7 @@ export def "get-report-definition" [
 #
 # PUT /reportDefinition/{reportId}
 # operationId: UpdateReportDefinition
-# --destinationS3Location shape: {bucket?: any, prefix?: any}
+# --destinationS3Location shape: {bucket?: string, prefix?: string}
 export def "update-report-definition" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -255,8 +255,8 @@ export def "update-report-definition" [
   report_description: string # Required. Description of the report.
   report_frequency: string@report-frequency-completer # Required. The cadence to generate the report.
   format: string@format-completer # Required. The format to use for the generated report.
-  destination_s3_location: record # Represents the Amazon Simple Storage Service (Amazon S3) location where AWS Application Cost Profiler reports are generated and then written to. — shape: {bucket?: any, prefix?: any}
-]: any -> record<reportId: record> {
+  destination_s3_location: record # Represents the Amazon Simple Storage Service (Amazon S3) location where AWS Application Cost Profiler reports are generated and then written to. — shape: {bucket?: string, prefix?: string}
+]: any -> record<reportId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -286,7 +286,7 @@ export def "update-report-definition" [
 #
 # POST /importApplicationUsage
 # operationId: ImportApplicationUsage
-# --sourceS3Location shape: {bucket?: any, key?: any, region?: any}
+# --sourceS3Location shape: {bucket?: string, key?: string, region?: "ap-east-1"|"me-south-1"|"eu-south-1"|"af-south-1"}
 export def "import-application-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -304,8 +304,8 @@ export def "import-application-usage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  source_s3_location: record # Represents the Amazon Simple Storage Service (Amazon S3) location where usage data is read from. — shape: {bucket?: any, key?: any, region?: any}
-]: any -> record<importId: record> {
+  source_s3_location: record # Represents the Amazon Simple Storage Service (Amazon S3) location where usage data is read from. — shape: {bucket?: string, key?: string, region?: "ap-east-1"|"me-south-1"|"eu-south-1"|"af-south-1"}
+]: any -> record<importId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -353,7 +353,7 @@ export def "list-report-definitions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<reportDefinitions: record, nextToken: record> {
+]: nothing -> record<reportDefinitions: table<reportId: string, reportDescription: string, reportFrequency: string, format: string, destinationS3Location: record, createdAt: string, lastUpdatedAt: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -380,7 +380,7 @@ export def "list-report-definitions" [
 #
 # POST /reportDefinition
 # operationId: PutReportDefinition
-# --destinationS3Location shape: {bucket?: any, prefix?: any}
+# --destinationS3Location shape: {bucket?: string, prefix?: string}
 export def "put-report-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -402,8 +402,8 @@ export def "put-report-definition" [
   report_description: string # Required. Description of the report.
   report_frequency: string@report-frequency-completer # Required. The cadence to generate the report.
   format: string@format-completer # Required. The format to use for the generated report.
-  destination_s3_location: record # Represents the Amazon Simple Storage Service (Amazon S3) location where AWS Application Cost Profiler reports are generated and then written to. — shape: {bucket?: any, prefix?: any}
-]: any -> record<reportId: record> {
+  destination_s3_location: record # Represents the Amazon Simple Storage Service (Amazon S3) location where AWS Application Cost Profiler reports are generated and then written to. — shape: {bucket?: string, prefix?: string}
+]: any -> record<reportId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

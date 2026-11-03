@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -106,6 +106,8 @@ def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def plan-type-name-completer [] { ["Advanced" "Essential" "Standard"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -144,10 +146,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> table<display: record<description: string, operation: string, provider: string, resource: string>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Addons/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -182,12 +185,13 @@ export def "canonical-support-plan-types-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> table<enabled: bool, supportPlanType: string, willEmitOneTimeChargeIfReEnabled: bool, willEmitOneTimeChargeWhenEnabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($provider_name | is-empty) { error make --unspanned { msg: "path parameter 'providerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_name: (encode-path-segment $provider_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Addons/supportProviders/{provider_name}/supportPlanTypes") $qp $auth.query)
   let accept_val = "application/json"
@@ -213,7 +217,7 @@ export def "canonical-support-plan-types-get" [
 export def "support-plan-types-delete" [
   subscription_id: string
   provider_name: string
-  plan_type_name: string
+  plan_type_name: string@plan-type-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,13 +227,14 @@ export def "support-plan-types-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<id: string, name: string, properties: record<provisioningState: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($provider_name | is-empty) { error make --unspanned { msg: "path parameter 'providerName' must be non-empty" } }
   if ($plan_type_name | is-empty) { error make --unspanned { msg: "path parameter 'planTypeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_name: (encode-path-segment $provider_name), plan_type_name: (encode-path-segment $plan_type_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Addons/supportProviders/{provider_name}/supportPlanTypes/{plan_type_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -255,7 +260,7 @@ export def "support-plan-types-delete" [
 export def "support-plan-types-get" [
   subscription_id: string
   provider_name: string
-  plan_type_name: string
+  plan_type_name: string@plan-type-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,13 +270,14 @@ export def "support-plan-types-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<id: string, name: string, properties: record<provisioningState: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($provider_name | is-empty) { error make --unspanned { msg: "path parameter 'providerName' must be non-empty" } }
   if ($plan_type_name | is-empty) { error make --unspanned { msg: "path parameter 'planTypeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_name: (encode-path-segment $provider_name), plan_type_name: (encode-path-segment $plan_type_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Addons/supportProviders/{provider_name}/supportPlanTypes/{plan_type_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -297,7 +303,7 @@ export def "support-plan-types-get" [
 export def "support-plan-types-create-or-update" [
   subscription_id: string
   provider_name: string
-  plan_type_name: string
+  plan_type_name: string@plan-type-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,13 +313,14 @@ export def "support-plan-types-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<id: string, name: string, properties: record<provisioningState: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($provider_name | is-empty) { error make --unspanned { msg: "path parameter 'providerName' must be non-empty" } }
   if ($plan_type_name | is-empty) { error make --unspanned { msg: "path parameter 'planTypeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_name: (encode-path-segment $provider_name), plan_type_name: (encode-path-segment $plan_type_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Addons/supportProviders/{provider_name}/supportPlanTypes/{plan_type_name}") $qp $auth.query)
   let accept_val = "application/json"

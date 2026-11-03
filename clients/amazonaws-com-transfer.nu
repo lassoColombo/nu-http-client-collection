@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -96,10 +96,16 @@ def base-url-completer [] { ["http://transfer.us-east-1.amazonaws.com" "http://t
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def home-directory-type-completer [] { ["LOGICAL" "PATH"] }
 def x-amz-target-completer [] { ["TransferService.CreateAccess"] }
+def status-completer [] { ["ACTIVE" "INACTIVE"] }
 def x-amz-target-completer-1 [] { ["TransferService.CreateAgreement"] }
 def x-amz-target-completer-2 [] { ["TransferService.CreateConnector"] }
+def profile-type-completer [] { ["LOCAL" "PARTNER"] }
 def x-amz-target-completer-3 [] { ["TransferService.CreateProfile"] }
+def domain-completer [] { ["EFS" "S3"] }
+def endpoint-type-completer [] { ["PUBLIC" "VPC" "VPC_ENDPOINT"] }
+def identity-provider-type-completer [] { ["API_GATEWAY" "AWS_DIRECTORY_SERVICE" "AWS_LAMBDA" "SERVICE_MANAGED"] }
 def x-amz-target-completer-4 [] { ["TransferService.CreateServer"] }
 def x-amz-target-completer-5 [] { ["TransferService.CreateUser"] }
 def x-amz-target-completer-6 [] { ["TransferService.CreateWorkflow"] }
@@ -124,6 +130,7 @@ def x-amz-target-completer-24 [] { ["TransferService.DescribeSecurityPolicy"] }
 def x-amz-target-completer-25 [] { ["TransferService.DescribeServer"] }
 def x-amz-target-completer-26 [] { ["TransferService.DescribeUser"] }
 def x-amz-target-completer-27 [] { ["TransferService.DescribeWorkflow"] }
+def usage-completer [] { ["ENCRYPTION" "SIGNING"] }
 def x-amz-target-completer-28 [] { ["TransferService.ImportCertificate"] }
 def x-amz-target-completer-29 [] { ["TransferService.ImportHostKey"] }
 def x-amz-target-completer-30 [] { ["TransferService.ImportSshPublicKey"] }
@@ -139,11 +146,13 @@ def x-amz-target-completer-39 [] { ["TransferService.ListServers"] }
 def x-amz-target-completer-40 [] { ["TransferService.ListTagsForResource"] }
 def x-amz-target-completer-41 [] { ["TransferService.ListUsers"] }
 def x-amz-target-completer-42 [] { ["TransferService.ListWorkflows"] }
+def status-completer-1 [] { ["FAILURE" "SUCCESS"] }
 def x-amz-target-completer-43 [] { ["TransferService.SendWorkflowStepState"] }
 def x-amz-target-completer-44 [] { ["TransferService.StartFileTransfer"] }
 def x-amz-target-completer-45 [] { ["TransferService.StartServer"] }
 def x-amz-target-completer-46 [] { ["TransferService.StopServer"] }
 def x-amz-target-completer-47 [] { ["TransferService.TagResource"] }
+def server-protocol-completer [] { ["AS2" "FTP" "FTPS" "SFTP"] }
 def x-amz-target-completer-48 [] { ["TransferService.TestIdentityProvider"] }
 def x-amz-target-completer-49 [] { ["TransferService.UntagResource"] }
 def x-amz-target-completer-50 [] { ["TransferService.UpdateAccess"] }
@@ -182,7 +191,8 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateAccess
-# --PosixProfile shape: {Uid: any, Gid: any, SecondaryGids?: any}
+# --HomeDirectoryMappings item shape: {Entry: string, Target: string}
+# --PosixProfile shape: {Uid: int, Gid: int, SecondaryGids?: list<int>}
 export def "create-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -200,19 +210,20 @@ export def "create-access" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  --home-directory: any
-  --home-directory-type: any
-  --home-directory-mappings: any
-  --policy: any
-  --posix-profile: record # The full POSIX identity, including user ID (Uid), group ID (Gid), and any secondary groups IDs (SecondaryGids), that controls your users' access to your Amazon EFS file systems. The POSIX permissions that are set on files and directories in your file system determine the level of access your users get when transferring files into and out of your Amazon EFS file systems. — shape: {Uid: any, Gid: any, SecondaryGids?: any}
-  role: any
-  server_id: any
-  external_id: any
-]: any -> record<ServerId: record, ExternalId: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  --home-directory: string # The landing directory (folder) for a user when they log in to the server using the client. A HomeDirectory example is /bucket_name/home/mydirectory.
+  --home-directory-type: string@home-directory-type-completer # The type of landing directory (folder) that you want your users' home directory to be when they log in to the server. If you set it to PATH, the user will see the absolute Amazon S3 bucket or EFS paths as is in their file transfer protocol clients. If you set it LOGICAL, you need to provide mappings in the HomeDirectoryMappings for how you want to make Amazon S3 or Amazon EFS paths visible to your users.
+  --home-directory-mappings: list # Logical directory mappings that specify what Amazon S3 or Amazon EFS paths and keys should be visible to your user and how you want to make them visible. You must specify the Entry and Target pair, where Entry shows how the path is made visible and Target is the actual Amazon S3 or Amazon EFS path. If you only specify a target, it is displayed as is. You also must ensure that your Identity and Access Management (IAM) role provides access to paths in Target. This value can be set only when HomeDirectoryType is set to LOGICAL. The following is an Entry and Target pair example. [ { "Entry": "/directory1", "Target": "/bucket_name/home/mydirectory" } ] In most cases, you can use this value instead of the session policy to lock down your user to the designated home directory ("chroot"). To do this, you can set Entry to / and set Target to the HomeDirectory parameter value. The following is an Entry and Target pair example for chroot. [ { "Entry": "/", "Target": "/bucket_name/home/mydirectory" } ] — item shape: {Entry: string, Target: string}
+  --policy: string # A session policy for your user so that you can use the same Identity and Access Management (IAM) role across multiple users. This policy scopes down a user's access to portions of their Amazon S3 bucket. Variables that you can use inside this policy include ${Transfer:UserName}, ${Transfer:HomeDirectory}, and ${Transfer:HomeBucket}. This policy applies only when the domain of ServerId is Amazon S3. Amazon EFS does not use session policies. For session policies, Transfer Family stores the policy as a JSON blob, instead of the Amazon Resource Name (ARN) of the policy. You save the policy as a JSON blob and pass it in the Policy argument. For an example of a session policy, see Example session policy (https://docs.aws.amazon.com/transfer/latest/userguide/session-policy.html). For more information, see AssumeRole (https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html) in the Security Token Service API Reference.
+  --posix-profile: record # The full POSIX identity, including user ID (Uid), group ID (Gid), and any secondary groups IDs (SecondaryGids), that controls your users' access to your Amazon EFS file systems. The POSIX permissions that are set on files and directories in your file system determine the level of access your users get when transferring files into and out of your Amazon EFS file systems. — shape: {Uid: int, Gid: int, SecondaryGids?: list<int>}
+  role: string # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role that controls your users' access to your Amazon S3 bucket or Amazon EFS file system. The policies attached to this role determine the level of access that you want to provide your users when transferring files into and out of your Amazon S3 bucket or Amazon EFS file system. The IAM role should also contain a trust relationship that allows the server to access your resources when servicing your users' transfer requests.
+  server_id: string # A system-assigned unique identifier for a server instance. This is the specific server that you added your user to.
+  external_id: string # A unique identifier that is required to identify specific groups within your directory. The users of the group that you associate have access to your Amazon S3 or Amazon EFS resources over the enabled protocols using Transfer Family. If you know the group name, you can view the SID values by running the following command using Windows PowerShell. Get-ADGroup -Filter {samAccountName -like "YourGroupName*"} -Properties * | Select SamAccountName,ObjectSid In that command, replace YourGroupName with the name of your Active Directory group. The regular expression used to validate this parameter is a string of characters consisting of uppercase and lowercase alphanumeric characters with no spaces. You can also include underscores or any of the following characters: =,.@:/-
+]: any -> record<ServerId: string, ExternalId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.CreateAccess")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HomeDirectory": $home_directory, "HomeDirectoryType": $home_directory_type, "HomeDirectoryMappings": $home_directory_mappings, "Policy": $policy, "PosixProfile": $posix_profile, "Role": $role, "ServerId": $server_id, "ExternalId": $external_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -238,6 +249,7 @@ export def "create-access" [
 #
 # POST /
 # operationId: CreateAgreement
+# --Tags item shape: {Key: string, Value: string}
 export def "create-agreement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -255,19 +267,20 @@ export def "create-agreement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  --description: any
-  server_id: any
-  local_profile_id: any
-  partner_profile_id: any
-  base_directory: any
-  access_role: any
-  --status: any
-  --tags: any
-]: any -> record<AgreementId: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  --description: string # A name or short description to identify the agreement.
+  server_id: string # A system-assigned unique identifier for a server instance. This is the specific server that the agreement uses.
+  local_profile_id: string # A unique identifier for the AS2 local profile.
+  partner_profile_id: string # A unique identifier for the partner profile used in the agreement.
+  base_directory: string # The landing directory (folder) for files transferred by using the AS2 protocol. A BaseDirectory example is /DOC-EXAMPLE-BUCKET/home/mydirectory.
+  access_role: string # With AS2, you can send files by calling StartFileTransfer and specifying the file paths in the request parameter, SendFilePaths. We use the file’s parent directory (for example, for --send-file-paths /bucket/dir/file.txt, parent directory is /bucket/dir/) to temporarily store a processed AS2 message file, store the MDN when we receive them from the partner, and write a final JSON file containing relevant metadata of the transmission. So, the AccessRole needs to provide read and write access to the parent directory of the file location used in the StartFileTransfer request. Additionally, you need to provide read and write access to the parent directory of the files that you intend to send with StartFileTransfer.
+  --status: string@status-completer # The status of the agreement. The agreement can be either ACTIVE or INACTIVE.
+  --tags: list # Key-value pairs that can be used to group and search for agreements. — item shape: {Key: string, Value: string}
+]: any -> record<AgreementId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.CreateAgreement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Description": $description, "ServerId": $server_id, "LocalProfileId": $local_profile_id, "PartnerProfileId": $partner_profile_id, "BaseDirectory": $base_directory, "AccessRole": $access_role, "Status": $status, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -293,6 +306,8 @@ export def "create-agreement" [
 #
 # POST /
 # operationId: CreateConnector
+# --As2Config shape: {LocalProfileId?: string, PartnerProfileId?: string, MessageSubject?: string, Compression?: "ZLIB"|"DISABLED", EncryptionAlgorithm?: "AES128_CBC"|"AES192_CBC"|"AES256_CBC"|"NONE", SigningAlgorithm?: "SHA256"|"SHA384"|"SHA512"|"SHA1"|"NONE", MdnSigningAlgorithm?: "SHA256"|"SHA384"|"SHA512"|"SHA1"|"NONE"|"DEFAULT", MdnResponse?: "SYNC"|"NONE"}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-connector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -310,16 +325,17 @@ export def "create-connector" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  url: any
-  as2_config: any
-  access_role: any
-  --logging-role: any
-  --tags: any
-]: any -> record<ConnectorId: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  url: string # The URL of the partner's AS2 endpoint.
+  as2_config: record # Contains the details for a connector object. The connector object is used for AS2 outbound processes, to connect the Transfer Family customer with the trading partner. — shape: {LocalProfileId?: string, PartnerProfileId?: string, MessageSubject?: string, Compression?: "ZLIB"|"DISABLED", EncryptionAlgorithm?: "AES128_CBC"|"AES192_CBC"|"AES256_CBC"|"NONE", SigningAlgorithm?: "SHA256"|"SHA384"|"SHA512"|"SHA1"|"NONE", MdnSigningAlgorithm?: "SHA256"|"SHA384"|"SHA512"|"SHA1"|"NONE"|"DEFAULT", MdnResponse?: "SYNC"|"NONE"}
+  access_role: string # With AS2, you can send files by calling StartFileTransfer and specifying the file paths in the request parameter, SendFilePaths. We use the file’s parent directory (for example, for --send-file-paths /bucket/dir/file.txt, parent directory is /bucket/dir/) to temporarily store a processed AS2 message file, store the MDN when we receive them from the partner, and write a final JSON file containing relevant metadata of the transmission. So, the AccessRole needs to provide read and write access to the parent directory of the file location used in the StartFileTransfer request. Additionally, you need to provide read and write access to the parent directory of the files that you intend to send with StartFileTransfer.
+  --logging-role: string # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role that allows a connector to turn on CloudWatch logging for Amazon S3 events. When set, you can view connector activity in your CloudWatch logs.
+  --tags: list # Key-value pairs that can be used to group and search for connectors. Tags are metadata attached to connectors for any purpose. — item shape: {Key: string, Value: string}
+]: any -> record<ConnectorId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.CreateConnector")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Url": $url, "As2Config": $as2_config, "AccessRole": $access_role, "LoggingRole": $logging_role, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -345,6 +361,7 @@ export def "create-connector" [
 #
 # POST /
 # operationId: CreateProfile
+# --Tags item shape: {Key: string, Value: string}
 export def "create-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -362,15 +379,16 @@ export def "create-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  as2_id: any
-  profile_type: any
-  --certificate-ids: any
-  --tags: any
-]: any -> record<ProfileId: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  as2_id: string # The As2Id is the AS2-name, as defined in the RFC 4130 (https://datatracker.ietf.org/doc/html/rfc4130). For inbound transfers, this is the AS2-From header for the AS2 messages sent from the partner. For outbound connectors, this is the AS2-To header for the AS2 messages sent to the partner using the StartFileTransfer API operation. This ID cannot include spaces.
+  profile_type: string@profile-type-completer # Determines the type of profile to create: Specify LOCAL to create a local profile. A local profile represents the AS2-enabled Transfer Family server organization or party. Specify PARTNER to create a partner profile. A partner profile represents a remote organization, external to Transfer Family.
+  --certificate-ids: list<string> # An array of identifiers for the imported certificates. You use this identifier for working with profiles and partner profiles.
+  --tags: list # Key-value pairs that can be used to group and search for AS2 profiles. — item shape: {Key: string, Value: string}
+]: any -> record<ProfileId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.CreateProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"As2Id": $as2_id, "ProfileType": $profile_type, "CertificateIds": $certificate_ids, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -396,6 +414,11 @@ export def "create-profile" [
 #
 # POST /
 # operationId: CreateServer
+# --EndpointDetails shape: {AddressAllocationIds?: list<string>, SubnetIds?: list<string>, VpcEndpointId?: string, VpcId?: string, SecurityGroupIds?: list<string>}
+# --IdentityProviderDetails shape: {Url?: string, InvocationRole?: string, DirectoryId?: string, Function?: string}
+# --ProtocolDetails shape: {PassiveIp?: string, TlsSessionResumptionMode?: "DISABLED"|"ENABLED"|"ENFORCED", SetStatOption?: "DEFAULT"|"ENABLE_NO_OP", As2Transports?: list<string>}
+# --Tags item shape: {Key: string, Value: string}
+# --WorkflowDetails shape: {OnUpload?: list, OnPartialUpload?: list}
 export def "create-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -413,26 +436,27 @@ export def "create-server" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  --certificate: any
-  --domain: any
-  --endpoint-details: any
-  --endpoint-type: any
-  --host-key: any
-  --identity-provider-details: any
-  --identity-provider-type: any
-  --logging-role: any
-  --post-authentication-login-banner: any
-  --pre-authentication-login-banner: any
-  --protocols: any
-  --protocol-details: any
-  --security-policy-name: any
-  --tags: any
-  --workflow-details: any
-]: any -> record<ServerId: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  --certificate: string # The Amazon Resource Name (ARN) of the Certificate Manager (ACM) certificate. Required when Protocols is set to FTPS. To request a new public certificate, see Request a public certificate (https://docs.aws.amazon.com/acm/latest/userguide/gs-acm-request-public.html) in the Certificate Manager User Guide. To import an existing certificate into ACM, see Importing certificates into ACM (https://docs.aws.amazon.com/acm/latest/userguide/import-certificate.html) in the Certificate Manager User Guide. To request a private certificate to use FTPS through private IP addresses, see Request a private certificate (https://docs.aws.amazon.com/acm/latest/userguide/gs-acm-request-private.html) in the Certificate Manager User Guide. Certificates with the following cryptographic algorithms and key sizes are supported: 2048-bit RSA (RSA_2048) 4096-bit RSA (RSA_4096) Elliptic Prime Curve 256 bit (EC_prime256v1) Elliptic Prime Curve 384 bit (EC_secp384r1) Elliptic Prime Curve 521 bit (EC_secp521r1) The certificate must be a valid SSL/TLS X.509 version 3 certificate with FQDN or IP address specified and information about the issuer.
+  --domain: string@domain-completer # The domain of the storage system that is used for file transfers. There are two domains available: Amazon Simple Storage Service (Amazon S3) and Amazon Elastic File System (Amazon EFS). The default value is S3. After the server is created, the domain cannot be changed.
+  --endpoint-details: record # The virtual private cloud (VPC) endpoint settings that are configured for your file transfer protocol-enabled server. With a VPC endpoint, you can restrict access to your server and resources only within your VPC. To control incoming internet traffic, invoke the UpdateServer API and attach an Elastic IP address to your server's endpoint. After May 19, 2021, you won't be able to create a server using EndpointType=VPC_ENDPOINT in your Amazon Web Servicesaccount if your account hasn't already done so before May 19, 2021. If you have already created servers with EndpointType=VPC_ENDPOINT in your Amazon Web Servicesaccount on or before May 19, 2021, you will not be affected. After this date, use EndpointType=VPC. For more information, see https://docs.aws.amazon.com/transfer/latest/userguide/create-server-in-vpc.html#deprecate-vpc-endpoint. — shape: {AddressAllocationIds?: list<string>, SubnetIds?: list<string>, VpcEndpointId?: string, VpcId?: string, SecurityGroupIds?: list<string>}
+  --endpoint-type: string@endpoint-type-completer # The type of endpoint that you want your server to use. You can choose to make your server's endpoint publicly accessible (PUBLIC) or host it inside your VPC. With an endpoint that is hosted in a VPC, you can restrict access to your server and resources only within your VPC or choose to make it internet facing by attaching Elastic IP addresses directly to it. After May 19, 2021, you won't be able to create a server using EndpointType=VPC_ENDPOINT in your Amazon Web Services account if your account hasn't already done so before May 19, 2021. If you have already created servers with EndpointType=VPC_ENDPOINT in your Amazon Web Services account on or before May 19, 2021, you will not be affected. After this date, use EndpointType=VPC. For more information, see https://docs.aws.amazon.com/transfer/latest/userguide/create-server-in-vpc.html#deprecate-vpc-endpoint. It is recommended that you use VPC as the EndpointType. With this endpoint type, you have the option to directly associate up to three Elastic IPv4 addresses (BYO IP included) with your server's endpoint and use VPC security groups to restrict traffic by the client's public IP address. This is not possible with EndpointType set to VPC_ENDPOINT.
+  --host-key: string # The RSA, ECDSA, or ED25519 private key to use for your SFTP-enabled server. You can add multiple host keys, in case you want to rotate keys, or have a set of active keys that use different algorithms. Use the following command to generate an RSA 2048 bit key with no passphrase: ssh-keygen -t rsa -b 2048 -N "" -m PEM -f my-new-server-key. Use a minimum value of 2048 for the -b option. You can create a stronger key by using 3072 or 4096. Use the following command to generate an ECDSA 256 bit key with no passphrase: ssh-keygen -t ecdsa -b 256 -N "" -m PEM -f my-new-server-key. Valid values for the -b option for ECDSA are 256, 384, and 521. Use the following command to generate an ED25519 key with no passphrase: ssh-keygen -t ed25519 -N "" -f my-new-server-key. For all of these commands, you can replace my-new-server-key with a string of your choice. If you aren't planning to migrate existing users from an existing SFTP-enabled server to a new server, don't update the host key. Accidentally changing a server's host key can be disruptive. For more information, see Manage host keys for your SFTP-enabled server (https://docs.aws.amazon.com/transfer/latest/userguide/edit-server-config.html#configuring-servers-change-host-key) in the Transfer Family User Guide. (format: password)
+  --identity-provider-details: record # Returns information related to the type of user authentication that is in use for a file transfer protocol-enabled server's users. A server can have only one method of authentication. — shape: {Url?: string, InvocationRole?: string, DirectoryId?: string, Function?: string}
+  --identity-provider-type: string@identity-provider-type-completer # Returns information related to the type of user authentication that is in use for a file transfer protocol-enabled server's users. For AWS_DIRECTORY_SERVICE or SERVICE_MANAGED authentication, the Secure Shell (SSH) public keys are stored with a user on the server instance. For API_GATEWAY authentication, your custom authentication method is implemented by using an API call. The server can have only one method of authentication.
+  --logging-role: string # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role that allows a server to turn on Amazon CloudWatch logging for Amazon S3 or Amazon EFSevents. When set, you can view user activity in your CloudWatch logs.
+  --post-authentication-login-banner: string # Specifies a string to display when users connect to a server. This string is displayed after the user authenticates. The SFTP protocol does not support post-authentication display banners.
+  --pre-authentication-login-banner: string # Specifies a string to display when users connect to a server. This string is displayed before the user authenticates. For example, the following banner displays details about using the system: This system is for the use of authorized users only. Individuals using this computer system without authority, or in excess of their authority, are subject to having all of their activities on this system monitored and recorded by system personnel.
+  --protocols: list<string> # Specifies the file transfer protocol or protocols over which your file transfer protocol client can connect to your server's endpoint. The available protocols are: SFTP (Secure Shell (SSH) File Transfer Protocol): File transfer over SSH FTPS (File Transfer Protocol Secure): File transfer with TLS encryption FTP (File Transfer Protocol): Unencrypted file transfer AS2 (Applicability Statement 2): used for transporting structured business-to-business data If you select FTPS, you must choose a certificate stored in Certificate Manager (ACM) which is used to identify your server when clients connect to it over FTPS. If Protocol includes either FTP or FTPS, then the EndpointType must be VPC and the IdentityProviderType must be either AWS_DIRECTORY_SERVICE, AWS_LAMBDA, or API_GATEWAY. If Protocol includes FTP, then AddressAllocationIds cannot be associated. If Protocol is set only to SFTP, the EndpointType can be set to PUBLIC and the IdentityProviderType can be set any of the supported identity types: SERVICE_MANAGED, AWS_DIRECTORY_SERVICE, AWS_LAMBDA, or API_GATEWAY. If Protocol includes AS2, then the EndpointType must be VPC, and domain must be Amazon S3.
+  --protocol-details: record # The protocol settings that are configured for your server. — shape: {PassiveIp?: string, TlsSessionResumptionMode?: "DISABLED"|"ENABLED"|"ENFORCED", SetStatOption?: "DEFAULT"|"ENABLE_NO_OP", As2Transports?: list<string>}
+  --security-policy-name: string # Specifies the name of the security policy that is attached to the server.
+  --tags: list # Key-value pairs that can be used to group and search for servers. — item shape: {Key: string, Value: string}
+  --workflow-details: record # Container for the WorkflowDetail data type. It is used by actions that trigger a workflow to begin execution. — shape: {OnUpload?: list, OnPartialUpload?: list}
+]: any -> record<ServerId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.CreateServer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Certificate": $certificate, "Domain": $domain, "EndpointDetails": $endpoint_details, "EndpointType": $endpoint_type, "HostKey": $host_key, "IdentityProviderDetails": $identity_provider_details, "IdentityProviderType": $identity_provider_type, "LoggingRole": $logging_role, "PostAuthenticationLoginBanner": $post_authentication_login_banner, "PreAuthenticationLoginBanner": $pre_authentication_login_banner, "Protocols": $protocols, "ProtocolDetails": $protocol_details, "SecurityPolicyName": $security_policy_name, "Tags": $tags, "WorkflowDetails": $workflow_details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -458,6 +482,9 @@ export def "create-server" [
 #
 # POST /
 # operationId: CreateUser
+# --HomeDirectoryMappings item shape: {Entry: string, Target: string}
+# --PosixProfile shape: {Uid: int, Gid: int, SecondaryGids?: list<int>}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,21 +502,22 @@ export def "create-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  --home-directory: any
-  --home-directory-type: any
-  --home-directory-mappings: any
-  --policy: any
-  --posix-profile: any
-  role: any
-  server_id: any
-  --ssh-public-key-body: any
-  --tags: any
-  user_name: any
-]: any -> record<ServerId: record, UserName: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  --home-directory: string # The landing directory (folder) for a user when they log in to the server using the client. A HomeDirectory example is /bucket_name/home/mydirectory.
+  --home-directory-type: string@home-directory-type-completer # The type of landing directory (folder) that you want your users' home directory to be when they log in to the server. If you set it to PATH, the user will see the absolute Amazon S3 bucket or EFS paths as is in their file transfer protocol clients. If you set it LOGICAL, you need to provide mappings in the HomeDirectoryMappings for how you want to make Amazon S3 or Amazon EFS paths visible to your users.
+  --home-directory-mappings: list # Logical directory mappings that specify what Amazon S3 or Amazon EFS paths and keys should be visible to your user and how you want to make them visible. You must specify the Entry and Target pair, where Entry shows how the path is made visible and Target is the actual Amazon S3 or Amazon EFS path. If you only specify a target, it is displayed as is. You also must ensure that your Identity and Access Management (IAM) role provides access to paths in Target. This value can be set only when HomeDirectoryType is set to LOGICAL. The following is an Entry and Target pair example. [ { "Entry": "/directory1", "Target": "/bucket_name/home/mydirectory" } ] In most cases, you can use this value instead of the session policy to lock your user down to the designated home directory ("chroot"). To do this, you can set Entry to / and set Target to the HomeDirectory parameter value. The following is an Entry and Target pair example for chroot. [ { "Entry": "/", "Target": "/bucket_name/home/mydirectory" } ] — item shape: {Entry: string, Target: string}
+  --policy: string # A session policy for your user so that you can use the same Identity and Access Management (IAM) role across multiple users. This policy scopes down a user's access to portions of their Amazon S3 bucket. Variables that you can use inside this policy include ${Transfer:UserName}, ${Transfer:HomeDirectory}, and ${Transfer:HomeBucket}. This policy applies only when the domain of ServerId is Amazon S3. Amazon EFS does not use session policies. For session policies, Transfer Family stores the policy as a JSON blob, instead of the Amazon Resource Name (ARN) of the policy. You save the policy as a JSON blob and pass it in the Policy argument. For an example of a session policy, see Example session policy (https://docs.aws.amazon.com/transfer/latest/userguide/session-policy.html). For more information, see AssumeRole (https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html) in the Amazon Web Services Security Token Service API Reference.
+  --posix-profile: record # The full POSIX identity, including user ID (Uid), group ID (Gid), and any secondary groups IDs (SecondaryGids), that controls your users' access to your Amazon EFS file systems. The POSIX permissions that are set on files and directories in your file system determine the level of access your users get when transferring files into and out of your Amazon EFS file systems. — shape: {Uid: int, Gid: int, SecondaryGids?: list<int>}
+  role: string # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role that controls your users' access to your Amazon S3 bucket or Amazon EFS file system. The policies attached to this role determine the level of access that you want to provide your users when transferring files into and out of your Amazon S3 bucket or Amazon EFS file system. The IAM role should also contain a trust relationship that allows the server to access your resources when servicing your users' transfer requests.
+  server_id: string # A system-assigned unique identifier for a server instance. This is the specific server that you added your user to.
+  --ssh-public-key-body: string # The public portion of the Secure Shell (SSH) key used to authenticate the user to the server. The three standard SSH public key format elements are <key type>, <body base64>, and an optional <comment>, with spaces between each element. Transfer Family accepts RSA, ECDSA, and ED25519 keys. For RSA keys, the key type is ssh-rsa. For ED25519 keys, the key type is ssh-ed25519. For ECDSA keys, the key type is either ecdsa-sha2-nistp256, ecdsa-sha2-nistp384, or ecdsa-sha2-nistp521, depending on the size of the key you generated.
+  --tags: list # Key-value pairs that can be used to group and search for users. Tags are metadata attached to users for any purpose. — item shape: {Key: string, Value: string}
+  user_name: string # A unique string that identifies a user and is associated with a ServerId. This user name must be a minimum of 3 and a maximum of 100 characters long. The following are valid characters: a-z, A-Z, 0-9, underscore '_', hyphen '-', period '.', and at sign '@'. The user name can't start with a hyphen, period, or at sign.
+]: any -> record<ServerId: string, UserName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.CreateUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HomeDirectory": $home_directory, "HomeDirectoryType": $home_directory_type, "HomeDirectoryMappings": $home_directory_mappings, "Policy": $policy, "PosixProfile": $posix_profile, "Role": $role, "ServerId": $server_id, "SshPublicKeyBody": $ssh_public_key_body, "Tags": $tags, "UserName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -515,6 +543,9 @@ export def "create-user" [
 #
 # POST /
 # operationId: CreateWorkflow
+# --Steps item shape: {Type?: "COPY"|"CUSTOM"|"TAG"|"DELETE"|"DECRYPT", CopyStepDetails?: record, CustomStepDetails?: record, DeleteStepDetails?: record, TagStepDetails?: record, DecryptStepDetails?: record}
+# --OnExceptionSteps item shape: {Type?: "COPY"|"CUSTOM"|"TAG"|"DELETE"|"DECRYPT", CopyStepDetails?: record, CustomStepDetails?: record, DeleteStepDetails?: record, TagStepDetails?: record, DecryptStepDetails?: record}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-workflow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -532,15 +563,16 @@ export def "create-workflow" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  --description: any
-  steps: any
-  --on-exception-steps: any
-  --tags: any
-]: any -> record<WorkflowId: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  --description: string # A textual description for the workflow.
+  steps: list # Specifies the details for the steps that are in the specified workflow. The TYPE specifies which of the following actions is being taken for this step. COPY - Copy the file to another location. CUSTOM - Perform a custom step with an Lambda function target. DECRYPT - Decrypt a file that was encrypted before it was uploaded. DELETE - Delete the file. TAG - Add a tag to the file. Currently, copying and tagging are supported only on S3. For file location, you specify either the Amazon S3 bucket and key, or the Amazon EFS file system ID and path. — item shape: {Type?: "COPY"|"CUSTOM"|"TAG"|"DELETE"|"DECRYPT", CopyStepDetails?: record, CustomStepDetails?: record, DeleteStepDetails?: record, TagStepDetails?: record, DecryptStepDetails?: record}
+  --on-exception-steps: list # Specifies the steps (actions) to take if errors are encountered during execution of the workflow. For custom steps, the lambda function needs to send FAILURE to the call back API to kick off the exception steps. Additionally, if the lambda does not send SUCCESS before it times out, the exception steps are executed. — item shape: {Type?: "COPY"|"CUSTOM"|"TAG"|"DELETE"|"DECRYPT", CopyStepDetails?: record, CustomStepDetails?: record, DeleteStepDetails?: record, TagStepDetails?: record, DecryptStepDetails?: record}
+  --tags: list # Key-value pairs that can be used to group and search for workflows. Tags are metadata attached to workflows for any purpose. — item shape: {Key: string, Value: string}
+]: any -> record<WorkflowId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.CreateWorkflow")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Description": $description, "Steps": $steps, "OnExceptionSteps": $on_exception_steps, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -583,13 +615,14 @@ export def "delete-access" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  server_id: any
-  external_id: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  server_id: string # A system-assigned unique identifier for a server that has this user assigned.
+  external_id: string # A unique identifier that is required to identify specific groups within your directory. The users of the group that you associate have access to your Amazon S3 or Amazon EFS resources over the enabled protocols using Transfer Family. If you know the group name, you can view the SID values by running the following command using Windows PowerShell. Get-ADGroup -Filter {samAccountName -like "YourGroupName*"} -Properties * | Select SamAccountName,ObjectSid In that command, replace YourGroupName with the name of your Active Directory group. The regular expression used to validate this parameter is a string of characters consisting of uppercase and lowercase alphanumeric characters with no spaces. You can also include underscores or any of the following characters: =,.@:/-
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DeleteAccess")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerId": $server_id, "ExternalId": $external_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -632,13 +665,14 @@ export def "delete-agreement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  agreement_id: any
-  server_id: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  agreement_id: string # A unique identifier for the agreement. This identifier is returned when you create an agreement.
+  server_id: string # The server identifier associated with the agreement that you are deleting.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DeleteAgreement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AgreementId": $agreement_id, "ServerId": $server_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -681,12 +715,13 @@ export def "delete-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  certificate_id: any
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  certificate_id: string # The identifier of the certificate object that you are deleting.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DeleteCertificate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateId": $certificate_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -729,12 +764,13 @@ export def "delete-connector" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  connector_id: any
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  connector_id: string # The unique identifier for the connector.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DeleteConnector")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConnectorId": $connector_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -777,13 +813,14 @@ export def "delete-host-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  server_id: any
-  host_key_id: any
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  server_id: string # The identifier of the server that contains the host key that you are deleting.
+  host_key_id: string # The identifier of the host key that you are deleting.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DeleteHostKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerId": $server_id, "HostKeyId": $host_key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -826,12 +863,13 @@ export def "delete-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  profile_id: any
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  profile_id: string # The identifier of the profile that you are deleting.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DeleteProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProfileId": $profile_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -874,12 +912,13 @@ export def "delete-server" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  server_id: any
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  server_id: string # A unique system-assigned identifier for a server instance.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DeleteServer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerId": $server_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -922,14 +961,15 @@ export def "delete-ssh-public-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  server_id: any
-  ssh_public_key_id: any
-  user_name: any
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  server_id: string # A system-assigned unique identifier for a file transfer protocol-enabled server instance that has the user assigned to it.
+  ssh_public_key_id: string # A unique identifier used to reference your user's specific SSH key.
+  user_name: string # A unique string that identifies a user whose public key is being deleted.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DeleteSshPublicKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerId": $server_id, "SshPublicKeyId": $ssh_public_key_id, "UserName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -972,13 +1012,14 @@ export def "delete-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  server_id: any
-  user_name: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  server_id: string # A system-assigned unique identifier for a server instance that has the user assigned to it.
+  user_name: string # A unique string that identifies a user that is being deleted from a server.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DeleteUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerId": $server_id, "UserName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1021,12 +1062,13 @@ export def "delete-workflow" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  workflow_id: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  workflow_id: string # A unique identifier for the workflow.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DeleteWorkflow")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WorkflowId": $workflow_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1069,13 +1111,14 @@ export def "describe-access" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  server_id: any
-  external_id: any
-]: any -> record<ServerId: record, Access: record<HomeDirectory: record, HomeDirectoryMappings: record, HomeDirectoryType: record, Policy: record, PosixProfile: record<Uid: record, Gid: record, SecondaryGids: record>, Role: record, ExternalId: record>> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  server_id: string # A system-assigned unique identifier for a server that has this access assigned.
+  external_id: string # A unique identifier that is required to identify specific groups within your directory. The users of the group that you associate have access to your Amazon S3 or Amazon EFS resources over the enabled protocols using Transfer Family. If you know the group name, you can view the SID values by running the following command using Windows PowerShell. Get-ADGroup -Filter {samAccountName -like "YourGroupName*"} -Properties * | Select SamAccountName,ObjectSid In that command, replace YourGroupName with the name of your Active Directory group. The regular expression used to validate this parameter is a string of characters consisting of uppercase and lowercase alphanumeric characters with no spaces. You can also include underscores or any of the following characters: =,.@:/-
+]: any -> record<ServerId: string, Access: record<HomeDirectory: string, HomeDirectoryMappings: list<record>, HomeDirectoryType: string, Policy: string, PosixProfile: record<Uid: int, Gid: int, SecondaryGids: list>, Role: string, ExternalId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DescribeAccess")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerId": $server_id, "ExternalId": $external_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1118,13 +1161,14 @@ export def "describe-agreement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  agreement_id: any
-  server_id: any
-]: any -> record<Agreement: record<Arn: record, AgreementId: record, Description: record, Status: record, ServerId: record, LocalProfileId: record, PartnerProfileId: record, BaseDirectory: record, AccessRole: record, Tags: record>> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  agreement_id: string # A unique identifier for the agreement. This identifier is returned when you create an agreement.
+  server_id: string # The server identifier that's associated with the agreement.
+]: any -> record<Agreement: record<Arn: string, AgreementId: string, Description: string, Status: string, ServerId: string, LocalProfileId: string, PartnerProfileId: string, BaseDirectory: string, AccessRole: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DescribeAgreement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AgreementId": $agreement_id, "ServerId": $server_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1167,12 +1211,13 @@ export def "describe-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  certificate_id: any
-]: any -> record<Certificate: record<Arn: record, CertificateId: record, Usage: record, Status: record, Certificate: record, CertificateChain: record, ActiveDate: record, InactiveDate: record, Serial: record, NotBeforeDate: record, NotAfterDate: record, Type: record, Description: record, Tags: record>> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  certificate_id: string # An array of identifiers for the imported certificates. You use this identifier for working with profiles and partner profiles.
+]: any -> record<Certificate: record<Arn: string, CertificateId: string, Usage: string, Status: string, Certificate: string, CertificateChain: string, ActiveDate: string, InactiveDate: string, Serial: string, NotBeforeDate: string, NotAfterDate: string, Type: string, Description: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DescribeCertificate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateId": $certificate_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1215,12 +1260,13 @@ export def "describe-connector" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  connector_id: any
-]: any -> record<Connector: record<Arn: record, ConnectorId: record, Url: record, As2Config: record<LocalProfileId: record, PartnerProfileId: record, MessageSubject: record, Compression: record, EncryptionAlgorithm: record, SigningAlgorithm: record, MdnSigningAlgorithm: record, MdnResponse: record>, AccessRole: record, LoggingRole: record, Tags: record>> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  connector_id: string # The unique identifier for the connector.
+]: any -> record<Connector: record<Arn: string, ConnectorId: string, Url: string, As2Config: record<LocalProfileId: string, PartnerProfileId: string, MessageSubject: string, Compression: string, EncryptionAlgorithm: string, SigningAlgorithm: string, MdnSigningAlgorithm: string, MdnResponse: string>, AccessRole: string, LoggingRole: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DescribeConnector")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConnectorId": $connector_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1263,13 +1309,14 @@ export def "describe-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  execution_id: any
-  workflow_id: any
-]: any -> record<WorkflowId: record, Execution: record<ExecutionId: record, InitialFileLocation: record<S3FileLocation: record, EfsFileLocation: record>, ServiceMetadata: record<UserDetails: record>, ExecutionRole: record, LoggingConfiguration: record<LoggingRole: record, LogGroupName: record>, PosixProfile: record<Uid: record, Gid: record, SecondaryGids: record>, Status: record, Results: record<Steps: record, OnExceptionSteps: record>>> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  execution_id: string # A unique identifier for the execution of a workflow.
+  workflow_id: string # A unique identifier for the workflow.
+]: any -> record<WorkflowId: string, Execution: record<ExecutionId: string, InitialFileLocation: record<S3FileLocation: record, EfsFileLocation: record>, ServiceMetadata: record<UserDetails: record>, ExecutionRole: string, LoggingConfiguration: record<LoggingRole: string, LogGroupName: string>, PosixProfile: record<Uid: int, Gid: int, SecondaryGids: list>, Status: string, Results: record<Steps: list, OnExceptionSteps: list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DescribeExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ExecutionId": $execution_id, "WorkflowId": $workflow_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1312,13 +1359,14 @@ export def "describe-host-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  server_id: any
-  host_key_id: any
-]: any -> record<HostKey: record<Arn: record, HostKeyId: record, HostKeyFingerprint: record, Description: record, Type: record, DateImported: record, Tags: record>> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  server_id: string # The identifier of the server that contains the host key that you want described.
+  host_key_id: string # The identifier of the host key that you want described.
+]: any -> record<HostKey: record<Arn: string, HostKeyId: string, HostKeyFingerprint: string, Description: string, Type: string, DateImported: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DescribeHostKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerId": $server_id, "HostKeyId": $host_key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1361,12 +1409,13 @@ export def "describe-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  profile_id: any
-]: any -> record<Profile: record<Arn: record, ProfileId: record, ProfileType: record, As2Id: record, CertificateIds: record, Tags: record>> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  profile_id: string # The identifier of the profile that you want described.
+]: any -> record<Profile: record<Arn: string, ProfileId: string, ProfileType: string, As2Id: string, CertificateIds: list<string>, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DescribeProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProfileId": $profile_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1409,12 +1458,13 @@ export def "describe-security-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  security_policy_name: any
-]: any -> record<SecurityPolicy: record<Fips: record, SecurityPolicyName: record, SshCiphers: record, SshKexs: record, SshMacs: record, TlsCiphers: record>> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  security_policy_name: string # Specifies the name of the security policy that is attached to the server.
+]: any -> record<SecurityPolicy: record<Fips: bool, SecurityPolicyName: string, SshCiphers: list<string>, SshKexs: list<string>, SshMacs: list<string>, TlsCiphers: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DescribeSecurityPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecurityPolicyName": $security_policy_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1457,12 +1507,13 @@ export def "describe-server" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  server_id: any
-]: any -> record<Server: record<Arn: record, Certificate: record, ProtocolDetails: record<PassiveIp: record, TlsSessionResumptionMode: record, SetStatOption: record, As2Transports: record>, Domain: record, EndpointDetails: record<AddressAllocationIds: record, SubnetIds: record, VpcEndpointId: record, VpcId: record, SecurityGroupIds: record>, EndpointType: record, HostKeyFingerprint: record, IdentityProviderDetails: record<Url: record, InvocationRole: record, DirectoryId: record, Function: record>, IdentityProviderType: record, LoggingRole: record, PostAuthenticationLoginBanner: record, PreAuthenticationLoginBanner: record, Protocols: record, SecurityPolicyName: record, ServerId: record, State: record, Tags: record, UserCount: record, WorkflowDetails: record<OnUpload: record, OnPartialUpload: record>>> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  server_id: string # A system-assigned unique identifier for a server.
+]: any -> record<Server: record<Arn: string, Certificate: string, ProtocolDetails: record<PassiveIp: string, TlsSessionResumptionMode: string, SetStatOption: string, As2Transports: list>, Domain: string, EndpointDetails: record<AddressAllocationIds: list, SubnetIds: list, VpcEndpointId: string, VpcId: string, SecurityGroupIds: list>, EndpointType: string, HostKeyFingerprint: string, IdentityProviderDetails: record<Url: string, InvocationRole: string, DirectoryId: string, Function: string>, IdentityProviderType: string, LoggingRole: string, PostAuthenticationLoginBanner: string, PreAuthenticationLoginBanner: string, Protocols: list<string>, SecurityPolicyName: string, ServerId: string, State: string, Tags: list<record>, UserCount: int, WorkflowDetails: record<OnUpload: list, OnPartialUpload: list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DescribeServer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerId": $server_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1505,13 +1556,14 @@ export def "describe-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  server_id: any
-  user_name: any
-]: any -> record<ServerId: record, User: record<Arn: record, HomeDirectory: record, HomeDirectoryMappings: record, HomeDirectoryType: record, Policy: record, PosixProfile: record<Uid: record, Gid: record, SecondaryGids: record>, Role: record, SshPublicKeys: record, Tags: record, UserName: record>> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  server_id: string # A system-assigned unique identifier for a server that has this user assigned.
+  user_name: string # The name of the user assigned to one or more servers. User names are part of the sign-in credentials to use the Transfer Family service and perform file transfer tasks.
+]: any -> record<ServerId: string, User: record<Arn: string, HomeDirectory: string, HomeDirectoryMappings: list<record>, HomeDirectoryType: string, Policy: string, PosixProfile: record<Uid: int, Gid: int, SecondaryGids: list>, Role: string, SshPublicKeys: list<record>, Tags: list<record>, UserName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DescribeUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerId": $server_id, "UserName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1554,12 +1606,13 @@ export def "describe-workflow" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  workflow_id: any
-]: any -> record<Workflow: record<Arn: record, Description: record, Steps: record, OnExceptionSteps: record, WorkflowId: record, Tags: record>> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  workflow_id: string # A unique identifier for the workflow.
+]: any -> record<Workflow: record<Arn: string, Description: string, Steps: list<record>, OnExceptionSteps: list<record>, WorkflowId: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.DescribeWorkflow")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WorkflowId": $workflow_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1585,6 +1638,7 @@ export def "describe-workflow" [
 #
 # POST /
 # operationId: ImportCertificate
+# --Tags item shape: {Key: string, Value: string}
 export def "import-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1602,19 +1656,20 @@ export def "import-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  usage: any
-  certificate: any
-  --certificate-chain: any
-  --private-key: any
-  --active-date: any
-  --inactive-date: any
-  --description: any
-  --tags: any
-]: any -> record<CertificateId: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  usage: string@usage-completer # Specifies whether this certificate is used for signing or encryption.
+  certificate: string # For the CLI, provide a file path for a certificate in URI format. For example, --certificate file://encryption-cert.pem. Alternatively, you can provide the raw content. For the SDK, specify the raw content of a certificate file. For example, --certificate "`cat encryption-cert.pem`". (format: password)
+  --certificate-chain: string # An optional list of certificates that make up the chain for the certificate that's being imported. (format: password)
+  --private-key: string # For the CLI, provide a file path for a private key in URI format.For example, --private-key file://encryption-key.pem. Alternatively, you can provide the raw content of the private key file. For the SDK, specify the raw content of a private key file. For example, --private-key "`cat encryption-key.pem`" (format: password)
+  --active-date: string # An optional date that specifies when the certificate becomes active. (format: date-time)
+  --inactive-date: string # An optional date that specifies when the certificate becomes inactive. (format: date-time)
+  --description: string # A short description that helps identify the certificate.
+  --tags: list # Key-value pairs that can be used to group and search for certificates. — item shape: {Key: string, Value: string}
+]: any -> record<CertificateId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.ImportCertificate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Usage": $usage, "Certificate": $certificate, "CertificateChain": $certificate_chain, "PrivateKey": $private_key, "ActiveDate": $active_date, "InactiveDate": $inactive_date, "Description": $description, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1640,6 +1695,7 @@ export def "import-certificate" [
 #
 # POST /
 # operationId: ImportHostKey
+# --Tags item shape: {Key: string, Value: string}
 export def "import-host-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1657,15 +1713,16 @@ export def "import-host-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  server_id: any
-  host_key_body: any
-  --description: any
-  --tags: any
-]: any -> record<ServerId: record, HostKeyId: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  server_id: string # The identifier of the server that contains the host key that you are importing.
+  host_key_body: string # The private key portion of an SSH key pair. Transfer Family accepts RSA, ECDSA, and ED25519 keys. (format: password)
+  --description: string # The text description that identifies this host key.
+  --tags: list # Key-value pairs that can be used to group and search for host keys. — item shape: {Key: string, Value: string}
+]: any -> record<ServerId: string, HostKeyId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.ImportHostKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerId": $server_id, "HostKeyBody": $host_key_body, "Description": $description, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1708,14 +1765,15 @@ export def "import-ssh-public-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  server_id: any
-  ssh_public_key_body: any
-  user_name: any
-]: any -> record<ServerId: record, SshPublicKeyId: record, UserName: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  server_id: string # A system-assigned unique identifier for a server.
+  ssh_public_key_body: string # The public key portion of an SSH key pair. Transfer Family accepts RSA, ECDSA, and ED25519 keys.
+  user_name: string # The name of the user account that is assigned to one or more servers.
+]: any -> record<ServerId: string, SshPublicKeyId: string, UserName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.ImportSshPublicKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerId": $server_id, "SshPublicKeyBody": $ssh_public_key_body, "UserName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1760,14 +1818,15 @@ export def "list-accesses" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-  server_id: any
-]: any -> record<NextToken: record, ServerId: record, Accesses: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  --max-results-body: int # Specifies the maximum number of access SIDs to return. (body field)
+  --next-token-body: string # When you can get additional results from the ListAccesses call, a NextToken parameter is returned in the output. You can then pass in a subsequent command to the NextToken parameter to continue listing additional accesses. (body field)
+  server_id: string # A system-assigned unique identifier for a server that has users assigned to it.
+]: any -> record<NextToken: string, ServerId: string, Accesses: table<HomeDirectory: string, HomeDirectoryType: string, Role: string, ExternalId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.ListAccesses")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body, "ServerId": $server_id} | compact
@@ -1813,14 +1872,15 @@ export def "list-agreements" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-  server_id: any
-]: any -> record<NextToken: record, Agreements: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  --max-results-body: int # The maximum number of agreements to return. (body field)
+  --next-token-body: string # When you can get additional results from the ListAgreements call, a NextToken parameter is returned in the output. You can then pass in a subsequent command to the NextToken parameter to continue listing additional agreements. (body field)
+  server_id: string # The identifier of the server for which you want a list of agreements.
+]: any -> record<NextToken: string, Agreements: table<Arn: string, AgreementId: string, Description: string, Status: string, ServerId: string, LocalProfileId: string, PartnerProfileId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.ListAgreements")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body, "ServerId": $server_id} | compact
@@ -1866,13 +1926,14 @@ export def "list-certificates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<NextToken: record, Certificates: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  --max-results-body: int # The maximum number of certificates to return. (body field)
+  --next-token-body: string # When you can get additional results from the ListCertificates call, a NextToken parameter is returned in the output. You can then pass in a subsequent command to the NextToken parameter to continue listing additional certificates. (body field)
+]: any -> record<NextToken: string, Certificates: table<Arn: string, CertificateId: string, Usage: string, Status: string, ActiveDate: string, InactiveDate: string, Type: string, Description: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.ListCertificates")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1918,13 +1979,14 @@ export def "list-connectors" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<NextToken: record, Connectors: record> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  --max-results-body: int # The maximum number of connectors to return. (body field)
+  --next-token-body: string # When you can get additional results from the ListConnectors call, a NextToken parameter is returned in the output. You can then pass in a subsequent command to the NextToken parameter to continue listing additional connectors. (body field)
+]: any -> record<NextToken: string, Connectors: table<Arn: string, ConnectorId: string, Url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.ListConnectors")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1970,14 +2032,15 @@ export def "list-executions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-  workflow_id: any
-]: any -> record<NextToken: record, WorkflowId: record, Executions: record> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  --max-results-body: int # Specifies the maximum number of executions to return. (body field)
+  --next-token-body: string # ListExecutions returns the NextToken parameter in the output. You can then pass the NextToken parameter in a subsequent command to continue listing additional executions. This is useful for pagination, for instance. If you have 100 executions for a workflow, you might only want to list first 10. If so, call the API by specifying the max-results: aws transfer list-executions --max-results 10 This returns details for the first 10 executions, as well as the pointer (NextToken) to the eleventh execution. You can now call the API again, supplying the NextToken value you received: aws transfer list-executions --max-results 10 --next-token $somePointerReturnedFromPreviousListResult This call returns the next 10 executions, the 11th through the 20th. You can then repeat the call until the details for all 100 executions have been returned. (body field)
+  workflow_id: string # A unique identifier for the workflow.
+]: any -> record<NextToken: string, WorkflowId: string, Executions: table<ExecutionId: string, InitialFileLocation: record, ServiceMetadata: record, Status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.ListExecutions")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body, "WorkflowId": $workflow_id} | compact
@@ -2021,14 +2084,15 @@ export def "list-host-keys" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  --max-results: any
-  --next-token: any
-  server_id: any
-]: any -> record<NextToken: record, ServerId: record, HostKeys: record> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  --max-results: int # The maximum number of host keys to return.
+  --next-token: string # When there are additional results that were not returned, a NextToken parameter is returned. You can use that value for a subsequent call to ListHostKeys to continue listing results.
+  server_id: string # The identifier of the server that contains the host keys that you want to view.
+]: any -> record<NextToken: string, ServerId: string, HostKeys: table<Arn: string, HostKeyId: string, Fingerprint: string, Description: string, Type: string, DateImported: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.ListHostKeys")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MaxResults": $max_results, "NextToken": $next_token, "ServerId": $server_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2073,14 +2137,15 @@ export def "list-profiles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-  --profile-type: any
-]: any -> record<NextToken: record, Profiles: record> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  --max-results-body: int # The maximum number of profiles to return. (body field)
+  --next-token-body: string # When there are additional results that were not returned, a NextToken parameter is returned. You can use that value for a subsequent call to ListProfiles to continue listing results. (body field)
+  --profile-type: string@profile-type-completer # Indicates whether to list only LOCAL type profiles or only PARTNER type profiles. If not supplied in the request, the command lists all types of profiles.
+]: any -> record<NextToken: string, Profiles: table<Arn: string, ProfileId: string, As2Id: string, ProfileType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.ListProfiles")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body, "ProfileType": $profile_type} | compact
@@ -2126,13 +2191,14 @@ export def "list-security-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<NextToken: record, SecurityPolicyNames: record> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  --max-results-body: int # Specifies the number of security policies to return as a response to the ListSecurityPolicies query. (body field)
+  --next-token-body: string # When additional results are obtained from the ListSecurityPolicies command, a NextToken parameter is returned in the output. You can then pass the NextToken parameter in a subsequent command to continue listing additional security policies. (body field)
+]: any -> record<NextToken: string, SecurityPolicyNames: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.ListSecurityPolicies")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -2178,13 +2244,14 @@ export def "list-servers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<NextToken: record, Servers: record> {
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  --max-results-body: int # Specifies the number of servers to return as a response to the ListServers query. (body field)
+  --next-token-body: string # When additional results are obtained from the ListServers command, a NextToken parameter is returned in the output. You can then pass the NextToken parameter in a subsequent command to continue listing additional servers. (body field)
+]: any -> record<NextToken: string, Servers: table<Arn: string, Domain: string, IdentityProviderType: string, EndpointType: string, LoggingRole: string, ServerId: string, State: string, UserCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.ListServers")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -2230,14 +2297,15 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  arn: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Arn: record, NextToken: record, Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  arn: string # Requests the tags associated with a particular Amazon Resource Name (ARN). An ARN is an identifier for a specific Amazon Web Services resource, such as a server, user, or role.
+  --max-results-body: int # Specifies the number of tags to return as a response to the ListTagsForResource request. (body field)
+  --next-token-body: string # When you request additional results from the ListTagsForResource operation, a NextToken parameter is returned in the input. You can then pass in a subsequent command to the NextToken parameter to continue listing additional tags. (body field)
+]: any -> record<Arn: string, NextToken: string, Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.ListTagsForResource")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Arn": $arn, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -2283,14 +2351,15 @@ export def "list-users" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-  server_id: any
-]: any -> record<NextToken: record, ServerId: record, Users: record> {
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  --max-results-body: int # Specifies the number of users to return as a response to the ListUsers request. (body field)
+  --next-token-body: string # When you can get additional results from the ListUsers call, a NextToken parameter is returned in the output. You can then pass in a subsequent command to the NextToken parameter to continue listing additional users. (body field)
+  server_id: string # A system-assigned unique identifier for a server that has users assigned to it.
+]: any -> record<NextToken: string, ServerId: string, Users: table<Arn: string, HomeDirectory: string, HomeDirectoryType: string, Role: string, SshPublicKeyCount: int, UserName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.ListUsers")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body, "ServerId": $server_id} | compact
@@ -2336,13 +2405,14 @@ export def "list-workflows" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<NextToken: record, Workflows: record> {
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  --max-results-body: int # Specifies the maximum number of workflows to return. (body field)
+  --next-token-body: string # ListWorkflows returns the NextToken parameter in the output. You can then pass the NextToken parameter in a subsequent command to continue listing additional workflows. (body field)
+]: any -> record<NextToken: string, Workflows: table<WorkflowId: string, Description: string, Arn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.ListWorkflows")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -2386,18 +2456,20 @@ export def "send-workflow-step-state" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  workflow_id: any
-  execution_id: any
-  --body-token: any
-  status: any
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  workflow_id: string # A unique identifier for the workflow.
+  execution_id: string # A unique identifier for the execution of a workflow.
+  --body-token: string # Used to distinguish between multiple callbacks for multiple Lambda steps within the same execution.
+  status: string@status-completer-1 # Indicates whether the specified step succeeded or failed.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.SendWorkflowStepState")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WorkflowId": $workflow_id, "ExecutionId": $execution_id, "Token": $body_token, "Status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "Token") == null) { error make --unspanned { msg: "required body field 'Token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -2437,13 +2509,14 @@ export def "start-file-transfer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  connector_id: any
-  send_file_paths: any
-]: any -> record<TransferId: record> {
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  connector_id: string # The unique identifier for the connector.
+  send_file_paths: list<string> # An array of strings. Each string represents the absolute path for one outbound file transfer. For example, DOC-EXAMPLE-BUCKET/myfile.txt .
+]: any -> record<TransferId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.StartFileTransfer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConnectorId": $connector_id, "SendFilePaths": $send_file_paths} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2486,12 +2559,13 @@ export def "start-server" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  server_id: any
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  server_id: string # A system-assigned unique identifier for a server that you start.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.StartServer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerId": $server_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2534,12 +2608,13 @@ export def "stop-server" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  server_id: any
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  server_id: string # A system-assigned unique identifier for a server that you stopped.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.StopServer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerId": $server_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2565,6 +2640,7 @@ export def "stop-server" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2582,13 +2658,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  arn: string # An Amazon Resource Name (ARN) for a specific Amazon Web Services resource, such as a server, user, or role.
+  tags: list # Key-value pairs assigned to ARNs that you can use to group and search for resources by type. You can attach this metadata to user accounts for any purpose. — item shape: {Key: string, Value: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Arn": $arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2631,16 +2708,17 @@ export def "test-identity-provider" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-48
-  server_id: any
-  --server-protocol: any
-  --source-ip: any
-  user_name: any
-  --user-password: any
-]: any -> record<Response: record, StatusCode: record, Message: record, Url: record> {
+  --x-amz-target: string@x-amz-target-completer-48 # required
+  server_id: string # A system-assigned identifier for a specific server. That server's user authentication method is tested with a user name and password.
+  --server-protocol: string@server-protocol-completer # The type of file transfer protocol to be tested. The available protocols are: Secure Shell (SSH) File Transfer Protocol (SFTP) File Transfer Protocol Secure (FTPS) File Transfer Protocol (FTP)
+  --source-ip: string # The source IP address of the user account to be tested.
+  user_name: string # The name of the user account to be tested.
+  --user-password: string # The password of the user account to be tested. (format: password)
+]: any -> record<Response: string, StatusCode: int, Message: string, Url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.TestIdentityProvider")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerId": $server_id, "ServerProtocol": $server_protocol, "SourceIp": $source_ip, "UserName": $user_name, "UserPassword": $user_password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2683,13 +2761,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-49
-  arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-49 # required
+  arn: string # The value of the resource that will have the tag removed. An Amazon Resource Name (ARN) is an identifier for a specific Amazon Web Services resource, such as a server, user, or role.
+  tag_keys: list<string> # TagKeys are key-value pairs assigned to ARNs that can be used to group and search for resources by type. This metadata can be attached to resources for any purpose.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Arn": $arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2715,7 +2794,8 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateAccess
-# --PosixProfile shape: {Uid: any, Gid: any, SecondaryGids?: any}
+# --HomeDirectoryMappings item shape: {Entry: string, Target: string}
+# --PosixProfile shape: {Uid: int, Gid: int, SecondaryGids?: list<int>}
 export def "update-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2733,19 +2813,20 @@ export def "update-access" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-50
-  --home-directory: any
-  --home-directory-type: any
-  --home-directory-mappings: any
-  --policy: any
-  --posix-profile: record # The full POSIX identity, including user ID (Uid), group ID (Gid), and any secondary groups IDs (SecondaryGids), that controls your users' access to your Amazon EFS file systems. The POSIX permissions that are set on files and directories in your file system determine the level of access your users get when transferring files into and out of your Amazon EFS file systems. — shape: {Uid: any, Gid: any, SecondaryGids?: any}
-  --role: any
-  server_id: any
-  external_id: any
-]: any -> record<ServerId: record, ExternalId: record> {
+  --x-amz-target: string@x-amz-target-completer-50 # required
+  --home-directory: string # The landing directory (folder) for a user when they log in to the server using the client. A HomeDirectory example is /bucket_name/home/mydirectory.
+  --home-directory-type: string@home-directory-type-completer # The type of landing directory (folder) that you want your users' home directory to be when they log in to the server. If you set it to PATH, the user will see the absolute Amazon S3 bucket or EFS paths as is in their file transfer protocol clients. If you set it LOGICAL, you need to provide mappings in the HomeDirectoryMappings for how you want to make Amazon S3 or Amazon EFS paths visible to your users.
+  --home-directory-mappings: list # Logical directory mappings that specify what Amazon S3 or Amazon EFS paths and keys should be visible to your user and how you want to make them visible. You must specify the Entry and Target pair, where Entry shows how the path is made visible and Target is the actual Amazon S3 or Amazon EFS path. If you only specify a target, it is displayed as is. You also must ensure that your Identity and Access Management (IAM) role provides access to paths in Target. This value can be set only when HomeDirectoryType is set to LOGICAL. The following is an Entry and Target pair example. [ { "Entry": "/directory1", "Target": "/bucket_name/home/mydirectory" } ] In most cases, you can use this value instead of the session policy to lock down your user to the designated home directory ("chroot"). To do this, you can set Entry to / and set Target to the HomeDirectory parameter value. The following is an Entry and Target pair example for chroot. [ { "Entry": "/", "Target": "/bucket_name/home/mydirectory" } ] — item shape: {Entry: string, Target: string}
+  --policy: string # A session policy for your user so that you can use the same Identity and Access Management (IAM) role across multiple users. This policy scopes down a user's access to portions of their Amazon S3 bucket. Variables that you can use inside this policy include ${Transfer:UserName}, ${Transfer:HomeDirectory}, and ${Transfer:HomeBucket}. This policy applies only when the domain of ServerId is Amazon S3. Amazon EFS does not use session policies. For session policies, Transfer Family stores the policy as a JSON blob, instead of the Amazon Resource Name (ARN) of the policy. You save the policy as a JSON blob and pass it in the Policy argument. For an example of a session policy, see Example session policy (https://docs.aws.amazon.com/transfer/latest/userguide/session-policy.html). For more information, see AssumeRole (https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html) in the Amazon Web ServicesSecurity Token Service API Reference.
+  --posix-profile: record # The full POSIX identity, including user ID (Uid), group ID (Gid), and any secondary groups IDs (SecondaryGids), that controls your users' access to your Amazon EFS file systems. The POSIX permissions that are set on files and directories in your file system determine the level of access your users get when transferring files into and out of your Amazon EFS file systems. — shape: {Uid: int, Gid: int, SecondaryGids?: list<int>}
+  --role: string # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role that controls your users' access to your Amazon S3 bucket or Amazon EFS file system. The policies attached to this role determine the level of access that you want to provide your users when transferring files into and out of your Amazon S3 bucket or Amazon EFS file system. The IAM role should also contain a trust relationship that allows the server to access your resources when servicing your users' transfer requests.
+  server_id: string # A system-assigned unique identifier for a server instance. This is the specific server that you added your user to.
+  external_id: string # A unique identifier that is required to identify specific groups within your directory. The users of the group that you associate have access to your Amazon S3 or Amazon EFS resources over the enabled protocols using Transfer Family. If you know the group name, you can view the SID values by running the following command using Windows PowerShell. Get-ADGroup -Filter {samAccountName -like "YourGroupName*"} -Properties * | Select SamAccountName,ObjectSid In that command, replace YourGroupName with the name of your Active Directory group. The regular expression used to validate this parameter is a string of characters consisting of uppercase and lowercase alphanumeric characters with no spaces. You can also include underscores or any of the following characters: =,.@:/-
+]: any -> record<ServerId: string, ExternalId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.UpdateAccess")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HomeDirectory": $home_directory, "HomeDirectoryType": $home_directory_type, "HomeDirectoryMappings": $home_directory_mappings, "Policy": $policy, "PosixProfile": $posix_profile, "Role": $role, "ServerId": $server_id, "ExternalId": $external_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2788,19 +2869,20 @@ export def "update-agreement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-51
-  agreement_id: any
-  server_id: any
-  --description: any
-  --status: any
-  --local-profile-id: any
-  --partner-profile-id: any
-  --base-directory: any
-  --access-role: any
-]: any -> record<AgreementId: record> {
+  --x-amz-target: string@x-amz-target-completer-51 # required
+  agreement_id: string # A unique identifier for the agreement. This identifier is returned when you create an agreement.
+  server_id: string # A system-assigned unique identifier for a server instance. This is the specific server that the agreement uses.
+  --description: string # To replace the existing description, provide a short description for the agreement.
+  --status: string@status-completer # You can update the status for the agreement, either activating an inactive agreement or the reverse.
+  --local-profile-id: string # A unique identifier for the AS2 local profile. To change the local profile identifier, provide a new value here.
+  --partner-profile-id: string # A unique identifier for the partner profile. To change the partner profile identifier, provide a new value here.
+  --base-directory: string # To change the landing directory (folder) for files that are transferred, provide the bucket folder that you want to use; for example, /DOC-EXAMPLE-BUCKET/home/mydirectory .
+  --access-role: string # With AS2, you can send files by calling StartFileTransfer and specifying the file paths in the request parameter, SendFilePaths. We use the file’s parent directory (for example, for --send-file-paths /bucket/dir/file.txt, parent directory is /bucket/dir/) to temporarily store a processed AS2 message file, store the MDN when we receive them from the partner, and write a final JSON file containing relevant metadata of the transmission. So, the AccessRole needs to provide read and write access to the parent directory of the file location used in the StartFileTransfer request. Additionally, you need to provide read and write access to the parent directory of the files that you intend to send with StartFileTransfer.
+]: any -> record<AgreementId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.UpdateAgreement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AgreementId": $agreement_id, "ServerId": $server_id, "Description": $description, "Status": $status, "LocalProfileId": $local_profile_id, "PartnerProfileId": $partner_profile_id, "BaseDirectory": $base_directory, "AccessRole": $access_role} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2843,15 +2925,16 @@ export def "update-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-52
-  certificate_id: any
-  --active-date: any
-  --inactive-date: any
-  --description: any
-]: any -> record<CertificateId: record> {
+  --x-amz-target: string@x-amz-target-completer-52 # required
+  certificate_id: string # The identifier of the certificate object that you are updating.
+  --active-date: string # An optional date that specifies when the certificate becomes active. (format: date-time)
+  --inactive-date: string # An optional date that specifies when the certificate becomes inactive. (format: date-time)
+  --description: string # A short description to help identify the certificate.
+]: any -> record<CertificateId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.UpdateCertificate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateId": $certificate_id, "ActiveDate": $active_date, "InactiveDate": $inactive_date, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2877,6 +2960,7 @@ export def "update-certificate" [
 #
 # POST /
 # operationId: UpdateConnector
+# --As2Config shape: {LocalProfileId?: string, PartnerProfileId?: string, MessageSubject?: string, Compression?: "ZLIB"|"DISABLED", EncryptionAlgorithm?: "AES128_CBC"|"AES192_CBC"|"AES256_CBC"|"NONE", SigningAlgorithm?: "SHA256"|"SHA384"|"SHA512"|"SHA1"|"NONE", MdnSigningAlgorithm?: "SHA256"|"SHA384"|"SHA512"|"SHA1"|"NONE"|"DEFAULT", MdnResponse?: "SYNC"|"NONE"}
 export def "update-connector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2894,16 +2978,17 @@ export def "update-connector" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-53
-  connector_id: any
-  --url: any
-  --as2-config: any
-  --access-role: any
-  --logging-role: any
-]: any -> record<ConnectorId: record> {
+  --x-amz-target: string@x-amz-target-completer-53 # required
+  connector_id: string # The unique identifier for the connector.
+  --url: string # The URL of the partner's AS2 endpoint.
+  --as2-config: record # Contains the details for a connector object. The connector object is used for AS2 outbound processes, to connect the Transfer Family customer with the trading partner. — shape: {LocalProfileId?: string, PartnerProfileId?: string, MessageSubject?: string, Compression?: "ZLIB"|"DISABLED", EncryptionAlgorithm?: "AES128_CBC"|"AES192_CBC"|"AES256_CBC"|"NONE", SigningAlgorithm?: "SHA256"|"SHA384"|"SHA512"|"SHA1"|"NONE", MdnSigningAlgorithm?: "SHA256"|"SHA384"|"SHA512"|"SHA1"|"NONE"|"DEFAULT", MdnResponse?: "SYNC"|"NONE"}
+  --access-role: string # With AS2, you can send files by calling StartFileTransfer and specifying the file paths in the request parameter, SendFilePaths. We use the file’s parent directory (for example, for --send-file-paths /bucket/dir/file.txt, parent directory is /bucket/dir/) to temporarily store a processed AS2 message file, store the MDN when we receive them from the partner, and write a final JSON file containing relevant metadata of the transmission. So, the AccessRole needs to provide read and write access to the parent directory of the file location used in the StartFileTransfer request. Additionally, you need to provide read and write access to the parent directory of the files that you intend to send with StartFileTransfer.
+  --logging-role: string # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role that allows a connector to turn on CloudWatch logging for Amazon S3 events. When set, you can view connector activity in your CloudWatch logs.
+]: any -> record<ConnectorId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.UpdateConnector")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConnectorId": $connector_id, "Url": $url, "As2Config": $as2_config, "AccessRole": $access_role, "LoggingRole": $logging_role} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2946,14 +3031,15 @@ export def "update-host-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-54
-  server_id: any
-  host_key_id: any
-  description: any
-]: any -> record<ServerId: record, HostKeyId: record> {
+  --x-amz-target: string@x-amz-target-completer-54 # required
+  server_id: string # The identifier of the server that contains the host key that you are updating.
+  host_key_id: string # The identifier of the host key that you are updating.
+  description: string # An updated description for the host key.
+]: any -> record<ServerId: string, HostKeyId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.UpdateHostKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerId": $server_id, "HostKeyId": $host_key_id, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2996,13 +3082,14 @@ export def "update-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-55
-  profile_id: any
-  --certificate-ids: any
-]: any -> record<ProfileId: record> {
+  --x-amz-target: string@x-amz-target-completer-55 # required
+  profile_id: string # The identifier of the profile object that you are updating.
+  --certificate-ids: list<string> # An array of identifiers for the imported certificates. You use this identifier for working with profiles and partner profiles.
+]: any -> record<ProfileId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.UpdateProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProfileId": $profile_id, "CertificateIds": $certificate_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3028,6 +3115,10 @@ export def "update-profile" [
 #
 # POST /
 # operationId: UpdateServer
+# --ProtocolDetails shape: {PassiveIp?: string, TlsSessionResumptionMode?: "DISABLED"|"ENABLED"|"ENFORCED", SetStatOption?: "DEFAULT"|"ENABLE_NO_OP", As2Transports?: list<string>}
+# --EndpointDetails shape: {AddressAllocationIds?: list<string>, SubnetIds?: list<string>, VpcEndpointId?: string, VpcId?: string, SecurityGroupIds?: list<string>}
+# --IdentityProviderDetails shape: {Url?: string, InvocationRole?: string, DirectoryId?: string, Function?: string}
+# --WorkflowDetails shape: {OnUpload?: list, OnPartialUpload?: list}
 export def "update-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3045,24 +3136,25 @@ export def "update-server" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-56
-  --certificate: any
-  --protocol-details: any
-  --endpoint-details: any
-  --endpoint-type: any
-  --host-key: any
-  --identity-provider-details: any
-  --logging-role: any
-  --post-authentication-login-banner: any
-  --pre-authentication-login-banner: any
-  --protocols: any
-  --security-policy-name: any
-  server_id: any
-  --workflow-details: any
-]: any -> record<ServerId: record> {
+  --x-amz-target: string@x-amz-target-completer-56 # required
+  --certificate: string # The Amazon Resource Name (ARN) of the Amazon Web ServicesCertificate Manager (ACM) certificate. Required when Protocols is set to FTPS. To request a new public certificate, see Request a public certificate (https://docs.aws.amazon.com/acm/latest/userguide/gs-acm-request-public.html) in the Amazon Web ServicesCertificate Manager User Guide. To import an existing certificate into ACM, see Importing certificates into ACM (https://docs.aws.amazon.com/acm/latest/userguide/import-certificate.html) in the Amazon Web ServicesCertificate Manager User Guide. To request a private certificate to use FTPS through private IP addresses, see Request a private certificate (https://docs.aws.amazon.com/acm/latest/userguide/gs-acm-request-private.html) in the Amazon Web ServicesCertificate Manager User Guide. Certificates with the following cryptographic algorithms and key sizes are supported: 2048-bit RSA (RSA_2048) 4096-bit RSA (RSA_4096) Elliptic Prime Curve 256 bit (EC_prime256v1) Elliptic Prime Curve 384 bit (EC_secp384r1) Elliptic Prime Curve 521 bit (EC_secp521r1) The certificate must be a valid SSL/TLS X.509 version 3 certificate with FQDN or IP address specified and information about the issuer.
+  --protocol-details: record # The protocol settings that are configured for your server. — shape: {PassiveIp?: string, TlsSessionResumptionMode?: "DISABLED"|"ENABLED"|"ENFORCED", SetStatOption?: "DEFAULT"|"ENABLE_NO_OP", As2Transports?: list<string>}
+  --endpoint-details: record # The virtual private cloud (VPC) endpoint settings that are configured for your file transfer protocol-enabled server. With a VPC endpoint, you can restrict access to your server and resources only within your VPC. To control incoming internet traffic, invoke the UpdateServer API and attach an Elastic IP address to your server's endpoint. After May 19, 2021, you won't be able to create a server using EndpointType=VPC_ENDPOINT in your Amazon Web Servicesaccount if your account hasn't already done so before May 19, 2021. If you have already created servers with EndpointType=VPC_ENDPOINT in your Amazon Web Servicesaccount on or before May 19, 2021, you will not be affected. After this date, use EndpointType=VPC. For more information, see https://docs.aws.amazon.com/transfer/latest/userguide/create-server-in-vpc.html#deprecate-vpc-endpoint. — shape: {AddressAllocationIds?: list<string>, SubnetIds?: list<string>, VpcEndpointId?: string, VpcId?: string, SecurityGroupIds?: list<string>}
+  --endpoint-type: string@endpoint-type-completer # The type of endpoint that you want your server to use. You can choose to make your server's endpoint publicly accessible (PUBLIC) or host it inside your VPC. With an endpoint that is hosted in a VPC, you can restrict access to your server and resources only within your VPC or choose to make it internet facing by attaching Elastic IP addresses directly to it. After May 19, 2021, you won't be able to create a server using EndpointType=VPC_ENDPOINT in your Amazon Web Servicesaccount if your account hasn't already done so before May 19, 2021. If you have already created servers with EndpointType=VPC_ENDPOINT in your Amazon Web Servicesaccount on or before May 19, 2021, you will not be affected. After this date, use EndpointType=VPC. For more information, see https://docs.aws.amazon.com/transfer/latest/userguide/create-server-in-vpc.html#deprecate-vpc-endpoint. It is recommended that you use VPC as the EndpointType. With this endpoint type, you have the option to directly associate up to three Elastic IPv4 addresses (BYO IP included) with your server's endpoint and use VPC security groups to restrict traffic by the client's public IP address. This is not possible with EndpointType set to VPC_ENDPOINT.
+  --host-key: string # The RSA, ECDSA, or ED25519 private key to use for your SFTP-enabled server. You can add multiple host keys, in case you want to rotate keys, or have a set of active keys that use different algorithms. Use the following command to generate an RSA 2048 bit key with no passphrase: ssh-keygen -t rsa -b 2048 -N "" -m PEM -f my-new-server-key. Use a minimum value of 2048 for the -b option. You can create a stronger key by using 3072 or 4096. Use the following command to generate an ECDSA 256 bit key with no passphrase: ssh-keygen -t ecdsa -b 256 -N "" -m PEM -f my-new-server-key. Valid values for the -b option for ECDSA are 256, 384, and 521. Use the following command to generate an ED25519 key with no passphrase: ssh-keygen -t ed25519 -N "" -f my-new-server-key. For all of these commands, you can replace my-new-server-key with a string of your choice. If you aren't planning to migrate existing users from an existing SFTP-enabled server to a new server, don't update the host key. Accidentally changing a server's host key can be disruptive. For more information, see Manage host keys for your SFTP-enabled server (https://docs.aws.amazon.com/transfer/latest/userguide/edit-server-config.html#configuring-servers-change-host-key) in the Transfer Family User Guide. (format: password)
+  --identity-provider-details: record # Returns information related to the type of user authentication that is in use for a file transfer protocol-enabled server's users. A server can have only one method of authentication. — shape: {Url?: string, InvocationRole?: string, DirectoryId?: string, Function?: string}
+  --logging-role: string # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role that allows a server to turn on Amazon CloudWatch logging for Amazon S3 or Amazon EFSevents. When set, you can view user activity in your CloudWatch logs.
+  --post-authentication-login-banner: string # Specifies a string to display when users connect to a server. This string is displayed after the user authenticates. The SFTP protocol does not support post-authentication display banners.
+  --pre-authentication-login-banner: string # Specifies a string to display when users connect to a server. This string is displayed before the user authenticates. For example, the following banner displays details about using the system: This system is for the use of authorized users only. Individuals using this computer system without authority, or in excess of their authority, are subject to having all of their activities on this system monitored and recorded by system personnel.
+  --protocols: list<string> # Specifies the file transfer protocol or protocols over which your file transfer protocol client can connect to your server's endpoint. The available protocols are: SFTP (Secure Shell (SSH) File Transfer Protocol): File transfer over SSH FTPS (File Transfer Protocol Secure): File transfer with TLS encryption FTP (File Transfer Protocol): Unencrypted file transfer AS2 (Applicability Statement 2): used for transporting structured business-to-business data If you select FTPS, you must choose a certificate stored in Certificate Manager (ACM) which is used to identify your server when clients connect to it over FTPS. If Protocol includes either FTP or FTPS, then the EndpointType must be VPC and the IdentityProviderType must be either AWS_DIRECTORY_SERVICE, AWS_LAMBDA, or API_GATEWAY. If Protocol includes FTP, then AddressAllocationIds cannot be associated. If Protocol is set only to SFTP, the EndpointType can be set to PUBLIC and the IdentityProviderType can be set any of the supported identity types: SERVICE_MANAGED, AWS_DIRECTORY_SERVICE, AWS_LAMBDA, or API_GATEWAY. If Protocol includes AS2, then the EndpointType must be VPC, and domain must be Amazon S3.
+  --security-policy-name: string # Specifies the name of the security policy that is attached to the server.
+  server_id: string # A system-assigned unique identifier for a server instance that the user account is assigned to.
+  --workflow-details: record # Container for the WorkflowDetail data type. It is used by actions that trigger a workflow to begin execution. — shape: {OnUpload?: list, OnPartialUpload?: list}
+]: any -> record<ServerId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.UpdateServer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Certificate": $certificate, "ProtocolDetails": $protocol_details, "EndpointDetails": $endpoint_details, "EndpointType": $endpoint_type, "HostKey": $host_key, "IdentityProviderDetails": $identity_provider_details, "LoggingRole": $logging_role, "PostAuthenticationLoginBanner": $post_authentication_login_banner, "PreAuthenticationLoginBanner": $pre_authentication_login_banner, "Protocols": $protocols, "SecurityPolicyName": $security_policy_name, "ServerId": $server_id, "WorkflowDetails": $workflow_details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3088,6 +3180,8 @@ export def "update-server" [
 #
 # POST /
 # operationId: UpdateUser
+# --HomeDirectoryMappings item shape: {Entry: string, Target: string}
+# --PosixProfile shape: {Uid: int, Gid: int, SecondaryGids?: list<int>}
 export def "update-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3105,19 +3199,20 @@ export def "update-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-57
-  --home-directory: any
-  --home-directory-type: any
-  --home-directory-mappings: any
-  --policy: any
-  --posix-profile: any
-  --role: any
-  server_id: any
-  user_name: any
-]: any -> record<ServerId: record, UserName: record> {
+  --x-amz-target: string@x-amz-target-completer-57 # required
+  --home-directory: string # The landing directory (folder) for a user when they log in to the server using the client. A HomeDirectory example is /bucket_name/home/mydirectory.
+  --home-directory-type: string@home-directory-type-completer # The type of landing directory (folder) that you want your users' home directory to be when they log in to the server. If you set it to PATH, the user will see the absolute Amazon S3 bucket or EFS paths as is in their file transfer protocol clients. If you set it LOGICAL, you need to provide mappings in the HomeDirectoryMappings for how you want to make Amazon S3 or Amazon EFS paths visible to your users.
+  --home-directory-mappings: list # Logical directory mappings that specify what Amazon S3 or Amazon EFS paths and keys should be visible to your user and how you want to make them visible. You must specify the Entry and Target pair, where Entry shows how the path is made visible and Target is the actual Amazon S3 or Amazon EFS path. If you only specify a target, it is displayed as is. You also must ensure that your Identity and Access Management (IAM) role provides access to paths in Target. This value can be set only when HomeDirectoryType is set to LOGICAL. The following is an Entry and Target pair example. [ { "Entry": "/directory1", "Target": "/bucket_name/home/mydirectory" } ] In most cases, you can use this value instead of the session policy to lock down your user to the designated home directory ("chroot"). To do this, you can set Entry to '/' and set Target to the HomeDirectory parameter value. The following is an Entry and Target pair example for chroot. [ { "Entry": "/", "Target": "/bucket_name/home/mydirectory" } ] — item shape: {Entry: string, Target: string}
+  --policy: string # A session policy for your user so that you can use the same Identity and Access Management (IAM) role across multiple users. This policy scopes down a user's access to portions of their Amazon S3 bucket. Variables that you can use inside this policy include ${Transfer:UserName}, ${Transfer:HomeDirectory}, and ${Transfer:HomeBucket}. This policy applies only when the domain of ServerId is Amazon S3. Amazon EFS does not use session policies. For session policies, Transfer Family stores the policy as a JSON blob, instead of the Amazon Resource Name (ARN) of the policy. You save the policy as a JSON blob and pass it in the Policy argument. For an example of a session policy, see Creating a session policy (https://docs.aws.amazon.com/transfer/latest/userguide/session-policy). For more information, see AssumeRole (https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html) in the Amazon Web Services Security Token Service API Reference.
+  --posix-profile: record # The full POSIX identity, including user ID (Uid), group ID (Gid), and any secondary groups IDs (SecondaryGids), that controls your users' access to your Amazon EFS file systems. The POSIX permissions that are set on files and directories in your file system determine the level of access your users get when transferring files into and out of your Amazon EFS file systems. — shape: {Uid: int, Gid: int, SecondaryGids?: list<int>}
+  --role: string # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role that controls your users' access to your Amazon S3 bucket or Amazon EFS file system. The policies attached to this role determine the level of access that you want to provide your users when transferring files into and out of your Amazon S3 bucket or Amazon EFS file system. The IAM role should also contain a trust relationship that allows the server to access your resources when servicing your users' transfer requests.
+  server_id: string # A system-assigned unique identifier for a server instance that the user account is assigned to.
+  user_name: string # A unique string that identifies a user and is associated with a server as specified by the ServerId. This user name must be a minimum of 3 and a maximum of 100 characters long. The following are valid characters: a-z, A-Z, 0-9, underscore '_', hyphen '-', period '.', and at sign '@'. The user name can't start with a hyphen, period, or at sign.
+]: any -> record<ServerId: string, UserName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "TransferService.UpdateUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HomeDirectory": $home_directory, "HomeDirectoryType": $home_directory_type, "HomeDirectoryMappings": $home_directory_mappings, "Policy": $policy, "PosixProfile": $posix_profile, "Role": $role, "ServerId": $server_id, "UserName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

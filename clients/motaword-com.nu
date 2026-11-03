@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -122,6 +122,7 @@ def order-type-completer [] { ["asc" "desc"] }
 def device-completer [] { ["Amazon" "Android" "Chrome" "Edge" "Firefox" "MacOS" "Safari" "Windows" "WindowsPhone" "iOS"] }
 def type-completer-1 [] { ["OneSignal"] }
 def order-by-completer-1 [] { ["delivery" "id" "price" "status"] }
+def action-type-completer [] { ["completed" "proofread" "translated"] }
 def payment-method-completer [] { ["app" "client" "corporate" "corporate_card" "credit"] }
 def accept-completer [] { ["application/json" "application/octet-stream"] }
 def type-completer-2 [] { ["EMAIL" "INCOMING_EMAIL" "NOTE" "TASK"] }
@@ -200,10 +201,11 @@ export def "download-async" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --async-request-key: string # Async operation key
+  --async-request-key: string # Async operation key (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($async_request_key == null) { error make --unspanned { msg: "required query parameter 'async_request_key' missing: pass --async-request-key" } }
   let qp = [(serialize-qp "async_request_key" $async_request_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/async/download" $qp $auth.query)
   let accept_val = "application/octet-stream"
@@ -414,6 +416,7 @@ export def "get-continuous-projects" [
 #
 # POST /continuous_projects
 # operationId: createContinuousProject
+# --links shape: {self?: record, editors?: record}
 # --subscription shape: {downgrade?: list<string>, payment_method?: int, period_end?: string, plan_id?: string, plan_name?: string, price?: string, products?: list, schedule_name?: string, schedule_start?: string, subscription_id?: string, upgrade?: list<string>, withTrial?: any}
 export def "create-continuous-project" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -431,7 +434,7 @@ export def "create-continuous-project" [
   --id: int # format: int64
   --is-enabled: oneof<nothing, bool>
   --last-activity-at: string # the date-time notation as defined by RFC 3339, section 5.6, for example, 2017-07-21T17:32:28Z (format: date-time)
-  --links: any
+  --links: record # shape: {self?: record, editors?: record}
   --mt-enabled: oneof<nothing, bool> # Immediately apply MT on translation requests if they are missing from TM.
   --mt-engine: string # One of "MOTAWORD", "GOOGLE", "AMAZON", "MS". Default is "MOTAWORD".
   --name: string
@@ -668,7 +671,7 @@ export def "collect-analytics" [
 #
 # POST /continuous_projects/{id}/complete
 # operationId: complete
-export def "complete" [
+export def "post-continuous-projects-id-complete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4236,7 +4239,7 @@ export def "assign-cm" [
 # operationId: triggerCallback
 export def "trigger-callback" [
   id: int
-  action_type: string
+  action_type: string@action-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5153,6 +5156,7 @@ export def "get-activity" [
 #
 # POST /projects/{projectId}/activities/{activityId}
 # operationId: submitComment
+# --links shape: {self?: record, activity?: record, project?: record}
 export def "submit-comment" [
   project_id: int
   activity_id: int
@@ -5168,7 +5172,7 @@ export def "submit-comment" [
   comment: string # Comment text.
   --commented-at: int # Unix epoch time (format: int64)
   --id: int # format: int64
-  --links: any
+  --links: record # shape: {self?: record, activity?: record, project?: record}
 ]: any -> record<comment: string, commented_at: int, id: int, links: record<self: record<href: string>, activity: record<href: string>, project: record<href: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5956,11 +5960,12 @@ export def "package-project-translation-memory-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --async-request-key: string # Async operation key
+  --async-request-key: string # Async operation key (required)
 ]: nothing -> record<duration: int, key: string, message: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($async_request_key == null) { error make --unspanned { msg: "required query parameter 'async_request_key' missing: pass --async-request-key" } }
   let qp = [(serialize-qp "async_request_key" $async_request_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/strings/package/status") $qp $auth.query)
   let accept_val = "application/json"
@@ -6037,12 +6042,13 @@ export def "package-project-translation-memory-for-language-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --async-request-key: string # Async operation key
+  --async-request-key: string # Async operation key (required)
 ]: nothing -> record<duration: int, key: string, message: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($language_code | is-empty) { error make --unspanned { msg: "path parameter 'languageCode' must be non-empty" } }
+  if ($async_request_key == null) { error make --unspanned { msg: "required query parameter 'async_request_key' missing: pass --async-request-key" } }
   let qp = [(serialize-qp "async_request_key" $async_request_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), language_code: (encode-path-segment $language_code)} | format pattern "/projects/{project_id}/strings/{language_code}/package/status") $qp $auth.query)
   let accept_val = "application/json"
@@ -6750,13 +6756,14 @@ export def "search-everywhere" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # Search query term
+  --query: string # Search query term (required)
   --include: list<string> # Search in these entities. Current oprions are projects, documents, strings. Can be multiple. When not provided, we'll search through all entities.
   --page: int # format: int64, default: 1
   --per-page: int # format: int64, default: 10
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, result: record<documents: list<record>, projects: list<record>, strings: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "include[]" $include "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -6823,10 +6830,11 @@ export def "check-documents-reindex" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --async-request-key: string # Async operation key
+  --async-request-key: string # Async operation key (required)
 ]: nothing -> record<duration: int, key: string, message: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($async_request_key == null) { error make --unspanned { msg: "required query parameter 'async_request_key' missing: pass --async-request-key" } }
   let qp = [(serialize-qp "async_request_key" $async_request_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/documents/reindex/status" $qp $auth.query)
   let accept_val = "application/json"
@@ -7233,11 +7241,12 @@ export def "package-user-translation-memory-for-language-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --async-request-key: string # Async operation key
+  --async-request-key: string # Async operation key (required)
 ]: nothing -> record<duration: int, key: string, message: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($language_code | is-empty) { error make --unspanned { msg: "path parameter 'languageCode' must be non-empty" } }
+  if ($async_request_key == null) { error make --unspanned { msg: "required query parameter 'async_request_key' missing: pass --async-request-key" } }
   let qp = [(serialize-qp "async_request_key" $async_request_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({language_code: (encode-path-segment $language_code)} | format pattern "/strings/{language_code}/package/status") $qp $auth.query)
   let accept_val = "application/json"
@@ -7600,8 +7609,10 @@ export def "get-users" [
 #
 # POST /users
 # operationId: createUser
+# --billing shape: {city?: string, country?: string, phone?: string, state?: string, street?: string, zip?: string, name?: string}
 # --client shape: {corporate?: record, nps?: float, subjects?: record}
 # --language_pairs item shape: {source_language?: string, target_language?: string}
+# --links shape: {self?: record, login_as?: record, projects?: record, responsivity?: record, stats?: record}
 # --mailing shape: {city?: string, country?: string, phone?: string, state?: string, street?: string, zip?: string}
 # --social_media shape: {facebook_url?: string, linkedIn_url?: string, twitter_url?: string}
 # --user_groups item shape: {corporate_id?: int, id?: int, name?: string, permissions?: list<string>}
@@ -7628,7 +7639,7 @@ export def "create-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --notify: oneof<nothing, bool> # Send a welcome email to the user (default: 1)
-  --billing: any
+  --billing: record # shape: {city?: string, country?: string, phone?: string, state?: string, street?: string, zip?: string, name?: string}
   --birthday: string # format: date
   --can-work-manual-files: oneof<nothing, bool> # \@deprecated. use `vendor` key (DEPRECATED)
   --city: string # \@deprecated. use mailing or billing key. (DEPRECATED)
@@ -7650,7 +7661,7 @@ export def "create-user" [
   --language-pairs: list # \@deprecated. use `vendor` key (DEPRECATED) — item shape: {source_language?: string, target_language?: string}
   --last-name: string
   --last-seen-online-at: int # Unix epoch time (format: int64)
-  --links: any
+  --links: record # shape: {self?: record, login_as?: record, projects?: record, responsivity?: record, stats?: record}
   --locale: string # User Locale
   --mailing: record # shape: {city?: string, country?: string, phone?: string, state?: string, street?: string, zip?: string}
   --name: string
@@ -8376,9 +8387,10 @@ export def "get-user-payment-info" [
 #
 # POST /{userId}/payment
 # operationId: updateUserPaymentInfo
+# --billing shape: {city?: string, country?: string, phone?: string, state?: string, street?: string, zip?: string, name?: string}
 # --card shape: {bin?: string, id?: int, is_default?: bool, payment_code?: string}
 # --cards item shape: {bin?: string, id?: int, is_default?: bool, payment_code?: string}
-# --corporate shape: {allow_api_invoicing?: bool, allow_payment_code?: bool, auto_charge?: bool, billing?: any, card?: record, contact_email_address?: string, payment_code?: string}
+# --corporate shape: {allow_api_invoicing?: bool, allow_payment_code?: bool, auto_charge?: bool, billing?: record, card?: record, contact_email_address?: string, payment_code?: string}
 # --shared_card shape: {bin?: string, id?: int, is_default?: bool, payment_code?: string}
 export def "update-user-payment-info" [
   user_id: int
@@ -8391,10 +8403,10 @@ export def "update-user-payment-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --billing: any
+  --billing: record # shape: {city?: string, country?: string, phone?: string, state?: string, street?: string, zip?: string, name?: string}
   --card: record # shape: {bin?: string, id?: int, is_default?: bool, payment_code?: string}
   --cards: list # item shape: {bin?: string, id?: int, is_default?: bool, payment_code?: string}
-  --corporate: record # shape: {allow_api_invoicing?: bool, allow_payment_code?: bool, auto_charge?: bool, billing?: any, card?: record, contact_email_address?: string, payment_code?: string}
+  --corporate: record # shape: {allow_api_invoicing?: bool, allow_payment_code?: bool, auto_charge?: bool, billing?: record, card?: record, contact_email_address?: string, payment_code?: string}
   --shared-card: record # shape: {bin?: string, id?: int, is_default?: bool, payment_code?: string}
 ]: any -> record<status: string> {
   let input = $in

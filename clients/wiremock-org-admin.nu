@@ -208,6 +208,7 @@ export def "get-admin-mappings" [
 #
 # POST /__admin/mappings
 # --request shape: {basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
+# --response shape: {additionalProxyRequestHeaders?: record, base64Body?: string, body?: string, bodyFileName?: string, delayDistribution?: any, fault?: "CONNECTION_RESET_BY_PEER"|"EMPTY_RESPONSE"|"MALFORMED_RESPONSE_CHUNK"|"RANDOM_DATA_THEN_CLOSE", fixedDelayMilliseconds?: int, fromConfiguredStub?: bool, headers?: record, jsonBody?: record, proxyBaseUrl?: string, status?: int, statusMessage?: string, transformerParameters?: record, transformers?: list<string>}
 export def "post-admin-mappings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -227,7 +228,7 @@ export def "post-admin-mappings" [
   --priority: int # This stub mapping's priority relative to others. 1 is highest.
   --request: record # e.g. {bodyPatterns: [{equalToJson: { "numbers": [1, 2, 3] }}], headers: {Content-Type: {equalTo: application/json}}, method: POST, url: /some/thing} — shape: {basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
   --required-scenario-state: string # The required state of the scenario in order for this stub to be matched.
-  --response: any
+  --response: record # shape: {additionalProxyRequestHeaders?: record, base64Body?: string, body?: string, bodyFileName?: string, delayDistribution?: any, fault?: "CONNECTION_RESET_BY_PEER"|"EMPTY_RESPONSE"|"MALFORMED_RESPONSE_CHUNK"|"RANDOM_DATA_THEN_CLOSE", fixedDelayMilliseconds?: int, fromConfiguredStub?: bool, headers?: record, jsonBody?: record, proxyBaseUrl?: string, status?: int, statusMessage?: string, transformerParameters?: record, transformers?: list<string>}
   --scenario-name: string # The name of the scenario that this stub mapping is part of
   --uuid: string # Alias for the id
 ]: any -> record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string> {
@@ -524,6 +525,7 @@ export def "get-admin-mappings-stub-mapping-id" [
 #
 # PUT /__admin/mappings/{stubMappingId}
 # --request shape: {basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
+# --response shape: {additionalProxyRequestHeaders?: record, base64Body?: string, body?: string, bodyFileName?: string, delayDistribution?: any, fault?: "CONNECTION_RESET_BY_PEER"|"EMPTY_RESPONSE"|"MALFORMED_RESPONSE_CHUNK"|"RANDOM_DATA_THEN_CLOSE", fixedDelayMilliseconds?: int, fromConfiguredStub?: bool, headers?: record, jsonBody?: record, proxyBaseUrl?: string, status?: int, statusMessage?: string, transformerParameters?: record, transformers?: list<string>}
 export def "put-admin-mappings-stub-mapping-id" [
   stub_mapping_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -544,7 +546,7 @@ export def "put-admin-mappings-stub-mapping-id" [
   --priority: int # This stub mapping's priority relative to others. 1 is highest.
   --request: record # e.g. {bodyPatterns: [{equalToJson: { "numbers": [1, 2, 3] }}], headers: {Content-Type: {equalTo: application/json}}, method: POST, url: /some/thing} — shape: {basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
   --required-scenario-state: string # The required state of the scenario in order for this stub to be matched.
-  --response: any
+  --response: record # shape: {additionalProxyRequestHeaders?: record, base64Body?: string, body?: string, bodyFileName?: string, delayDistribution?: any, fault?: "CONNECTION_RESET_BY_PEER"|"EMPTY_RESPONSE"|"MALFORMED_RESPONSE_CHUNK"|"RANDOM_DATA_THEN_CLOSE", fixedDelayMilliseconds?: int, fromConfiguredStub?: bool, headers?: record, jsonBody?: record, proxyBaseUrl?: string, status?: int, statusMessage?: string, transformerParameters?: record, transformers?: list<string>}
   --scenario-name: string # The name of the scenario that this stub mapping is part of
   --uuid: string # Alias for the id
 ]: any -> record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string> {
@@ -683,7 +685,7 @@ export def "post-admin-recordings-snapshot" [
   --request-body-pattern: record # Control the request body matcher used in generated stub mappings — shape: {caseInsensitive?: bool, ignoreArrayOrder?: bool, ignoreExtraElements?: bool, matcher?: "auto"}
   --transformer-parameters: record # List of names of stub mappings transformers to apply to generated stubs
   --transformers: list<string> # Parameters to pass to stub mapping transformers
-  --filters: record # shape: {ids?: list<string>, basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
+  --filters: record # Filter requests for which to create stub mapping — shape: {ids?: list<string>, basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
 ]: any -> record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -712,6 +714,7 @@ export def "post-admin-recordings-snapshot" [
 # POST /__admin/recordings/start
 # --extractBodyCriteria shape: {binarySizeThreshold?: string, textSizeThreshold?: string}
 # --requestBodyPattern shape: {caseInsensitive?: bool, ignoreArrayOrder?: bool, ignoreExtraElements?: bool, matcher?: "auto"}
+# --filters shape: {basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
 export def "post-admin-recordings-start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -729,7 +732,7 @@ export def "post-admin-recordings-start" [
   --request-body-pattern: record # Control the request body matcher used in generated stub mappings — shape: {caseInsensitive?: bool, ignoreArrayOrder?: bool, ignoreExtraElements?: bool, matcher?: "auto"}
   --transformer-parameters: record # List of names of stub mappings transformers to apply to generated stubs
   --transformers: list<string> # Parameters to pass to stub mapping transformers
-  --filters: any
+  --filters: record # Filter requests for which to create stub mapping — shape: {basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
   --target-base-url: string # Target URL when using the record and playback API (e.g. http://example.mocklab.io)
 ]: any -> any {
   let input = $in

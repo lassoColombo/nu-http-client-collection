@@ -158,19 +158,19 @@ export def "get-all-ap-is" [
   --name: string # Only return APIs whose name includes the given value. Matching is case insensitive. (e.g. {{name}})
   --summary: string # Only return APIs whose summary includes the given value. Matching is case insensitive. (e.g. {{summary}})
   --description: string # Only return APIs whose description includes the given value. Matching is case insensitive. (e.g. {{description}})
-  --qp-sort: string # The value of sort can be one of the names of the fields included in the response. (e.g. {{sort}})
+  --sort: string # The value of sort can be one of the names of the fields included in the response. (e.g. {{sort}})
   --direction: string # The sorting direction, which can be ascending or descending. The value can be asc to specify an ascending direction or desc to specify a descending direction. If none is specified, the default sorting direction is descending for timestamp and numeric fields and ascending otherwise. An ID is not considered a numeric field. (e.g. {{direction}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workspace" $workspace "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "createdBy" $created_by "scalar") (serialize-qp "updatedBy" $updated_by "scalar") (serialize-qp "isPublic" $is_public "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "summary" $summary "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "workspace" $workspace "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "createdBy" $created_by "scalar") (serialize-qp "updatedBy" $updated_by "scalar") (serialize-qp "isPublic" $is_public "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "summary" $summary "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apis" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"workspace": $workspace, "since": $since, "until": $until, "createdBy": $created_by, "updatedBy": $updated_by, "isPublic": $is_public, "name": $name, "summary": $summary, "description": $description, "sort": $qp_sort, "direction": $direction} | compact)
+    query: ({"workspace": $workspace, "since": $since, "until": $until, "createdBy": $created_by, "updatedBy": $updated_by, "isPublic": $is_public, "name": $name, "summary": $summary, "description": $description, "sort": $sort, "direction": $direction} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1190,14 +1190,14 @@ export def "merge-a-fork" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --destination: string # e.g. {{destination_collection_uid}}
-  --body-source: string # e.g. {{source_collection_uid}}
+  --source: string # e.g. {{source_collection_uid}}
   --strategy: string # e.g. deleteSource
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/collections/merge" $auth.query)
-  let req_body = {"destination": $destination, "source": $body_source, "strategy": $strategy} | compact
+  let req_body = {"destination": $destination, "source": $source, "strategy": $strategy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1567,14 +1567,14 @@ export def "import-external-api-specification" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --input: record # shape: {info?: record, openapi?: string, paths?: record, servers?: list}
+  --body-input: record # shape: {info?: record, openapi?: string, paths?: record, servers?: list}
   --type: string # e.g. json
 ]: any -> record<collections: table<id: string, name: string, uid: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/import/openapi" $auth.query)
-  let req_body = {"input": $input, "type": $type} | compact
+  let req_body = {"input": $body_input, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

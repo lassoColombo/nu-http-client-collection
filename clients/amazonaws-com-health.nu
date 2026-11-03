@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -100,6 +100,7 @@ def x-amz-target-completer [] { ["AWSHealth_20160804.DescribeAffectedAccountsFor
 def x-amz-target-completer-1 [] { ["AWSHealth_20160804.DescribeAffectedEntities"] }
 def x-amz-target-completer-2 [] { ["AWSHealth_20160804.DescribeAffectedEntitiesForOrganization"] }
 def x-amz-target-completer-3 [] { ["AWSHealth_20160804.DescribeEntityAggregates"] }
+def aggregate-field-completer [] { ["eventTypeCategory"] }
 def x-amz-target-completer-4 [] { ["AWSHealth_20160804.DescribeEventAggregates"] }
 def x-amz-target-completer-5 [] { ["AWSHealth_20160804.DescribeEventDetails"] }
 def x-amz-target-completer-6 [] { ["AWSHealth_20160804.DescribeEventDetailsForOrganization"] }
@@ -156,14 +157,15 @@ export def "describe-affected-accounts-for-organization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  event_arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<affectedAccounts: record, eventScopeCode: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  event_arn: string # The unique identifier for the event. The event ARN has the arn:aws:health:event-region::event/SERVICE/EVENT_TYPE_CODE/EVENT_TYPE_PLUS_ID format. For example, an event ARN might look like the following: arn:aws:health:us-east-1::event/EC2/EC2_INSTANCE_RETIREMENT_SCHEDULED/EC2_INSTANCE_RETIREMENT_SCHEDULED_ABC123-DEF456
+  --next-token-body: string # If the results of a search are large, only a portion of the results are returned, and a nextToken pagination token is returned in the response. To retrieve the next batch of results, reissue the search request and include the returned token. When all results have been returned, the response does not contain a pagination token value. (body field)
+  --max-results-body: int # The maximum number of items to return in one batch, between 10 and 100, inclusive. (body field)
+]: any -> record<affectedAccounts: list<string>, eventScopeCode: string, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHealth_20160804.DescribeAffectedAccountsForOrganization")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"eventArn": $event_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -190,6 +192,7 @@ export def "describe-affected-accounts-for-organization" [
 #
 # POST /
 # operationId: DescribeAffectedEntities
+# --filter shape: {eventArns: list<string>, entityArns?: list<string>, entityValues?: list<string>, lastUpdatedTimes?: list, tags?: list, statusCodes?: list<string>}
 export def "describe-affected-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -209,15 +212,16 @@ export def "describe-affected-entities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  filter: any
-  --locale: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<entities: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  filter: record # The values to use to filter results from the DescribeAffectedEntities (https://docs.aws.amazon.com/health/latest/APIReference/API_DescribeAffectedEntities.html) operation. — shape: {eventArns: list<string>, entityArns?: list<string>, entityValues?: list<string>, lastUpdatedTimes?: list, tags?: list, statusCodes?: list<string>}
+  --locale: string # The locale (language) to return information in. English (en) is the default and the only supported value at this time.
+  --next-token-body: string # If the results of a search are large, only a portion of the results are returned, and a nextToken pagination token is returned in the response. To retrieve the next batch of results, reissue the search request and include the returned token. When all results have been returned, the response does not contain a pagination token value. (body field)
+  --max-results-body: int # The maximum number of items to return in one batch, between 10 and 100, inclusive. (body field)
+]: any -> record<entities: table<entityArn: string, eventArn: string, entityValue: string, entityUrl: string, awsAccountId: string, lastUpdatedTime: string, statusCode: string, tags: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHealth_20160804.DescribeAffectedEntities")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"filter": $filter, "locale": $locale, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -244,6 +248,7 @@ export def "describe-affected-entities" [
 #
 # POST /
 # operationId: DescribeAffectedEntitiesForOrganization
+# --organizationEntityFilters item shape: {eventArn: string, awsAccountId?: string}
 export def "describe-affected-entities-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,15 +268,16 @@ export def "describe-affected-entities-for-organization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  organization_entity_filters: any
-  --locale: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<entities: record, failedSet: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  organization_entity_filters: list # A JSON set of elements including the awsAccountId and the eventArn. — item shape: {eventArn: string, awsAccountId?: string}
+  --locale: string # The locale (language) to return information in. English (en) is the default and the only supported value at this time.
+  --next-token-body: string # If the results of a search are large, only a portion of the results are returned, and a nextToken pagination token is returned in the response. To retrieve the next batch of results, reissue the search request and include the returned token. When all results have been returned, the response does not contain a pagination token value. (body field)
+  --max-results-body: int # The maximum number of items to return in one batch, between 10 and 100, inclusive. (body field)
+]: any -> record<entities: table<entityArn: string, eventArn: string, entityValue: string, entityUrl: string, awsAccountId: string, lastUpdatedTime: string, statusCode: string, tags: record>, failedSet: table<awsAccountId: string, eventArn: string, errorName: string, errorMessage: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHealth_20160804.DescribeAffectedEntitiesForOrganization")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"organizationEntityFilters": $organization_entity_filters, "locale": $locale, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -315,12 +321,13 @@ export def "describe-entity-aggregates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  --event-arns: any
-]: any -> record<entityAggregates: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  --event-arns: list<string> # A list of event ARNs (unique identifiers). For example: "arn:aws:health:us-east-1::event/EC2/EC2_INSTANCE_RETIREMENT_SCHEDULED/EC2_INSTANCE_RETIREMENT_SCHEDULED_ABC123-CDE456", "arn:aws:health:us-west-1::event/EBS/AWS_EBS_LOST_VOLUME/AWS_EBS_LOST_VOLUME_CHI789_JKL101"
+]: any -> record<entityAggregates: table<eventArn: string, count: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHealth_20160804.DescribeEntityAggregates")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"eventArns": $event_arns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -346,6 +353,7 @@ export def "describe-entity-aggregates" [
 #
 # POST /
 # operationId: DescribeEventAggregates
+# --filter shape: {eventArns?: list<string>, eventTypeCodes?: list<string>, services?: list<string>, regions?: list<string>, availabilityZones?: list<string>, startTimes?: list, endTimes?: list, lastUpdatedTimes?: list, entityArns?: list<string>, entityValues?: list<string>, eventTypeCategories?: list<string>, tags?: list, eventStatusCodes?: list<string>}
 export def "describe-event-aggregates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -365,15 +373,16 @@ export def "describe-event-aggregates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  --filter: any
-  aggregate_field: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<eventAggregates: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  --filter: record # The values to use to filter results from the DescribeEvents (https://docs.aws.amazon.com/health/latest/APIReference/API_DescribeEvents.html) and DescribeEventAggregates (https://docs.aws.amazon.com/health/latest/APIReference/API_DescribeEventAggregates.html) operations. — shape: {eventArns?: list<string>, eventTypeCodes?: list<string>, services?: list<string>, regions?: list<string>, availabilityZones?: list<string>, startTimes?: list, endTimes?: list, lastUpdatedTimes?: list, entityArns?: list<string>, entityValues?: list<string>, eventTypeCategories?: list<string>, tags?: list, eventStatusCodes?: list<string>}
+  aggregate_field: string@aggregate-field-completer # The only currently supported value is eventTypeCategory.
+  --max-results-body: int # The maximum number of items to return in one batch, between 10 and 100, inclusive. (body field)
+  --next-token-body: string # If the results of a search are large, only a portion of the results are returned, and a nextToken pagination token is returned in the response. To retrieve the next batch of results, reissue the search request and include the returned token. When all results have been returned, the response does not contain a pagination token value. (body field)
+]: any -> record<eventAggregates: table<aggregateValue: string, count: int>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHealth_20160804.DescribeEventAggregates")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"filter": $filter, "aggregateField": $aggregate_field, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
@@ -417,13 +426,14 @@ export def "describe-event-details" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  event_arns: any
-  --locale: any
-]: any -> record<successfulSet: record, failedSet: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  event_arns: list<string> # A list of event ARNs (unique identifiers). For example: "arn:aws:health:us-east-1::event/EC2/EC2_INSTANCE_RETIREMENT_SCHEDULED/EC2_INSTANCE_RETIREMENT_SCHEDULED_ABC123-CDE456", "arn:aws:health:us-west-1::event/EBS/AWS_EBS_LOST_VOLUME/AWS_EBS_LOST_VOLUME_CHI789_JKL101"
+  --locale: string # The locale (language) to return information in. English (en) is the default and the only supported value at this time.
+]: any -> record<successfulSet: table<event: record, eventDescription: record, eventMetadata: record>, failedSet: table<eventArn: string, errorName: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHealth_20160804.DescribeEventDetails")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"eventArns": $event_arns, "locale": $locale} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -449,6 +459,7 @@ export def "describe-event-details" [
 #
 # POST /
 # operationId: DescribeEventDetailsForOrganization
+# --organizationEventDetailFilters item shape: {eventArn: string, awsAccountId?: string}
 export def "describe-event-details-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -466,13 +477,14 @@ export def "describe-event-details-for-organization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  organization_event_detail_filters: any
-  --locale: any
-]: any -> record<successfulSet: record, failedSet: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  organization_event_detail_filters: list # A set of JSON elements that includes the awsAccountId and the eventArn. — item shape: {eventArn: string, awsAccountId?: string}
+  --locale: string # The locale (language) to return information in. English (en) is the default and the only supported value at this time.
+]: any -> record<successfulSet: table<awsAccountId: string, event: record, eventDescription: record, eventMetadata: record>, failedSet: table<awsAccountId: string, eventArn: string, errorName: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHealth_20160804.DescribeEventDetailsForOrganization")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"organizationEventDetailFilters": $organization_event_detail_filters, "locale": $locale} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -498,6 +510,7 @@ export def "describe-event-details-for-organization" [
 #
 # POST /
 # operationId: DescribeEventTypes
+# --filter shape: {eventTypeCodes?: list<string>, services?: list<string>, eventTypeCategories?: list<string>}
 export def "describe-event-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -517,15 +530,16 @@ export def "describe-event-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  --filter: any
-  --locale: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<eventTypes: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  --filter: record # The values to use to filter results from the DescribeEventTypes (https://docs.aws.amazon.com/health/latest/APIReference/API_DescribeEventTypes.html) operation. — shape: {eventTypeCodes?: list<string>, services?: list<string>, eventTypeCategories?: list<string>}
+  --locale: string # The locale (language) to return information in. English (en) is the default and the only supported value at this time.
+  --next-token-body: string # If the results of a search are large, only a portion of the results are returned, and a nextToken pagination token is returned in the response. To retrieve the next batch of results, reissue the search request and include the returned token. When all results have been returned, the response does not contain a pagination token value. (body field)
+  --max-results-body: int # The maximum number of items to return in one batch, between 10 and 100, inclusive. (body field)
+]: any -> record<eventTypes: table<service: string, code: string, category: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHealth_20160804.DescribeEventTypes")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"filter": $filter, "locale": $locale, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -552,6 +566,7 @@ export def "describe-event-types" [
 #
 # POST /
 # operationId: DescribeEvents
+# --filter shape: {eventArns?: list<string>, eventTypeCodes?: list<string>, services?: list<string>, regions?: list<string>, availabilityZones?: list<string>, startTimes?: list, endTimes?: list, lastUpdatedTimes?: list, entityArns?: list<string>, entityValues?: list<string>, eventTypeCategories?: list<string>, tags?: list, eventStatusCodes?: list<string>}
 export def "describe-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -571,15 +586,16 @@ export def "describe-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  --filter: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --locale: any
-]: any -> record<events: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  --filter: record # The values to use to filter results from the DescribeEvents (https://docs.aws.amazon.com/health/latest/APIReference/API_DescribeEvents.html) and DescribeEventAggregates (https://docs.aws.amazon.com/health/latest/APIReference/API_DescribeEventAggregates.html) operations. — shape: {eventArns?: list<string>, eventTypeCodes?: list<string>, services?: list<string>, regions?: list<string>, availabilityZones?: list<string>, startTimes?: list, endTimes?: list, lastUpdatedTimes?: list, entityArns?: list<string>, entityValues?: list<string>, eventTypeCategories?: list<string>, tags?: list, eventStatusCodes?: list<string>}
+  --next-token-body: string # If the results of a search are large, only a portion of the results are returned, and a nextToken pagination token is returned in the response. To retrieve the next batch of results, reissue the search request and include the returned token. When all results have been returned, the response does not contain a pagination token value. (body field)
+  --max-results-body: int # The maximum number of items to return in one batch, between 10 and 100, inclusive. (body field)
+  --locale: string # The locale (language) to return information in. English (en) is the default and the only supported value at this time.
+]: any -> record<events: table<arn: string, service: string, eventTypeCode: string, eventTypeCategory: string, region: string, availabilityZone: string, startTime: string, endTime: string, lastUpdatedTime: string, statusCode: string, eventScopeCode: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHealth_20160804.DescribeEvents")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"filter": $filter, "nextToken": $next_token_body, "maxResults": $max_results_body, "locale": $locale} | compact
@@ -606,6 +622,7 @@ export def "describe-events" [
 #
 # POST /
 # operationId: DescribeEventsForOrganization
+# --filter shape: {eventTypeCodes?: list<string>, awsAccountIds?: list<string>, services?: list<string>, regions?: list<string>, startTime?: record, endTime?: record, lastUpdatedTime?: record, entityArns?: list<string>, entityValues?: list<string>, eventTypeCategories?: list<string>, eventStatusCodes?: list<string>}
 export def "describe-events-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -625,15 +642,16 @@ export def "describe-events-for-organization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  --filter: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --locale: any
-]: any -> record<events: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  --filter: record # The values to filter results from the DescribeEventsForOrganization (https://docs.aws.amazon.com/health/latest/APIReference/API_DescribeEventsForOrganization.html) operation. — shape: {eventTypeCodes?: list<string>, awsAccountIds?: list<string>, services?: list<string>, regions?: list<string>, startTime?: record, endTime?: record, lastUpdatedTime?: record, entityArns?: list<string>, entityValues?: list<string>, eventTypeCategories?: list<string>, eventStatusCodes?: list<string>}
+  --next-token-body: string # If the results of a search are large, only a portion of the results are returned, and a nextToken pagination token is returned in the response. To retrieve the next batch of results, reissue the search request and include the returned token. When all results have been returned, the response does not contain a pagination token value. (body field)
+  --max-results-body: int # The maximum number of items to return in one batch, between 10 and 100, inclusive. (body field)
+  --locale: string # The locale (language) to return information in. English (en) is the default and the only supported value at this time.
+]: any -> record<events: table<arn: string, service: string, eventTypeCode: string, eventTypeCategory: string, eventScopeCode: string, region: string, startTime: string, endTime: string, lastUpdatedTime: string, statusCode: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHealth_20160804.DescribeEventsForOrganization")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"filter": $filter, "nextToken": $next_token_body, "maxResults": $max_results_body, "locale": $locale} | compact
@@ -677,10 +695,11 @@ export def "describe-health-service-status-for-organization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-]: nothing -> record<healthServiceAccessStatusForOrganization: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+]: nothing -> record<healthServiceAccessStatusForOrganization: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHealth_20160804.DescribeHealthServiceStatusForOrganization")
   let full_url = (build-url $base "/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -721,10 +740,11 @@ export def "disable-health-service-access-for-organization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
+  --x-amz-target: string@x-amz-target-completer-11 # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHealth_20160804.DisableHealthServiceAccessForOrganization")
   let full_url = (build-url $base "/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -765,10 +785,11 @@ export def "enable-health-service-access-for-organization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
+  --x-amz-target: string@x-amz-target-completer-12 # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHealth_20160804.EnableHealthServiceAccessForOrganization")
   let full_url = (build-url $base "/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

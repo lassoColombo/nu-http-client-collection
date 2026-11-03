@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -161,13 +161,14 @@ export def "check-name-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview. (required)
   --name: string # the name to check for availability
   --type: string@type-completer # fully qualified resource type which includes provider namespace
 ]: any -> record<message: string, nameAvailable: bool, reason: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Management/checkNameAvailability" $qp $auth.query)
   let req_body = {"name": $name, "type": $type} | compact
@@ -202,7 +203,7 @@ export def "entities-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview. (required)
   --skiptoken: string # Page continuation token is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a token parameter that specifies a starting point to use for subsequent calls.
   --skip: int # Number of entities to skip over when retrieving results. Passing this in will override $skipToken.
   --top: int # Number of elements to return when retrieving results. Passing this in will override $skipToken.
@@ -211,10 +212,11 @@ export def "entities-list" [
   --filter: string # The filter parameter allows you to filter on the name or display name fields. You can check for equality on the name field (e.g. name eq '{entityName}') and you can check for substrings on either the name or display name fields(e.g. contains(name, '{substringToSearch}'), contains(displayName, '{substringToSearch')). Note that the '{entityName}' and '{substringToSearch}' fields are checked case insensitively.
   --view: string@view-completer # The view parameter allows clients to filter the type of data that is returned by the getEntities call.
   --group-name: string # A filter which allows the get entities call to focus on a particular group (i.e. "$filter=name eq 'groupName'")
-  --cache-control: string # Indicates that the request shouldn't utilize any caches.
+  --cache-control: string # Indicates that the request shouldn't utilize any caches. (default: no-cache)
 ]: nothing -> record<count: int, nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$search" $search "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$view" $view "scalar") (serialize-qp "groupName" $group_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Management/getEntities" $qp $auth.query)
   let accept_val = "application/json"
@@ -249,12 +251,13 @@ export def "management-groups-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview. (required)
   --skiptoken: string # Page continuation token is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a token parameter that specifies a starting point to use for subsequent calls.
-  --cache-control: string # Indicates that the request shouldn't utilize any caches.
+  --cache-control: string # Indicates that the request shouldn't utilize any caches. (default: no-cache)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Management/managementGroups" $qp $auth.query)
   let accept_val = "application/json"
@@ -290,12 +293,13 @@ export def "management-groups-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
-  --cache-control: string # Indicates that the request shouldn't utilize any caches.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview. (required)
+  --cache-control: string # Indicates that the request shouldn't utilize any caches. (default: no-cache)
 ]: nothing -> record<id: string, name: string, properties: record<provisioningState: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -331,15 +335,16 @@ export def "management-groups-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview. (required)
   --expand: string@expand-completer # The $expand=children query string parameter allows clients to request inclusion of children in the response payload.
   --recurse: oneof<nothing, bool> # The $recurse=true query string parameter allows clients to request inclusion of entire hierarchy in the response payload. Note that $expand=children must be passed up if $recurse is set to true.
   --filter: string # A filter which allows the exclusion of subscriptions from results (i.e. '$filter=children.childType ne Subscription')
-  --cache-control: string # Indicates that the request shouldn't utilize any caches.
+  --cache-control: string # Indicates that the request shouldn't utilize any caches. (default: no-cache)
 ]: nothing -> record<id: string, name: string, properties: record<children: list<record>, details: record<parent: record, updatedBy: string, updatedTime: string, version: float>, displayName: string, roles: list<string>, tenantId: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$recurse" $recurse "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -375,8 +380,8 @@ export def "management-groups-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
-  --cache-control: string # Indicates that the request shouldn't utilize any caches.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview. (required)
+  --cache-control: string # Indicates that the request shouldn't utilize any caches. (default: no-cache)
   --display-name: string # The friendly name of the management group.
   --parent-id: string # (Optional) The fully qualified ID for the parent management group. For example, /providers/Microsoft.Management/managementGroups/0000000-0000-0000-0000-000000000000
 ]: any -> record<id: string, name: string, properties: record<children: list<record>, details: record<parent: record, updatedBy: string, updatedTime: string, version: float>, displayName: string, roles: list<string>, tenantId: string>, type: string> {
@@ -384,6 +389,7 @@ export def "management-groups-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}") $qp $auth.query)
   let req_body = {"displayName": $display_name, "parentId": $parent_id} | compact
@@ -422,8 +428,8 @@ export def "management-groups-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
-  --cache-control: string # Indicates that the request shouldn't utilize any caches.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview. (required)
+  --cache-control: string # Indicates that the request shouldn't utilize any caches. (default: no-cache)
   --name: string # The name of the management group. For example, 00000000-0000-0000-0000-000000000000
   --properties: record # The generic properties of a management group used during creation. — shape: {details?: record, displayName?: string}
 ]: any -> record<id: string, name: string, properties: record<children: list<record>, details: record<parent: record, updatedBy: string, updatedTime: string, version: float>, displayName: string, roles: list<string>, tenantId: string>, type: string> {
@@ -431,6 +437,7 @@ export def "management-groups-create-or-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}") $qp $auth.query)
   let req_body = {"name": $name, "properties": $properties} | compact
@@ -468,13 +475,14 @@ export def "management-groups-get-descendants" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview. (required)
   --skiptoken: string # Page continuation token is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a token parameter that specifies a starting point to use for subsequent calls.
   --top: int # Number of elements to return when retrieving results. Passing this in will override $skipToken.
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}/descendants") $qp $auth.query)
   let accept_val = "application/json"
@@ -509,13 +517,14 @@ export def "management-group-subscriptions-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
-  --cache-control: string # Indicates that the request shouldn't utilize any caches.
-]: nothing -> record<error: record<code: string, details: string, message: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview. (required)
+  --cache-control: string # Indicates that the request shouldn't utilize any caches. (default: no-cache)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}/subscriptions/{subscription_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -552,13 +561,14 @@ export def "management-group-subscriptions-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
-  --cache-control: string # Indicates that the request shouldn't utilize any caches.
-]: nothing -> record<error: record<code: string, details: string, message: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview. (required)
+  --cache-control: string # Indicates that the request shouldn't utilize any caches. (default: no-cache)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}/subscriptions/{subscription_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -593,10 +603,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Management/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -629,10 +640,11 @@ export def "start-tenant-backfill" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview. (required)
 ]: nothing -> record<status: string, tenantId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Management/startTenantBackfill" $qp $auth.query)
   let accept_val = "application/json"
@@ -665,10 +677,11 @@ export def "tenant-backfill-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview. (required)
 ]: nothing -> record<status: string, tenantId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Management/tenantBackfillStatus" $qp $auth.query)
   let accept_val = "application/json"

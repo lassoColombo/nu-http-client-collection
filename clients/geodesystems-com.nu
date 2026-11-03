@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -133,12 +133,14 @@ export def "media-tabular-extractsheet" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --output: string # Output type -don't change (default: media_tabular_extractsheet)
-  --entryid: string # Entry ID
+  --output: string # Output type -don't change (required, default: media_tabular_extractsheet)
+  --entryid: string # Entry ID (required)
   --arg1: string # Sheets
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  let output = ($output | default "media_tabular_extractsheet")
+  if ($entryid == null) { error make --unspanned { msg: "required query parameter 'entryid' missing: pass --entryid" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "entryid" $entryid "scalar") (serialize-qp "arg1" $arg1 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/entry/show" $qp $auth.query)
   let accept_val = "application/json"

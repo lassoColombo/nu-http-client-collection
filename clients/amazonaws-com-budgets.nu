@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -98,6 +98,8 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def x-amz-target-completer [] { ["AWSBudgetServiceGateway.CreateBudget"] }
 def notification-type-completer [] { ["ACTUAL" "FORECASTED"] }
+def action-type-completer [] { ["APPLY_IAM_POLICY" "APPLY_SCP_POLICY" "RUN_SSM_DOCUMENTS"] }
+def approval-model-completer [] { ["AUTOMATIC" "MANUAL"] }
 def x-amz-target-completer-1 [] { ["AWSBudgetServiceGateway.CreateBudgetAction"] }
 def x-amz-target-completer-2 [] { ["AWSBudgetServiceGateway.CreateNotification"] }
 def x-amz-target-completer-3 [] { ["AWSBudgetServiceGateway.CreateSubscriber"] }
@@ -115,6 +117,7 @@ def x-amz-target-completer-14 [] { ["AWSBudgetServiceGateway.DescribeBudgetPerfo
 def x-amz-target-completer-15 [] { ["AWSBudgetServiceGateway.DescribeBudgets"] }
 def x-amz-target-completer-16 [] { ["AWSBudgetServiceGateway.DescribeNotificationsForBudget"] }
 def x-amz-target-completer-17 [] { ["AWSBudgetServiceGateway.DescribeSubscribersForNotification"] }
+def execution-type-completer [] { ["APPROVE_BUDGET_ACTION" "RESET_BUDGET_ACTION" "RETRY_BUDGET_ACTION" "REVERSE_BUDGET_ACTION"] }
 def x-amz-target-completer-18 [] { ["AWSBudgetServiceGateway.ExecuteBudgetAction"] }
 def x-amz-target-completer-19 [] { ["AWSBudgetServiceGateway.UpdateBudget"] }
 def x-amz-target-completer-20 [] { ["AWSBudgetServiceGateway.UpdateBudgetAction"] }
@@ -148,6 +151,8 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateBudget
+# --Budget shape: {BudgetName: string, BudgetLimit?: record, PlannedBudgetLimits?: record, CostFilters?: record, CostTypes?: record, TimeUnit: "DAILY"|"MONTHLY"|"QUARTERLY"|"ANNUALLY", TimePeriod?: record, CalculatedSpend?: record, BudgetType: "USAGE"|"COST"|"RI_UTILIZATION"|"RI_COVERAGE"|"SAVINGS_PLANS_UTILIZATION"|"SAVINGS_PLANS_COVERAGE", LastUpdatedTime?: string, AutoAdjustData?: record}
+# --NotificationsWithSubscribers item shape: {Notification: record, Subscribers: list}
 export def "create-budget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -165,14 +170,15 @@ export def "create-budget" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  account_id: any
-  budget: any
-  --notifications-with-subscribers: any
+  --x-amz-target: string@x-amz-target-completer # required
+  account_id: string # The account ID of the user. It's a 12-digit number.
+  budget: record # Represents the output of the CreateBudget operation. The content consists of the detailed metadata and data file information, and the current status of the budget object. This is the Amazon Resource Name (ARN) pattern for a budget: arn:aws:budgets::AccountId:budget/budgetName — shape: {BudgetName: string, BudgetLimit?: record, PlannedBudgetLimits?: record, CostFilters?: record, CostTypes?: record, TimeUnit: "DAILY"|"MONTHLY"|"QUARTERLY"|"ANNUALLY", TimePeriod?: record, CalculatedSpend?: record, BudgetType: "USAGE"|"COST"|"RI_UTILIZATION"|"RI_COVERAGE"|"SAVINGS_PLANS_UTILIZATION"|"SAVINGS_PLANS_COVERAGE", LastUpdatedTime?: string, AutoAdjustData?: record}
+  --notifications-with-subscribers: list # A list of notifications, each with a list of subscribers. — item shape: {Notification: record, Subscribers: list}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.CreateBudget")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "Budget": $budget, "NotificationsWithSubscribers": $notifications_with_subscribers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -199,8 +205,8 @@ export def "create-budget" [
 # POST /
 # operationId: CreateBudgetAction
 # --ActionThreshold shape: {ActionThresholdValue: float, ActionThresholdType: "PERCENTAGE"|"ABSOLUTE_VALUE"}
-# --Definition shape: {IamActionDefinition?: any, ScpActionDefinition?: any, SsmActionDefinition?: any}
-# --Subscribers item shape: {SubscriptionType: any, Address: any}
+# --Definition shape: {IamActionDefinition?: record, ScpActionDefinition?: record, SsmActionDefinition?: record}
+# --Subscribers item shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
 export def "create-budget-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -218,20 +224,21 @@ export def "create-budget-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
+  --x-amz-target: string@x-amz-target-completer-1 # required
   account_id: string # The account ID of the user. It's a 12-digit number.
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
   notification_type: string@notification-type-completer # The type of a notification. It must be ACTUAL or FORECASTED.
-  action_type: any
+  action_type: string@action-type-completer # The type of action. This defines the type of tasks that can be carried out by this action. This field also determines the format for definition.
   action_threshold: record # The trigger threshold of the action. — shape: {ActionThresholdValue: float, ActionThresholdType: "PERCENTAGE"|"ABSOLUTE_VALUE"}
-  definition: record # Specifies all of the type-specific parameters. — shape: {IamActionDefinition?: any, ScpActionDefinition?: any, SsmActionDefinition?: any}
-  execution_role_arn: any
-  approval_model: any
-  subscribers: list # A list of subscribers. — item shape: {SubscriptionType: any, Address: any}
-]: any -> record<AccountId: string, BudgetName: string, ActionId: record> {
+  definition: record # Specifies all of the type-specific parameters. — shape: {IamActionDefinition?: record, ScpActionDefinition?: record, SsmActionDefinition?: record}
+  execution_role_arn: string # The role passed for action execution and reversion. Roles and actions must be in the same account.
+  approval_model: string@approval-model-completer # This specifies if the action needs manual or automatic approval.
+  subscribers: list # A list of subscribers. — item shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
+]: any -> record<AccountId: string, BudgetName: string, ActionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.CreateBudgetAction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "NotificationType": $notification_type, "ActionType": $action_type, "ActionThreshold": $action_threshold, "Definition": $definition, "ExecutionRoleArn": $execution_role_arn, "ApprovalModel": $approval_model, "Subscribers": $subscribers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -257,6 +264,8 @@ export def "create-budget-action" [
 #
 # POST /
 # operationId: CreateNotification
+# --Notification shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
+# --Subscribers item shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
 export def "create-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -274,15 +283,16 @@ export def "create-notification" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  account_id: any
-  budget_name: any
-  notification: any
-  subscribers: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  account_id: string # The account ID of the user. It's a 12-digit number.
+  budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
+  notification: record # A notification that's associated with a budget. A budget can have up to ten notifications. Each notification must have at least one subscriber. A notification can have one SNS subscriber and up to 10 email subscribers, for a total of 11 subscribers. For example, if you have a budget for 200 dollars and you want to be notified when you go over 160 dollars, create a notification with the following parameters: A notificationType of ACTUAL A thresholdType of PERCENTAGE A comparisonOperator of GREATER_THAN A notification threshold of 80 — shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
+  subscribers: list # A list of subscribers. — item shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.CreateNotification")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "Notification": $notification, "Subscribers": $subscribers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -308,6 +318,8 @@ export def "create-notification" [
 #
 # POST /
 # operationId: CreateSubscriber
+# --Notification shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
+# --Subscriber shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
 export def "create-subscriber" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -325,15 +337,16 @@ export def "create-subscriber" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  account_id: any
-  budget_name: any
-  notification: any
-  subscriber: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  account_id: string # The account ID of the user. It's a 12-digit number.
+  budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
+  notification: record # A notification that's associated with a budget. A budget can have up to ten notifications. Each notification must have at least one subscriber. A notification can have one SNS subscriber and up to 10 email subscribers, for a total of 11 subscribers. For example, if you have a budget for 200 dollars and you want to be notified when you go over 160 dollars, create a notification with the following parameters: A notificationType of ACTUAL A thresholdType of PERCENTAGE A comparisonOperator of GREATER_THAN A notification threshold of 80 — shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
+  subscriber: record # The subscriber to a budget notification. The subscriber consists of a subscription type and either an Amazon SNS topic or an email address. For example, an email subscriber has the following parameters: A subscriptionType of EMAIL An address of example@example.com — shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.CreateSubscriber")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "Notification": $notification, "Subscriber": $subscriber} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -376,13 +389,14 @@ export def "delete-budget" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  account_id: any
-  budget_name: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  account_id: string # The account ID of the user. It's a 12-digit number.
+  budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DeleteBudget")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -425,14 +439,15 @@ export def "delete-budget-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
+  --x-amz-target: string@x-amz-target-completer-5 # required
   account_id: string # The account ID of the user. It's a 12-digit number.
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
-  action_id: any
-]: any -> record<AccountId: string, BudgetName: string, Action: record<ActionId: record, BudgetName: string, NotificationType: string, ActionType: record, ActionThreshold: record<ActionThresholdValue: float, ActionThresholdType: string>, Definition: record<IamActionDefinition: record, ScpActionDefinition: record, SsmActionDefinition: record>, ExecutionRoleArn: record, ApprovalModel: record, Status: record, Subscribers: list<record>>> {
+  action_id: string # A system-generated universally unique identifier (UUID) for the action.
+]: any -> record<AccountId: string, BudgetName: string, Action: record<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record<ActionThresholdValue: float, ActionThresholdType: string>, Definition: record<IamActionDefinition: record, ScpActionDefinition: record, SsmActionDefinition: record>, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DeleteBudgetAction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "ActionId": $action_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -458,6 +473,7 @@ export def "delete-budget-action" [
 #
 # POST /
 # operationId: DeleteNotification
+# --Notification shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
 export def "delete-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,14 +491,15 @@ export def "delete-notification" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  account_id: any
-  budget_name: any
-  notification: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  account_id: string # The account ID of the user. It's a 12-digit number.
+  budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
+  notification: record # A notification that's associated with a budget. A budget can have up to ten notifications. Each notification must have at least one subscriber. A notification can have one SNS subscriber and up to 10 email subscribers, for a total of 11 subscribers. For example, if you have a budget for 200 dollars and you want to be notified when you go over 160 dollars, create a notification with the following parameters: A notificationType of ACTUAL A thresholdType of PERCENTAGE A comparisonOperator of GREATER_THAN A notification threshold of 80 — shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DeleteNotification")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "Notification": $notification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -508,6 +525,8 @@ export def "delete-notification" [
 #
 # POST /
 # operationId: DeleteSubscriber
+# --Notification shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
+# --Subscriber shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
 export def "delete-subscriber" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -525,15 +544,16 @@ export def "delete-subscriber" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  account_id: any
-  budget_name: any
-  notification: any
-  subscriber: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  account_id: string # The account ID of the user. It's a 12-digit number.
+  budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
+  notification: record # A notification that's associated with a budget. A budget can have up to ten notifications. Each notification must have at least one subscriber. A notification can have one SNS subscriber and up to 10 email subscribers, for a total of 11 subscribers. For example, if you have a budget for 200 dollars and you want to be notified when you go over 160 dollars, create a notification with the following parameters: A notificationType of ACTUAL A thresholdType of PERCENTAGE A comparisonOperator of GREATER_THAN A notification threshold of 80 — shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
+  subscriber: record # The subscriber to a budget notification. The subscriber consists of a subscription type and either an Amazon SNS topic or an email address. For example, an email subscriber has the following parameters: A subscriptionType of EMAIL An address of example@example.com — shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DeleteSubscriber")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "Notification": $notification, "Subscriber": $subscriber} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -576,13 +596,14 @@ export def "describe-budget" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  account_id: any
-  budget_name: any
-]: any -> record<Budget: record<BudgetName: record, BudgetLimit: record<Amount: record, Unit: record>, PlannedBudgetLimits: record, CostFilters: record, CostTypes: record<IncludeTax: record, IncludeSubscription: record, UseBlended: record, IncludeRefund: record, IncludeCredit: record, IncludeUpfront: record, IncludeRecurring: record, IncludeOtherSubscription: record, IncludeSupport: record, IncludeDiscount: record, UseAmortized: record>, TimeUnit: record, TimePeriod: record<Start: record, End: record>, CalculatedSpend: record<ActualSpend: record, ForecastedSpend: record>, BudgetType: record, LastUpdatedTime: record, AutoAdjustData: record<AutoAdjustType: record, HistoricalOptions: record, LastAutoAdjustTime: record>>> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  account_id: string # The account ID of the user. It's a 12-digit number.
+  budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
+]: any -> record<Budget: record<BudgetName: string, BudgetLimit: record<Amount: string, Unit: string>, PlannedBudgetLimits: record, CostFilters: record, CostTypes: record<IncludeTax: bool, IncludeSubscription: bool, UseBlended: bool, IncludeRefund: bool, IncludeCredit: bool, IncludeUpfront: bool, IncludeRecurring: bool, IncludeOtherSubscription: bool, IncludeSupport: bool, IncludeDiscount: bool, UseAmortized: bool>, TimeUnit: string, TimePeriod: record<Start: string, End: string>, CalculatedSpend: record<ActualSpend: record, ForecastedSpend: record>, BudgetType: string, LastUpdatedTime: string, AutoAdjustData: record<AutoAdjustType: string, HistoricalOptions: record, LastAutoAdjustTime: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeBudget")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -625,14 +646,15 @@ export def "describe-budget-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
+  --x-amz-target: string@x-amz-target-completer-9 # required
   account_id: string # The account ID of the user. It's a 12-digit number.
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
-  action_id: any
-]: any -> record<AccountId: string, BudgetName: string, Action: record<ActionId: record, BudgetName: string, NotificationType: string, ActionType: record, ActionThreshold: record<ActionThresholdValue: float, ActionThresholdType: string>, Definition: record<IamActionDefinition: record, ScpActionDefinition: record, SsmActionDefinition: record>, ExecutionRoleArn: record, ApprovalModel: record, Status: record, Subscribers: list<record>>> {
+  action_id: string # A system-generated universally unique identifier (UUID) for the action.
+]: any -> record<AccountId: string, BudgetName: string, Action: record<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record<ActionThresholdValue: float, ActionThresholdType: string>, Definition: record<IamActionDefinition: record, ScpActionDefinition: record, SsmActionDefinition: record>, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeBudgetAction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "ActionId": $action_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -658,7 +680,7 @@ export def "describe-budget-action" [
 #
 # POST /
 # operationId: DescribeBudgetActionHistories
-# --TimePeriod shape: {Start?: any, End?: any}
+# --TimePeriod shape: {Start?: string, End?: string}
 export def "describe-budget-action-histories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -678,17 +700,18 @@ export def "describe-budget-action-histories" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
+  --x-amz-target: string@x-amz-target-completer-10 # required
   account_id: string # The account ID of the user. It's a 12-digit number.
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
-  action_id: any
-  --time-period: record # The period of time that's covered by a budget. The period has a start date and an end date. The start date must come before the end date. There are no restrictions on the end date. — shape: {Start?: any, End?: any}
+  action_id: string # A system-generated universally unique identifier (UUID) for the action.
+  --time-period: record # The period of time that's covered by a budget. The period has a start date and an end date. The start date must come before the end date. There are no restrictions on the end date. — shape: {Start?: string, End?: string}
   --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
   --next-token-body: string # A generic string. (body field)
-]: any -> record<ActionHistories: record, NextToken: string> {
+]: any -> record<ActionHistories: table<Timestamp: string, Status: string, EventType: string, ActionHistoryDetails: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeBudgetActionHistories")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "ActionId": $action_id, "TimePeriod": $time_period, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -734,14 +757,15 @@ export def "describe-budget-actions-for-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
+  --x-amz-target: string@x-amz-target-completer-11 # required
   account_id: string # The account ID of the user. It's a 12-digit number.
   --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
   --next-token-body: string # A generic string. (body field)
-]: any -> record<Actions: record, NextToken: string> {
+]: any -> record<Actions: table<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record, Definition: record, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeBudgetActionsForAccount")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"AccountId": $account_id, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -787,15 +811,16 @@ export def "describe-budget-actions-for-budget" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
+  --x-amz-target: string@x-amz-target-completer-12 # required
   account_id: string # The account ID of the user. It's a 12-digit number.
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
   --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
   --next-token-body: string # A generic string. (body field)
-]: any -> record<Actions: record, NextToken: string> {
+]: any -> record<Actions: table<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record, Definition: record, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeBudgetActionsForBudget")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -841,14 +866,15 @@ export def "describe-budget-notifications-for-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
+  --x-amz-target: string@x-amz-target-completer-13 # required
   account_id: string # The account ID of the user. It's a 12-digit number.
-  --max-results-body: any #  (body field)
+  --max-results-body: int # An integer that shows how many budget name entries a paginated response contains. (body field)
   --next-token-body: string # A generic string. (body field)
-]: any -> record<BudgetNotificationsForAccount: record, NextToken: string> {
+]: any -> record<BudgetNotificationsForAccount: table<Notifications: list, BudgetName: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeBudgetNotificationsForAccount")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"AccountId": $account_id, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -875,6 +901,7 @@ export def "describe-budget-notifications-for-account" [
 #
 # POST /
 # operationId: DescribeBudgetPerformanceHistory
+# --TimePeriod shape: {Start?: string, End?: string}
 export def "describe-budget-performance-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -894,16 +921,17 @@ export def "describe-budget-performance-history" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
+  --x-amz-target: string@x-amz-target-completer-14 # required
   account_id: string # The account ID of the user. It's a 12-digit number.
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
-  --time-period: any
+  --time-period: record # The period of time that's covered by a budget. The period has a start date and an end date. The start date must come before the end date. There are no restrictions on the end date. — shape: {Start?: string, End?: string}
   --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
   --next-token-body: string # A generic string. (body field)
-]: any -> record<BudgetPerformanceHistory: record<BudgetName: string, BudgetType: string, CostFilters: record, CostTypes: record<IncludeTax: record, IncludeSubscription: record, UseBlended: record, IncludeRefund: record, IncludeCredit: record, IncludeUpfront: record, IncludeRecurring: record, IncludeOtherSubscription: record, IncludeSupport: record, IncludeDiscount: record, UseAmortized: record>, TimeUnit: string, BudgetedAndActualAmountsList: record>, NextToken: string> {
+]: any -> record<BudgetPerformanceHistory: record<BudgetName: string, BudgetType: string, CostFilters: record, CostTypes: record<IncludeTax: bool, IncludeSubscription: bool, UseBlended: bool, IncludeRefund: bool, IncludeCredit: bool, IncludeUpfront: bool, IncludeRecurring: bool, IncludeOtherSubscription: bool, IncludeSupport: bool, IncludeDiscount: bool, UseAmortized: bool>, TimeUnit: string, BudgetedAndActualAmountsList: list<record>>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeBudgetPerformanceHistory")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "TimePeriod": $time_period, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -949,14 +977,15 @@ export def "describe-budgets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  account_id: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Budgets: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  account_id: string # The account ID of the user. It's a 12-digit number.
+  --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
+  --next-token-body: string # A generic string. (body field)
+]: any -> record<Budgets: table<BudgetName: string, BudgetLimit: record, PlannedBudgetLimits: record, CostFilters: record, CostTypes: record, TimeUnit: string, TimePeriod: record, CalculatedSpend: record, BudgetType: string, LastUpdatedTime: string, AutoAdjustData: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeBudgets")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"AccountId": $account_id, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1002,15 +1031,16 @@ export def "describe-notifications-for-budget" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  account_id: any
-  budget_name: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Notifications: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  account_id: string # The account ID of the user. It's a 12-digit number.
+  budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
+  --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
+  --next-token-body: string # A generic string. (body field)
+]: any -> record<Notifications: table<NotificationType: string, ComparisonOperator: string, Threshold: float, ThresholdType: string, NotificationState: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeNotificationsForBudget")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1037,6 +1067,7 @@ export def "describe-notifications-for-budget" [
 #
 # POST /
 # operationId: DescribeSubscribersForNotification
+# --Notification shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
 export def "describe-subscribers-for-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1056,16 +1087,17 @@ export def "describe-subscribers-for-notification" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  account_id: any
-  budget_name: any
-  notification: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Subscribers: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  account_id: string # The account ID of the user. It's a 12-digit number.
+  budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
+  notification: record # A notification that's associated with a budget. A budget can have up to ten notifications. Each notification must have at least one subscriber. A notification can have one SNS subscriber and up to 10 email subscribers, for a total of 11 subscribers. For example, if you have a budget for 200 dollars and you want to be notified when you go over 160 dollars, create a notification with the following parameters: A notificationType of ACTUAL A thresholdType of PERCENTAGE A comparisonOperator of GREATER_THAN A notification threshold of 80 — shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
+  --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
+  --next-token-body: string # A generic string. (body field)
+]: any -> record<Subscribers: table<SubscriptionType: string, Address: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeSubscribersForNotification")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "Notification": $notification, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1109,15 +1141,16 @@ export def "execute-budget-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
+  --x-amz-target: string@x-amz-target-completer-18 # required
   account_id: string # The account ID of the user. It's a 12-digit number.
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
-  action_id: any
-  execution_type: any
-]: any -> record<AccountId: string, BudgetName: string, ActionId: record, ExecutionType: record> {
+  action_id: string # A system-generated universally unique identifier (UUID) for the action.
+  execution_type: string@execution-type-completer # The type of execution.
+]: any -> record<AccountId: string, BudgetName: string, ActionId: string, ExecutionType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.ExecuteBudgetAction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "ActionId": $action_id, "ExecutionType": $execution_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1143,6 +1176,7 @@ export def "execute-budget-action" [
 #
 # POST /
 # operationId: UpdateBudget
+# --NewBudget shape: {BudgetName: string, BudgetLimit?: record, PlannedBudgetLimits?: record, CostFilters?: record, CostTypes?: record, TimeUnit: "DAILY"|"MONTHLY"|"QUARTERLY"|"ANNUALLY", TimePeriod?: record, CalculatedSpend?: record, BudgetType: "USAGE"|"COST"|"RI_UTILIZATION"|"RI_COVERAGE"|"SAVINGS_PLANS_UTILIZATION"|"SAVINGS_PLANS_COVERAGE", LastUpdatedTime?: string, AutoAdjustData?: record}
 export def "update-budget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1160,13 +1194,14 @@ export def "update-budget" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  account_id: any
-  new_budget: any
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  account_id: string # The account ID of the user. It's a 12-digit number.
+  new_budget: record # Represents the output of the CreateBudget operation. The content consists of the detailed metadata and data file information, and the current status of the budget object. This is the Amazon Resource Name (ARN) pattern for a budget: arn:aws:budgets::AccountId:budget/budgetName — shape: {BudgetName: string, BudgetLimit?: record, PlannedBudgetLimits?: record, CostFilters?: record, CostTypes?: record, TimeUnit: "DAILY"|"MONTHLY"|"QUARTERLY"|"ANNUALLY", TimePeriod?: record, CalculatedSpend?: record, BudgetType: "USAGE"|"COST"|"RI_UTILIZATION"|"RI_COVERAGE"|"SAVINGS_PLANS_UTILIZATION"|"SAVINGS_PLANS_COVERAGE", LastUpdatedTime?: string, AutoAdjustData?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.UpdateBudget")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "NewBudget": $new_budget} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1193,8 +1228,8 @@ export def "update-budget" [
 # POST /
 # operationId: UpdateBudgetAction
 # --ActionThreshold shape: {ActionThresholdValue: float, ActionThresholdType: "PERCENTAGE"|"ABSOLUTE_VALUE"}
-# --Definition shape: {IamActionDefinition?: any, ScpActionDefinition?: any, SsmActionDefinition?: any}
-# --Subscribers item shape: {SubscriptionType: any, Address: any}
+# --Definition shape: {IamActionDefinition?: record, ScpActionDefinition?: record, SsmActionDefinition?: record}
+# --Subscribers item shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
 export def "update-budget-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1212,20 +1247,21 @@ export def "update-budget-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
+  --x-amz-target: string@x-amz-target-completer-20 # required
   account_id: string # The account ID of the user. It's a 12-digit number.
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
-  action_id: any
+  action_id: string # A system-generated universally unique identifier (UUID) for the action.
   --notification-type: string@notification-type-completer # The type of a notification. It must be ACTUAL or FORECASTED.
   --action-threshold: record # The trigger threshold of the action. — shape: {ActionThresholdValue: float, ActionThresholdType: "PERCENTAGE"|"ABSOLUTE_VALUE"}
-  --definition: record # Specifies all of the type-specific parameters. — shape: {IamActionDefinition?: any, ScpActionDefinition?: any, SsmActionDefinition?: any}
-  --execution-role-arn: any
-  --approval-model: any
-  --subscribers: list # A list of subscribers. — item shape: {SubscriptionType: any, Address: any}
-]: any -> record<AccountId: string, BudgetName: string, OldAction: record<ActionId: record, BudgetName: string, NotificationType: string, ActionType: record, ActionThreshold: record<ActionThresholdValue: float, ActionThresholdType: string>, Definition: record<IamActionDefinition: record, ScpActionDefinition: record, SsmActionDefinition: record>, ExecutionRoleArn: record, ApprovalModel: record, Status: record, Subscribers: list<record>>, NewAction: record<ActionId: record, BudgetName: string, NotificationType: string, ActionType: record, ActionThreshold: record<ActionThresholdValue: float, ActionThresholdType: string>, Definition: record<IamActionDefinition: record, ScpActionDefinition: record, SsmActionDefinition: record>, ExecutionRoleArn: record, ApprovalModel: record, Status: record, Subscribers: list<record>>> {
+  --definition: record # Specifies all of the type-specific parameters. — shape: {IamActionDefinition?: record, ScpActionDefinition?: record, SsmActionDefinition?: record}
+  --execution-role-arn: string # The role passed for action execution and reversion. Roles and actions must be in the same account.
+  --approval-model: string@approval-model-completer # This specifies if the action needs manual or automatic approval.
+  --subscribers: list # A list of subscribers. — item shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
+]: any -> record<AccountId: string, BudgetName: string, OldAction: record<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record<ActionThresholdValue: float, ActionThresholdType: string>, Definition: record<IamActionDefinition: record, ScpActionDefinition: record, SsmActionDefinition: record>, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list<record>>, NewAction: record<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record<ActionThresholdValue: float, ActionThresholdType: string>, Definition: record<IamActionDefinition: record, ScpActionDefinition: record, SsmActionDefinition: record>, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.UpdateBudgetAction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "ActionId": $action_id, "NotificationType": $notification_type, "ActionThreshold": $action_threshold, "Definition": $definition, "ExecutionRoleArn": $execution_role_arn, "ApprovalModel": $approval_model, "Subscribers": $subscribers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1251,6 +1287,8 @@ export def "update-budget-action" [
 #
 # POST /
 # operationId: UpdateNotification
+# --OldNotification shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
+# --NewNotification shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
 export def "update-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1268,15 +1306,16 @@ export def "update-notification" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  account_id: any
-  budget_name: any
-  old_notification: any
-  new_notification: any
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  account_id: string # The account ID of the user. It's a 12-digit number.
+  budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
+  old_notification: record # A notification that's associated with a budget. A budget can have up to ten notifications. Each notification must have at least one subscriber. A notification can have one SNS subscriber and up to 10 email subscribers, for a total of 11 subscribers. For example, if you have a budget for 200 dollars and you want to be notified when you go over 160 dollars, create a notification with the following parameters: A notificationType of ACTUAL A thresholdType of PERCENTAGE A comparisonOperator of GREATER_THAN A notification threshold of 80 — shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
+  new_notification: record # A notification that's associated with a budget. A budget can have up to ten notifications. Each notification must have at least one subscriber. A notification can have one SNS subscriber and up to 10 email subscribers, for a total of 11 subscribers. For example, if you have a budget for 200 dollars and you want to be notified when you go over 160 dollars, create a notification with the following parameters: A notificationType of ACTUAL A thresholdType of PERCENTAGE A comparisonOperator of GREATER_THAN A notification threshold of 80 — shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.UpdateNotification")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "OldNotification": $old_notification, "NewNotification": $new_notification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1302,6 +1341,9 @@ export def "update-notification" [
 #
 # POST /
 # operationId: UpdateSubscriber
+# --Notification shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
+# --OldSubscriber shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
+# --NewSubscriber shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
 export def "update-subscriber" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1319,16 +1361,17 @@ export def "update-subscriber" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  account_id: any
-  budget_name: any
-  notification: any
-  old_subscriber: any
-  new_subscriber: any
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  account_id: string # The account ID of the user. It's a 12-digit number.
+  budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
+  notification: record # A notification that's associated with a budget. A budget can have up to ten notifications. Each notification must have at least one subscriber. A notification can have one SNS subscriber and up to 10 email subscribers, for a total of 11 subscribers. For example, if you have a budget for 200 dollars and you want to be notified when you go over 160 dollars, create a notification with the following parameters: A notificationType of ACTUAL A thresholdType of PERCENTAGE A comparisonOperator of GREATER_THAN A notification threshold of 80 — shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
+  old_subscriber: record # The subscriber to a budget notification. The subscriber consists of a subscription type and either an Amazon SNS topic or an email address. For example, an email subscriber has the following parameters: A subscriptionType of EMAIL An address of example@example.com — shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
+  new_subscriber: record # The subscriber to a budget notification. The subscriber consists of a subscription type and either an Amazon SNS topic or an email address. For example, an email subscriber has the following parameters: A subscriptionType of EMAIL An address of example@example.com — shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.UpdateSubscriber")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "Notification": $notification, "OldSubscriber": $old_subscriber, "NewSubscriber": $new_subscriber} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

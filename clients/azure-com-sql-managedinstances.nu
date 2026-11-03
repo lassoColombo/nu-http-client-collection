@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -151,11 +151,12 @@ export def "managed-instances-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, sku: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Sql/managedInstances") $qp $auth.query)
   let accept_val = "application/json"
@@ -191,13 +192,14 @@ export def "managed-instances-list-by-instance-pool" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, sku: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($instance_pool_name | is-empty) { error make --unspanned { msg: "path parameter 'instancePoolName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), instance_pool_name: (encode-path-segment $instance_pool_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/instancePools/{instance_pool_name}/managedInstances") $qp $auth.query)
   let accept_val = "application/json"
@@ -232,12 +234,13 @@ export def "managed-instances-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, sku: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances") $qp $auth.query)
   let accept_val = "application/json"
@@ -273,13 +276,14 @@ export def "managed-instances-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'managedInstanceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_instance_name: (encode-path-segment $managed_instance_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -315,13 +319,14 @@ export def "managed-instances-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<administratorLogin: string, administratorLoginPassword: string, collation: string, dnsZone: string, dnsZonePartner: string, fullyQualifiedDomainName: string, instancePoolId: string, licenseType: string, managedInstanceCreateMode: string, proxyOverride: string, publicDataEndpointEnabled: bool, restorePointInTime: string, sourceManagedInstanceId: string, state: string, storageSizeInGB: int, subnetId: string, timezoneId: string, vCores: int>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<administratorLogin: string, administratorLoginPassword: string, collation: string, dnsZone: string, dnsZonePartner: string, fullyQualifiedDomainName: string, instancePoolId: string, licenseType: string, managedInstanceCreateMode: string, proxyOverride: string, publicDataEndpointEnabled: bool, restorePointInTime: string, sourceManagedInstanceId: string, state: string, storageSizeInGB: int, subnetId: string, timezoneId: string, vCores: int>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'managedInstanceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_instance_name: (encode-path-segment $managed_instance_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -359,17 +364,18 @@ export def "managed-instances-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: record # The properties of a managed instance. — shape: {administratorLogin?: string, administratorLoginPassword?: string, collation?: string, dnsZonePartner?: string, instancePoolId?: string, licenseType?: "LicenseIncluded"|"BasePrice", managedInstanceCreateMode?: "Default"|"PointInTimeRestore", proxyOverride?: "Proxy"|"Redirect"|"Default", publicDataEndpointEnabled?: bool, restorePointInTime?: string, sourceManagedInstanceId?: string, storageSizeInGB?: int, subnetId?: string, timezoneId?: string, vCores?: int}
   --sku: record # An ARM Resource SKU. — shape: {capacity?: int, family?: string, name: string, size?: string, tier?: string}
   --tags: record # Resource tags.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<administratorLogin: string, administratorLoginPassword: string, collation: string, dnsZone: string, dnsZonePartner: string, fullyQualifiedDomainName: string, instancePoolId: string, licenseType: string, managedInstanceCreateMode: string, proxyOverride: string, publicDataEndpointEnabled: bool, restorePointInTime: string, sourceManagedInstanceId: string, state: string, storageSizeInGB: int, subnetId: string, timezoneId: string, vCores: int>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>> {
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<administratorLogin: string, administratorLoginPassword: string, collation: string, dnsZone: string, dnsZonePartner: string, fullyQualifiedDomainName: string, instancePoolId: string, licenseType: string, managedInstanceCreateMode: string, proxyOverride: string, publicDataEndpointEnabled: bool, restorePointInTime: string, sourceManagedInstanceId: string, state: string, storageSizeInGB: int, subnetId: string, timezoneId: string, vCores: int>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'managedInstanceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_instance_name: (encode-path-segment $managed_instance_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "sku": $sku, "tags": $tags} | compact
@@ -410,19 +416,20 @@ export def "managed-instances-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --identity: record # Azure Active Directory identity configuration for a resource. — shape: {type?: "SystemAssigned"}
   --properties: record # The properties of a managed instance. — shape: {administratorLogin?: string, administratorLoginPassword?: string, collation?: string, dnsZonePartner?: string, instancePoolId?: string, licenseType?: "LicenseIncluded"|"BasePrice", managedInstanceCreateMode?: "Default"|"PointInTimeRestore", proxyOverride?: "Proxy"|"Redirect"|"Default", publicDataEndpointEnabled?: bool, restorePointInTime?: string, sourceManagedInstanceId?: string, storageSizeInGB?: int, subnetId?: string, timezoneId?: string, vCores?: int}
   --sku: record # An ARM Resource SKU. — shape: {capacity?: int, family?: string, name: string, size?: string, tier?: string}
   location: string # Resource location.
   --tags: record # Resource tags.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<administratorLogin: string, administratorLoginPassword: string, collation: string, dnsZone: string, dnsZonePartner: string, fullyQualifiedDomainName: string, instancePoolId: string, licenseType: string, managedInstanceCreateMode: string, proxyOverride: string, publicDataEndpointEnabled: bool, restorePointInTime: string, sourceManagedInstanceId: string, state: string, storageSizeInGB: int, subnetId: string, timezoneId: string, vCores: int>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>> {
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<administratorLogin: string, administratorLoginPassword: string, collation: string, dnsZone: string, dnsZonePartner: string, fullyQualifiedDomainName: string, instancePoolId: string, licenseType: string, managedInstanceCreateMode: string, proxyOverride: string, publicDataEndpointEnabled: bool, restorePointInTime: string, sourceManagedInstanceId: string, state: string, storageSizeInGB: int, subnetId: string, timezoneId: string, vCores: int>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'managedInstanceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_instance_name: (encode-path-segment $managed_instance_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}") $qp $auth.query)
   let req_body = {"identity": $identity, "properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact

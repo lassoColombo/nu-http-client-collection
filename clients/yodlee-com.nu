@@ -638,7 +638,7 @@ export def "get-subscribed-events" [
 # operationId: deleteSubscribedEvent
 @deprecated
 export def "delete-subscribed-event" [
-  event_name: string
+  event_name: string@event-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -677,7 +677,7 @@ export def "delete-subscribed-event" [
 # --event shape: {callbackUrl?: string}
 @deprecated
 export def "create-subscription-event" [
-  event_name: string
+  event_name: string@event-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -720,7 +720,7 @@ export def "create-subscription-event" [
 # --event shape: {callbackUrl?: string}
 @deprecated
 export def "update-subscribed-event" [
-  event_name: string
+  event_name: string@event-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -905,7 +905,7 @@ export def "get-subscribed-notification-events" [
 # DELETE /configs/notifications/events/{eventName}
 # operationId: deleteSubscribedNotificationEvent
 export def "delete-subscribed-notification-event" [
-  event_name: string
+  event_name: string@event-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -942,7 +942,7 @@ export def "delete-subscribed-notification-event" [
 # operationId: createSubscriptionNotificationEvent
 # --event shape: {callbackUrl?: string}
 export def "create-subscription-notification-event" [
-  event_name: string
+  event_name: string@event-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -983,7 +983,7 @@ export def "create-subscription-notification-event" [
 # operationId: updateSubscribedNotificationEvent
 # --event shape: {callbackUrl?: string}
 export def "update-subscribed-notification-event" [
-  event_name: string
+  event_name: string@event-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1066,12 +1066,15 @@ export def "get-data-extracts-events" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --event-name: string # Event Name
-  --from-date: string # From DateTime (YYYY-MM-DDThh:mm:ssZ)
-  --to-date: string # To DateTime (YYYY-MM-DDThh:mm:ssZ)
+  --event-name: string # Event Name (required)
+  --from-date: string # From DateTime (YYYY-MM-DDThh:mm:ssZ) (required)
+  --to-date: string # To DateTime (YYYY-MM-DDThh:mm:ssZ) (required)
 ]: nothing -> record<event: record<data: record<fromDate: string, toDate: string, userCount: int, userData: list>, info: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($event_name == null) { error make --unspanned { msg: "required query parameter 'eventName' missing: pass --event-name" } }
+  if ($from_date == null) { error make --unspanned { msg: "required query parameter 'fromDate' missing: pass --from-date" } }
+  if ($to_date == null) { error make --unspanned { msg: "required query parameter 'toDate' missing: pass --to-date" } }
   let qp = [(serialize-qp "eventName" $event_name "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dataExtracts/events" $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"
@@ -1104,12 +1107,15 @@ export def "get-data-extracts-user-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --from-date: string # From DateTime (YYYY-MM-DDThh:mm:ssZ)
-  --login-name: string # Login Name
-  --to-date: string # To DateTime (YYYY-MM-DDThh:mm:ssZ)
+  --from-date: string # From DateTime (YYYY-MM-DDThh:mm:ssZ) (required)
+  --login-name: string # Login Name (required)
+  --to-date: string # To DateTime (YYYY-MM-DDThh:mm:ssZ) (required)
 ]: nothing -> record<userData: table<account: list, holding: list, providerAccount: list, totalTransactionsCount: int, transaction: list, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($from_date == null) { error make --unspanned { msg: "required query parameter 'fromDate' missing: pass --from-date" } }
+  if ($login_name == null) { error make --unspanned { msg: "required query parameter 'loginName' missing: pass --login-name" } }
+  if ($to_date == null) { error make --unspanned { msg: "required query parameter 'toDate' missing: pass --to-date" } }
   let qp = [(serialize-qp "fromDate" $from_date "scalar") (serialize-qp "loginName" $login_name "scalar") (serialize-qp "toDate" $to_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dataExtracts/userData" $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"
@@ -1227,7 +1233,7 @@ export def "get-transaction-summary" [
   --category-id: string # comma separated categoryIds
   --category-type: string # INCOME, EXPENSE, TRANSFER, UNCATEGORIZE or DEFERRED_COMPENSATION
   --from-date: string # YYYY-MM-DD format
-  --group-by: string # CATEGORY_TYPE, HIGH_LEVEL_CATEGORY or CATEGORY
+  --group-by: string # CATEGORY_TYPE, HIGH_LEVEL_CATEGORY or CATEGORY (required)
   --include: string # details
   --include-user-category: oneof<nothing, bool> # TRUE/FALSE
   --interval: string # D-daily, W-weekly, M-mothly or Y-yearly
@@ -1235,6 +1241,7 @@ export def "get-transaction-summary" [
 ]: nothing -> record<links: record<transactions: string>, transactionSummary: table<categorySummary: list, categoryType: string, creditTotal: record, debitTotal: record, links: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_by == null) { error make --unspanned { msg: "required query parameter 'groupBy' missing: pass --group-by" } }
   let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "categoryId" $category_id "scalar") (serialize-qp "categoryType" $category_type "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "groupBy" $group_by "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "includeUserCategory" $include_user_category "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "toDate" $to_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/derived/transactionSummary" $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"
@@ -1563,7 +1570,7 @@ export def "edit-credentials-or-refresh-provider-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --provider-account-ids: string # comma separated providerAccountIds
+  --provider-account-ids: string # comma separated providerAccountIds (required)
   --aggregation-source: string@aggregation-source-completer
   --consent-id: int # Consent Id generated for the request through POST Consent.Endpoints:POST Provider AccountPUT Provider Account (format: int64)
   --dataset: list # item shape: {attribute?: list, name?: "BASIC_AGG_DATA"|"ADVANCE_AGG_DATA"|"ACCT_PROFILE"|"DOCUMENT"}
@@ -1574,6 +1581,7 @@ export def "edit-credentials-or-refresh-provider-account" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_account_ids == null) { error make --unspanned { msg: "required query parameter 'providerAccountIds' missing: pass --provider-account-ids" } }
   let qp = [(serialize-qp "providerAccountIds" $provider_account_ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providerAccounts" $qp $auth.query)
   let req_body = {"aggregationSource": $aggregation_source, "consentId": $consent_id, "dataset": $dataset, "datasetName": $dataset_name, "field": $field, "preferences": $preferences} | compact
@@ -2044,13 +2052,13 @@ export def "update-transaction-category" [
   --category-name: string
   --high-level-category-name: string
   id: int # format: int64
-  --body-source: string@source-completer
+  source: string@source-completer
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/categories" $auth.query)
-  let req_body = {"categoryName": $category_name, "highLevelCategoryName": $high_level_category_name, "id": $id, "source": $body_source} | compact
+  let req_body = {"categoryName": $category_name, "highLevelCategoryName": $high_level_category_name, "id": $id, "source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2192,11 +2200,12 @@ export def "run-transaction-categorization-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer # default: run
+  --action: string@action-completer # required, default: run
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
+  let action = ($action | default "run")
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({rule_id: (encode-path-segment $rule_id)} | format pattern "/transactions/categories/rules/{rule_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2500,10 +2509,11 @@ export def "get-access-tokens" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-ids: string # appIds
+  --app-ids: string # appIds (required)
 ]: nothing -> record<user: record<accessTokens: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($app_ids == null) { error make --unspanned { msg: "required query parameter 'appIds' missing: pass --app-ids" } }
   let qp = [(serialize-qp "appIds" $app_ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/accessTokens" $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"
@@ -2609,20 +2619,22 @@ export def "saml-login" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --issuer: string # issuer
-  --saml-response: string # samlResponse
-  --qp-source: string # source
+  --issuer: string # issuer (required)
+  --saml-response: string # samlResponse (required)
+  --source: string # source
 ]: nothing -> record<user: record<id: int, loginName: string, name: record<first: string, fullName: string, last: string, middle: string>, preferences: record<currency: string, dateFormat: string, locale: string, timeZone: string>, roleType: string, session: record<userSession: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "issuer" $issuer "scalar") (serialize-qp "samlResponse" $saml_response "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  if ($issuer == null) { error make --unspanned { msg: "required query parameter 'issuer' missing: pass --issuer" } }
+  if ($saml_response == null) { error make --unspanned { msg: "required query parameter 'samlResponse' missing: pass --saml-response" } }
+  let qp = [(serialize-qp "issuer" $issuer "scalar") (serialize-qp "samlResponse" $saml_response "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/samlLogin" $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"issuer": $issuer, "samlResponse": $saml_response, "source": $qp_source} | compact)
+    query: ({"issuer": $issuer, "samlResponse": $saml_response, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"

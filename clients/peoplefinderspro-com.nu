@@ -134,13 +134,13 @@ export def "post-address-autocomplete" [
   --galaxy-ap-name: string # e.g. Key (e.g. Key)
   --galaxy-ap-password: string # e.g. Secret (e.g. Secret)
   --galaxy-search-type: string # e.g. DevAPIAddressAutoComplete (e.g. DevAPIAddressAutoComplete)
-  --input: string
+  --body-input: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/address/autocomplete" $auth.query)
-  let req_body = {"Input": $input} | compact
+  let req_body = {"Input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

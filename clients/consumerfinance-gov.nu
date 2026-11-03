@@ -245,7 +245,7 @@ export def "query-slice-hmda" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --select: string # Fields to return, separated by commas.
-  --qp-where: string # Conditions to search for in the slice, in SQL WHERE style.
+  --where: string # Conditions to search for in the slice, in SQL WHERE style.
   --group: string # Fields to group by, summarizing the data, separated by commas.
   --limit: int # Number of records to return, 100 by default. Enter 0 for no limit.
   --offset: int # Number of records to skip.
@@ -255,14 +255,14 @@ export def "query-slice-hmda" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($slice | is-empty) { error make --unspanned { msg: "path parameter 'slice' must be non-empty" } }
-  let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "$where" $qp_where "scalar") (serialize-qp "$group" $group "scalar") (serialize-qp "$limit" $limit "scalar") (serialize-qp "$offset" $offset "scalar") (serialize-qp "$orderBy" $order_by "scalar") (serialize-qp "$callback" $callback "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "$where" $where "scalar") (serialize-qp "$group" $group "scalar") (serialize-qp "$limit" $limit "scalar") (serialize-qp "$offset" $offset "scalar") (serialize-qp "$orderBy" $order_by "scalar") (serialize-qp "$callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({slice: (encode-path-segment $slice)} | format pattern "/data/hmda/slice/{slice}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$select": $select, "$where": $qp_where, "$group": $group, "$limit": $limit, "$offset": $offset, "$orderBy": $order_by, "$callback": $callback} | compact)
+    query: ({"$select": $select, "$where": $where, "$group": $group, "$limit": $limit, "$offset": $offset, "$orderBy": $order_by, "$callback": $callback} | compact)
     headers: $auth.headers
     body: null
     content_type: null

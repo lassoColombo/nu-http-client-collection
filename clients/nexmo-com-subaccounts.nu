@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -146,13 +146,14 @@ export def "retrieve-balance-transfers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # Start of the retrieval period. (e.g. 2019-07-15T13:11:44Z)
+  --start-date: string # Start of the retrieval period. (required, e.g. 2019-07-15T13:11:44Z)
   --end-date: string # End of the retrieval period. If absent then all transfers until now is returned. (e.g. 2019-07-15T14:11:44Z)
   --subaccount: string # Subaccount to filter by. You may send this multiple times to filter on multiple subaccounts
 ]: nothing -> record<_embedded: record<balance_transfers: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'api_key' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "subaccount" $subaccount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/{api_key}/balance-transfers") $qp $auth.query)
   let accept_val = "application/json"
@@ -187,16 +188,16 @@ export def "transfer-balance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: float # e.g. 123.45
-  --body-from: string # e.g. 7c9738e6
+  from: string # e.g. 7c9738e6
   --reference: string # e.g. This gets added to the audit log
-  --body-to: string # e.g. ad6dc56f
+  to: string # e.g. ad6dc56f
 ]: any -> record<amount: float, balance_transfer_id: string, created_at: string, from: string, reference: string, to: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'api_key' must be non-empty" } }
   let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/{api_key}/balance-transfers") $auth.query)
-  let req_body = {"amount": $amount, "from": $body_from, "reference": $reference, "to": $body_to} | compact
+  let req_body = {"amount": $amount, "from": $from, "reference": $reference, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -229,13 +230,14 @@ export def "retrieve-credit-transfers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # Start of the retrieval period. (e.g. 2019-07-15T13:11:44Z)
+  --start-date: string # Start of the retrieval period. (required, e.g. 2019-07-15T13:11:44Z)
   --end-date: string # End of the retrieval period. If absent then all transfers until now is returned. (e.g. 2019-07-15T14:11:44Z)
   --subaccount: string # Subaccount to filter by. You may send this multiple times to filter on multiple subaccounts
 ]: nothing -> record<_embedded: record<credit_transfers: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'api_key' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "subaccount" $subaccount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/{api_key}/credit-transfers") $qp $auth.query)
   let accept_val = "application/json"
@@ -270,16 +272,16 @@ export def "transfer-credit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: float # e.g. 123.45
-  --body-from: string # e.g. 7c9738e6
+  from: string # e.g. 7c9738e6
   --reference: string # e.g. This gets added to the audit log
-  --body-to: string # e.g. ad6dc56f
+  to: string # e.g. ad6dc56f
 ]: any -> record<amount: float, created_at: string, credit_transfer_id: string, from: string, reference: string, to: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'api_key' must be non-empty" } }
   let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/{api_key}/credit-transfers") $auth.query)
-  let req_body = {"amount": $amount, "from": $body_from, "reference": $reference, "to": $body_to} | compact
+  let req_body = {"amount": $amount, "from": $from, "reference": $reference, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -473,16 +475,16 @@ export def "transfer-number" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # e.g. GB
-  --body-from: string # e.g. 7c9738e6
+  --from: string # e.g. 7c9738e6
   --number: float # e.g. 23507703696
-  --body-to: string # e.g. ad6dc56f
+  --to: string # e.g. ad6dc56f
 ]: any -> record<country: string, from: string, number: string, to: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'api_key' must be non-empty" } }
   let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/{api_key}/transfer-number") $auth.query)
-  let req_body = {"country": $country, "from": $body_from, "number": $number, "to": $body_to} | compact
+  let req_body = {"country": $country, "from": $from, "number": $number, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

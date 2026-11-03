@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -163,7 +163,7 @@ export def "balance-get" [
 #
 # POST /send
 # operationId: SendPost
-export def "send-post" [
+export def "post-send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,17 +173,17 @@ export def "send-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
-  --hdr-accept: string
+  --content-type: string # required
+  --hdr-accept: string # required
   content: string # Message Content
-  --body-from: string # Sender ID / Number
-  --body-to: int # Destination Mobile Number (format: int64)
+  from: string # Sender ID / Number
+  to: int # Destination Mobile Number (format: int64)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/send" $auth.query)
-  let req_body = {"content": $content, "from": $body_from, "to": $body_to} | compact
+  let req_body = {"content": $content, "from": $from, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -220,8 +220,8 @@ export def "sendbatch-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
-  --hdr-accept: string
+  --content-type: string # required
+  --hdr-accept: string # required
   messages: list # Sendbatch message body — item shape: {content: string, from: string, to: list<string>}
 ]: any -> any {
   let input = $in

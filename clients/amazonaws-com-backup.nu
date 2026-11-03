@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -155,7 +155,7 @@ export def "cancel-legal-hold" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cancel-description: string # String describing the reason for removing the legal hold.
+  --cancel-description: string # String describing the reason for removing the legal hold. (required)
   --retain-record-in-days: int # The integer amount in days specifying amount of days after this API operation to remove legal hold.
   --x-amz-content-sha256: string
   --x-amz-date: string
@@ -168,6 +168,7 @@ export def "cancel-legal-hold" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($legal_hold_id | is-empty) { error make --unspanned { msg: "path parameter 'legalHoldId' must be non-empty" } }
+  if ($cancel_description == null) { error make --unspanned { msg: "required query parameter 'cancelDescription' missing: pass --cancel-description" } }
   let qp = [(serialize-qp "cancelDescription" $cancel_description "scalar") (serialize-qp "retainRecordInDays" $retain_record_in_days "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({legal_hold_id: (encode-path-segment $legal_hold_id)} | format pattern "/legal-holds/{legal_hold_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -192,7 +193,7 @@ export def "cancel-legal-hold" [
 #
 # PUT /backup/plans/
 # operationId: CreateBackupPlan
-# --BackupPlan shape: {BackupPlanName?: any, Rules?: any, AdvancedBackupSettings?: any}
+# --BackupPlan shape: {BackupPlanName?: string, Rules?: list, AdvancedBackupSettings?: list}
 export def "create-backup-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -210,10 +211,10 @@ export def "create-backup-plan" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  backup_plan: record # Contains an optional backup plan display name and an array of BackupRule objects, each of which specifies a backup rule. Each rule in a backup plan is a separate scheduled task. — shape: {BackupPlanName?: any, Rules?: any, AdvancedBackupSettings?: any}
+  backup_plan: record # Contains an optional backup plan display name and an array of BackupRule objects, each of which specifies a backup rule. Each rule in a backup plan is a separate scheduled task. — shape: {BackupPlanName?: string, Rules?: list, AdvancedBackupSettings?: list}
   --backup-plan-tags: record # To help organize your resources, you can assign your own metadata to the resources that you create. Each tag is a key-value pair. The specified tags are assigned to all backups created with this plan.
   --creator-request-id: string # Identifies the request and allows failed requests to be retried without the risk of running the operation twice. If the request includes a CreatorRequestId that matches an existing backup plan, that plan is returned. This parameter is optional. If used, this parameter must contain 1 to 50 alphanumeric or '-_.' characters.
-]: any -> record<BackupPlanId: record, BackupPlanArn: record, CreationDate: record, VersionId: record, AdvancedBackupSettings: record> {
+]: any -> record<BackupPlanId: string, BackupPlanArn: string, CreationDate: string, VersionId: string, AdvancedBackupSettings: table<ResourceType: string, BackupOptions: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -264,7 +265,7 @@ export def "list-backup-plans" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, BackupPlansList: record> {
+]: nothing -> record<NextToken: string, BackupPlansList: table<BackupPlanArn: string, BackupPlanId: string, CreationDate: string, DeletionDate: string, VersionId: string, BackupPlanName: string, CreatorRequestId: string, LastExecutionDate: string, AdvancedBackupSettings: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -291,7 +292,7 @@ export def "list-backup-plans" [
 #
 # PUT /backup/plans/{backupPlanId}/selections/
 # operationId: CreateBackupSelection
-# --BackupSelection shape: {SelectionName?: any, IamRoleArn?: any, Resources?: any, ListOfTags?: any, NotResources?: any, Conditions?: any}
+# --BackupSelection shape: {SelectionName?: string, IamRoleArn?: string, Resources?: list<string>, ListOfTags?: list, NotResources?: list<string>, Conditions?: record}
 export def "create-backup-selection" [
   backup_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -310,9 +311,9 @@ export def "create-backup-selection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  backup_selection: record # Used to specify a set of resources to a backup plan. Specifying your desired Conditions, ListOfTags, NotResources, and/or Resources is recommended. If none of these are specified, Backup will attempt to select all supported and opted-in storage resources, which could have unintended cost implications. — shape: {SelectionName?: any, IamRoleArn?: any, Resources?: any, ListOfTags?: any, NotResources?: any, Conditions?: any}
+  backup_selection: record # Used to specify a set of resources to a backup plan. Specifying your desired Conditions, ListOfTags, NotResources, and/or Resources is recommended. If none of these are specified, Backup will attempt to select all supported and opted-in storage resources, which could have unintended cost implications. — shape: {SelectionName?: string, IamRoleArn?: string, Resources?: list<string>, ListOfTags?: list, NotResources?: list<string>, Conditions?: record}
   --creator-request-id: string # A unique string that identifies the request and allows failed requests to be retried without the risk of running the operation twice. This parameter is optional. If used, this parameter must contain 1 to 50 alphanumeric or '-_.' characters.
-]: any -> record<SelectionId: record, BackupPlanId: record, CreationDate: record> {
+]: any -> record<SelectionId: string, BackupPlanId: string, CreationDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -364,7 +365,7 @@ export def "list-backup-selections" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, BackupSelectionsList: record> {
+]: nothing -> record<NextToken: string, BackupSelectionsList: table<SelectionId: string, SelectionName: string, BackupPlanId: string, CreationDate: string, CreatorRequestId: string, IamRoleArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($backup_plan_id | is-empty) { error make --unspanned { msg: "path parameter 'backupPlanId' must be non-empty" } }
@@ -413,7 +414,7 @@ export def "create-backup-vault" [
   --backup-vault-tags: record # Metadata that you can assign to help organize the resources that you create. Each tag is a key-value pair.
   --encryption-key-arn: string # The server-side encryption key that is used to protect your backups; for example, arn:aws:kms:us-west-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab.
   --creator-request-id: string # A unique string that identifies the request and allows failed requests to be retried without the risk of running the operation twice. This parameter is optional. If used, this parameter must contain 1 to 50 alphanumeric or '-_.' characters.
-]: any -> record<BackupVaultName: record, BackupVaultArn: record, CreationDate: record> {
+]: any -> record<BackupVaultName: string, BackupVaultArn: string, CreationDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -506,7 +507,7 @@ export def "describe-backup-vault" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BackupVaultName: record, BackupVaultArn: record, EncryptionKeyArn: record, CreationDate: record, CreatorRequestId: record, NumberOfRecoveryPoints: record, Locked: record, MinRetentionDays: record, MaxRetentionDays: record, LockDate: record> {
+]: nothing -> record<BackupVaultName: string, BackupVaultArn: string, EncryptionKeyArn: string, CreationDate: string, CreatorRequestId: string, NumberOfRecoveryPoints: int, Locked: bool, MinRetentionDays: int, MaxRetentionDays: int, LockDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($backup_vault_name | is-empty) { error make --unspanned { msg: "path parameter 'backupVaultName' must be non-empty" } }
@@ -533,7 +534,7 @@ export def "describe-backup-vault" [
 #
 # POST /audit/frameworks
 # operationId: CreateFramework
-# --FrameworkControls item shape: {ControlName: any, ControlInputParameters?: any, ControlScope?: any}
+# --FrameworkControls item shape: {ControlName: string, ControlInputParameters?: list, ControlScope?: record}
 export def "create-framework" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -553,10 +554,10 @@ export def "create-framework" [
   --x-amz-signed-headers: string
   framework_name: string # The unique name of the framework. The name must be between 1 and 256 characters, starting with a letter, and consisting of letters (a-z, A-Z), numbers (0-9), and underscores (_).
   --framework-description: string # An optional description of the framework with a maximum of 1,024 characters.
-  framework_controls: list # A list of the controls that make up the framework. Each control in the list has a name, input parameters, and scope. — item shape: {ControlName: any, ControlInputParameters?: any, ControlScope?: any}
+  framework_controls: list # A list of the controls that make up the framework. Each control in the list has a name, input parameters, and scope. — item shape: {ControlName: string, ControlInputParameters?: list, ControlScope?: record}
   --idempotency-token: string # A customer-chosen string that you can use to distinguish between otherwise identical calls to CreateFrameworkInput. Retrying a successful request with the same idempotency token results in a success message with no action taken.
   --framework-tags: record # Metadata that you can assign to help organize the frameworks that you create. Each tag is a key-value pair.
-]: any -> record<FrameworkName: record, FrameworkArn: record> {
+]: any -> record<FrameworkName: string, FrameworkArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -604,7 +605,7 @@ export def "list-frameworks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Frameworks: record, NextToken: record> {
+]: nothing -> record<Frameworks: table<FrameworkName: string, FrameworkArn: string, FrameworkDescription: string, NumberOfControls: int, CreationTime: string, DeploymentStatus: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -631,7 +632,7 @@ export def "list-frameworks" [
 #
 # POST /legal-holds/
 # operationId: CreateLegalHold
-# --RecoveryPointSelection shape: {VaultNames?: any, ResourceIdentifiers?: any, DateRange?: record}
+# --RecoveryPointSelection shape: {VaultNames?: list<string>, ResourceIdentifiers?: list<string>, DateRange?: record}
 export def "create-legal-hold" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -652,9 +653,9 @@ export def "create-legal-hold" [
   title: string # This is the string title of the legal hold.
   description: string # This is the string description of the legal hold.
   --idempotency-token: string # This is a user-chosen string used to distinguish between otherwise identical calls. Retrying a successful request with the same idempotency token results in a success message with no action taken.
-  --recovery-point-selection: record # This specifies criteria to assign a set of resources, such as resource types or backup vaults. — shape: {VaultNames?: any, ResourceIdentifiers?: any, DateRange?: record}
+  --recovery-point-selection: record # This specifies criteria to assign a set of resources, such as resource types or backup vaults. — shape: {VaultNames?: list<string>, ResourceIdentifiers?: list<string>, DateRange?: record}
   --tags: record # Optional tags to include. A tag is a key-value pair you can use to manage, filter, and search for your resources. Allowed characters include UTF-8 letters, numbers, spaces, and the following characters: + - = . _ : /.
-]: any -> record<Title: record, Status: record, Description: record, LegalHoldId: record, LegalHoldArn: record, CreationDate: record, RecoveryPointSelection: record<VaultNames: record, ResourceIdentifiers: record, DateRange: record<FromDate: record, ToDate: record>>> {
+]: any -> record<Title: string, Status: string, Description: string, LegalHoldId: string, LegalHoldArn: string, CreationDate: string, RecoveryPointSelection: record<VaultNames: list<string>, ResourceIdentifiers: list<string>, DateRange: record<FromDate: string, ToDate: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -704,7 +705,7 @@ export def "list-legal-holds" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, LegalHolds: record> {
+]: nothing -> record<NextToken: string, LegalHolds: table<Title: string, Status: string, Description: string, LegalHoldId: string, LegalHoldArn: string, CreationDate: string, CancellationDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -731,8 +732,8 @@ export def "list-legal-holds" [
 #
 # POST /audit/report-plans
 # operationId: CreateReportPlan
-# --ReportDeliveryChannel shape: {S3BucketName?: any, S3KeyPrefix?: any, Formats?: any}
-# --ReportSetting shape: {ReportTemplate?: any, FrameworkArns?: any, NumberOfFrameworks?: any, Accounts?: any, OrganizationUnits?: any, Regions?: any}
+# --ReportDeliveryChannel shape: {S3BucketName?: string, S3KeyPrefix?: string, Formats?: list<string>}
+# --ReportSetting shape: {ReportTemplate?: string, FrameworkArns?: list<string>, NumberOfFrameworks?: int, Accounts?: list<string>, OrganizationUnits?: list<string>, Regions?: list<string>}
 export def "create-report-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -752,11 +753,11 @@ export def "create-report-plan" [
   --x-amz-signed-headers: string
   report_plan_name: string # The unique name of the report plan. The name must be between 1 and 256 characters, starting with a letter, and consisting of letters (a-z, A-Z), numbers (0-9), and underscores (_).
   --report-plan-description: string # An optional description of the report plan with a maximum of 1,024 characters.
-  report_delivery_channel: record # Contains information from your report plan about where to deliver your reports, specifically your Amazon S3 bucket name, S3 key prefix, and the formats of your reports. — shape: {S3BucketName?: any, S3KeyPrefix?: any, Formats?: any}
-  report_setting: record # Contains detailed information about a report setting. — shape: {ReportTemplate?: any, FrameworkArns?: any, NumberOfFrameworks?: any, Accounts?: any, OrganizationUnits?: any, Regions?: any}
+  report_delivery_channel: record # Contains information from your report plan about where to deliver your reports, specifically your Amazon S3 bucket name, S3 key prefix, and the formats of your reports. — shape: {S3BucketName?: string, S3KeyPrefix?: string, Formats?: list<string>}
+  report_setting: record # Contains detailed information about a report setting. — shape: {ReportTemplate?: string, FrameworkArns?: list<string>, NumberOfFrameworks?: int, Accounts?: list<string>, OrganizationUnits?: list<string>, Regions?: list<string>}
   --report-plan-tags: record # Metadata that you can assign to help organize the report plans that you create. Each tag is a key-value pair.
   --idempotency-token: string # A customer-chosen string that you can use to distinguish between otherwise identical calls to CreateReportPlanInput. Retrying a successful request with the same idempotency token results in a success message with no action taken.
-]: any -> record<ReportPlanName: record, ReportPlanArn: record, CreationTime: record> {
+]: any -> record<ReportPlanName: string, ReportPlanArn: string, CreationTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -804,7 +805,7 @@ export def "list-report-plans" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ReportPlans: record, NextToken: record> {
+]: nothing -> record<ReportPlans: table<ReportPlanArn: string, ReportPlanName: string, ReportPlanDescription: string, ReportSetting: record, ReportDeliveryChannel: record, DeploymentStatus: string, CreationTime: string, LastAttemptedExecutionTime: string, LastSuccessfulExecutionTime: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -849,7 +850,7 @@ export def "delete-backup-plan" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BackupPlanId: record, BackupPlanArn: record, DeletionDate: record, VersionId: record> {
+]: nothing -> record<BackupPlanId: string, BackupPlanArn: string, DeletionDate: string, VersionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($backup_plan_id | is-empty) { error make --unspanned { msg: "path parameter 'backupPlanId' must be non-empty" } }
@@ -876,7 +877,7 @@ export def "delete-backup-plan" [
 #
 # POST /backup/plans/{backupPlanId}
 # operationId: UpdateBackupPlan
-# --BackupPlan shape: {BackupPlanName?: any, Rules?: any, AdvancedBackupSettings?: any}
+# --BackupPlan shape: {BackupPlanName?: string, Rules?: list, AdvancedBackupSettings?: list}
 export def "update-backup-plan" [
   backup_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -895,8 +896,8 @@ export def "update-backup-plan" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  backup_plan: record # Contains an optional backup plan display name and an array of BackupRule objects, each of which specifies a backup rule. Each rule in a backup plan is a separate scheduled task. — shape: {BackupPlanName?: any, Rules?: any, AdvancedBackupSettings?: any}
-]: any -> record<BackupPlanId: record, BackupPlanArn: record, CreationDate: record, VersionId: record, AdvancedBackupSettings: record> {
+  backup_plan: record # Contains an optional backup plan display name and an array of BackupRule objects, each of which specifies a backup rule. Each rule in a backup plan is a separate scheduled task. — shape: {BackupPlanName?: string, Rules?: list, AdvancedBackupSettings?: list}
+]: any -> record<BackupPlanId: string, BackupPlanArn: string, CreationDate: string, VersionId: string, AdvancedBackupSettings: table<ResourceType: string, BackupOptions: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -992,7 +993,7 @@ export def "get-backup-selection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BackupSelection: record<SelectionName: record, IamRoleArn: record, Resources: record, ListOfTags: record, NotResources: record, Conditions: record<StringEquals: record, StringNotEquals: record, StringLike: record, StringNotLike: record>>, SelectionId: record, BackupPlanId: record, CreationDate: record, CreatorRequestId: record> {
+]: nothing -> record<BackupSelection: record<SelectionName: string, IamRoleArn: string, Resources: list<string>, ListOfTags: list<record>, NotResources: list<string>, Conditions: record<StringEquals: list, StringNotEquals: list, StringLike: list, StringNotLike: list>>, SelectionId: string, BackupPlanId: string, CreationDate: string, CreatorRequestId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($backup_plan_id | is-empty) { error make --unspanned { msg: "path parameter 'backupPlanId' must be non-empty" } }
@@ -1083,7 +1084,7 @@ export def "get-backup-vault-access-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BackupVaultName: record, BackupVaultArn: record, Policy: record> {
+]: nothing -> record<BackupVaultName: string, BackupVaultArn: string, Policy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($backup_vault_name | is-empty) { error make --unspanned { msg: "path parameter 'backupVaultName' must be non-empty" } }
@@ -1318,7 +1319,7 @@ export def "get-backup-vault-notifications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BackupVaultName: record, BackupVaultArn: record, SNSTopicArn: record, BackupVaultEvents: record> {
+]: nothing -> record<BackupVaultName: string, BackupVaultArn: string, SNSTopicArn: string, BackupVaultEvents: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($backup_vault_name | is-empty) { error make --unspanned { msg: "path parameter 'backupVaultName' must be non-empty" } }
@@ -1458,7 +1459,7 @@ export def "describe-framework" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FrameworkName: record, FrameworkArn: record, FrameworkDescription: record, FrameworkControls: record, CreationTime: record, DeploymentStatus: record, FrameworkStatus: record, IdempotencyToken: record> {
+]: nothing -> record<FrameworkName: string, FrameworkArn: string, FrameworkDescription: string, FrameworkControls: table<ControlName: string, ControlInputParameters: list, ControlScope: record>, CreationTime: string, DeploymentStatus: string, FrameworkStatus: string, IdempotencyToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($framework_name | is-empty) { error make --unspanned { msg: "path parameter 'frameworkName' must be non-empty" } }
@@ -1485,7 +1486,7 @@ export def "describe-framework" [
 #
 # PUT /audit/frameworks/{frameworkName}
 # operationId: UpdateFramework
-# --FrameworkControls item shape: {ControlName: any, ControlInputParameters?: any, ControlScope?: any}
+# --FrameworkControls item shape: {ControlName: string, ControlInputParameters?: list, ControlScope?: record}
 export def "update-framework" [
   framework_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1505,9 +1506,9 @@ export def "update-framework" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --framework-description: string # An optional description of the framework with a maximum 1,024 characters.
-  --framework-controls: list # A list of the controls that make up the framework. Each control in the list has a name, input parameters, and scope. — item shape: {ControlName: any, ControlInputParameters?: any, ControlScope?: any}
+  --framework-controls: list # A list of the controls that make up the framework. Each control in the list has a name, input parameters, and scope. — item shape: {ControlName: string, ControlInputParameters?: list, ControlScope?: record}
   --idempotency-token: string # A customer-chosen string that you can use to distinguish between otherwise identical calls to UpdateFrameworkInput. Retrying a successful request with the same idempotency token results in a success message with no action taken.
-]: any -> record<FrameworkName: record, FrameworkArn: record, CreationTime: record> {
+]: any -> record<FrameworkName: string, FrameworkArn: string, CreationTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1603,7 +1604,7 @@ export def "describe-recovery-point" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RecoveryPointArn: record, BackupVaultName: record, BackupVaultArn: record, SourceBackupVaultArn: record, ResourceArn: record, ResourceType: record, CreatedBy: record<BackupPlanId: record, BackupPlanArn: record, BackupPlanVersion: record, BackupRuleId: record>, IamRoleArn: record, Status: record, StatusMessage: record, CreationDate: record, CompletionDate: record, BackupSizeInBytes: record, CalculatedLifecycle: record<MoveToColdStorageAt: record, DeleteAt: record>, Lifecycle: record<MoveToColdStorageAfterDays: record, DeleteAfterDays: record>, EncryptionKeyArn: record, IsEncrypted: record, StorageClass: record, LastRestoreTime: record, ParentRecoveryPointArn: record, CompositeMemberIdentifier: record, IsParent: record, ResourceName: record> {
+]: nothing -> record<RecoveryPointArn: string, BackupVaultName: string, BackupVaultArn: string, SourceBackupVaultArn: string, ResourceArn: string, ResourceType: string, CreatedBy: record<BackupPlanId: string, BackupPlanArn: string, BackupPlanVersion: string, BackupRuleId: string>, IamRoleArn: string, Status: string, StatusMessage: string, CreationDate: string, CompletionDate: string, BackupSizeInBytes: int, CalculatedLifecycle: record<MoveToColdStorageAt: string, DeleteAt: string>, Lifecycle: record<MoveToColdStorageAfterDays: int, DeleteAfterDays: int>, EncryptionKeyArn: string, IsEncrypted: bool, StorageClass: string, LastRestoreTime: string, ParentRecoveryPointArn: string, CompositeMemberIdentifier: string, IsParent: bool, ResourceName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($backup_vault_name | is-empty) { error make --unspanned { msg: "path parameter 'backupVaultName' must be non-empty" } }
@@ -1631,7 +1632,7 @@ export def "describe-recovery-point" [
 #
 # POST /backup-vaults/{backupVaultName}/recovery-points/{recoveryPointArn}
 # operationId: UpdateRecoveryPointLifecycle
-# --Lifecycle shape: {MoveToColdStorageAfterDays?: any, DeleteAfterDays?: any}
+# --Lifecycle shape: {MoveToColdStorageAfterDays?: int, DeleteAfterDays?: int}
 export def "update-recovery-point-lifecycle" [
   backup_vault_name: string
   recovery_point_arn: string
@@ -1651,8 +1652,8 @@ export def "update-recovery-point-lifecycle" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --lifecycle: record # Contains an array of Transition objects specifying how long in days before a recovery point transitions to cold storage or is deleted. Backups transitioned to cold storage must be stored in cold storage for a minimum of 90 days. Therefore, on the console, the “retention” setting must be 90 days greater than the “transition to cold after days” setting. The “transition to cold after days” setting cannot be changed after a backup has been transitioned to cold. Resource types that are able to be transitioned to cold storage are listed in the "Lifecycle to cold storage" section of the Feature availability by resource (https://docs.aws.amazon.com/aws-backup/latest/devguide/whatisbackup.html#features-by-resource) table. Backup ignores this expression for other resource types. — shape: {MoveToColdStorageAfterDays?: any, DeleteAfterDays?: any}
-]: any -> record<BackupVaultArn: record, RecoveryPointArn: record, Lifecycle: record<MoveToColdStorageAfterDays: record, DeleteAfterDays: record>, CalculatedLifecycle: record<MoveToColdStorageAt: record, DeleteAt: record>> {
+  --lifecycle: record # Contains an array of Transition objects specifying how long in days before a recovery point transitions to cold storage or is deleted. Backups transitioned to cold storage must be stored in cold storage for a minimum of 90 days. Therefore, on the console, the “retention” setting must be 90 days greater than the “transition to cold after days” setting. The “transition to cold after days” setting cannot be changed after a backup has been transitioned to cold. Resource types that are able to be transitioned to cold storage are listed in the "Lifecycle to cold storage" section of the Feature availability by resource (https://docs.aws.amazon.com/aws-backup/latest/devguide/whatisbackup.html#features-by-resource) table. Backup ignores this expression for other resource types. — shape: {MoveToColdStorageAfterDays?: int, DeleteAfterDays?: int}
+]: any -> record<BackupVaultArn: string, RecoveryPointArn: string, Lifecycle: record<MoveToColdStorageAfterDays: int, DeleteAfterDays: int>, CalculatedLifecycle: record<MoveToColdStorageAt: string, DeleteAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1746,7 +1747,7 @@ export def "describe-report-plan" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ReportPlan: record<ReportPlanArn: record, ReportPlanName: record, ReportPlanDescription: record, ReportSetting: record<ReportTemplate: record, FrameworkArns: record, NumberOfFrameworks: record, Accounts: record, OrganizationUnits: record, Regions: record>, ReportDeliveryChannel: record<S3BucketName: record, S3KeyPrefix: record, Formats: record>, DeploymentStatus: record, CreationTime: record, LastAttemptedExecutionTime: record, LastSuccessfulExecutionTime: record>> {
+]: nothing -> record<ReportPlan: record<ReportPlanArn: string, ReportPlanName: string, ReportPlanDescription: string, ReportSetting: record<ReportTemplate: string, FrameworkArns: list, NumberOfFrameworks: int, Accounts: list, OrganizationUnits: list, Regions: list>, ReportDeliveryChannel: record<S3BucketName: string, S3KeyPrefix: string, Formats: list>, DeploymentStatus: string, CreationTime: string, LastAttemptedExecutionTime: string, LastSuccessfulExecutionTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($report_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'reportPlanName' must be non-empty" } }
@@ -1773,8 +1774,8 @@ export def "describe-report-plan" [
 #
 # PUT /audit/report-plans/{reportPlanName}
 # operationId: UpdateReportPlan
-# --ReportDeliveryChannel shape: {S3BucketName?: any, S3KeyPrefix?: any, Formats?: any}
-# --ReportSetting shape: {ReportTemplate?: any, FrameworkArns?: any, NumberOfFrameworks?: any, Accounts?: any, OrganizationUnits?: any, Regions?: any}
+# --ReportDeliveryChannel shape: {S3BucketName?: string, S3KeyPrefix?: string, Formats?: list<string>}
+# --ReportSetting shape: {ReportTemplate?: string, FrameworkArns?: list<string>, NumberOfFrameworks?: int, Accounts?: list<string>, OrganizationUnits?: list<string>, Regions?: list<string>}
 export def "update-report-plan" [
   report_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1794,10 +1795,10 @@ export def "update-report-plan" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --report-plan-description: string # An optional description of the report plan with a maximum 1,024 characters.
-  --report-delivery-channel: record # Contains information from your report plan about where to deliver your reports, specifically your Amazon S3 bucket name, S3 key prefix, and the formats of your reports. — shape: {S3BucketName?: any, S3KeyPrefix?: any, Formats?: any}
-  --report-setting: record # Contains detailed information about a report setting. — shape: {ReportTemplate?: any, FrameworkArns?: any, NumberOfFrameworks?: any, Accounts?: any, OrganizationUnits?: any, Regions?: any}
+  --report-delivery-channel: record # Contains information from your report plan about where to deliver your reports, specifically your Amazon S3 bucket name, S3 key prefix, and the formats of your reports. — shape: {S3BucketName?: string, S3KeyPrefix?: string, Formats?: list<string>}
+  --report-setting: record # Contains detailed information about a report setting. — shape: {ReportTemplate?: string, FrameworkArns?: list<string>, NumberOfFrameworks?: int, Accounts?: list<string>, OrganizationUnits?: list<string>, Regions?: list<string>}
   --idempotency-token: string # A customer-chosen string that you can use to distinguish between otherwise identical calls to UpdateReportPlanInput. Retrying a successful request with the same idempotency token results in a success message with no action taken.
-]: any -> record<ReportPlanName: record, ReportPlanArn: record, CreationTime: record> {
+]: any -> record<ReportPlanName: string, ReportPlanArn: string, CreationTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1845,7 +1846,7 @@ export def "describe-backup-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AccountId: record, BackupJobId: record, BackupVaultName: record, BackupVaultArn: record, RecoveryPointArn: record, ResourceArn: record, CreationDate: record, CompletionDate: record, State: record, StatusMessage: record, PercentDone: record, BackupSizeInBytes: record, IamRoleArn: record, CreatedBy: record<BackupPlanId: record, BackupPlanArn: record, BackupPlanVersion: record, BackupRuleId: record>, ResourceType: record, BytesTransferred: record, ExpectedCompletionDate: record, StartBy: record, BackupOptions: record, BackupType: record, ParentJobId: record, IsParent: record, NumberOfChildJobs: record, ChildJobsInState: record, ResourceName: record> {
+]: nothing -> record<AccountId: string, BackupJobId: string, BackupVaultName: string, BackupVaultArn: string, RecoveryPointArn: string, ResourceArn: string, CreationDate: string, CompletionDate: string, State: string, StatusMessage: string, PercentDone: string, BackupSizeInBytes: int, IamRoleArn: string, CreatedBy: record<BackupPlanId: string, BackupPlanArn: string, BackupPlanVersion: string, BackupRuleId: string>, ResourceType: string, BytesTransferred: int, ExpectedCompletionDate: string, StartBy: string, BackupOptions: record, BackupType: string, ParentJobId: string, IsParent: bool, NumberOfChildJobs: int, ChildJobsInState: record, ResourceName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($backup_job_id | is-empty) { error make --unspanned { msg: "path parameter 'backupJobId' must be non-empty" } }
@@ -1935,7 +1936,7 @@ export def "describe-copy-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CopyJob: record<AccountId: record, CopyJobId: record, SourceBackupVaultArn: record, SourceRecoveryPointArn: record, DestinationBackupVaultArn: record, DestinationRecoveryPointArn: record, ResourceArn: record, CreationDate: record, CompletionDate: record, State: record, StatusMessage: record, BackupSizeInBytes: record, IamRoleArn: record, CreatedBy: record<BackupPlanId: record, BackupPlanArn: record, BackupPlanVersion: record, BackupRuleId: record>, ResourceType: record, ParentJobId: record, IsParent: record, CompositeMemberIdentifier: record, NumberOfChildJobs: record, ChildJobsInState: record, ResourceName: record>> {
+]: nothing -> record<CopyJob: record<AccountId: string, CopyJobId: string, SourceBackupVaultArn: string, SourceRecoveryPointArn: string, DestinationBackupVaultArn: string, DestinationRecoveryPointArn: string, ResourceArn: string, CreationDate: string, CompletionDate: string, State: string, StatusMessage: string, BackupSizeInBytes: int, IamRoleArn: string, CreatedBy: record<BackupPlanId: string, BackupPlanArn: string, BackupPlanVersion: string, BackupRuleId: string>, ResourceType: string, ParentJobId: string, IsParent: bool, CompositeMemberIdentifier: string, NumberOfChildJobs: int, ChildJobsInState: record, ResourceName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($copy_job_id | is-empty) { error make --unspanned { msg: "path parameter 'copyJobId' must be non-empty" } }
@@ -1979,7 +1980,7 @@ export def "describe-global-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalSettings: record, LastUpdateTime: record> {
+]: nothing -> record<GlobalSettings: record, LastUpdateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/global-settings" $auth.query)
@@ -2070,7 +2071,7 @@ export def "describe-protected-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ResourceArn: record, ResourceType: record, LastBackupTime: record, ResourceName: record> {
+]: nothing -> record<ResourceArn: string, ResourceType: string, LastBackupTime: string, ResourceName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -2206,7 +2207,7 @@ export def "describe-report-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ReportJob: record<ReportJobId: record, ReportPlanArn: record, ReportTemplate: record, CreationTime: record, CompletionTime: record, Status: record, StatusMessage: record, ReportDestination: record<S3BucketName: record, S3Keys: record>>> {
+]: nothing -> record<ReportJob: record<ReportJobId: string, ReportPlanArn: string, ReportTemplate: string, CreationTime: string, CompletionTime: string, Status: string, StatusMessage: string, ReportDestination: record<S3BucketName: string, S3Keys: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($report_job_id | is-empty) { error make --unspanned { msg: "path parameter 'reportJobId' must be non-empty" } }
@@ -2251,7 +2252,7 @@ export def "describe-restore-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AccountId: record, RestoreJobId: record, RecoveryPointArn: record, CreationDate: record, CompletionDate: record, Status: record, StatusMessage: record, PercentDone: record, BackupSizeInBytes: record, IamRoleArn: record, ExpectedCompletionTimeMinutes: record, CreatedResourceArn: record, ResourceType: record> {
+]: nothing -> record<AccountId: string, RestoreJobId: string, RecoveryPointArn: string, CreationDate: string, CompletionDate: string, Status: string, StatusMessage: string, PercentDone: string, BackupSizeInBytes: int, IamRoleArn: string, ExpectedCompletionTimeMinutes: int, CreatedResourceArn: string, ResourceType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restore_job_id | is-empty) { error make --unspanned { msg: "path parameter 'restoreJobId' must be non-empty" } }
@@ -2390,7 +2391,7 @@ export def "export-backup-plan-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BackupPlanTemplateJson: record> {
+]: nothing -> record<BackupPlanTemplateJson: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($backup_plan_id | is-empty) { error make --unspanned { msg: "path parameter 'backupPlanId' must be non-empty" } }
@@ -2436,7 +2437,7 @@ export def "get-backup-plan" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BackupPlan: record<BackupPlanName: record, Rules: record, AdvancedBackupSettings: record>, BackupPlanId: record, BackupPlanArn: record, VersionId: record, CreatorRequestId: record, CreationDate: record, DeletionDate: record, LastExecutionDate: record, AdvancedBackupSettings: record> {
+]: nothing -> record<BackupPlan: record<BackupPlanName: string, Rules: list<record>, AdvancedBackupSettings: list<record>>, BackupPlanId: string, BackupPlanArn: string, VersionId: string, CreatorRequestId: string, CreationDate: string, DeletionDate: string, LastExecutionDate: string, AdvancedBackupSettings: table<ResourceType: string, BackupOptions: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($backup_plan_id | is-empty) { error make --unspanned { msg: "path parameter 'backupPlanId' must be non-empty" } }
@@ -2482,7 +2483,7 @@ export def "get-backup-plan-from-json" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   backup_plan_template_json: string # A customer-supplied backup plan document in JSON format.
-]: any -> record<BackupPlan: record<BackupPlanName: record, Rules: record, AdvancedBackupSettings: record>> {
+]: any -> record<BackupPlan: record<BackupPlanName: string, Rules: list<record>, AdvancedBackupSettings: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2529,7 +2530,7 @@ export def "get-backup-plan-from-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BackupPlanDocument: record<BackupPlanName: record, Rules: record, AdvancedBackupSettings: record>> {
+]: nothing -> record<BackupPlanDocument: record<BackupPlanName: string, Rules: list<record>, AdvancedBackupSettings: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
@@ -2574,7 +2575,7 @@ export def "get-legal-hold" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Title: record, Status: record, Description: record, CancelDescription: record, LegalHoldId: record, LegalHoldArn: record, CreationDate: record, CancellationDate: record, RetainRecordUntil: record, RecoveryPointSelection: record<VaultNames: record, ResourceIdentifiers: record, DateRange: record<FromDate: record, ToDate: record>>> {
+]: nothing -> record<Title: string, Status: string, Description: string, CancelDescription: string, LegalHoldId: string, LegalHoldArn: string, CreationDate: string, CancellationDate: string, RetainRecordUntil: string, RecoveryPointSelection: record<VaultNames: list<string>, ResourceIdentifiers: list<string>, DateRange: record<FromDate: string, ToDate: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($legal_hold_id | is-empty) { error make --unspanned { msg: "path parameter 'legalHoldId' must be non-empty" } }
@@ -2620,7 +2621,7 @@ export def "get-recovery-point-restore-metadata" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BackupVaultArn: record, RecoveryPointArn: record, RestoreMetadata: record> {
+]: nothing -> record<BackupVaultArn: string, RecoveryPointArn: string, RestoreMetadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($backup_vault_name | is-empty) { error make --unspanned { msg: "path parameter 'backupVaultName' must be non-empty" } }
@@ -2665,7 +2666,7 @@ export def "get-supported-resource-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ResourceTypes: record> {
+]: nothing -> record<ResourceTypes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/supported-resource-types" $auth.query)
@@ -2722,7 +2723,7 @@ export def "list-backup-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BackupJobs: record, NextToken: record> {
+]: nothing -> record<BackupJobs: table<AccountId: string, BackupJobId: string, BackupVaultName: string, BackupVaultArn: string, RecoveryPointArn: string, ResourceArn: string, CreationDate: string, CompletionDate: string, State: string, StatusMessage: string, PercentDone: string, BackupSizeInBytes: int, IamRoleArn: string, CreatedBy: record, ExpectedCompletionDate: string, StartBy: string, ResourceType: string, BytesTransferred: int, BackupOptions: record, BackupType: string, ParentJobId: string, IsParent: bool, ResourceName: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "resourceArn" $resource_arn "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "backupVaultName" $backup_vault_name "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "resourceType" $resource_type "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "completeAfter" $complete_after "scalar") (serialize-qp "completeBefore" $complete_before "scalar") (serialize-qp "parentJobId" $parent_job_id "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -2770,7 +2771,7 @@ export def "list-backup-plan-templates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, BackupPlanTemplatesList: record> {
+]: nothing -> record<NextToken: string, BackupPlanTemplatesList: table<BackupPlanTemplateId: string, BackupPlanTemplateName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -2819,7 +2820,7 @@ export def "list-backup-plan-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, BackupPlanVersionsList: record> {
+]: nothing -> record<NextToken: string, BackupPlanVersionsList: table<BackupPlanArn: string, BackupPlanId: string, CreationDate: string, DeletionDate: string, VersionId: string, BackupPlanName: string, CreatorRequestId: string, LastExecutionDate: string, AdvancedBackupSettings: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($backup_plan_id | is-empty) { error make --unspanned { msg: "path parameter 'backupPlanId' must be non-empty" } }
@@ -2868,7 +2869,7 @@ export def "list-backup-vaults" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BackupVaultList: record, NextToken: record> {
+]: nothing -> record<BackupVaultList: table<BackupVaultName: string, BackupVaultArn: string, CreationDate: string, EncryptionKeyArn: string, CreatorRequestId: string, NumberOfRecoveryPoints: int, Locked: bool, MinRetentionDays: int, MaxRetentionDays: int, LockDate: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -2926,7 +2927,7 @@ export def "list-copy-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CopyJobs: record, NextToken: record> {
+]: nothing -> record<CopyJobs: table<AccountId: string, CopyJobId: string, SourceBackupVaultArn: string, SourceRecoveryPointArn: string, DestinationBackupVaultArn: string, DestinationRecoveryPointArn: string, ResourceArn: string, CreationDate: string, CompletionDate: string, State: string, StatusMessage: string, BackupSizeInBytes: int, IamRoleArn: string, CreatedBy: record, ResourceType: string, ParentJobId: string, IsParent: bool, CompositeMemberIdentifier: string, NumberOfChildJobs: int, ChildJobsInState: record, ResourceName: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "resourceArn" $resource_arn "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "resourceType" $resource_type "scalar") (serialize-qp "destinationVaultArn" $destination_vault_arn "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "completeBefore" $complete_before "scalar") (serialize-qp "completeAfter" $complete_after "scalar") (serialize-qp "parentJobId" $parent_job_id "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -2974,7 +2975,7 @@ export def "list-protected-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Results: record, NextToken: record> {
+]: nothing -> record<Results: table<ResourceArn: string, ResourceType: string, LastBackupTime: string, ResourceName: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -3029,7 +3030,7 @@ export def "list-recovery-points-by-backup-vault" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, RecoveryPoints: record> {
+]: nothing -> record<NextToken: string, RecoveryPoints: table<RecoveryPointArn: string, BackupVaultName: string, BackupVaultArn: string, SourceBackupVaultArn: string, ResourceArn: string, ResourceType: string, CreatedBy: record, IamRoleArn: string, Status: string, StatusMessage: string, CreationDate: string, CompletionDate: string, BackupSizeInBytes: int, CalculatedLifecycle: record, Lifecycle: record, EncryptionKeyArn: string, IsEncrypted: bool, LastRestoreTime: string, ParentRecoveryPointArn: string, CompositeMemberIdentifier: string, IsParent: bool, ResourceName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($backup_vault_name | is-empty) { error make --unspanned { msg: "path parameter 'backupVaultName' must be non-empty" } }
@@ -3079,7 +3080,7 @@ export def "list-recovery-points-by-legal-hold" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RecoveryPoints: record, NextToken: record> {
+]: nothing -> record<RecoveryPoints: table<RecoveryPointArn: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($legal_hold_id | is-empty) { error make --unspanned { msg: "path parameter 'legalHoldId' must be non-empty" } }
@@ -3129,7 +3130,7 @@ export def "list-recovery-points-by-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, RecoveryPoints: record> {
+]: nothing -> record<NextToken: string, RecoveryPoints: table<RecoveryPointArn: string, CreationDate: string, Status: string, StatusMessage: string, EncryptionKeyArn: string, BackupSizeBytes: int, BackupVaultName: string, IsParent: bool, ParentRecoveryPointArn: string, ResourceName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -3180,7 +3181,7 @@ export def "list-report-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ReportJobs: record, NextToken: record> {
+]: nothing -> record<ReportJobs: table<ReportJobId: string, ReportPlanArn: string, ReportTemplate: string, CreationTime: string, CompletionTime: string, Status: string, StatusMessage: string, ReportDestination: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReportPlanName" $report_plan_name "scalar") (serialize-qp "CreationBefore" $creation_before "scalar") (serialize-qp "CreationAfter" $creation_after "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -3234,7 +3235,7 @@ export def "list-restore-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RestoreJobs: record, NextToken: record> {
+]: nothing -> record<RestoreJobs: table<AccountId: string, RestoreJobId: string, RecoveryPointArn: string, CreationDate: string, CompletionDate: string, Status: string, StatusMessage: string, PercentDone: string, BackupSizeInBytes: int, IamRoleArn: string, ExpectedCompletionTimeMinutes: int, CreatedResourceArn: string, ResourceType: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "completeBefore" $complete_before "scalar") (serialize-qp "completeAfter" $complete_after "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -3283,7 +3284,7 @@ export def "list-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, Tags: record> {
+]: nothing -> record<NextToken: string, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -3311,7 +3312,7 @@ export def "list-tags" [
 #
 # PUT /backup-jobs
 # operationId: StartBackupJob
-# --Lifecycle shape: {MoveToColdStorageAfterDays?: any, DeleteAfterDays?: any}
+# --Lifecycle shape: {MoveToColdStorageAfterDays?: int, DeleteAfterDays?: int}
 export def "start-backup-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3335,10 +3336,10 @@ export def "start-backup-job" [
   --idempotency-token: string # A customer-chosen string that you can use to distinguish between otherwise identical calls to StartBackupJob. Retrying a successful request with the same idempotency token results in a success message with no action taken.
   --start-window-minutes: int # A value in minutes after a backup is scheduled before a job will be canceled if it doesn't start successfully. This value is optional, and the default is 8 hours. If this value is included, it must be at least 60 minutes to avoid errors.
   --complete-window-minutes: int # A value in minutes during which a successfully started backup must complete, or else Backup will cancel the job. This value is optional. This value begins counting down from when the backup was scheduled. It does not add additional time for StartWindowMinutes, or if the backup started later than scheduled.
-  --lifecycle: record # Contains an array of Transition objects specifying how long in days before a recovery point transitions to cold storage or is deleted. Backups transitioned to cold storage must be stored in cold storage for a minimum of 90 days. Therefore, on the console, the “retention” setting must be 90 days greater than the “transition to cold after days” setting. The “transition to cold after days” setting cannot be changed after a backup has been transitioned to cold. Resource types that are able to be transitioned to cold storage are listed in the "Lifecycle to cold storage" section of the Feature availability by resource (https://docs.aws.amazon.com/aws-backup/latest/devguide/whatisbackup.html#features-by-resource) table. Backup ignores this expression for other resource types. — shape: {MoveToColdStorageAfterDays?: any, DeleteAfterDays?: any}
+  --lifecycle: record # Contains an array of Transition objects specifying how long in days before a recovery point transitions to cold storage or is deleted. Backups transitioned to cold storage must be stored in cold storage for a minimum of 90 days. Therefore, on the console, the “retention” setting must be 90 days greater than the “transition to cold after days” setting. The “transition to cold after days” setting cannot be changed after a backup has been transitioned to cold. Resource types that are able to be transitioned to cold storage are listed in the "Lifecycle to cold storage" section of the Feature availability by resource (https://docs.aws.amazon.com/aws-backup/latest/devguide/whatisbackup.html#features-by-resource) table. Backup ignores this expression for other resource types. — shape: {MoveToColdStorageAfterDays?: int, DeleteAfterDays?: int}
   --recovery-point-tags: record # To help organize your resources, you can assign your own metadata to the resources that you create. Each tag is a key-value pair.
   --backup-options: record # Specifies the backup option for a selected resource. This option is only available for Windows Volume Shadow Copy Service (VSS) backup jobs. Valid values: Set to "WindowsVSS":"enabled" to enable the WindowsVSS backup option and create a Windows VSS backup. Set to "WindowsVSS""disabled" to create a regular backup. The WindowsVSS option is not enabled by default.
-]: any -> record<BackupJobId: record, RecoveryPointArn: record, CreationDate: record, IsParent: record> {
+]: any -> record<BackupJobId: string, RecoveryPointArn: string, CreationDate: string, IsParent: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3367,7 +3368,7 @@ export def "start-backup-job" [
 #
 # PUT /copy-jobs
 # operationId: StartCopyJob
-# --Lifecycle shape: {MoveToColdStorageAfterDays?: any, DeleteAfterDays?: any}
+# --Lifecycle shape: {MoveToColdStorageAfterDays?: int, DeleteAfterDays?: int}
 export def "start-copy-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3390,8 +3391,8 @@ export def "start-copy-job" [
   destination_backup_vault_arn: string # An Amazon Resource Name (ARN) that uniquely identifies a destination backup vault to copy to; for example, arn:aws:backup:us-east-1:123456789012:vault:aBackupVault.
   iam_role_arn: string # Specifies the IAM role ARN used to copy the target recovery point; for example, arn:aws:iam::123456789012:role/S3Access.
   --idempotency-token: string # A customer-chosen string that you can use to distinguish between otherwise identical calls to StartCopyJob. Retrying a successful request with the same idempotency token results in a success message with no action taken.
-  --lifecycle: record # Contains an array of Transition objects specifying how long in days before a recovery point transitions to cold storage or is deleted. Backups transitioned to cold storage must be stored in cold storage for a minimum of 90 days. Therefore, on the console, the “retention” setting must be 90 days greater than the “transition to cold after days” setting. The “transition to cold after days” setting cannot be changed after a backup has been transitioned to cold. Resource types that are able to be transitioned to cold storage are listed in the "Lifecycle to cold storage" section of the Feature availability by resource (https://docs.aws.amazon.com/aws-backup/latest/devguide/whatisbackup.html#features-by-resource) table. Backup ignores this expression for other resource types. — shape: {MoveToColdStorageAfterDays?: any, DeleteAfterDays?: any}
-]: any -> record<CopyJobId: record, CreationDate: record, IsParent: record> {
+  --lifecycle: record # Contains an array of Transition objects specifying how long in days before a recovery point transitions to cold storage or is deleted. Backups transitioned to cold storage must be stored in cold storage for a minimum of 90 days. Therefore, on the console, the “retention” setting must be 90 days greater than the “transition to cold after days” setting. The “transition to cold after days” setting cannot be changed after a backup has been transitioned to cold. Resource types that are able to be transitioned to cold storage are listed in the "Lifecycle to cold storage" section of the Feature availability by resource (https://docs.aws.amazon.com/aws-backup/latest/devguide/whatisbackup.html#features-by-resource) table. Backup ignores this expression for other resource types. — shape: {MoveToColdStorageAfterDays?: int, DeleteAfterDays?: int}
+]: any -> record<CopyJobId: string, CreationDate: string, IsParent: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3439,7 +3440,7 @@ export def "start-report-job" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --idempotency-token: string # A customer-chosen string that you can use to distinguish between otherwise identical calls to StartReportJobInput. Retrying a successful request with the same idempotency token results in a success message with no action taken.
-]: any -> record<ReportJobId: record> {
+]: any -> record<ReportJobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3491,7 +3492,7 @@ export def "start-restore-job" [
   --iam-role-arn: string # The Amazon Resource Name (ARN) of the IAM role that Backup uses to create the target resource; for example: arn:aws:iam::123456789012:role/S3Access.
   --idempotency-token: string # A customer-chosen string that you can use to distinguish between otherwise identical calls to StartRestoreJob. Retrying a successful request with the same idempotency token results in a success message with no action taken.
   --resource-type: string # Starts a job to restore a recovery point for one of the following resources: Aurora for Amazon Aurora DocumentDB for Amazon DocumentDB (with MongoDB compatibility) DynamoDB for Amazon DynamoDB EBS for Amazon Elastic Block Store EC2 for Amazon Elastic Compute Cloud EFS for Amazon Elastic File System FSx for Amazon FSx Neptune for Amazon Neptune RDS for Amazon Relational Database Service Storage Gateway for Storage Gateway S3 for Amazon S3 VirtualMachine for virtual machines
-]: any -> record<RestoreJobId: record> {
+]: any -> record<RestoreJobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

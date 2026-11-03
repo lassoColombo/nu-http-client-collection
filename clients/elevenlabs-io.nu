@@ -360,6 +360,7 @@ export def "get-audio-from-history-item-v1-history-history-item-id-audio-get" [
 #
 # POST /v1/text-to-speech/{voice_id}
 # operationId: Text_to_speech_v1_text_to_speech__voice_id__post
+# --voice_settings shape: {similarity_boost: float, stability: float}
 export def "text-to-speech-v1-text-to-speech-voice-id-post" [
   voice_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -373,7 +374,7 @@ export def "text-to-speech-v1-text-to-speech-voice-id-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programatically. You can view your xi-api-key using the 'Profile' tab on the website.
   text: string # The text that will get converted into speech. Currently only English text is supported.
-  --voice-settings: any # Voice settings overriding stored setttings for the given voice. They are applied only on the given TTS request.
+  --voice-settings: record # Voice settings overriding stored setttings for the given voice. They are applied only on the given TTS request. — shape: {similarity_boost: float, stability: float}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -404,6 +405,7 @@ export def "text-to-speech-v1-text-to-speech-voice-id-post" [
 #
 # POST /v1/text-to-speech/{voice_id}/stream
 # operationId: Text_to_speech_v1_text_to_speech__voice_id__stream_post
+# --voice_settings shape: {similarity_boost: float, stability: float}
 export def "text-to-speech-v1-text-to-speech-voice-id-stream-post" [
   voice_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -417,7 +419,7 @@ export def "text-to-speech-v1-text-to-speech-voice-id-stream-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programatically. You can view your xi-api-key using the 'Profile' tab on the website.
   text: string # The text that will get converted into speech. Currently only English text is supported.
-  --voice-settings: any # Voice settings overriding stored setttings for the given voice. They are applied only on the given TTS request.
+  --voice-settings: record # Voice settings overriding stored setttings for the given voice. They are applied only on the given TTS request. — shape: {similarity_boost: float, stability: float}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -585,8 +587,8 @@ export def "add-voice-v1-voices-add-post" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -747,8 +749,8 @@ export def "edit-voice-v1-voices-voice-id-edit-post" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url

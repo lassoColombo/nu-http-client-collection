@@ -1081,11 +1081,12 @@ export def "get-instances-id-content" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --param: string # Path to the DICOM tag. This is the interleaving of one DICOM tag, possibly followed by an index for sequences. Sequences are accessible as, for instance, `/0008-1140/1/0008-1150`
+  --param: string # Path to the DICOM tag. This is the interleaving of one DICOM tag, possibly followed by an index for sequences. Sequences are accessible as, for instance, `/0008-1140/1/0008-1150` (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($param == null) { error make --unspanned { msg: "required query parameter '...' missing: pass --param" } }
   let qp = [(serialize-qp "..." $param "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/content") $qp $auth.query)
   let accept_val = "application/octet-stream"
@@ -9821,10 +9822,11 @@ export def "get-tools-generate-uid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --level: string # Type of DICOM resource among: `patient`, `study`, `series` or `instance`
+  --level: string # Type of DICOM resource among: `patient`, `study`, `series` or `instance` (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($level == null) { error make --unspanned { msg: "required query parameter 'level' missing: pass --level" } }
   let qp = [(serialize-qp "level" $level "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tools/generate-uid" $qp $auth.query)
   let accept_val = "text/plain"

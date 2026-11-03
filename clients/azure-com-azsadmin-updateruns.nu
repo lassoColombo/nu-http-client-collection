@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -141,13 +141,14 @@ export def "update-runs-list-top-level" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2016-05-01)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API Version. (required, default: 2016-05-01)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($update_location | is-empty) { error make --unspanned { msg: "path parameter 'updateLocation' must be non-empty" } }
+  let api_version = ($api_version | default "2016-05-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), update_location: (encode-path-segment $update_location)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Update.Admin/updateLocations/{update_location}/updateRuns") $qp $auth.query)
   let accept_val = "application/json"
@@ -184,14 +185,15 @@ export def "update-runs-get-top-level" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2016-05-01)
-]: nothing -> record<properties: record<duration: string, progress: record<description: string, endTimeUtc: string, errorMessage: string, name: string, startTimeUtc: string, status: string, steps: list>, state: string, timeStarted: string>> {
+  --api-version: string # Client API Version. (required, default: 2016-05-01)
+]: nothing -> record<properties: record<duration: string, progress: record<description: string, endTimeUtc: string, errorMessage: string, name: string, startTimeUtc: string, status: string, steps: list>, state: string, timeStarted: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($update_location | is-empty) { error make --unspanned { msg: "path parameter 'updateLocation' must be non-empty" } }
   if ($run_name | is-empty) { error make --unspanned { msg: "path parameter 'runName' must be non-empty" } }
+  let api_version = ($api_version | default "2016-05-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), update_location: (encode-path-segment $update_location), run_name: (encode-path-segment $run_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Update.Admin/updateLocations/{update_location}/updateRuns/{run_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -228,14 +230,15 @@ export def "update-runs-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2016-05-01)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API Version. (required, default: 2016-05-01)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($update_location | is-empty) { error make --unspanned { msg: "path parameter 'updateLocation' must be non-empty" } }
   if ($update_name | is-empty) { error make --unspanned { msg: "path parameter 'updateName' must be non-empty" } }
+  let api_version = ($api_version | default "2016-05-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), update_location: (encode-path-segment $update_location), update_name: (encode-path-segment $update_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Update.Admin/updateLocations/{update_location}/updates/{update_name}/updateRuns") $qp $auth.query)
   let accept_val = "application/json"
@@ -273,8 +276,8 @@ export def "update-runs-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2016-05-01)
-]: nothing -> record<properties: record<duration: string, progress: record<description: string, endTimeUtc: string, errorMessage: string, name: string, startTimeUtc: string, status: string, steps: list>, state: string, timeStarted: string>> {
+  --api-version: string # Client API Version. (required, default: 2016-05-01)
+]: nothing -> record<properties: record<duration: string, progress: record<description: string, endTimeUtc: string, errorMessage: string, name: string, startTimeUtc: string, status: string, steps: list>, state: string, timeStarted: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -282,6 +285,7 @@ export def "update-runs-get" [
   if ($update_location | is-empty) { error make --unspanned { msg: "path parameter 'updateLocation' must be non-empty" } }
   if ($update_name | is-empty) { error make --unspanned { msg: "path parameter 'updateName' must be non-empty" } }
   if ($run_name | is-empty) { error make --unspanned { msg: "path parameter 'runName' must be non-empty" } }
+  let api_version = ($api_version | default "2016-05-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), update_location: (encode-path-segment $update_location), update_name: (encode-path-segment $update_name), run_name: (encode-path-segment $run_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Update.Admin/updateLocations/{update_location}/updates/{update_name}/updateRuns/{run_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -319,7 +323,7 @@ export def "update-runs-rerun" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2016-05-01)
+  --api-version: string # Client API Version. (required, default: 2016-05-01)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -328,6 +332,7 @@ export def "update-runs-rerun" [
   if ($update_location | is-empty) { error make --unspanned { msg: "path parameter 'updateLocation' must be non-empty" } }
   if ($update_name | is-empty) { error make --unspanned { msg: "path parameter 'updateName' must be non-empty" } }
   if ($run_name | is-empty) { error make --unspanned { msg: "path parameter 'runName' must be non-empty" } }
+  let api_version = ($api_version | default "2016-05-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), update_location: (encode-path-segment $update_location), update_name: (encode-path-segment $update_name), run_name: (encode-path-segment $run_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Update.Admin/updateLocations/{update_location}/updates/{update_name}/updateRuns/{run_name}/rerun") $qp $auth.query)
   let accept_val = "application/json"

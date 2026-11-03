@@ -140,7 +140,7 @@ export def "get-eff-rest-services-download-effluent-chart" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --p-id: string # Identifier for the service.
+  --p-id: string # Identifier for the service. (required)
   --outfall: string # Three-character code that identifies the point of discharge (e.g., pipe or outfall) for a facility. A single NPDES ID may have multiple points of discharge.
   --parameter-code: string # Five-digit numeric code identifying the parameter. See Parameter Lookup documentation for a complete list of codes.
   --start-date: string # The start date (mm/dd/yyyy) for the date range of interest. Must be used in conjunction with end_date. If start_date and end_date are not specified, the service will return the last three years of data.
@@ -148,6 +148,7 @@ export def "get-eff-rest-services-download-effluent-chart" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "p_id" $p_id "scalar") (serialize-qp "outfall" $outfall "scalar") (serialize-qp "parameter_code" $parameter_code "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/eff_rest_services.download_effluent_chart" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -223,7 +224,7 @@ export def "get-eff-rest-services-get-effluent-chart" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --p-id: string # Identifier for the service.
+  --p-id: string # Identifier for the service. (required)
   --outfall: string # Three-character code that identifies the point of discharge (e.g., pipe or outfall) for a facility. A single NPDES ID may have multiple points of discharge.
   --parameter-code: string # Five-digit numeric code identifying the parameter. See Parameter Lookup documentation for a complete list of codes.
   --start-date: string # The start date (mm/dd/yyyy) for the date range of interest. Must be used in conjunction with end_date. If start_date and end_date are not specified, the service will return the last three years of data.
@@ -233,6 +234,7 @@ export def "get-eff-rest-services-get-effluent-chart" [
 ]: nothing -> record<Results: record<CWPCity: string, CWPCurrentSNCStatus: string, CWPMajorMinorStatusFlag: string, CWPName: string, CWPPermitStatusDesc: string, CWPPermitTypeDesc: string, CWPState: string, CWPStreet: string, CWPZip: string, EPASystem: string, EndDate: string, Message: string, PermFeatures: list<record>, RegistryId: string, SourceId: string, StartDate: string, Statute: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "p_id" $p_id "scalar") (serialize-qp "outfall" $outfall "scalar") (serialize-qp "parameter_code" $parameter_code "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/eff_rest_services.get_effluent_chart" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -310,7 +312,7 @@ export def "get-eff-rest-services-get-summary-chart" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --p-id: string # Identifier for the service.
+  --p-id: string # Identifier for the service. (required)
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --start-date: string # The start date (mm/dd/yyyy) for the date range of interest. Must be used in conjunction with end_date. If start_date and end_date are not specified, the service will return the last three years of data.
@@ -318,6 +320,7 @@ export def "get-eff-rest-services-get-summary-chart" [
 ]: nothing -> record<Results: record<CWPCity: string, CWPCurrentSNCStatus: string, CWPMajorMinorStatusFlag: string, CWPName: string, CWPPermitStatusDesc: string, CWPPermitTypeDesc: string, CWPState: string, CWPStreet: string, CWPZip: string, EPASystem: string, EndDate: string, LinkedPermits: list<record>, Message: string, PermFeatures: list<record>, RegistryId: string, SourceId: string, StartDate: string, Statute: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "p_id" $p_id "scalar") (serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/eff_rest_services.get_summary_chart" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

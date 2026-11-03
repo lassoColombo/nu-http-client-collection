@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -1049,13 +1049,14 @@ export def "delete-characters-character-id-contacts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contact-ids: list<int> # A list of contacts to delete
+  --contact-ids: list<int> # A list of contacts to delete (required)
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
+  if ($contact_ids == null) { error make --unspanned { msg: "required query parameter 'contact_ids' missing: pass --contact-ids" } }
   let qp = [(serialize-qp "contact_ids" $contact_ids "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp $auth.query)
   let accept_val = "application/json"
@@ -1134,7 +1135,7 @@ export def "post-characters-character-id-contacts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --label-ids: list<int> # Add custom labels to the new contact
-  --standing: float # Standing for the contact (format: float)
+  --standing: float # Standing for the contact (required, format: float)
   --qp-token: string # Access token to use if unable to set a header
   --watched: oneof<nothing, bool> # Whether the contact should be watched, note this is only effective on characters (default: false)
   --body: list
@@ -1143,6 +1144,7 @@ export def "post-characters-character-id-contacts" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
+  if ($standing == null) { error make --unspanned { msg: "required query parameter 'standing' missing: pass --standing" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "label_ids" $label_ids "csv") (serialize-qp "standing" $standing "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "watched" $watched "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp $auth.query)
   let req_body = $body
@@ -1180,7 +1182,7 @@ export def "put-characters-character-id-contacts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --label-ids: list<int> # Add custom labels to the contact
-  --standing: float # Standing for the contact (format: float)
+  --standing: float # Standing for the contact (required, format: float)
   --qp-token: string # Access token to use if unable to set a header
   --watched: oneof<nothing, bool> # Whether the contact should be watched, note this is only effective on characters (default: false)
   --body: list
@@ -1189,6 +1191,7 @@ export def "put-characters-character-id-contacts" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
+  if ($standing == null) { error make --unspanned { msg: "required query parameter 'standing' missing: pass --standing" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "label_ids" $label_ids "csv") (serialize-qp "standing" $standing "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "watched" $watched "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp $auth.query)
   let req_body = $body
@@ -2847,18 +2850,20 @@ export def "get-characters-character-id-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --categories: list<string> # Type of entities to search for
+  --categories: list<string> # Type of entities to search for (required)
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --search: string # The string to search on
+  --search: string # The string to search on (required)
   --strict: oneof<nothing, bool> # Whether the search should be a strict match (default: false)
   --qp-token: string # Access token to use if unable to set a header
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<agent: list<int>, alliance: list<int>, character: list<int>, constellation: list<int>, corporation: list<int>, faction: list<int>, inventory_type: list<int>, region: list<int>, solar_system: list<int>, station: list<int>, structure: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
+  if ($categories == null) { error make --unspanned { msg: "required query parameter 'categories' missing: pass --categories" } }
+  if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
   let qp = [(serialize-qp "categories" $categories "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "strict" $strict "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/search/") $qp $auth.query)
   let accept_val = "application/json"
@@ -5023,7 +5028,7 @@ export def "get-corporations-corporation-id-starbases-starbase-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --system-id: int # The solar system this starbase (POS) is located in, (format: int32)
+  --system-id: int # The solar system this starbase (POS) is located in, (required, format: int32)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<allow_alliance_members: bool, allow_corporation_members: bool, anchor: string, attack_if_at_war: bool, attack_if_other_security_status_dropping: bool, attack_security_status_threshold: float, attack_standing_threshold: float, fuel_bay_take: string, fuel_bay_view: string, fuels: table<quantity: int, type_id: int>, offline: string, online: string, unanchor: string, use_alliance_standings: bool> {
@@ -5031,6 +5036,7 @@ export def "get-corporations-corporation-id-starbases-starbase-id" [
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
   if ($starbase_id | is-empty) { error make --unspanned { msg: "path parameter 'starbase_id' must be non-empty" } }
+  if ($system_id == null) { error make --unspanned { msg: "required query parameter 'system_id' missing: pass --system-id" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "system_id" $system_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), starbase_id: (encode-path-segment $starbase_id)} | format pattern "/corporations/{corporation_id}/starbases/{starbase_id}/") $qp $auth.query)
   let accept_val = "application/json"
@@ -5070,7 +5076,7 @@ export def "get-corporations-corporation-id-structures" [
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<corporation_id: int, fuel_expires: string, next_reinforce_apply: string, next_reinforce_hour: int, next_reinforce_weekday: int, profile_id: int, reinforce_hour: int, reinforce_weekday: int, services: list<record>, state: string, state_timer_end: string, state_timer_start: string, structure_id: int, system_id: int, type_id: int, unanchors_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5577,7 +5583,7 @@ export def "get-fleets-fleet-id-members" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --qp-token: string # Access token to use if unable to set a header
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<character_id: int, join_time: string, role: string, role_name: string, ship_type_id: int, solar_system_id: int, squad_id: int, station_id: int, takes_fleet_warp: bool, wing_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5841,7 +5847,7 @@ export def "get-fleets-fleet-id-wings" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --qp-token: string # Access token to use if unable to set a header
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<id: int, name: string, squads: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6400,7 +6406,7 @@ export def "get-insurance-prices" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<levels: list<record>, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6565,7 +6571,7 @@ export def "get-markets-groups-market-group-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<description: string, market_group_id: int, name: string, parent_group_id: int, types: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6689,12 +6695,13 @@ export def "get-markets-region-id-history" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --type-id: int # Return statistics for this type (format: int32)
+  --type-id: int # Return statistics for this type (required, format: int32)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<average: float, date: string, highest: float, lowest: float, order_count: int, volume: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'region_id' must be non-empty" } }
+  if ($type_id == null) { error make --unspanned { msg: "required query parameter 'type_id' missing: pass --type-id" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "type_id" $type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/markets/{region_id}/history/") $qp $auth.query)
   let accept_val = "application/json"
@@ -6731,7 +6738,7 @@ export def "get-markets-region-id-orders" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --order-type: string@order-type-completer # Filter buy/sell orders, return all orders by default. If you query without type_id, we always return both buy and sell orders (default: all)
+  --order-type: string@order-type-completer # Filter buy/sell orders, return all orders by default. If you query without type_id, we always return both buy and sell orders (required, default: all)
   --page: int # Which page of results to return (format: int32, default: 1)
   --type-id: int # Return orders only for this type (format: int32)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
@@ -6739,6 +6746,7 @@ export def "get-markets-region-id-orders" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'region_id' must be non-empty" } }
+  let order_type = ($order_type | default "all")
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "order_type" $order_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "type_id" $type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/markets/{region_id}/orders/") $qp $auth.query)
   let accept_val = "application/json"
@@ -6857,7 +6865,7 @@ export def "get-opportunities-groups-group-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<connected_groups: list<int>, description: string, group_id: int, name: string, notification: string, required_tasks: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7023,16 +7031,18 @@ export def "get-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --categories: list<string> # Type of entities to search for
+  --categories: list<string> # Type of entities to search for (required)
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --search: string # The string to search on
+  --search: string # The string to search on (required)
   --strict: oneof<nothing, bool> # Whether the search should be a strict match (default: false)
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<agent: list<int>, alliance: list<int>, character: list<int>, constellation: list<int>, corporation: list<int>, faction: list<int>, inventory_type: list<int>, region: list<int>, solar_system: list<int>, station: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($categories == null) { error make --unspanned { msg: "required query parameter 'categories' missing: pass --categories" } }
+  if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
   let qp = [(serialize-qp "categories" $categories "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "strict" $strict "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/" $qp $auth.query)
   let accept_val = "application/json"
@@ -7223,14 +7233,17 @@ export def "post-ui-autopilot-waypoint" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --add-to-beginning: oneof<nothing, bool> # Whether this solar system should be added to the beginning of all waypoints (default: false)
-  --clear-other-waypoints: oneof<nothing, bool> # Whether clean other waypoints beforing adding this one (default: false)
+  --add-to-beginning: oneof<nothing, bool> # Whether this solar system should be added to the beginning of all waypoints (required, default: false)
+  --clear-other-waypoints: oneof<nothing, bool> # Whether clean other waypoints beforing adding this one (required, default: false)
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --destination-id: int # The destination to travel to, can be solar system, station or structure's id (format: int64)
+  --destination-id: int # The destination to travel to, can be solar system, station or structure's id (required, format: int64)
   --qp-token: string # Access token to use if unable to set a header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let add_to_beginning = ($add_to_beginning | default false)
+  let clear_other_waypoints = ($clear_other_waypoints | default false)
+  if ($destination_id == null) { error make --unspanned { msg: "required query parameter 'destination_id' missing: pass --destination-id" } }
   let qp = [(serialize-qp "add_to_beginning" $add_to_beginning "scalar") (serialize-qp "clear_other_waypoints" $clear_other_waypoints "scalar") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "destination_id" $destination_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ui/autopilot/waypoint/" $qp $auth.query)
   let accept_val = "application/json"
@@ -7263,12 +7276,13 @@ export def "post-ui-openwindow-contract" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contract-id: int # The contract to open (format: int32)
+  --contract-id: int # The contract to open (required, format: int32)
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contract_id == null) { error make --unspanned { msg: "required query parameter 'contract_id' missing: pass --contract-id" } }
   let qp = [(serialize-qp "contract_id" $contract_id "scalar") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ui/openwindow/contract/" $qp $auth.query)
   let accept_val = "application/json"
@@ -7302,11 +7316,12 @@ export def "post-ui-openwindow-information" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --target-id: int # The target to open (format: int32)
+  --target-id: int # The target to open (required, format: int32)
   --qp-token: string # Access token to use if unable to set a header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($target_id == null) { error make --unspanned { msg: "required query parameter 'target_id' missing: pass --target-id" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "target_id" $target_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ui/openwindow/information/" $qp $auth.query)
   let accept_val = "application/json"
@@ -7341,10 +7356,11 @@ export def "post-ui-openwindow-marketdetails" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --type-id: int # The item type to open in market window (format: int32)
+  --type-id: int # The item type to open in market window (required, format: int32)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($type_id == null) { error make --unspanned { msg: "required query parameter 'type_id' missing: pass --type-id" } }
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "type_id" $type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ui/openwindow/marketdetails/" $qp $auth.query)
   let accept_val = "application/json"
@@ -7424,7 +7440,7 @@ export def "get-universe-ancestries" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<bloodline_id: int, description: string, icon_id: int, id: int, name: string, short_description: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7506,7 +7522,7 @@ export def "get-universe-bloodlines" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<bloodline_id: int, charisma: int, corporation_id: int, description: string, intelligence: int, memory: int, name: string, perception: int, race_id: int, ship_type_id: int, willpower: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7587,7 +7603,7 @@ export def "get-universe-categories-category-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<category_id: int, groups: list<int>, name: string, published: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7669,7 +7685,7 @@ export def "get-universe-constellations-constellation-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<constellation_id: int, name: string, position: record<x: float, y: float, z: float>, region_id: int, systems: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7711,7 +7727,7 @@ export def "get-universe-factions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<corporation_id: int, description: string, faction_id: int, is_unique: bool, militia_corporation_id: int, name: string, size_factor: float, solar_system_id: int, station_count: int, station_system_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7873,7 +7889,7 @@ export def "get-universe-groups-group-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<category_id: int, group_id: int, name: string, published: bool, types: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7915,7 +7931,7 @@ export def "post-universe-ids" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --body: list
 ]: any -> record<agents: table<id: int, name: string>, alliances: table<id: int, name: string>, characters: table<id: int, name: string>, constellations: table<id: int, name: string>, corporations: table<id: int, name: string>, factions: table<id: int, name: string>, inventory_types: table<id: int, name: string>, regions: table<id: int, name: string>, stations: table<id: int, name: string>, systems: table<id: int, name: string>> {
   let input = $in
@@ -8081,7 +8097,7 @@ export def "get-universe-races" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<alliance_id: int, description: string, name: string, race_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8162,7 +8178,7 @@ export def "get-universe-regions-region-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<constellations: list<int>, description: string, name: string, region_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8568,7 +8584,7 @@ export def "get-universe-systems-system-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<constellation_id: int, name: string, planets: table<asteroid_belts: list, moons: list, planet_id: int>, position: record<x: float, y: float, z: float>, security_class: string, security_status: float, star_id: int, stargates: list<int>, stations: list<int>, system_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8651,7 +8667,7 @@ export def "get-universe-types-type-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --accept-language: string@accept-language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<capacity: float, description: string, dogma_attributes: table<attribute_id: int, value: float>, dogma_effects: table<effect_id: int, is_default: bool>, graphic_id: int, group_id: int, icon_id: int, market_group_id: int, mass: float, name: string, packaged_volume: float, portion_size: int, published: bool, radius: float, type_id: int, volume: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

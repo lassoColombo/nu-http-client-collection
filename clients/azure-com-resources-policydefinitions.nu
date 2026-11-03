@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -144,10 +144,11 @@ export def "policy-definitions-list-built-in" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Authorization/policyDefinitions" $qp $auth.query)
   let accept_val = "application/json"
@@ -181,11 +182,12 @@ export def "policy-definitions-get-built-in" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
 ]: nothing -> record<id: string, name: string, properties: record<description: string, displayName: string, metadata: record, mode: string, parameters: record, policyRule: record, policyType: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($policy_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'policyDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({policy_definition_name: (encode-path-segment $policy_definition_name)} | format pattern "/providers/Microsoft.Authorization/policyDefinitions/{policy_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -219,11 +221,12 @@ export def "policy-definitions-list-by-management-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($management_group_id | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({management_group_id: (encode-path-segment $management_group_id)} | format pattern "/providers/Microsoft.Management/managementgroups/{management_group_id}/providers/Microsoft.Authorization/policyDefinitions") $qp $auth.query)
   let accept_val = "application/json"
@@ -258,12 +261,13 @@ export def "policy-definitions-delete-at-management-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($management_group_id | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupId' must be non-empty" } }
   if ($policy_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'policyDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({management_group_id: (encode-path-segment $management_group_id), policy_definition_name: (encode-path-segment $policy_definition_name)} | format pattern "/providers/Microsoft.Management/managementgroups/{management_group_id}/providers/Microsoft.Authorization/policyDefinitions/{policy_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -298,12 +302,13 @@ export def "policy-definitions-get-at-management-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
 ]: nothing -> record<id: string, name: string, properties: record<description: string, displayName: string, metadata: record, mode: string, parameters: record, policyRule: record, policyType: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($management_group_id | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupId' must be non-empty" } }
   if ($policy_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'policyDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({management_group_id: (encode-path-segment $management_group_id), policy_definition_name: (encode-path-segment $policy_definition_name)} | format pattern "/providers/Microsoft.Management/managementgroups/{management_group_id}/providers/Microsoft.Authorization/policyDefinitions/{policy_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -339,7 +344,7 @@ export def "policy-definitions-create-or-update-at-management-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
   --properties: any # The policy definition properties. — shape: {description?: string, displayName?: string, metadata?: record, mode?: string, parameters?: record, policyRule?: record, policyType?: "NotSpecified"|"BuiltIn"|"Custom"}
 ]: any -> record<id: string, name: string, properties: record<description: string, displayName: string, metadata: record, mode: string, parameters: record, policyRule: record, policyType: string>, type: string> {
   let input = $in
@@ -347,6 +352,7 @@ export def "policy-definitions-create-or-update-at-management-group" [
   let base = ($base_url | default $BASE_URL)
   if ($management_group_id | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupId' must be non-empty" } }
   if ($policy_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'policyDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({management_group_id: (encode-path-segment $management_group_id), policy_definition_name: (encode-path-segment $policy_definition_name)} | format pattern "/providers/Microsoft.Management/managementgroups/{management_group_id}/providers/Microsoft.Authorization/policyDefinitions/{policy_definition_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -382,11 +388,12 @@ export def "policy-definitions-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Authorization/policyDefinitions") $qp $auth.query)
   let accept_val = "application/json"
@@ -421,12 +428,13 @@ export def "policy-definitions-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($policy_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'policyDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), policy_definition_name: (encode-path-segment $policy_definition_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Authorization/policyDefinitions/{policy_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -461,12 +469,13 @@ export def "policy-definitions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
 ]: nothing -> record<id: string, name: string, properties: record<description: string, displayName: string, metadata: record, mode: string, parameters: record, policyRule: record, policyType: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($policy_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'policyDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), policy_definition_name: (encode-path-segment $policy_definition_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Authorization/policyDefinitions/{policy_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -502,7 +511,7 @@ export def "policy-definitions-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
   --properties: any # The policy definition properties. — shape: {description?: string, displayName?: string, metadata?: record, mode?: string, parameters?: record, policyRule?: record, policyType?: "NotSpecified"|"BuiltIn"|"Custom"}
 ]: any -> record<id: string, name: string, properties: record<description: string, displayName: string, metadata: record, mode: string, parameters: record, policyRule: record, policyType: string>, type: string> {
   let input = $in
@@ -510,6 +519,7 @@ export def "policy-definitions-create-or-update" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($policy_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'policyDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), policy_definition_name: (encode-path-segment $policy_definition_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Authorization/policyDefinitions/{policy_definition_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

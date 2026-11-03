@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-fungenerators-api-secret" => { {scheme: $scheme, headers: {X-Fungenerators-Api-Secret: $token_val}, query: "", location: "header"} }
+    "x-fungenerators-api-secret" => { {scheme: $scheme, headers: {"X-Fungenerators-Api-Secret": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -168,10 +168,10 @@ export def "get-qrcode-business-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --firstname: string # First Name (format: string)
-  --lastname: string # Last Name (format: string)
+  --firstname: string # First Name (required, format: string)
+  --lastname: string # Last Name (required, format: string)
   --middlename: string # Middle Name (format: string)
-  --email: string # Email id (format: string)
+  --email: string # Email id (required, format: string)
   --company: string # Company Name (format: string)
   --phone-work: string # Work Phone Number (format: string)
   --phone-home: string # Home Phone Number (format: string)
@@ -186,6 +186,9 @@ export def "get-qrcode-business-card" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($firstname == null) { error make --unspanned { msg: "required query parameter 'firstname' missing: pass --firstname" } }
+  if ($lastname == null) { error make --unspanned { msg: "required query parameter 'lastname' missing: pass --lastname" } }
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
   let qp = [(serialize-qp "firstname" $firstname "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "middlename" $middlename "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "company" $company "scalar") (serialize-qp "phone_work" $phone_work "scalar") (serialize-qp "phone_home" $phone_home "scalar") (serialize-qp "phone_cell" $phone_cell "scalar") (serialize-qp "street1" $street1 "scalar") (serialize-qp "street2" $street2 "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/qrcode/business_card" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -228,8 +231,8 @@ export def "post-qrcode-decode" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["qrimage"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["qrimage"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -258,13 +261,14 @@ export def "get-qrcode-email" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --email: string # Email id to send the email to (format: string)
+  --email: string # Email id to send the email to (required, format: string)
   --subject: string # Subject of the email(optional) (format: string)
   --body: string # Body of the email(optional) (format: string)
   --format: string # Output image format. Must be one of png/png/eps/raw/svg (format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "subject" $subject "scalar") (serialize-qp "body" $body "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/qrcode/email" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -297,11 +301,12 @@ export def "get-qrcode-phone" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --number: string # Phone Number (format: string)
+  --number: string # Phone Number (required, format: string)
   --format: string # Output image format. Must be one of png/eps/raw/svg (format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/qrcode/phone" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -334,11 +339,12 @@ export def "get-qrcode-raw" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --rawtext: string # Raw Text value (format: string)
+  --rawtext: string # Raw Text value (required, format: string)
   --format: string # Output image format. Must be one of png/eps/raw/svg (format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($rawtext == null) { error make --unspanned { msg: "required query parameter 'rawtext' missing: pass --rawtext" } }
   let qp = [(serialize-qp "rawtext" $rawtext "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/qrcode/raw" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -371,11 +377,12 @@ export def "get-qrcode-skype" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --username: string # Skype User name (format: string)
+  --username: string # Skype User name (required, format: string)
   --format: string # Output image format. Must be one of png/eps/raw/svg (format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/qrcode/skype" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -408,11 +415,12 @@ export def "get-qrcode-sms" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --number: string # Phone Number to SMS (format: string)
+  --number: string # Phone Number to SMS (required, format: string)
   --format: string # Output image format. Must be one of png/eps/raw/svg (format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/qrcode/sms" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -445,11 +453,12 @@ export def "get-qrcode-text" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text value (format: string)
+  --text: string # Text value (required, format: string)
   --format: string # Output image format. Must be one of png/eps/raw/svg (format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/qrcode/text" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -482,11 +491,12 @@ export def "get-qrcode-url" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --url: string # URL value (format: string)
+  --url: string # URL value (required, format: string)
   --format: string # Output image format. Must be one of png/raw/eps/svg (format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/qrcode/url" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

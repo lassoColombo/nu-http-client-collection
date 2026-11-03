@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -104,10 +104,14 @@ def x-amz-target-completer-4 [] { ["CodeDeploy_20141006.BatchGetDeploymentInstan
 def x-amz-target-completer-5 [] { ["CodeDeploy_20141006.BatchGetDeploymentTargets"] }
 def x-amz-target-completer-6 [] { ["CodeDeploy_20141006.BatchGetDeployments"] }
 def x-amz-target-completer-7 [] { ["CodeDeploy_20141006.BatchGetOnPremisesInstances"] }
+def deployment-wait-type-completer [] { ["READY_WAIT" "TERMINATION_WAIT"] }
 def x-amz-target-completer-8 [] { ["CodeDeploy_20141006.ContinueDeployment"] }
+def compute-platform-completer [] { ["ECS" "Lambda" "Server"] }
 def x-amz-target-completer-9 [] { ["CodeDeploy_20141006.CreateApplication"] }
+def file-exists-behavior-completer [] { ["DISALLOW" "OVERWRITE" "RETAIN"] }
 def x-amz-target-completer-10 [] { ["CodeDeploy_20141006.CreateDeployment"] }
 def x-amz-target-completer-11 [] { ["CodeDeploy_20141006.CreateDeploymentConfig"] }
+def outdated-instances-strategy-completer [] { ["IGNORE" "UPDATE"] }
 def x-amz-target-completer-12 [] { ["CodeDeploy_20141006.CreateDeploymentGroup"] }
 def x-amz-target-completer-13 [] { ["CodeDeploy_20141006.DeleteApplication"] }
 def x-amz-target-completer-14 [] { ["CodeDeploy_20141006.DeleteDeploymentConfig"] }
@@ -123,6 +127,9 @@ def x-amz-target-completer-23 [] { ["CodeDeploy_20141006.GetDeploymentGroup"] }
 def x-amz-target-completer-24 [] { ["CodeDeploy_20141006.GetDeploymentInstance"] }
 def x-amz-target-completer-25 [] { ["CodeDeploy_20141006.GetDeploymentTarget"] }
 def x-amz-target-completer-26 [] { ["CodeDeploy_20141006.GetOnPremisesInstance"] }
+def sort-by-completer [] { ["firstUsedTime" "lastUsedTime" "registerTime"] }
+def sort-order-completer [] { ["ascending" "descending"] }
+def deployed-completer [] { ["exclude" "ignore" "include"] }
 def x-amz-target-completer-27 [] { ["CodeDeploy_20141006.ListApplicationRevisions"] }
 def x-amz-target-completer-28 [] { ["CodeDeploy_20141006.ListApplications"] }
 def x-amz-target-completer-29 [] { ["CodeDeploy_20141006.ListDeploymentConfigs"] }
@@ -131,8 +138,10 @@ def x-amz-target-completer-31 [] { ["CodeDeploy_20141006.ListDeploymentInstances
 def x-amz-target-completer-32 [] { ["CodeDeploy_20141006.ListDeploymentTargets"] }
 def x-amz-target-completer-33 [] { ["CodeDeploy_20141006.ListDeployments"] }
 def x-amz-target-completer-34 [] { ["CodeDeploy_20141006.ListGitHubAccountTokenNames"] }
+def registration-status-completer [] { ["Deregistered" "Registered"] }
 def x-amz-target-completer-35 [] { ["CodeDeploy_20141006.ListOnPremisesInstances"] }
 def x-amz-target-completer-36 [] { ["CodeDeploy_20141006.ListTagsForResource"] }
+def status-completer [] { ["Failed" "InProgress" "Pending" "Skipped" "Succeeded" "Unknown"] }
 def x-amz-target-completer-37 [] { ["CodeDeploy_20141006.PutLifecycleEventHookExecutionStatus"] }
 def x-amz-target-completer-38 [] { ["CodeDeploy_20141006.RegisterApplicationRevision"] }
 def x-amz-target-completer-39 [] { ["CodeDeploy_20141006.RegisterOnPremisesInstance"] }
@@ -171,6 +180,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddTagsToOnPremisesInstances
+# --tags item shape: {Key?: string, Value?: string}
 export def "add-tags-to-on-premises-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -188,13 +198,14 @@ export def "add-tags-to-on-premises-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  tags: any
-  instance_names: any
+  --x-amz-target: string@x-amz-target-completer # required
+  tags: list # The tag key-value pairs to add to the on-premises instances. Keys and values are both required. Keys cannot be null or empty strings. Value-only tags are not allowed. — item shape: {Key?: string, Value?: string}
+  instance_names: list<string> # The names of the on-premises instances to which to add tags.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.AddTagsToOnPremisesInstances")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"tags": $tags, "instanceNames": $instance_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -220,6 +231,7 @@ export def "add-tags-to-on-premises-instances" [
 #
 # POST /
 # operationId: BatchGetApplicationRevisions
+# --revisions item shape: {revisionType?: "S3"|"GitHub"|"String"|"AppSpecContent", s3Location?: record, gitHubLocation?: record, string?: record, appSpecContent?: record}
 export def "batch-get-application-revisions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -237,13 +249,14 @@ export def "batch-get-application-revisions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  application_name: any
-  revisions: any
-]: any -> record<applicationName: record, errorMessage: record, revisions: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  application_name: string # The name of an CodeDeploy application about which to get revision information.
+  revisions: list # An array of RevisionLocation objects that specify information to get about the application revisions, including type and location. The maximum number of RevisionLocation objects you can specify is 25. — item shape: {revisionType?: "S3"|"GitHub"|"String"|"AppSpecContent", s3Location?: record, gitHubLocation?: record, string?: record, appSpecContent?: record}
+]: any -> record<applicationName: string, errorMessage: string, revisions: table<revisionLocation: record, genericRevisionInfo: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.BatchGetApplicationRevisions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"applicationName": $application_name, "revisions": $revisions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -286,12 +299,13 @@ export def "batch-get-applications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  application_names: any
-]: any -> record<applicationsInfo: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  application_names: list<string> # A list of application names separated by spaces. The maximum number of application names you can specify is 100.
+]: any -> record<applicationsInfo: table<applicationId: string, applicationName: string, createTime: string, linkedToGitHub: bool, gitHubAccountName: string, computePlatform: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.BatchGetApplications")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"applicationNames": $application_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -334,13 +348,14 @@ export def "batch-get-deployment-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  application_name: any
-  deployment_group_names: any
-]: any -> record<deploymentGroupsInfo: record, errorMessage: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  application_name: string # The name of an CodeDeploy application associated with the applicable IAM or Amazon Web Services account.
+  deployment_group_names: list<string> # The names of the deployment groups.
+]: any -> record<deploymentGroupsInfo: table<applicationName: string, deploymentGroupId: string, deploymentGroupName: string, deploymentConfigName: string, ec2TagFilters: list, onPremisesInstanceTagFilters: list, autoScalingGroups: list, serviceRoleArn: string, targetRevision: record, triggerConfigurations: list, alarmConfiguration: record, autoRollbackConfiguration: record, deploymentStyle: record, outdatedInstancesStrategy: string, blueGreenDeploymentConfiguration: record, loadBalancerInfo: record, lastSuccessfulDeployment: record, lastAttemptedDeployment: record, ec2TagSet: record, onPremisesTagSet: record, computePlatform: string, ecsServices: list>, errorMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.BatchGetDeploymentGroups")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"applicationName": $application_name, "deploymentGroupNames": $deployment_group_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -385,13 +400,14 @@ export def "batch-get-deployment-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  deployment_id: any
-  instance_ids: any
-]: any -> record<instancesSummary: record, errorMessage: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  deployment_id: string # The unique ID of a deployment.
+  instance_ids: list<string> # The unique IDs of instances used in the deployment. The maximum number of instance IDs you can specify is 25.
+]: any -> record<instancesSummary: table<deploymentId: string, instanceId: string, status: string, lastUpdatedAt: string, lifecycleEvents: list, instanceType: string>, errorMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.BatchGetDeploymentInstances")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deploymentId": $deployment_id, "instanceIds": $instance_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -434,13 +450,14 @@ export def "batch-get-deployment-targets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  --deployment-id: any
-  --target-ids: any
-]: any -> record<deploymentTargets: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  --deployment-id: string # The unique ID of a deployment.
+  --target-ids: list<string> # The unique IDs of the deployment targets. The compute platform of the deployment determines the type of the targets and their formats. The maximum number of deployment target IDs you can specify is 25. For deployments that use the EC2/On-premises compute platform, the target IDs are Amazon EC2 or on-premises instances IDs, and their target type is instanceTarget. For deployments that use the Lambda compute platform, the target IDs are the names of Lambda functions, and their target type is instanceTarget. For deployments that use the Amazon ECS compute platform, the target IDs are pairs of Amazon ECS clusters and services specified using the format <clustername>:<servicename>. Their target type is ecsTarget. For deployments that are deployed with CloudFormation, the target IDs are CloudFormation stack IDs. Their target type is cloudFormationTarget.
+]: any -> record<deploymentTargets: table<deploymentTargetType: string, instanceTarget: record, lambdaTarget: record, ecsTarget: record, cloudFormationTarget: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.BatchGetDeploymentTargets")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deploymentId": $deployment_id, "targetIds": $target_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -483,12 +500,13 @@ export def "batch-get-deployments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  deployment_ids: any
-]: any -> record<deploymentsInfo: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  deployment_ids: list<string> # A list of deployment IDs, separated by spaces. The maximum number of deployment IDs you can specify is 25.
+]: any -> record<deploymentsInfo: table<applicationName: string, deploymentGroupName: string, deploymentConfigName: string, deploymentId: string, previousRevision: record, revision: record, status: string, errorInformation: record, createTime: string, startTime: string, completeTime: string, deploymentOverview: record, description: string, creator: string, ignoreApplicationStopFailures: bool, autoRollbackConfiguration: record, updateOutdatedInstancesOnly: bool, rollbackInfo: record, deploymentStyle: record, targetInstances: record, instanceTerminationWaitTimeStarted: bool, blueGreenDeploymentConfiguration: record, loadBalancerInfo: record, additionalDeploymentStatusInfo: string, fileExistsBehavior: string, deploymentStatusMessages: list, computePlatform: string, externalId: string, relatedDeployments: record, overrideAlarmConfiguration: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.BatchGetDeployments")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deploymentIds": $deployment_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -531,12 +549,13 @@ export def "batch-get-on-premises-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  instance_names: any
-]: any -> record<instanceInfos: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  instance_names: list<string> # The names of the on-premises instances about which to get information. The maximum number of instance names you can specify is 25.
+]: any -> record<instanceInfos: table<instanceName: string, iamSessionArn: string, iamUserArn: string, instanceArn: string, registerTime: string, deregisterTime: string, tags: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.BatchGetOnPremisesInstances")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"instanceNames": $instance_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -579,13 +598,14 @@ export def "continue-deployment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  --deployment-id: any
-  --deployment-wait-type: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  --deployment-id: string # The unique ID of a blue/green deployment for which you want to start rerouting traffic to the replacement environment.
+  --deployment-wait-type: string@deployment-wait-type-completer # The status of the deployment's waiting period. READY_WAIT indicates that the deployment is ready to start shifting traffic. TERMINATION_WAIT indicates that the traffic is shifted, but the original target is not terminated.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.ContinueDeployment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deploymentId": $deployment_id, "deploymentWaitType": $deployment_wait_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -611,6 +631,7 @@ export def "continue-deployment" [
 #
 # POST /
 # operationId: CreateApplication
+# --tags item shape: {Key?: string, Value?: string}
 export def "create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -628,14 +649,15 @@ export def "create-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  application_name: any
-  --compute-platform: any
-  --tags: any
-]: any -> record<applicationId: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  application_name: string # The name of the application. This name must be unique with the applicable IAM or Amazon Web Services account.
+  --compute-platform: string@compute-platform-completer # The destination platform type for the deployment (Lambda, Server, or ECS).
+  --tags: list # The metadata that you apply to CodeDeploy applications to help you organize and categorize them. Each tag consists of a key and an optional value, both of which you define. — item shape: {Key?: string, Value?: string}
+]: any -> record<applicationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.CreateApplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"applicationName": $application_name, "computePlatform": $compute_platform, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -661,6 +683,10 @@ export def "create-application" [
 #
 # POST /
 # operationId: CreateDeployment
+# --revision shape: {revisionType?: "S3"|"GitHub"|"String"|"AppSpecContent", s3Location?: record, gitHubLocation?: record, string?: record, appSpecContent?: record}
+# --targetInstances shape: {tagFilters?: list, autoScalingGroups?: list<string>, ec2TagSet?: record}
+# --autoRollbackConfiguration shape: {enabled?: bool, events?: list<string>}
+# --overrideAlarmConfiguration shape: {enabled?: bool, ignorePollAlarmFailure?: bool, alarms?: list}
 export def "create-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -678,22 +704,23 @@ export def "create-deployment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  application_name: any
-  --deployment-group-name: any
-  --revision: any
-  --deployment-config-name: any
-  --description: any
-  --ignore-application-stop-failures: any
-  --target-instances: any
-  --auto-rollback-configuration: any
-  --update-outdated-instances-only: any
-  --file-exists-behavior: any
-  --override-alarm-configuration: any
-]: any -> record<deploymentId: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  application_name: string # The name of an CodeDeploy application associated with the IAM user or Amazon Web Services account.
+  --deployment-group-name: string # The name of the deployment group.
+  --revision: record # Information about the location of an application revision. — shape: {revisionType?: "S3"|"GitHub"|"String"|"AppSpecContent", s3Location?: record, gitHubLocation?: record, string?: record, appSpecContent?: record}
+  --deployment-config-name: string # The name of a deployment configuration associated with the IAM user or Amazon Web Services account. If not specified, the value configured in the deployment group is used as the default. If the deployment group does not have a deployment configuration associated with it, CodeDeployDefault.OneAtATime is used by default.
+  --description: string # A comment about the deployment.
+  --ignore-application-stop-failures: oneof<nothing, bool> # If true, then if an ApplicationStop, BeforeBlockTraffic, or AfterBlockTraffic deployment lifecycle event to an instance fails, then the deployment continues to the next deployment lifecycle event. For example, if ApplicationStop fails, the deployment continues with DownloadBundle. If BeforeBlockTraffic fails, the deployment continues with BlockTraffic. If AfterBlockTraffic fails, the deployment continues with ApplicationStop. If false or not specified, then if a lifecycle event fails during a deployment to an instance, that deployment fails. If deployment to that instance is part of an overall deployment and the number of healthy hosts is not less than the minimum number of healthy hosts, then a deployment to the next instance is attempted. During a deployment, the CodeDeploy agent runs the scripts specified for ApplicationStop, BeforeBlockTraffic, and AfterBlockTraffic in the AppSpec file from the previous successful deployment. (All other scripts are run from the AppSpec file in the current deployment.) If one of these scripts contains an error and does not run successfully, the deployment can fail. If the cause of the failure is a script from the last successful deployment that will never run successfully, create a new deployment and use ignoreApplicationStopFailures to specify that the ApplicationStop, BeforeBlockTraffic, and AfterBlockTraffic failures should be ignored.
+  --target-instances: record # Information about the instances to be used in the replacement environment in a blue/green deployment. — shape: {tagFilters?: list, autoScalingGroups?: list<string>, ec2TagSet?: record}
+  --auto-rollback-configuration: record # Information about a configuration for automatically rolling back to a previous version of an application revision when a deployment is not completed successfully. — shape: {enabled?: bool, events?: list<string>}
+  --update-outdated-instances-only: oneof<nothing, bool> # Indicates whether to deploy to all instances or only to instances that are not running the latest application revision.
+  --file-exists-behavior: string@file-exists-behavior-completer # Information about how CodeDeploy handles files that already exist in a deployment target location but weren't part of the previous successful deployment. The fileExistsBehavior parameter takes any of the following values: DISALLOW: The deployment fails. This is also the default behavior if no option is specified. OVERWRITE: The version of the file from the application revision currently being deployed replaces the version already on the instance. RETAIN: The version of the file already on the instance is kept and used as part of the new deployment.
+  --override-alarm-configuration: record # Information about alarms associated with a deployment or deployment group. — shape: {enabled?: bool, ignorePollAlarmFailure?: bool, alarms?: list}
+]: any -> record<deploymentId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.CreateDeployment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"applicationName": $application_name, "deploymentGroupName": $deployment_group_name, "revision": $revision, "deploymentConfigName": $deployment_config_name, "description": $description, "ignoreApplicationStopFailures": $ignore_application_stop_failures, "targetInstances": $target_instances, "autoRollbackConfiguration": $auto_rollback_configuration, "updateOutdatedInstancesOnly": $update_outdated_instances_only, "fileExistsBehavior": $file_exists_behavior, "overrideAlarmConfiguration": $override_alarm_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -719,6 +746,8 @@ export def "create-deployment" [
 #
 # POST /
 # operationId: CreateDeploymentConfig
+# --minimumHealthyHosts shape: {type?: "HOST_COUNT"|"FLEET_PERCENT", value?: int}
+# --trafficRoutingConfig shape: {type?: "TimeBasedCanary"|"TimeBasedLinear"|"AllAtOnce", timeBasedCanary?: record, timeBasedLinear?: record}
 export def "create-deployment-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -736,15 +765,16 @@ export def "create-deployment-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  deployment_config_name: any
-  --minimum-healthy-hosts: any
-  --traffic-routing-config: any
-  --compute-platform: any
-]: any -> record<deploymentConfigId: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  deployment_config_name: string # The name of the deployment configuration to create.
+  --minimum-healthy-hosts: record # Information about minimum healthy instance. — shape: {type?: "HOST_COUNT"|"FLEET_PERCENT", value?: int}
+  --traffic-routing-config: record # The configuration that specifies how traffic is shifted from one version of a Lambda function to another version during an Lambda deployment, or from one Amazon ECS task set to another during an Amazon ECS deployment. — shape: {type?: "TimeBasedCanary"|"TimeBasedLinear"|"AllAtOnce", timeBasedCanary?: record, timeBasedLinear?: record}
+  --compute-platform: string@compute-platform-completer # The destination platform type for the deployment (Lambda, Server, or ECS).
+]: any -> record<deploymentConfigId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.CreateDeploymentConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deploymentConfigName": $deployment_config_name, "minimumHealthyHosts": $minimum_healthy_hosts, "trafficRoutingConfig": $traffic_routing_config, "computePlatform": $compute_platform} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -770,6 +800,18 @@ export def "create-deployment-config" [
 #
 # POST /
 # operationId: CreateDeploymentGroup
+# --ec2TagFilters item shape: {Key?: string, Value?: string, Type?: "KEY_ONLY"|"VALUE_ONLY"|"KEY_AND_VALUE"}
+# --onPremisesInstanceTagFilters item shape: {Key?: string, Value?: string, Type?: "KEY_ONLY"|"VALUE_ONLY"|"KEY_AND_VALUE"}
+# --triggerConfigurations item shape: {triggerName?: string, triggerTargetArn?: string, triggerEvents?: list<string>}
+# --alarmConfiguration shape: {enabled?: bool, ignorePollAlarmFailure?: bool, alarms?: list}
+# --autoRollbackConfiguration shape: {enabled?: bool, events?: list<string>}
+# --deploymentStyle shape: {deploymentType?: "IN_PLACE"|"BLUE_GREEN", deploymentOption?: "WITH_TRAFFIC_CONTROL"|"WITHOUT_TRAFFIC_CONTROL"}
+# --blueGreenDeploymentConfiguration shape: {terminateBlueInstancesOnDeploymentSuccess?: record, deploymentReadyOption?: record, greenFleetProvisioningOption?: record}
+# --loadBalancerInfo shape: {elbInfoList?: list, targetGroupInfoList?: list, targetGroupPairInfoList?: list}
+# --ec2TagSet shape: {ec2TagSetList?: list}
+# --ecsServices item shape: {serviceName?: string, clusterName?: string}
+# --onPremisesTagSet shape: {onPremisesTagSetList?: list}
+# --tags item shape: {Key?: string, Value?: string}
 export def "create-deployment-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -787,29 +829,30 @@ export def "create-deployment-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  application_name: any
-  deployment_group_name: any
-  --deployment-config-name: any
-  --ec2-tag-filters: any
-  --on-premises-instance-tag-filters: any
-  --auto-scaling-groups: any
-  service_role_arn: any
-  --trigger-configurations: any
-  --alarm-configuration: any
-  --auto-rollback-configuration: any
-  --outdated-instances-strategy: any
-  --deployment-style: any
-  --blue-green-deployment-configuration: any
-  --load-balancer-info: any
-  --ec2-tag-set: any
-  --ecs-services: any
-  --on-premises-tag-set: any
-  --tags: any
-]: any -> record<deploymentGroupId: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  application_name: string # The name of an CodeDeploy application associated with the IAM user or Amazon Web Services account.
+  deployment_group_name: string # The name of a new deployment group for the specified application.
+  --deployment-config-name: string # If specified, the deployment configuration name can be either one of the predefined configurations provided with CodeDeploy or a custom deployment configuration that you create by calling the create deployment configuration operation. CodeDeployDefault.OneAtATime is the default deployment configuration. It is used if a configuration isn't specified for the deployment or deployment group. For more information about the predefined deployment configurations in CodeDeploy, see Working with Deployment Configurations in CodeDeploy (https://docs.aws.amazon.com/codedeploy/latest/userguide/deployment-configurations.html) in the CodeDeploy User Guide.
+  --ec2-tag-filters: list # The Amazon EC2 tags on which to filter. The deployment group includes Amazon EC2 instances with any of the specified tags. Cannot be used in the same call as ec2TagSet. — item shape: {Key?: string, Value?: string, Type?: "KEY_ONLY"|"VALUE_ONLY"|"KEY_AND_VALUE"}
+  --on-premises-instance-tag-filters: list # The on-premises instance tags on which to filter. The deployment group includes on-premises instances with any of the specified tags. Cannot be used in the same call as OnPremisesTagSet. — item shape: {Key?: string, Value?: string, Type?: "KEY_ONLY"|"VALUE_ONLY"|"KEY_AND_VALUE"}
+  --auto-scaling-groups: list<string> # A list of associated Amazon EC2 Auto Scaling groups.
+  service_role_arn: string # A service role Amazon Resource Name (ARN) that allows CodeDeploy to act on the user's behalf when interacting with Amazon Web Services services.
+  --trigger-configurations: list # Information about triggers to create when the deployment group is created. For examples, see Create a Trigger for an CodeDeploy Event (https://docs.aws.amazon.com/codedeploy/latest/userguide/how-to-notify-sns.html) in the CodeDeploy User Guide. — item shape: {triggerName?: string, triggerTargetArn?: string, triggerEvents?: list<string>}
+  --alarm-configuration: record # Information about alarms associated with a deployment or deployment group. — shape: {enabled?: bool, ignorePollAlarmFailure?: bool, alarms?: list}
+  --auto-rollback-configuration: record # Information about a configuration for automatically rolling back to a previous version of an application revision when a deployment is not completed successfully. — shape: {enabled?: bool, events?: list<string>}
+  --outdated-instances-strategy: string@outdated-instances-strategy-completer # Indicates what happens when new Amazon EC2 instances are launched mid-deployment and do not receive the deployed application revision. If this option is set to UPDATE or is unspecified, CodeDeploy initiates one or more 'auto-update outdated instances' deployments to apply the deployed application revision to the new Amazon EC2 instances. If this option is set to IGNORE, CodeDeploy does not initiate a deployment to update the new Amazon EC2 instances. This may result in instances having different revisions.
+  --deployment-style: record # Information about the type of deployment, either in-place or blue/green, you want to run and whether to route deployment traffic behind a load balancer. — shape: {deploymentType?: "IN_PLACE"|"BLUE_GREEN", deploymentOption?: "WITH_TRAFFIC_CONTROL"|"WITHOUT_TRAFFIC_CONTROL"}
+  --blue-green-deployment-configuration: record # Information about blue/green deployment options for a deployment group. — shape: {terminateBlueInstancesOnDeploymentSuccess?: record, deploymentReadyOption?: record, greenFleetProvisioningOption?: record}
+  --load-balancer-info: record # Information about the Elastic Load Balancing load balancer or target group used in a deployment. — shape: {elbInfoList?: list, targetGroupInfoList?: list, targetGroupPairInfoList?: list}
+  --ec2-tag-set: record # Information about groups of Amazon EC2 instance tags. — shape: {ec2TagSetList?: list}
+  --ecs-services: list # The target Amazon ECS services in the deployment group. This applies only to deployment groups that use the Amazon ECS compute platform. A target Amazon ECS service is specified as an Amazon ECS cluster and service name pair using the format <clustername>:<servicename>. — item shape: {serviceName?: string, clusterName?: string}
+  --on-premises-tag-set: record # Information about groups of on-premises instance tags. — shape: {onPremisesTagSetList?: list}
+  --tags: list # The metadata that you apply to CodeDeploy deployment groups to help you organize and categorize them. Each tag consists of a key and an optional value, both of which you define. — item shape: {Key?: string, Value?: string}
+]: any -> record<deploymentGroupId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.CreateDeploymentGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"applicationName": $application_name, "deploymentGroupName": $deployment_group_name, "deploymentConfigName": $deployment_config_name, "ec2TagFilters": $ec2_tag_filters, "onPremisesInstanceTagFilters": $on_premises_instance_tag_filters, "autoScalingGroups": $auto_scaling_groups, "serviceRoleArn": $service_role_arn, "triggerConfigurations": $trigger_configurations, "alarmConfiguration": $alarm_configuration, "autoRollbackConfiguration": $auto_rollback_configuration, "outdatedInstancesStrategy": $outdated_instances_strategy, "deploymentStyle": $deployment_style, "blueGreenDeploymentConfiguration": $blue_green_deployment_configuration, "loadBalancerInfo": $load_balancer_info, "ec2TagSet": $ec2_tag_set, "ecsServices": $ecs_services, "onPremisesTagSet": $on_premises_tag_set, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -852,12 +895,13 @@ export def "delete-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  application_name: any
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  application_name: string # The name of an CodeDeploy application associated with the IAM user or Amazon Web Services account.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.DeleteApplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"applicationName": $application_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -900,12 +944,13 @@ export def "delete-deployment-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  deployment_config_name: any
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  deployment_config_name: string # The name of a deployment configuration associated with the IAM user or Amazon Web Services account.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.DeleteDeploymentConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deploymentConfigName": $deployment_config_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -948,13 +993,14 @@ export def "delete-deployment-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  application_name: any
-  deployment_group_name: any
-]: any -> record<hooksNotCleanedUp: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  application_name: string # The name of an CodeDeploy application associated with the IAM user or Amazon Web Services account.
+  deployment_group_name: string # The name of a deployment group for the specified application.
+]: any -> record<hooksNotCleanedUp: table<name: string, hook: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.DeleteDeploymentGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"applicationName": $application_name, "deploymentGroupName": $deployment_group_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -997,12 +1043,13 @@ export def "delete-git-hub-account-token" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  --token-name: any
-]: any -> record<tokenName: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  --token-name: string # The name of the GitHub account connection to delete.
+]: any -> record<tokenName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.DeleteGitHubAccountToken")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"tokenName": $token_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1045,12 +1092,13 @@ export def "delete-resources-by-external-id" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  --external-id: any
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  --external-id: string # The unique ID of an external resource (for example, a CloudFormation stack ID) that is linked to one or more CodeDeploy resources.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.DeleteResourcesByExternalId")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"externalId": $external_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1093,12 +1141,13 @@ export def "deregister-on-premises-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  instance_name: any
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  instance_name: string # The name of the on-premises instance to deregister.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.DeregisterOnPremisesInstance")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"instanceName": $instance_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1141,12 +1190,13 @@ export def "get-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  application_name: any
-]: any -> record<application: record<applicationId: record, applicationName: record, createTime: record, linkedToGitHub: record, gitHubAccountName: record, computePlatform: record>> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  application_name: string # The name of an CodeDeploy application associated with the IAM user or Amazon Web Services account.
+]: any -> record<application: record<applicationId: string, applicationName: string, createTime: string, linkedToGitHub: bool, gitHubAccountName: string, computePlatform: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.GetApplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"applicationName": $application_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1172,6 +1222,7 @@ export def "get-application" [
 #
 # POST /
 # operationId: GetApplicationRevision
+# --revision shape: {revisionType?: "S3"|"GitHub"|"String"|"AppSpecContent", s3Location?: record, gitHubLocation?: record, string?: record, appSpecContent?: record}
 export def "get-application-revision" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1189,13 +1240,14 @@ export def "get-application-revision" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  application_name: any
-  revision: any
-]: any -> record<applicationName: record, revision: record<revisionType: record, s3Location: record<bucket: record, key: record, bundleType: record, version: record, eTag: record>, gitHubLocation: record<repository: record, commitId: record>, string: record<content: record, sha256: record>, appSpecContent: record<content: record, sha256: record>>, revisionInfo: record<description: record, deploymentGroups: record, firstUsedTime: record, lastUsedTime: record, registerTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  application_name: string # The name of the application that corresponds to the revision.
+  revision: record # Information about the location of an application revision. — shape: {revisionType?: "S3"|"GitHub"|"String"|"AppSpecContent", s3Location?: record, gitHubLocation?: record, string?: record, appSpecContent?: record}
+]: any -> record<applicationName: string, revision: record<revisionType: string, s3Location: record<bucket: string, key: string, bundleType: string, version: string, eTag: string>, gitHubLocation: record<repository: string, commitId: string>, string: record<content: string, sha256: string>, appSpecContent: record<content: string, sha256: string>>, revisionInfo: record<description: string, deploymentGroups: list<string>, firstUsedTime: string, lastUsedTime: string, registerTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.GetApplicationRevision")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"applicationName": $application_name, "revision": $revision} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1238,12 +1290,13 @@ export def "get-deployment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  deployment_id: any
-]: any -> record<deploymentInfo: record<applicationName: record, deploymentGroupName: record, deploymentConfigName: record, deploymentId: record, previousRevision: record<revisionType: record, s3Location: record, gitHubLocation: record, string: record, appSpecContent: record>, revision: record<revisionType: record, s3Location: record, gitHubLocation: record, string: record, appSpecContent: record>, status: record, errorInformation: record<code: record, message: record>, createTime: record, startTime: record, completeTime: record, deploymentOverview: record<Pending: record, InProgress: record, Succeeded: record, Failed: record, Skipped: record, Ready: record>, description: record, creator: record, ignoreApplicationStopFailures: record, autoRollbackConfiguration: record<enabled: record, events: record>, updateOutdatedInstancesOnly: record, rollbackInfo: record<rollbackDeploymentId: record, rollbackTriggeringDeploymentId: record, rollbackMessage: record>, deploymentStyle: record<deploymentType: record, deploymentOption: record>, targetInstances: record<tagFilters: record, autoScalingGroups: record, ec2TagSet: record>, instanceTerminationWaitTimeStarted: record, blueGreenDeploymentConfiguration: record<terminateBlueInstancesOnDeploymentSuccess: record, deploymentReadyOption: record, greenFleetProvisioningOption: record>, loadBalancerInfo: record<elbInfoList: record, targetGroupInfoList: record, targetGroupPairInfoList: record>, additionalDeploymentStatusInfo: record, fileExistsBehavior: record, deploymentStatusMessages: record, computePlatform: record, externalId: record, relatedDeployments: record<autoUpdateOutdatedInstancesRootDeploymentId: record, autoUpdateOutdatedInstancesDeploymentIds: record>, overrideAlarmConfiguration: record<enabled: record, ignorePollAlarmFailure: record, alarms: record>>> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  deployment_id: string # The unique ID of a deployment associated with the IAM user or Amazon Web Services account.
+]: any -> record<deploymentInfo: record<applicationName: string, deploymentGroupName: string, deploymentConfigName: string, deploymentId: string, previousRevision: record<revisionType: string, s3Location: record, gitHubLocation: record, string: record, appSpecContent: record>, revision: record<revisionType: string, s3Location: record, gitHubLocation: record, string: record, appSpecContent: record>, status: string, errorInformation: record<code: string, message: string>, createTime: string, startTime: string, completeTime: string, deploymentOverview: record<Pending: int, InProgress: int, Succeeded: int, Failed: int, Skipped: int, Ready: int>, description: string, creator: string, ignoreApplicationStopFailures: bool, autoRollbackConfiguration: record<enabled: bool, events: list>, updateOutdatedInstancesOnly: bool, rollbackInfo: record<rollbackDeploymentId: string, rollbackTriggeringDeploymentId: string, rollbackMessage: string>, deploymentStyle: record<deploymentType: string, deploymentOption: string>, targetInstances: record<tagFilters: list, autoScalingGroups: list, ec2TagSet: record>, instanceTerminationWaitTimeStarted: bool, blueGreenDeploymentConfiguration: record<terminateBlueInstancesOnDeploymentSuccess: record, deploymentReadyOption: record, greenFleetProvisioningOption: record>, loadBalancerInfo: record<elbInfoList: list, targetGroupInfoList: list, targetGroupPairInfoList: list>, additionalDeploymentStatusInfo: string, fileExistsBehavior: string, deploymentStatusMessages: list<string>, computePlatform: string, externalId: string, relatedDeployments: record<autoUpdateOutdatedInstancesRootDeploymentId: string, autoUpdateOutdatedInstancesDeploymentIds: list>, overrideAlarmConfiguration: record<enabled: bool, ignorePollAlarmFailure: bool, alarms: list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.GetDeployment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deploymentId": $deployment_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1286,12 +1339,13 @@ export def "get-deployment-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  deployment_config_name: any
-]: any -> record<deploymentConfigInfo: record<deploymentConfigId: record, deploymentConfigName: record, minimumHealthyHosts: record<type: record, value: record>, createTime: record, computePlatform: record, trafficRoutingConfig: record<type: record, timeBasedCanary: record, timeBasedLinear: record>>> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  deployment_config_name: string # The name of a deployment configuration associated with the IAM user or Amazon Web Services account.
+]: any -> record<deploymentConfigInfo: record<deploymentConfigId: string, deploymentConfigName: string, minimumHealthyHosts: record<type: string, value: int>, createTime: string, computePlatform: string, trafficRoutingConfig: record<type: string, timeBasedCanary: record, timeBasedLinear: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.GetDeploymentConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deploymentConfigName": $deployment_config_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1334,13 +1388,14 @@ export def "get-deployment-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  application_name: any
-  deployment_group_name: any
-]: any -> record<deploymentGroupInfo: record<applicationName: record, deploymentGroupId: record, deploymentGroupName: record, deploymentConfigName: record, ec2TagFilters: record, onPremisesInstanceTagFilters: record, autoScalingGroups: record, serviceRoleArn: record, targetRevision: record<revisionType: record, s3Location: record, gitHubLocation: record, string: record, appSpecContent: record>, triggerConfigurations: record, alarmConfiguration: record<enabled: record, ignorePollAlarmFailure: record, alarms: record>, autoRollbackConfiguration: record<enabled: record, events: record>, deploymentStyle: record<deploymentType: record, deploymentOption: record>, outdatedInstancesStrategy: record, blueGreenDeploymentConfiguration: record<terminateBlueInstancesOnDeploymentSuccess: record, deploymentReadyOption: record, greenFleetProvisioningOption: record>, loadBalancerInfo: record<elbInfoList: record, targetGroupInfoList: record, targetGroupPairInfoList: record>, lastSuccessfulDeployment: record<deploymentId: record, status: record, endTime: record, createTime: record>, lastAttemptedDeployment: record<deploymentId: record, status: record, endTime: record, createTime: record>, ec2TagSet: record<ec2TagSetList: record>, onPremisesTagSet: record<onPremisesTagSetList: record>, computePlatform: record, ecsServices: record>> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  application_name: string # The name of an CodeDeploy application associated with the IAM user or Amazon Web Services account.
+  deployment_group_name: string # The name of a deployment group for the specified application.
+]: any -> record<deploymentGroupInfo: record<applicationName: string, deploymentGroupId: string, deploymentGroupName: string, deploymentConfigName: string, ec2TagFilters: list<record>, onPremisesInstanceTagFilters: list<record>, autoScalingGroups: list<record>, serviceRoleArn: string, targetRevision: record<revisionType: string, s3Location: record, gitHubLocation: record, string: record, appSpecContent: record>, triggerConfigurations: list<record>, alarmConfiguration: record<enabled: bool, ignorePollAlarmFailure: bool, alarms: list>, autoRollbackConfiguration: record<enabled: bool, events: list>, deploymentStyle: record<deploymentType: string, deploymentOption: string>, outdatedInstancesStrategy: string, blueGreenDeploymentConfiguration: record<terminateBlueInstancesOnDeploymentSuccess: record, deploymentReadyOption: record, greenFleetProvisioningOption: record>, loadBalancerInfo: record<elbInfoList: list, targetGroupInfoList: list, targetGroupPairInfoList: list>, lastSuccessfulDeployment: record<deploymentId: string, status: string, endTime: string, createTime: string>, lastAttemptedDeployment: record<deploymentId: string, status: string, endTime: string, createTime: string>, ec2TagSet: record<ec2TagSetList: list>, onPremisesTagSet: record<onPremisesTagSetList: list>, computePlatform: string, ecsServices: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.GetDeploymentGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"applicationName": $application_name, "deploymentGroupName": $deployment_group_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1385,13 +1440,14 @@ export def "get-deployment-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  deployment_id: any
-  instance_id: any
-]: any -> record<instanceSummary: record<deploymentId: record, instanceId: record, status: record, lastUpdatedAt: record, lifecycleEvents: record, instanceType: record>> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  deployment_id: string # The unique ID of a deployment.
+  instance_id: string # The unique ID of an instance in the deployment group.
+]: any -> record<instanceSummary: record<deploymentId: string, instanceId: string, status: string, lastUpdatedAt: string, lifecycleEvents: list<record>, instanceType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.GetDeploymentInstance")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deploymentId": $deployment_id, "instanceId": $instance_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1434,13 +1490,14 @@ export def "get-deployment-target" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  --deployment-id: any
-  --target-id: any
-]: any -> record<deploymentTarget: record<deploymentTargetType: record, instanceTarget: record<deploymentId: record, targetId: record, targetArn: record, status: record, lastUpdatedAt: record, lifecycleEvents: record, instanceLabel: record>, lambdaTarget: record<deploymentId: record, targetId: record, targetArn: record, status: record, lastUpdatedAt: record, lifecycleEvents: record, lambdaFunctionInfo: record>, ecsTarget: record<deploymentId: record, targetId: record, targetArn: record, lastUpdatedAt: record, lifecycleEvents: record, status: record, taskSetsInfo: record>, cloudFormationTarget: record<deploymentId: record, targetId: record, lastUpdatedAt: record, lifecycleEvents: record, status: record, resourceType: record, targetVersionWeight: record>>> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  --deployment-id: string # The unique ID of a deployment.
+  --target-id: string # The unique ID of a deployment target.
+]: any -> record<deploymentTarget: record<deploymentTargetType: string, instanceTarget: record<deploymentId: string, targetId: string, targetArn: string, status: string, lastUpdatedAt: string, lifecycleEvents: list, instanceLabel: string>, lambdaTarget: record<deploymentId: string, targetId: string, targetArn: string, status: string, lastUpdatedAt: string, lifecycleEvents: list, lambdaFunctionInfo: record>, ecsTarget: record<deploymentId: string, targetId: string, targetArn: string, lastUpdatedAt: string, lifecycleEvents: list, status: string, taskSetsInfo: list>, cloudFormationTarget: record<deploymentId: string, targetId: string, lastUpdatedAt: string, lifecycleEvents: list, status: string, resourceType: string, targetVersionWeight: float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.GetDeploymentTarget")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deploymentId": $deployment_id, "targetId": $target_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1483,12 +1540,13 @@ export def "get-on-premises-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  instance_name: any
-]: any -> record<instanceInfo: record<instanceName: record, iamSessionArn: record, iamUserArn: record, instanceArn: record, registerTime: record, deregisterTime: record, tags: record>> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  instance_name: string # The name of the on-premises instance about which to get information.
+]: any -> record<instanceInfo: record<instanceName: string, iamSessionArn: string, iamUserArn: string, instanceArn: string, registerTime: string, deregisterTime: string, tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.GetOnPremisesInstance")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"instanceName": $instance_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1532,18 +1590,19 @@ export def "list-application-revisions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  application_name: any
-  --sort-by: any
-  --sort-order: any
-  --s3-bucket: any
-  --s3-key-prefix: any
-  --deployed: any
-  --next-token-body: any #  (body field)
-]: any -> record<revisions: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  application_name: string # The name of an CodeDeploy application associated with the IAM user or Amazon Web Services account.
+  --sort-by: string@sort-by-completer # The column name to use to sort the list results: registerTime: Sort by the time the revisions were registered with CodeDeploy. firstUsedTime: Sort by the time the revisions were first used in a deployment. lastUsedTime: Sort by the time the revisions were last used in a deployment. If not specified or set to null, the results are returned in an arbitrary order.
+  --sort-order: string@sort-order-completer # The order in which to sort the list results: ascending: ascending order. descending: descending order. If not specified, the results are sorted in ascending order. If set to null, the results are sorted in an arbitrary order.
+  --s3-bucket: string # An Amazon S3 bucket name to limit the search for revisions. If set to null, all of the user's buckets are searched.
+  --s3-key-prefix: string # A key prefix for the set of Amazon S3 objects to limit the search for revisions.
+  --deployed: string@deployed-completer # Whether to list revisions based on whether the revision is the target revision of a deployment group: include: List revisions that are target revisions of a deployment group. exclude: Do not list revisions that are target revisions of a deployment group. ignore: List all revisions.
+  --next-token-body: string # An identifier returned from the previous ListApplicationRevisions call. It can be used to return the next set of applications in the list. (body field)
+]: any -> record<revisions: table<revisionType: string, s3Location: record, gitHubLocation: record, string: record, appSpecContent: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.ListApplicationRevisions")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"applicationName": $application_name, "sortBy": $sort_by, "sortOrder": $sort_order, "s3Bucket": $s3_bucket, "s3KeyPrefix": $s3_key_prefix, "deployed": $deployed, "nextToken": $next_token_body} | compact
@@ -1588,12 +1647,13 @@ export def "list-applications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  --next-token-body: any #  (body field)
-]: any -> record<applications: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  --next-token-body: string # An identifier returned from the previous list applications call. It can be used to return the next set of applications in the list. (body field)
+]: any -> record<applications: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.ListApplications")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"nextToken": $next_token_body} | compact
@@ -1638,12 +1698,13 @@ export def "list-deployment-configs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  --next-token-body: any #  (body field)
-]: any -> record<deploymentConfigsList: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  --next-token-body: string # An identifier returned from the previous ListDeploymentConfigs call. It can be used to return the next set of deployment configurations in the list. (body field)
+]: any -> record<deploymentConfigsList: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.ListDeploymentConfigs")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"nextToken": $next_token_body} | compact
@@ -1688,13 +1749,14 @@ export def "list-deployment-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  application_name: any
-  --next-token-body: any #  (body field)
-]: any -> record<applicationName: record, deploymentGroups: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  application_name: string # The name of an CodeDeploy application associated with the IAM user or Amazon Web Services account.
+  --next-token-body: string # An identifier returned from the previous list deployment groups call. It can be used to return the next set of deployment groups in the list. (body field)
+]: any -> record<applicationName: string, deploymentGroups: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.ListDeploymentGroups")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"applicationName": $application_name, "nextToken": $next_token_body} | compact
@@ -1741,15 +1803,16 @@ export def "list-deployment-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  deployment_id: any
-  --next-token-body: any #  (body field)
-  --instance-status-filter: any
-  --instance-type-filter: any
-]: any -> record<instancesList: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  deployment_id: string # The unique ID of a deployment.
+  --next-token-body: string # An identifier returned from the previous list deployment instances call. It can be used to return the next set of deployment instances in the list. (body field)
+  --instance-status-filter: list<string> # A subset of instances to list by status: Pending: Include those instances with pending deployments. InProgress: Include those instances where deployments are still in progress. Succeeded: Include those instances with successful deployments. Failed: Include those instances with failed deployments. Skipped: Include those instances with skipped deployments. Unknown: Include those instances with deployments in an unknown state.
+  --instance-type-filter: list<string> # The set of instances in a blue/green deployment, either those in the original environment ("BLUE") or those in the replacement environment ("GREEN"), for which you want to view instance information.
+]: any -> record<instancesList: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.ListDeploymentInstances")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"deploymentId": $deployment_id, "nextToken": $next_token_body, "instanceStatusFilter": $instance_status_filter, "instanceTypeFilter": $instance_type_filter} | compact
@@ -1793,14 +1856,15 @@ export def "list-deployment-targets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  --deployment-id: any
-  --next-token: any
-  --target-filters: any
-]: any -> record<targetIds: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  --deployment-id: string # The unique ID of a deployment.
+  --next-token: string # A token identifier returned from the previous ListDeploymentTargets call. It can be used to return the next set of deployment targets in the list.
+  --target-filters: record # A key used to filter the returned targets. The two valid values are: TargetStatus - A TargetStatus filter string can be Failed, InProgress, Pending, Ready, Skipped, Succeeded, or Unknown. ServerInstanceLabel - A ServerInstanceLabel filter string can be Blue or Green.
+]: any -> record<targetIds: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.ListDeploymentTargets")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deploymentId": $deployment_id, "nextToken": $next_token, "targetFilters": $target_filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1826,6 +1890,7 @@ export def "list-deployment-targets" [
 #
 # POST /
 # operationId: ListDeployments
+# --createTimeRange shape: {start?: string, end?: string}
 export def "list-deployments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1844,17 +1909,18 @@ export def "list-deployments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  --application-name: any
-  --deployment-group-name: any
-  --external-id: any
-  --include-only-statuses: any
-  --create-time-range: any
-  --next-token-body: any #  (body field)
-]: any -> record<deployments: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  --application-name: string # The name of an CodeDeploy application associated with the IAM user or Amazon Web Services account. If applicationName is specified, then deploymentGroupName must be specified. If it is not specified, then deploymentGroupName must not be specified.
+  --deployment-group-name: string # The name of a deployment group for the specified application. If deploymentGroupName is specified, then applicationName must be specified. If it is not specified, then applicationName must not be specified.
+  --external-id: string # The unique ID of an external resource for returning deployments linked to the external resource.
+  --include-only-statuses: list<string> # A subset of deployments to list by status: Created: Include created deployments in the resulting list. Queued: Include queued deployments in the resulting list. In Progress: Include in-progress deployments in the resulting list. Succeeded: Include successful deployments in the resulting list. Failed: Include failed deployments in the resulting list. Stopped: Include stopped deployments in the resulting list.
+  --create-time-range: record # Information about a time range. — shape: {start?: string, end?: string}
+  --next-token-body: string # An identifier returned from the previous list deployments call. It can be used to return the next set of deployments in the list. (body field)
+]: any -> record<deployments: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.ListDeployments")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"applicationName": $application_name, "deploymentGroupName": $deployment_group_name, "externalId": $external_id, "includeOnlyStatuses": $include_only_statuses, "createTimeRange": $create_time_range, "nextToken": $next_token_body} | compact
@@ -1898,12 +1964,13 @@ export def "list-git-hub-account-token-names" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  --next-token: any
-]: any -> record<tokenNameList: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  --next-token: string # An identifier returned from the previous ListGitHubAccountTokenNames call. It can be used to return the next set of names in the list.
+]: any -> record<tokenNameList: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.ListGitHubAccountTokenNames")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"nextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1929,6 +1996,7 @@ export def "list-git-hub-account-token-names" [
 #
 # POST /
 # operationId: ListOnPremisesInstances
+# --tagFilters item shape: {Key?: string, Value?: string, Type?: "KEY_ONLY"|"VALUE_ONLY"|"KEY_AND_VALUE"}
 export def "list-on-premises-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1946,14 +2014,15 @@ export def "list-on-premises-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  --registration-status: any
-  --tag-filters: any
-  --next-token: any
-]: any -> record<instanceNames: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  --registration-status: string@registration-status-completer # The registration status of the on-premises instances: Deregistered: Include deregistered on-premises instances in the resulting list. Registered: Include registered on-premises instances in the resulting list.
+  --tag-filters: list # The on-premises instance tags that are used to restrict the on-premises instance names returned. — item shape: {Key?: string, Value?: string, Type?: "KEY_ONLY"|"VALUE_ONLY"|"KEY_AND_VALUE"}
+  --next-token: string # An identifier returned from the previous list on-premises instances call. It can be used to return the next set of on-premises instances in the list.
+]: any -> record<instanceNames: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.ListOnPremisesInstances")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registrationStatus": $registration_status, "tagFilters": $tag_filters, "nextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1996,13 +2065,14 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  resource_arn: any
-  --next-token: any
-]: any -> record<Tags: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  resource_arn: string # The ARN of a CodeDeploy resource. ListTagsForResource returns all the tags associated with the resource that is identified by the ResourceArn.
+  --next-token: string # An identifier returned from the previous ListTagsForResource call. It can be used to return the next set of applications in the list.
+]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2045,14 +2115,15 @@ export def "put-lifecycle-event-hook-execution-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  --deployment-id: any
-  --lifecycle-event-hook-execution-id: any
-  --status: any
-]: any -> record<lifecycleEventHookExecutionId: record> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  --deployment-id: string # The unique ID of a deployment. Pass this ID to a Lambda function that validates a deployment lifecycle event.
+  --lifecycle-event-hook-execution-id: string # The execution ID of a deployment's lifecycle hook. A deployment lifecycle hook is specified in the hooks section of the AppSpec file.
+  --status: string@status-completer # The result of a Lambda function that validates a deployment lifecycle event. The values listed in Valid Values are valid for lifecycle statuses in general; however, only Succeeded and Failed can be passed successfully in your API call.
+]: any -> record<lifecycleEventHookExecutionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.PutLifecycleEventHookExecutionStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deploymentId": $deployment_id, "lifecycleEventHookExecutionId": $lifecycle_event_hook_execution_id, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2078,6 +2149,7 @@ export def "put-lifecycle-event-hook-execution-status" [
 #
 # POST /
 # operationId: RegisterApplicationRevision
+# --revision shape: {revisionType?: "S3"|"GitHub"|"String"|"AppSpecContent", s3Location?: record, gitHubLocation?: record, string?: record, appSpecContent?: record}
 export def "register-application-revision" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2095,14 +2167,15 @@ export def "register-application-revision" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  application_name: any
-  --description: any
-  revision: any
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  application_name: string # The name of an CodeDeploy application associated with the IAM user or Amazon Web Services account.
+  --description: string # A comment about the revision.
+  revision: record # Information about the location of an application revision. — shape: {revisionType?: "S3"|"GitHub"|"String"|"AppSpecContent", s3Location?: record, gitHubLocation?: record, string?: record, appSpecContent?: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.RegisterApplicationRevision")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"applicationName": $application_name, "description": $description, "revision": $revision} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2145,14 +2218,15 @@ export def "register-on-premises-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  instance_name: any
-  --iam-session-arn: any
-  --iam-user-arn: any
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  instance_name: string # The name of the on-premises instance to register.
+  --iam-session-arn: string # The ARN of the IAM session to associate with the on-premises instance.
+  --iam-user-arn: string # The ARN of the IAM user to associate with the on-premises instance.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.RegisterOnPremisesInstance")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"instanceName": $instance_name, "iamSessionArn": $iam_session_arn, "iamUserArn": $iam_user_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2178,6 +2252,7 @@ export def "register-on-premises-instance" [
 #
 # POST /
 # operationId: RemoveTagsFromOnPremisesInstances
+# --tags item shape: {Key?: string, Value?: string}
 export def "remove-tags-from-on-premises-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2195,13 +2270,14 @@ export def "remove-tags-from-on-premises-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  tags: any
-  instance_names: any
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  tags: list # The tag key-value pairs to remove from the on-premises instances. — item shape: {Key?: string, Value?: string}
+  instance_names: list<string> # The names of the on-premises instances from which to remove tags.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.RemoveTagsFromOnPremisesInstances")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"tags": $tags, "instanceNames": $instance_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2246,12 +2322,13 @@ export def "skip-wait-time-for-instance-termination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  --deployment-id: any
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  --deployment-id: string # The unique ID of a blue/green deployment for which you want to skip the instance termination wait time.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.SkipWaitTimeForInstanceTermination")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deploymentId": $deployment_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2294,13 +2371,14 @@ export def "stop-deployment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  deployment_id: any
-  --auto-rollback-enabled: any
-]: any -> record<status: record, statusMessage: record> {
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  deployment_id: string # The unique ID of a deployment.
+  --auto-rollback-enabled: oneof<nothing, bool> # Indicates, when a deployment is stopped, whether instances that have been updated should be rolled back to the previous version of the application revision.
+]: any -> record<status: string, statusMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.StopDeployment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deploymentId": $deployment_id, "autoRollbackEnabled": $auto_rollback_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2326,6 +2404,7 @@ export def "stop-deployment" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2343,13 +2422,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  resource_arn: string # The ARN of a resource, such as a CodeDeploy application or deployment group.
+  tags: list # A list of tags that TagResource associates with a resource. The resource is identified by the ResourceArn input parameter. — item shape: {Key?: string, Value?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2392,13 +2472,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  resource_arn: string # The Amazon Resource Name (ARN) that specifies from which resource to disassociate the tags with the keys in the TagKeys input parameter.
+  tag_keys: list<string> # A list of keys of Tag objects. The Tag objects identified by the keys are disassociated from the resource specified by the ResourceArn input parameter.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2441,13 +2522,14 @@ export def "update-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  --application-name: any
-  --new-application-name: any
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  --application-name: string # The current name of the application you want to change.
+  --new-application-name: string # The new name to give the application.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.UpdateApplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"applicationName": $application_name, "newApplicationName": $new_application_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2473,6 +2555,17 @@ export def "update-application" [
 #
 # POST /
 # operationId: UpdateDeploymentGroup
+# --ec2TagFilters item shape: {Key?: string, Value?: string, Type?: "KEY_ONLY"|"VALUE_ONLY"|"KEY_AND_VALUE"}
+# --onPremisesInstanceTagFilters item shape: {Key?: string, Value?: string, Type?: "KEY_ONLY"|"VALUE_ONLY"|"KEY_AND_VALUE"}
+# --triggerConfigurations item shape: {triggerName?: string, triggerTargetArn?: string, triggerEvents?: list<string>}
+# --alarmConfiguration shape: {enabled?: bool, ignorePollAlarmFailure?: bool, alarms?: list}
+# --autoRollbackConfiguration shape: {enabled?: bool, events?: list<string>}
+# --deploymentStyle shape: {deploymentType?: "IN_PLACE"|"BLUE_GREEN", deploymentOption?: "WITH_TRAFFIC_CONTROL"|"WITHOUT_TRAFFIC_CONTROL"}
+# --blueGreenDeploymentConfiguration shape: {terminateBlueInstancesOnDeploymentSuccess?: record, deploymentReadyOption?: record, greenFleetProvisioningOption?: record}
+# --loadBalancerInfo shape: {elbInfoList?: list, targetGroupInfoList?: list, targetGroupPairInfoList?: list}
+# --ec2TagSet shape: {ec2TagSetList?: list}
+# --ecsServices item shape: {serviceName?: string, clusterName?: string}
+# --onPremisesTagSet shape: {onPremisesTagSetList?: list}
 export def "update-deployment-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2490,29 +2583,30 @@ export def "update-deployment-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  application_name: any
-  current_deployment_group_name: any
-  --new-deployment-group-name: any
-  --deployment-config-name: any
-  --ec2-tag-filters: any
-  --on-premises-instance-tag-filters: any
-  --auto-scaling-groups: any
-  --service-role-arn: any
-  --trigger-configurations: any
-  --alarm-configuration: any
-  --auto-rollback-configuration: any
-  --outdated-instances-strategy: any
-  --deployment-style: any
-  --blue-green-deployment-configuration: any
-  --load-balancer-info: any
-  --ec2-tag-set: any
-  --ecs-services: any
-  --on-premises-tag-set: any
-]: any -> record<hooksNotCleanedUp: record> {
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  application_name: string # The application name that corresponds to the deployment group to update.
+  current_deployment_group_name: string # The current name of the deployment group.
+  --new-deployment-group-name: string # The new name of the deployment group, if you want to change it.
+  --deployment-config-name: string # The replacement deployment configuration name to use, if you want to change it.
+  --ec2-tag-filters: list # The replacement set of Amazon EC2 tags on which to filter, if you want to change them. To keep the existing tags, enter their names. To remove tags, do not enter any tag names. — item shape: {Key?: string, Value?: string, Type?: "KEY_ONLY"|"VALUE_ONLY"|"KEY_AND_VALUE"}
+  --on-premises-instance-tag-filters: list # The replacement set of on-premises instance tags on which to filter, if you want to change them. To keep the existing tags, enter their names. To remove tags, do not enter any tag names. — item shape: {Key?: string, Value?: string, Type?: "KEY_ONLY"|"VALUE_ONLY"|"KEY_AND_VALUE"}
+  --auto-scaling-groups: list<string> # The replacement list of Auto Scaling groups to be included in the deployment group, if you want to change them. To keep the Auto Scaling groups, enter their names or do not specify this parameter. To remove Auto Scaling groups, specify a non-null empty list of Auto Scaling group names to detach all CodeDeploy-managed Auto Scaling lifecycle hooks. For examples, see Amazon EC2 instances in an Amazon EC2 Auto Scaling group fail to launch and receive the error "Heartbeat Timeout" (https://docs.aws.amazon.com/https:/docs.aws.amazon.com/codedeploy/latest/userguide/troubleshooting-auto-scaling.html#troubleshooting-auto-scaling-heartbeat) in the CodeDeploy User Guide.
+  --service-role-arn: string # A replacement ARN for the service role, if you want to change it.
+  --trigger-configurations: list # Information about triggers to change when the deployment group is updated. For examples, see Edit a Trigger in a CodeDeploy Deployment Group (https://docs.aws.amazon.com/codedeploy/latest/userguide/how-to-notify-edit.html) in the CodeDeploy User Guide. — item shape: {triggerName?: string, triggerTargetArn?: string, triggerEvents?: list<string>}
+  --alarm-configuration: record # Information about alarms associated with a deployment or deployment group. — shape: {enabled?: bool, ignorePollAlarmFailure?: bool, alarms?: list}
+  --auto-rollback-configuration: record # Information about a configuration for automatically rolling back to a previous version of an application revision when a deployment is not completed successfully. — shape: {enabled?: bool, events?: list<string>}
+  --outdated-instances-strategy: string@outdated-instances-strategy-completer # Indicates what happens when new Amazon EC2 instances are launched mid-deployment and do not receive the deployed application revision. If this option is set to UPDATE or is unspecified, CodeDeploy initiates one or more 'auto-update outdated instances' deployments to apply the deployed application revision to the new Amazon EC2 instances. If this option is set to IGNORE, CodeDeploy does not initiate a deployment to update the new Amazon EC2 instances. This may result in instances having different revisions.
+  --deployment-style: record # Information about the type of deployment, either in-place or blue/green, you want to run and whether to route deployment traffic behind a load balancer. — shape: {deploymentType?: "IN_PLACE"|"BLUE_GREEN", deploymentOption?: "WITH_TRAFFIC_CONTROL"|"WITHOUT_TRAFFIC_CONTROL"}
+  --blue-green-deployment-configuration: record # Information about blue/green deployment options for a deployment group. — shape: {terminateBlueInstancesOnDeploymentSuccess?: record, deploymentReadyOption?: record, greenFleetProvisioningOption?: record}
+  --load-balancer-info: record # Information about the Elastic Load Balancing load balancer or target group used in a deployment. — shape: {elbInfoList?: list, targetGroupInfoList?: list, targetGroupPairInfoList?: list}
+  --ec2-tag-set: record # Information about groups of Amazon EC2 instance tags. — shape: {ec2TagSetList?: list}
+  --ecs-services: list # The target Amazon ECS services in the deployment group. This applies only to deployment groups that use the Amazon ECS compute platform. A target Amazon ECS service is specified as an Amazon ECS cluster and service name pair using the format <clustername>:<servicename>. — item shape: {serviceName?: string, clusterName?: string}
+  --on-premises-tag-set: record # Information about groups of on-premises instance tags. — shape: {onPremisesTagSetList?: list}
+]: any -> record<hooksNotCleanedUp: table<name: string, hook: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeDeploy_20141006.UpdateDeploymentGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"applicationName": $application_name, "currentDeploymentGroupName": $current_deployment_group_name, "newDeploymentGroupName": $new_deployment_group_name, "deploymentConfigName": $deployment_config_name, "ec2TagFilters": $ec2_tag_filters, "onPremisesInstanceTagFilters": $on_premises_instance_tag_filters, "autoScalingGroups": $auto_scaling_groups, "serviceRoleArn": $service_role_arn, "triggerConfigurations": $trigger_configurations, "alarmConfiguration": $alarm_configuration, "autoRollbackConfiguration": $auto_rollback_configuration, "outdatedInstancesStrategy": $outdated_instances_strategy, "deploymentStyle": $deployment_style, "blueGreenDeploymentConfiguration": $blue_green_deployment_configuration, "loadBalancerInfo": $load_balancer_info, "ec2TagSet": $ec2_tag_set, "ecsServices": $ecs_services, "onPremisesTagSet": $on_premises_tag_set} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

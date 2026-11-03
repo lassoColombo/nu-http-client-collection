@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -178,7 +178,7 @@ export def "create-application" [
   --spdx-license-id: string # A valid identifier from https://spdx.org/licenses/ (https://spdx.org/licenses/).
   --template-body: string # The local raw packaged AWS SAM template file of your application. The file has the format file://<path>/<filename>.You can specify only one of templateBody and templateUrl; otherwise an error results.
   --template-url: string # A link to the S3 object containing the packaged AWS SAM template of your application.You can specify only one of templateBody and templateUrl; otherwise an error results.
-]: any -> record<ApplicationId: record, Author: record, CreationTime: record, Description: record, HomePageUrl: record, IsVerifiedAuthor: record, Labels: record, LicenseUrl: record, Name: record, ReadmeUrl: record, SpdxLicenseId: record, VerifiedAuthorUrl: record, Version: record<ApplicationId: record, CreationTime: record, ParameterDefinitions: record, RequiredCapabilities: record, ResourcesSupported: record, SemanticVersion: record, SourceCodeArchiveUrl: record, SourceCodeUrl: record, TemplateUrl: record>> {
+]: any -> record<ApplicationId: string, Author: string, CreationTime: string, Description: string, HomePageUrl: string, IsVerifiedAuthor: bool, Labels: list<string>, LicenseUrl: string, Name: string, ReadmeUrl: string, SpdxLicenseId: string, VerifiedAuthorUrl: string, Version: record<ApplicationId: string, CreationTime: string, ParameterDefinitions: list<record>, RequiredCapabilities: list<string>, ResourcesSupported: bool, SemanticVersion: string, SourceCodeArchiveUrl: string, SourceCodeUrl: string, TemplateUrl: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -228,7 +228,7 @@ export def "list-applications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Applications: record, NextToken: record> {
+]: nothing -> record<Applications: table<ApplicationId: string, Author: string, CreationTime: string, Description: string, HomePageUrl: string, Labels: list, Name: string, SpdxLicenseId: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxItems" $max_items "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxItems" $max_items_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -278,7 +278,7 @@ export def "create-application-version" [
   --source-code-url: string # A link to a public repository for the source code of your application, for example the URL of a specific GitHub commit.
   --template-body: string # The raw packaged AWS SAM template of your application.
   --template-url: string # A link to the packaged AWS SAM template of your application.
-]: any -> record<ApplicationId: record, CreationTime: record, ParameterDefinitions: record, RequiredCapabilities: record, ResourcesSupported: record, SemanticVersion: record, SourceCodeArchiveUrl: record, SourceCodeUrl: record, TemplateUrl: record> {
+]: any -> record<ApplicationId: string, CreationTime: string, ParameterDefinitions: table<AllowedPattern: string, AllowedValues: list, ConstraintDescription: string, DefaultValue: string, Description: string, MaxLength: int, MaxValue: int, MinLength: int, MinValue: int, Name: string, NoEcho: bool, ReferencedByResources: list, Type: string>, RequiredCapabilities: list<string>, ResourcesSupported: bool, SemanticVersion: string, SourceCodeArchiveUrl: string, SourceCodeUrl: string, TemplateUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -309,9 +309,9 @@ export def "create-application-version" [
 #
 # POST /applications/{applicationId}/changesets
 # operationId: CreateCloudFormationChangeSet
-# --parameterOverrides item shape: {Name: any, Value: any}
-# --rollbackConfiguration shape: {MonitoringTimeInMinutes?: any, RollbackTriggers?: any}
-# --tags item shape: {Key: any, Value: any}
+# --parameterOverrides item shape: {Name: string, Value: string}
+# --rollbackConfiguration shape: {MonitoringTimeInMinutes?: int, RollbackTriggers?: list}
+# --tags item shape: {Key: string, Value: string}
 export def "create-cloud-formation-change-set" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -335,14 +335,14 @@ export def "create-cloud-formation-change-set" [
   --client-token: string # This property corresponds to the parameter of the same name for the AWS CloudFormation CreateChangeSet (https://docs.aws.amazon.com/goto/WebAPI/cloudformation-2010-05-15/CreateChangeSet) API.
   --description: string # This property corresponds to the parameter of the same name for the AWS CloudFormation CreateChangeSet (https://docs.aws.amazon.com/goto/WebAPI/cloudformation-2010-05-15/CreateChangeSet) API.
   --notification-arns: list<string> # This property corresponds to the parameter of the same name for the AWS CloudFormation CreateChangeSet (https://docs.aws.amazon.com/goto/WebAPI/cloudformation-2010-05-15/CreateChangeSet) API.
-  --parameter-overrides: list # A list of parameter values for the parameters of the application. — item shape: {Name: any, Value: any}
+  --parameter-overrides: list # A list of parameter values for the parameters of the application. — item shape: {Name: string, Value: string}
   --resource-types: list<string> # This property corresponds to the parameter of the same name for the AWS CloudFormation CreateChangeSet (https://docs.aws.amazon.com/goto/WebAPI/cloudformation-2010-05-15/CreateChangeSet) API.
-  --rollback-configuration: record # This property corresponds to the AWS CloudFormation RollbackConfiguration (https://docs.aws.amazon.com/goto/WebAPI/cloudformation-2010-05-15/RollbackConfiguration) Data Type. — shape: {MonitoringTimeInMinutes?: any, RollbackTriggers?: any}
+  --rollback-configuration: record # This property corresponds to the AWS CloudFormation RollbackConfiguration (https://docs.aws.amazon.com/goto/WebAPI/cloudformation-2010-05-15/RollbackConfiguration) Data Type. — shape: {MonitoringTimeInMinutes?: int, RollbackTriggers?: list}
   --semantic-version: string # The semantic version of the application: https://semver.org/ (https://semver.org/)
   stack_name: string # This property corresponds to the parameter of the same name for the AWS CloudFormation CreateChangeSet (https://docs.aws.amazon.com/goto/WebAPI/cloudformation-2010-05-15/CreateChangeSet) API.
-  --tags: list # This property corresponds to the parameter of the same name for the AWS CloudFormation CreateChangeSet (https://docs.aws.amazon.com/goto/WebAPI/cloudformation-2010-05-15/CreateChangeSet) API. — item shape: {Key: any, Value: any}
+  --tags: list # This property corresponds to the parameter of the same name for the AWS CloudFormation CreateChangeSet (https://docs.aws.amazon.com/goto/WebAPI/cloudformation-2010-05-15/CreateChangeSet) API. — item shape: {Key: string, Value: string}
   --template-id: string # The UUID returned by CreateCloudFormationTemplate.Pattern: [0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}
-]: any -> record<ApplicationId: record, ChangeSetId: record, SemanticVersion: record, StackId: record> {
+]: any -> record<ApplicationId: string, ChangeSetId: string, SemanticVersion: string, StackId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -391,7 +391,7 @@ export def "create-cloud-formation-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --semantic-version: string # The semantic version of the application: https://semver.org/ (https://semver.org/)
-]: any -> record<ApplicationId: record, CreationTime: record, ExpirationTime: record, SemanticVersion: record, Status: record, TemplateId: record, TemplateUrl: record> {
+]: any -> record<ApplicationId: string, CreationTime: string, ExpirationTime: string, SemanticVersion: string, Status: string, TemplateId: string, TemplateUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -485,7 +485,7 @@ export def "get-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApplicationId: record, Author: record, CreationTime: record, Description: record, HomePageUrl: record, IsVerifiedAuthor: record, Labels: record, LicenseUrl: record, Name: record, ReadmeUrl: record, SpdxLicenseId: record, VerifiedAuthorUrl: record, Version: record<ApplicationId: record, CreationTime: record, ParameterDefinitions: record, RequiredCapabilities: record, ResourcesSupported: record, SemanticVersion: record, SourceCodeArchiveUrl: record, SourceCodeUrl: record, TemplateUrl: record>> {
+]: nothing -> record<ApplicationId: string, Author: string, CreationTime: string, Description: string, HomePageUrl: string, IsVerifiedAuthor: bool, Labels: list<string>, LicenseUrl: string, Name: string, ReadmeUrl: string, SpdxLicenseId: string, VerifiedAuthorUrl: string, Version: record<ApplicationId: string, CreationTime: string, ParameterDefinitions: list<record>, RequiredCapabilities: list<string>, ResourcesSupported: bool, SemanticVersion: string, SourceCodeArchiveUrl: string, SourceCodeUrl: string, TemplateUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
@@ -537,7 +537,7 @@ export def "update-application" [
   --labels: list<string> # Labels to improve discovery of apps in search results.Minimum length=1. Maximum length=127. Maximum number of labels: 10Pattern: "^[a-zA-Z0-9+\\-_:\\/@]+$";
   --readme-body: string # A text readme file in Markdown language that contains a more detailed description of the application and how it works.Maximum size 5 MB
   --readme-url: string # A link to the readme file in Markdown language that contains a more detailed description of the application and how it works.Maximum size 5 MB
-]: any -> record<ApplicationId: record, Author: record, CreationTime: record, Description: record, HomePageUrl: record, IsVerifiedAuthor: record, Labels: record, LicenseUrl: record, Name: record, ReadmeUrl: record, SpdxLicenseId: record, VerifiedAuthorUrl: record, Version: record<ApplicationId: record, CreationTime: record, ParameterDefinitions: record, RequiredCapabilities: record, ResourcesSupported: record, SemanticVersion: record, SourceCodeArchiveUrl: record, SourceCodeUrl: record, TemplateUrl: record>> {
+]: any -> record<ApplicationId: string, Author: string, CreationTime: string, Description: string, HomePageUrl: string, IsVerifiedAuthor: bool, Labels: list<string>, LicenseUrl: string, Name: string, ReadmeUrl: string, SpdxLicenseId: string, VerifiedAuthorUrl: string, Version: record<ApplicationId: string, CreationTime: string, ParameterDefinitions: list<record>, RequiredCapabilities: list<string>, ResourcesSupported: bool, SemanticVersion: string, SourceCodeArchiveUrl: string, SourceCodeUrl: string, TemplateUrl: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -585,7 +585,7 @@ export def "get-application-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Statements: record> {
+]: nothing -> record<Statements: table<Actions: list, PrincipalOrgIDs: list, Principals: list, StatementId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
@@ -612,7 +612,7 @@ export def "get-application-policy" [
 #
 # PUT /applications/{applicationId}/policy
 # operationId: PutApplicationPolicy
-# --statements item shape: {Actions: any, PrincipalOrgIDs?: any, Principals: any, StatementId?: any}
+# --statements item shape: {Actions: list<string>, PrincipalOrgIDs?: list<string>, Principals: list<string>, StatementId?: string}
 export def "put-application-policy" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -631,8 +631,8 @@ export def "put-application-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  statements: list # An array of policy statements applied to the application. — item shape: {Actions: any, PrincipalOrgIDs?: any, Principals: any, StatementId?: any}
-]: any -> record<Statements: record> {
+  statements: list # An array of policy statements applied to the application. — item shape: {Actions: list<string>, PrincipalOrgIDs?: list<string>, Principals: list<string>, StatementId?: string}
+]: any -> record<Statements: table<Actions: list, PrincipalOrgIDs: list, Principals: list, StatementId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -681,7 +681,7 @@ export def "get-cloud-formation-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApplicationId: record, CreationTime: record, ExpirationTime: record, SemanticVersion: record, Status: record, TemplateId: record, TemplateUrl: record> {
+]: nothing -> record<ApplicationId: string, CreationTime: string, ExpirationTime: string, SemanticVersion: string, Status: string, TemplateId: string, TemplateUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
@@ -732,7 +732,7 @@ export def "list-application-dependencies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Dependencies: record, NextToken: record> {
+]: nothing -> record<Dependencies: table<ApplicationId: string, SemanticVersion: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
@@ -782,7 +782,7 @@ export def "list-application-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, Versions: record> {
+]: nothing -> record<NextToken: string, Versions: table<ApplicationId: string, CreationTime: string, SemanticVersion: string, SourceCodeUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }

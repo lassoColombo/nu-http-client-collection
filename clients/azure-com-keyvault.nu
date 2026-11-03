@@ -163,10 +163,11 @@ export def "get-certificates" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
   --include-pending: oneof<nothing, bool> # Specifies whether to include certificates which are not completely provisioned.
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<attributes: record, id: string, tags: record, x5t: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "includePending" $include_pending "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/certificates" $qp $auth.query)
   let accept_val = "application/json"
@@ -199,10 +200,11 @@ export def "delete-certificate-contacts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<contacts: table<email: string, name: string, phone: string>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/certificates/contacts" $qp $auth.query)
   let accept_val = "application/json"
@@ -235,10 +237,11 @@ export def "get-certificate-contacts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<contacts: table<email: string, name: string, phone: string>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/certificates/contacts" $qp $auth.query)
   let accept_val = "application/json"
@@ -272,12 +275,13 @@ export def "set-certificate-contacts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --contacts: list # The contact list for the vault certificates. — item shape: {email?: string, name?: string, phone?: string}
 ]: any -> record<contacts: table<email: string, name: string, phone: string>, id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/certificates/contacts" $qp $auth.query)
   let req_body = {"contacts": $contacts} | compact
@@ -313,10 +317,11 @@ export def "get-certificate-issuers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, provider: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/certificates/issuers" $qp $auth.query)
   let accept_val = "application/json"
@@ -350,11 +355,12 @@ export def "delete-certificate-issuer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<attributes: record<created: int, enabled: bool, updated: int>, credentials: record<account_id: string, pwd: string>, id: string, org_details: record<admin_details: list<record>, id: string>, provider: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($issuer_name | is-empty) { error make --unspanned { msg: "path parameter 'issuer-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issuer_name: (encode-path-segment $issuer_name)} | format pattern "/certificates/issuers/{issuer_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -388,11 +394,12 @@ export def "get-certificate-issuer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<attributes: record<created: int, enabled: bool, updated: int>, credentials: record<account_id: string, pwd: string>, id: string, org_details: record<admin_details: list<record>, id: string>, provider: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($issuer_name | is-empty) { error make --unspanned { msg: "path parameter 'issuer-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issuer_name: (encode-path-segment $issuer_name)} | format pattern "/certificates/issuers/{issuer_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -429,7 +436,7 @@ export def "update-certificate-issuer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --attributes: any # The attributes of an issuer managed by the Key Vault service. — shape: {enabled?: bool}
   --credentials: any # The credentials to be used for the certificate issuer. — shape: {account_id?: string, pwd?: string}
   --org-details: any # Details of the organization of the certificate issuer. — shape: {admin_details?: list, id?: string}
@@ -439,6 +446,7 @@ export def "update-certificate-issuer" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($issuer_name | is-empty) { error make --unspanned { msg: "path parameter 'issuer-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issuer_name: (encode-path-segment $issuer_name)} | format pattern "/certificates/issuers/{issuer_name}") $qp $auth.query)
   let req_body = {"attributes": $attributes, "credentials": $credentials, "org_details": $org_details, "provider": $provider} | compact
@@ -477,7 +485,7 @@ export def "set-certificate-issuer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --attributes: any # The attributes of an issuer managed by the Key Vault service. — shape: {enabled?: bool}
   --credentials: any # The credentials to be used for the certificate issuer. — shape: {account_id?: string, pwd?: string}
   --org-details: any # Details of the organization of the certificate issuer. — shape: {admin_details?: list, id?: string}
@@ -487,6 +495,7 @@ export def "set-certificate-issuer" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($issuer_name | is-empty) { error make --unspanned { msg: "path parameter 'issuer-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issuer_name: (encode-path-segment $issuer_name)} | format pattern "/certificates/issuers/{issuer_name}") $qp $auth.query)
   let req_body = {"attributes": $attributes, "credentials": $credentials, "org_details": $org_details, "provider": $provider} | compact
@@ -521,12 +530,13 @@ export def "restore-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   value: string # The backup blob associated with a certificate bundle. (format: base64url)
 ]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/certificates/restore" $qp $auth.query)
   let req_body = {"value": $value} | compact
@@ -562,11 +572,12 @@ export def "delete-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -600,11 +611,12 @@ export def "backup-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/backup") $qp $auth.query)
   let accept_val = "application/json"
@@ -640,7 +652,7 @@ export def "create-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --attributes: any # The certificate management attributes. — shape: {enabled?: bool, exp?: int, nbf?: int}
   --policy: any # Management policy for a certificate. — shape: {attributes?: any, issuer?: any, key_props?: any, lifetime_actions?: list, secret_props?: any, x509_props?: any}
   --tags: record # Application specific metadata in the form of key-value pairs.
@@ -649,6 +661,7 @@ export def "create-certificate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/create") $qp $auth.query)
   let req_body = {"attributes": $attributes, "policy": $policy, "tags": $tags} | compact
@@ -686,7 +699,7 @@ export def "import-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --attributes: any # The certificate management attributes. — shape: {enabled?: bool, exp?: int, nbf?: int}
   --policy: any # Management policy for a certificate. — shape: {attributes?: any, issuer?: any, key_props?: any, lifetime_actions?: list, secret_props?: any, x509_props?: any}
   --pwd: string # If the private key in base64EncodedCertificate is encrypted, the password used for encryption.
@@ -697,6 +710,7 @@ export def "import-certificate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/import") $qp $auth.query)
   let req_body = {"attributes": $attributes, "policy": $policy, "pwd": $pwd, "tags": $tags, "value": $value} | compact
@@ -732,11 +746,12 @@ export def "delete-certificate-operation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<cancellation_requested: bool, csr: string, error: record<code: string, innererror: any, message: string>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, request_id: string, status: string, status_details: string, target: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/pending") $qp $auth.query)
   let accept_val = "application/json"
@@ -770,11 +785,12 @@ export def "get-certificate-operation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<cancellation_requested: bool, csr: string, error: record<code: string, innererror: any, message: string>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, request_id: string, status: string, status_details: string, target: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/pending") $qp $auth.query)
   let accept_val = "application/json"
@@ -808,17 +824,19 @@ export def "update-certificate-operation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --cancellation-requested: oneof<nothing, bool> # Indicates if cancellation was requested on the certificate operation.
 ]: any -> record<cancellation_requested: bool, csr: string, error: record<code: string, innererror: any, message: string>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, request_id: string, status: string, status_details: string, target: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/pending") $qp $auth.query)
   let req_body = {"cancellation_requested": $cancellation_requested} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "cancellation_requested") == null) { error make --unspanned { msg: "required body field 'cancellation_requested' missing: pass --cancellation-requested or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -851,7 +869,7 @@ export def "merge-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --attributes: any # The certificate management attributes. — shape: {enabled?: bool, exp?: int, nbf?: int}
   --tags: record # Application specific metadata in the form of key-value pairs.
   x5c: list<string> # The certificate or the certificate chain to merge.
@@ -860,6 +878,7 @@ export def "merge-certificate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/pending/merge") $qp $auth.query)
   let req_body = {"attributes": $attributes, "tags": $tags, "x5c": $x5c} | compact
@@ -895,11 +914,12 @@ export def "get-certificate-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: table<action: record, trigger: record>, secret_props: record<contentType: string>, x509_props: record<ekus: list<string>, key_usage: list<string>, sans: record<dns_names: list, emails: list, upns: list>, subject: string, validity_months: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/policy") $qp $auth.query)
   let accept_val = "application/json"
@@ -939,7 +959,7 @@ export def "update-certificate-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --attributes: any # The certificate management attributes. — shape: {enabled?: bool, exp?: int, nbf?: int}
   --issuer: any # Parameters for the issuer of the X509 component of a certificate. — shape: {cert_transparency?: bool, cty?: string, name?: string}
   --key-props: any # Properties of the key pair backing a certificate. — shape: {crv?: "P-256"|"P-384"|"P-521"|"P-256K", exportable?: bool, key_size?: int, kty?: "EC"|"EC-HSM"|"RSA"|"RSA-HSM"|"oct", reuse_key?: bool}
@@ -951,6 +971,7 @@ export def "update-certificate-policy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/policy") $qp $auth.query)
   let req_body = {"attributes": $attributes, "issuer": $issuer, "key_props": $key_props, "lifetime_actions": $lifetime_actions, "secret_props": $secret_props, "x509_props": $x509_props} | compact
@@ -987,11 +1008,12 @@ export def "get-certificate-versions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<attributes: record, id: string, tags: record, x5t: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/versions") $qp $auth.query)
   let accept_val = "application/json"
@@ -1026,12 +1048,13 @@ export def "get-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
   if ($certificate_version | is-empty) { error make --unspanned { msg: "path parameter 'certificate-version' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name), certificate_version: (encode-path-segment $certificate_version)} | format pattern "/certificates/{certificate_name}/{certificate_version}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1068,7 +1091,7 @@ export def "update-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --attributes: any # The certificate management attributes. — shape: {enabled?: bool, exp?: int, nbf?: int}
   --policy: any # Management policy for a certificate. — shape: {attributes?: any, issuer?: any, key_props?: any, lifetime_actions?: list, secret_props?: any, x509_props?: any}
   --tags: record # Application specific metadata in the form of key-value pairs.
@@ -1078,6 +1101,7 @@ export def "update-certificate" [
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
   if ($certificate_version | is-empty) { error make --unspanned { msg: "path parameter 'certificate-version' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name), certificate_version: (encode-path-segment $certificate_version)} | format pattern "/certificates/{certificate_name}/{certificate_version}") $qp $auth.query)
   let req_body = {"attributes": $attributes, "policy": $policy, "tags": $tags} | compact
@@ -1114,10 +1138,11 @@ export def "get-deleted-certificates" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
   --include-pending: oneof<nothing, bool> # Specifies whether to include certificates which are not completely provisioned.
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record, id: string, tags: record, x5t: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "includePending" $include_pending "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deletedcertificates" $qp $auth.query)
   let accept_val = "application/json"
@@ -1151,11 +1176,12 @@ export def "purge-deleted-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<error: record<code: string, innererror: any, message: string>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/deletedcertificates/{certificate_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1189,11 +1215,12 @@ export def "get-deleted-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/deletedcertificates/{certificate_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1227,11 +1254,12 @@ export def "recover-deleted-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/deletedcertificates/{certificate_name}/recover") $qp $auth.query)
   let accept_val = "application/json"
@@ -1265,10 +1293,11 @@ export def "get-deleted-keys" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record, kid: string, managed: bool, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deletedkeys" $qp $auth.query)
   let accept_val = "application/json"
@@ -1302,11 +1331,12 @@ export def "purge-deleted-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<error: record<code: string, innererror: any, message: string>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/deletedkeys/{key_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1340,11 +1370,12 @@ export def "get-deleted-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/deletedkeys/{key_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1378,11 +1409,12 @@ export def "recover-deleted-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/deletedkeys/{key_name}/recover") $qp $auth.query)
   let accept_val = "application/json"
@@ -1416,10 +1448,11 @@ export def "get-deleted-secrets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record, contentType: string, id: string, managed: bool, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deletedsecrets" $qp $auth.query)
   let accept_val = "application/json"
@@ -1453,11 +1486,12 @@ export def "purge-deleted-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<error: record<code: string, innererror: any, message: string>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secret-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({secret_name: (encode-path-segment $secret_name)} | format pattern "/deletedsecrets/{secret_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1491,11 +1525,12 @@ export def "get-deleted-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secret-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({secret_name: (encode-path-segment $secret_name)} | format pattern "/deletedsecrets/{secret_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1529,11 +1564,12 @@ export def "recover-deleted-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secret-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({secret_name: (encode-path-segment $secret_name)} | format pattern "/deletedsecrets/{secret_name}/recover") $qp $auth.query)
   let accept_val = "application/json"
@@ -1567,10 +1603,11 @@ export def "get-deleted-storage-accounts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record, id: string, resourceId: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deletedstorage" $qp $auth.query)
   let accept_val = "application/json"
@@ -1604,11 +1641,12 @@ export def "purge-deleted-storage-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<error: record<code: string, innererror: any, message: string>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/deletedstorage/{storage_account_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1642,11 +1680,12 @@ export def "get-deleted-storage-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/deletedstorage/{storage_account_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1680,11 +1719,12 @@ export def "recover-deleted-storage-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/deletedstorage/{storage_account_name}/recover") $qp $auth.query)
   let accept_val = "application/json"
@@ -1719,11 +1759,12 @@ export def "get-deleted-sas-definitions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record, id: string, sid: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/deletedstorage/{storage_account_name}/sas") $qp $auth.query)
   let accept_val = "application/json"
@@ -1758,12 +1799,13 @@ export def "get-deleted-sas-definition" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, id: string, sasType: string, sid: string, tags: record, templateUri: string, validityPeriod: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
   if ($sas_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'sas-definition-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name), sas_definition_name: (encode-path-segment $sas_definition_name)} | format pattern "/deletedstorage/{storage_account_name}/sas/{sas_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1798,12 +1840,13 @@ export def "recover-deleted-sas-definition" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, id: string, sasType: string, sid: string, tags: record, templateUri: string, validityPeriod: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
   if ($sas_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'sas-definition-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name), sas_definition_name: (encode-path-segment $sas_definition_name)} | format pattern "/deletedstorage/{storage_account_name}/sas/{sas_definition_name}/recover") $qp $auth.query)
   let accept_val = "application/json"
@@ -1837,10 +1880,11 @@ export def "get-keys" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<attributes: record, kid: string, managed: bool, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/keys" $qp $auth.query)
   let accept_val = "application/json"
@@ -1873,12 +1917,13 @@ export def "restore-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   value: string # The backup blob associated with a key bundle. (format: base64url)
 ]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/keys/restore" $qp $auth.query)
   let req_body = {"value": $value} | compact
@@ -1914,11 +1959,12 @@ export def "delete-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/keys/{key_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1954,7 +2000,7 @@ export def "import-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --hsm: oneof<nothing, bool> # Whether to import as a hardware key (HSM) or software key.
   --attributes: any # The attributes of a key managed by the key vault service. — shape: {enabled?: bool, exp?: int, nbf?: int}
   key: any # As of http://tools.ietf.org/html/draft-ietf-jose-json-web-key-18 — shape: {crv?: "P-256"|"P-384"|"P-521"|"P-256K", d?: string, dp?: string, dq?: string, e?: string, k?: string, key_hsm?: string, key_ops?: list<string>, kid?: string, kty?: "EC"|"EC-HSM"|"RSA"|"RSA-HSM"|"oct", n?: string, p?: string, q?: string, qi?: string, x?: string, y?: string}
@@ -1964,6 +2010,7 @@ export def "import-key" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/keys/{key_name}") $qp $auth.query)
   let req_body = {"Hsm": $hsm, "attributes": $attributes, "key": $key, "tags": $tags} | compact
@@ -1999,11 +2046,12 @@ export def "backup-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/keys/{key_name}/backup") $qp $auth.query)
   let accept_val = "application/json"
@@ -2038,7 +2086,7 @@ export def "create-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --attributes: any # The attributes of a key managed by the key vault service. — shape: {enabled?: bool, exp?: int, nbf?: int}
   --crv: string@crv-completer # Elliptic curve name. For valid values, see JsonWebKeyCurveName.
   --key-ops: list<string>
@@ -2050,6 +2098,7 @@ export def "create-key" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/keys/{key_name}/create") $qp $auth.query)
   let req_body = {"attributes": $attributes, "crv": $crv, "key_ops": $key_ops, "key_size": $key_size, "kty": $kty, "tags": $tags} | compact
@@ -2086,11 +2135,12 @@ export def "get-key-versions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<attributes: record, kid: string, managed: bool, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/keys/{key_name}/versions") $qp $auth.query)
   let accept_val = "application/json"
@@ -2125,12 +2175,13 @@ export def "get-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
   if ($key_version | is-empty) { error make --unspanned { msg: "path parameter 'key-version' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_name: (encode-path-segment $key_name), key_version: (encode-path-segment $key_version)} | format pattern "/keys/{key_name}/{key_version}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2166,7 +2217,7 @@ export def "update-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --attributes: any # The attributes of a key managed by the key vault service. — shape: {enabled?: bool, exp?: int, nbf?: int}
   --key-ops: list<string> # Json web key operations. For more information on possible key operations, see JsonWebKeyOperation.
   --tags: record # Application specific metadata in the form of key-value pairs.
@@ -2176,6 +2227,7 @@ export def "update-key" [
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
   if ($key_version | is-empty) { error make --unspanned { msg: "path parameter 'key-version' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_name: (encode-path-segment $key_name), key_version: (encode-path-segment $key_version)} | format pattern "/keys/{key_name}/{key_version}") $qp $auth.query)
   let req_body = {"attributes": $attributes, "key_ops": $key_ops, "tags": $tags} | compact
@@ -2212,7 +2264,7 @@ export def "decrypt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   alg: string@alg-completer # algorithm identifier
   value: string # format: base64url
 ]: any -> record<kid: string, value: string> {
@@ -2221,6 +2273,7 @@ export def "decrypt" [
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
   if ($key_version | is-empty) { error make --unspanned { msg: "path parameter 'key-version' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_name: (encode-path-segment $key_name), key_version: (encode-path-segment $key_version)} | format pattern "/keys/{key_name}/{key_version}/decrypt") $qp $auth.query)
   let req_body = {"alg": $alg, "value": $value} | compact
@@ -2257,7 +2310,7 @@ export def "encrypt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   alg: string@alg-completer # algorithm identifier
   value: string # format: base64url
 ]: any -> record<kid: string, value: string> {
@@ -2266,6 +2319,7 @@ export def "encrypt" [
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
   if ($key_version | is-empty) { error make --unspanned { msg: "path parameter 'key-version' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_name: (encode-path-segment $key_name), key_version: (encode-path-segment $key_version)} | format pattern "/keys/{key_name}/{key_version}/encrypt") $qp $auth.query)
   let req_body = {"alg": $alg, "value": $value} | compact
@@ -2302,7 +2356,7 @@ export def "sign" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   alg: string@alg-completer-1 # The signing/verification algorithm identifier. For more information on possible algorithm types, see JsonWebKeySignatureAlgorithm.
   value: string # format: base64url
 ]: any -> record<kid: string, value: string> {
@@ -2311,6 +2365,7 @@ export def "sign" [
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
   if ($key_version | is-empty) { error make --unspanned { msg: "path parameter 'key-version' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_name: (encode-path-segment $key_name), key_version: (encode-path-segment $key_version)} | format pattern "/keys/{key_name}/{key_version}/sign") $qp $auth.query)
   let req_body = {"alg": $alg, "value": $value} | compact
@@ -2347,7 +2402,7 @@ export def "unwrap-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   alg: string@alg-completer # algorithm identifier
   value: string # format: base64url
 ]: any -> record<kid: string, value: string> {
@@ -2356,6 +2411,7 @@ export def "unwrap-key" [
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
   if ($key_version | is-empty) { error make --unspanned { msg: "path parameter 'key-version' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_name: (encode-path-segment $key_name), key_version: (encode-path-segment $key_version)} | format pattern "/keys/{key_name}/{key_version}/unwrapkey") $qp $auth.query)
   let req_body = {"alg": $alg, "value": $value} | compact
@@ -2392,7 +2448,7 @@ export def "verify" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   alg: string@alg-completer-1 # The signing/verification algorithm. For more information on possible algorithm types, see JsonWebKeySignatureAlgorithm.
   digest: string # The digest used for signing. (format: base64url)
   value: string # The signature to be verified. (format: base64url)
@@ -2402,6 +2458,7 @@ export def "verify" [
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
   if ($key_version | is-empty) { error make --unspanned { msg: "path parameter 'key-version' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_name: (encode-path-segment $key_name), key_version: (encode-path-segment $key_version)} | format pattern "/keys/{key_name}/{key_version}/verify") $qp $auth.query)
   let req_body = {"alg": $alg, "digest": $digest, "value": $value} | compact
@@ -2438,7 +2495,7 @@ export def "wrap-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   alg: string@alg-completer # algorithm identifier
   value: string # format: base64url
 ]: any -> record<kid: string, value: string> {
@@ -2447,6 +2504,7 @@ export def "wrap-key" [
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
   if ($key_version | is-empty) { error make --unspanned { msg: "path parameter 'key-version' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_name: (encode-path-segment $key_name), key_version: (encode-path-segment $key_version)} | format pattern "/keys/{key_name}/{key_version}/wrapkey") $qp $auth.query)
   let req_body = {"alg": $alg, "value": $value} | compact
@@ -2482,10 +2540,11 @@ export def "get-secrets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified, the service will return up to 25 results. (format: int32)
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<attributes: record, contentType: string, id: string, managed: bool, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/secrets" $qp $auth.query)
   let accept_val = "application/json"
@@ -2518,12 +2577,13 @@ export def "restore-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   value: string # The backup blob associated with a secret bundle. (format: base64url)
 ]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/secrets/restore" $qp $auth.query)
   let req_body = {"value": $value} | compact
@@ -2559,11 +2619,12 @@ export def "delete-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secret-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({secret_name: (encode-path-segment $secret_name)} | format pattern "/secrets/{secret_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2598,7 +2659,7 @@ export def "set-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --attributes: any # The secret management attributes. — shape: {enabled?: bool, exp?: int, nbf?: int}
   --content-type: string # Type of the secret value such as a password.
   --tags: record # Application specific metadata in the form of key-value pairs.
@@ -2608,6 +2669,7 @@ export def "set-secret" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secret-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({secret_name: (encode-path-segment $secret_name)} | format pattern "/secrets/{secret_name}") $qp $auth.query)
   let req_body = {"attributes": $attributes, "contentType": $content_type, "tags": $tags, "value": $value} | compact
@@ -2643,11 +2705,12 @@ export def "backup-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secret-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({secret_name: (encode-path-segment $secret_name)} | format pattern "/secrets/{secret_name}/backup") $qp $auth.query)
   let accept_val = "application/json"
@@ -2682,11 +2745,12 @@ export def "get-secret-versions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified, the service will return up to 25 results. (format: int32)
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<attributes: record, contentType: string, id: string, managed: bool, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secret-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({secret_name: (encode-path-segment $secret_name)} | format pattern "/secrets/{secret_name}/versions") $qp $auth.query)
   let accept_val = "application/json"
@@ -2721,12 +2785,13 @@ export def "get-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secret-name' must be non-empty" } }
   if ($secret_version | is-empty) { error make --unspanned { msg: "path parameter 'secret-version' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({secret_name: (encode-path-segment $secret_name), secret_version: (encode-path-segment $secret_version)} | format pattern "/secrets/{secret_name}/{secret_version}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2762,7 +2827,7 @@ export def "update-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --attributes: any # The secret management attributes. — shape: {enabled?: bool, exp?: int, nbf?: int}
   --content-type: string # Type of the secret value such as a password.
   --tags: record # Application specific metadata in the form of key-value pairs.
@@ -2772,6 +2837,7 @@ export def "update-secret" [
   let base = ($base_url | default $BASE_URL)
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secret-name' must be non-empty" } }
   if ($secret_version | is-empty) { error make --unspanned { msg: "path parameter 'secret-version' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({secret_name: (encode-path-segment $secret_name), secret_version: (encode-path-segment $secret_version)} | format pattern "/secrets/{secret_name}/{secret_version}") $qp $auth.query)
   let req_body = {"attributes": $attributes, "contentType": $content_type, "tags": $tags} | compact
@@ -2807,10 +2873,11 @@ export def "get-storage-accounts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<attributes: record, id: string, resourceId: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/storage" $qp $auth.query)
   let accept_val = "application/json"
@@ -2843,12 +2910,13 @@ export def "restore-storage-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   value: string # The backup blob associated with a storage account. (format: base64url)
 ]: any -> record<activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/storage/restore" $qp $auth.query)
   let req_body = {"value": $value} | compact
@@ -2884,11 +2952,12 @@ export def "delete-storage-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/storage/{storage_account_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2922,11 +2991,12 @@ export def "get-storage-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/storage/{storage_account_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2961,7 +3031,7 @@ export def "update-storage-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --active-key-name: string # The current active storage account key name.
   --attributes: any # The storage account management attributes. — shape: {enabled?: bool}
   --auto-regenerate-key: oneof<nothing, bool> # whether keyvault should manage the storage account for the user.
@@ -2972,6 +3042,7 @@ export def "update-storage-account" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/storage/{storage_account_name}") $qp $auth.query)
   let req_body = {"activeKeyName": $active_key_name, "attributes": $attributes, "autoRegenerateKey": $auto_regenerate_key, "regenerationPeriod": $regeneration_period, "tags": $tags} | compact
@@ -3008,7 +3079,7 @@ export def "set-storage-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   active_key_name: string # Current active storage account key name.
   --attributes: any # The storage account management attributes. — shape: {enabled?: bool}
   --auto-regenerate-key: oneof<nothing, bool> # whether keyvault should manage the storage account for the user.
@@ -3020,10 +3091,12 @@ export def "set-storage-account" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/storage/{storage_account_name}") $qp $auth.query)
   let req_body = {"activeKeyName": $active_key_name, "attributes": $attributes, "autoRegenerateKey": $auto_regenerate_key, "regenerationPeriod": $regeneration_period, "resourceId": $resource_id, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "autoRegenerateKey") == null) { error make --unspanned { msg: "required body field 'autoRegenerateKey' missing: pass --auto-regenerate-key or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3055,11 +3128,12 @@ export def "backup-storage-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/storage/{storage_account_name}/backup") $qp $auth.query)
   let accept_val = "application/json"
@@ -3093,13 +3167,14 @@ export def "regenerate-storage-account-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   key_name: string # The storage account key name.
 ]: any -> record<activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/storage/{storage_account_name}/regeneratekey") $qp $auth.query)
   let req_body = {"keyName": $key_name} | compact
@@ -3136,11 +3211,12 @@ export def "get-sas-definitions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<attributes: record, id: string, sid: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/storage/{storage_account_name}/sas") $qp $auth.query)
   let accept_val = "application/json"
@@ -3175,12 +3251,13 @@ export def "delete-sas-definition" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, id: string, sasType: string, sid: string, tags: record, templateUri: string, validityPeriod: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
   if ($sas_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'sas-definition-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name), sas_definition_name: (encode-path-segment $sas_definition_name)} | format pattern "/storage/{storage_account_name}/sas/{sas_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3215,12 +3292,13 @@ export def "get-sas-definition" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, id: string, sasType: string, sid: string, tags: record, templateUri: string, validityPeriod: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
   if ($sas_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'sas-definition-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name), sas_definition_name: (encode-path-segment $sas_definition_name)} | format pattern "/storage/{storage_account_name}/sas/{sas_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3256,7 +3334,7 @@ export def "update-sas-definition" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --attributes: any # The SAS definition management attributes. — shape: {enabled?: bool}
   --sas-type: string@sas-type-completer # The type of SAS token the SAS definition will create.
   --tags: record # Application specific metadata in the form of key-value pairs.
@@ -3268,6 +3346,7 @@ export def "update-sas-definition" [
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
   if ($sas_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'sas-definition-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name), sas_definition_name: (encode-path-segment $sas_definition_name)} | format pattern "/storage/{storage_account_name}/sas/{sas_definition_name}") $qp $auth.query)
   let req_body = {"attributes": $attributes, "sasType": $sas_type, "tags": $tags, "templateUri": $template_uri, "validityPeriod": $validity_period} | compact
@@ -3305,7 +3384,7 @@ export def "set-sas-definition" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --attributes: any # The SAS definition management attributes. — shape: {enabled?: bool}
   sas_type: string@sas-type-completer # The type of SAS token the SAS definition will create.
   --tags: record # Application specific metadata in the form of key-value pairs.
@@ -3317,6 +3396,7 @@ export def "set-sas-definition" [
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
   if ($sas_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'sas-definition-name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name), sas_definition_name: (encode-path-segment $sas_definition_name)} | format pattern "/storage/{storage_account_name}/sas/{sas_definition_name}") $qp $auth.query)
   let req_body = {"attributes": $attributes, "sasType": $sas_type, "tags": $tags, "templateUri": $template_uri, "validityPeriod": $validity_period} | compact

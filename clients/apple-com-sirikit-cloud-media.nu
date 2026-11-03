@@ -139,16 +139,21 @@ export def "extension-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-applecloudextension-session-id: string
-  --x-applecloudextension-retry-count: float
-  --request-timeout: float
-  --user-agent: string
-  --accept-language: string
+  --x-applecloudextension-session-id: string # required
+  --x-applecloudextension-retry-count: float # format: uint32
+  --request-timeout: float # required, format: uint32
+  --user-agent: string # required
+  --accept-language: string # required
   --if-none-match: string
-  --cache-control: string
-]: nothing -> record<hdr: record, intent: record<addMedia: record<opt: list>, hdr: record, playMedia: record<opt: list>, updateMediaAffinity: record<opt: list>>, media: record<queues: record<hdr: record, playMedia: record, updateActivity: record>>, url: string, version: string> {
+  --cache-control: string # required
+]: nothing -> record<hdr: record, intent: record<addMedia: record<opt: list, hdr: record, url: string>, hdr: record, playMedia: record<opt: list, hdr: record, url: string>, updateMediaAffinity: record<opt: list, hdr: record, url: string>>, media: record<queues: record<hdr: record, playMedia: record, updateActivity: record>>, url: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_applecloudextension_session_id == null) { error make --unspanned { msg: "required header parameter 'x-applecloudextension-session-id' missing: pass --x-applecloudextension-session-id" } }
+  if ($request_timeout == null) { error make --unspanned { msg: "required header parameter 'Request-Timeout' missing: pass --request-timeout" } }
+  if ($user_agent == null) { error make --unspanned { msg: "required header parameter 'User-Agent' missing: pass --user-agent" } }
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
+  if ($cache_control == null) { error make --unspanned { msg: "required header parameter 'Cache-Control' missing: pass --cache-control" } }
   let full_url = (build-url $base "/configuration" $auth.query)
   let accept_val = "application/jose"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -182,16 +187,20 @@ export def "add-media-intent-handling" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-applecloudextension-session-id: string
-  --x-applecloudextension-retry-count: float
-  --request-timeout: float
-  --user-agent: string
-  --accept-language: string
+  --x-applecloudextension-session-id: string # required
+  --x-applecloudextension-retry-count: float # format: uint32
+  --request-timeout: float # required, format: uint32
+  --user-agent: string # required
+  --accept-language: string # required
   --body: list
 ]: any -> list<any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_applecloudextension_session_id == null) { error make --unspanned { msg: "required header parameter 'x-applecloudextension-session-id' missing: pass --x-applecloudextension-session-id" } }
+  if ($request_timeout == null) { error make --unspanned { msg: "required header parameter 'Request-Timeout' missing: pass --request-timeout" } }
+  if ($user_agent == null) { error make --unspanned { msg: "required header parameter 'User-Agent' missing: pass --user-agent" } }
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/intent/addMedia" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -227,16 +236,20 @@ export def "play-media-intent-handling" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-applecloudextension-session-id: string
-  --x-applecloudextension-retry-count: float
-  --request-timeout: float
-  --user-agent: string
-  --accept-language: string
+  --x-applecloudextension-session-id: string # required
+  --x-applecloudextension-retry-count: float # format: uint32
+  --request-timeout: float # required, format: uint32
+  --user-agent: string # required
+  --accept-language: string # required
   --body: list
 ]: any -> list<any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_applecloudextension_session_id == null) { error make --unspanned { msg: "required header parameter 'x-applecloudextension-session-id' missing: pass --x-applecloudextension-session-id" } }
+  if ($request_timeout == null) { error make --unspanned { msg: "required header parameter 'Request-Timeout' missing: pass --request-timeout" } }
+  if ($user_agent == null) { error make --unspanned { msg: "required header parameter 'User-Agent' missing: pass --user-agent" } }
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/intent/playMedia" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -272,16 +285,20 @@ export def "update-media-affinity-intent-handling" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-applecloudextension-session-id: string
-  --x-applecloudextension-retry-count: float
-  --request-timeout: float
-  --user-agent: string
-  --accept-language: string
+  --x-applecloudextension-session-id: string # required
+  --x-applecloudextension-retry-count: float # format: uint32
+  --request-timeout: float # required, format: uint32
+  --user-agent: string # required
+  --accept-language: string # required
   --body: list
 ]: any -> list<any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_applecloudextension_session_id == null) { error make --unspanned { msg: "required header parameter 'x-applecloudextension-session-id' missing: pass --x-applecloudextension-session-id" } }
+  if ($request_timeout == null) { error make --unspanned { msg: "required header parameter 'Request-Timeout' missing: pass --request-timeout" } }
+  if ($user_agent == null) { error make --unspanned { msg: "required header parameter 'User-Agent' missing: pass --user-agent" } }
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/intent/updateMediaAffinity" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -319,10 +336,10 @@ export def "play-media-on-queue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-applecloudextension-session-id: string
-  --x-applecloudextension-retry-count: float
-  --user-agent: string
-  --accept-language: string
+  --x-applecloudextension-session-id: string # required
+  --x-applecloudextension-retry-count: float # format: uint32
+  --user-agent: string # required
+  --accept-language: string # required
   constraints: record # shape: {allowExplicitContent?: bool, maximumQueueSegmentItemCount?: int, updateUserTasteProfile?: bool}
   --user-activity: record # nullable — shape: {activityType: string, persistentIdentifier?: string, title?: string, userInfo?: record, version: string}
   version: string
@@ -330,6 +347,9 @@ export def "play-media-on-queue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_applecloudextension_session_id == null) { error make --unspanned { msg: "required header parameter 'x-applecloudextension-session-id' missing: pass --x-applecloudextension-session-id" } }
+  if ($user_agent == null) { error make --unspanned { msg: "required header parameter 'User-Agent' missing: pass --user-agent" } }
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/queues/playMedia" $auth.query)
   let req_body = {"constraints": $constraints, "userActivity": $user_activity, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -369,10 +389,10 @@ export def "update-activity-on-queue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-applecloudextension-session-id: string
-  --x-applecloudextension-retry-count: float
-  --user-agent: string
-  --accept-language: string
+  --x-applecloudextension-session-id: string # required
+  --x-applecloudextension-retry-count: float # format: uint32
+  --user-agent: string # required
+  --accept-language: string # required
   --constraints: record # shape: {allowExplicitContent?: bool, maximumQueueSegmentItemCount?: int, updateUserTasteProfile?: bool}
   --now-playing: record # shape: {activityIdentifier?: string, contentIdentifier?: string, offsetInMillis?: int, playbackSpeed?: float, queueIdentifier?: string}
   --previously-playing: record # shape: {activityIdentifier?: string, contentIdentifier?: string, offsetInMillis?: int, playbackSpeed?: float, queueIdentifier?: string}
@@ -384,6 +404,9 @@ export def "update-activity-on-queue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_applecloudextension_session_id == null) { error make --unspanned { msg: "required header parameter 'x-applecloudextension-session-id' missing: pass --x-applecloudextension-session-id" } }
+  if ($user_agent == null) { error make --unspanned { msg: "required header parameter 'User-Agent' missing: pass --user-agent" } }
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/queues/updateActivity" $auth.query)
   let req_body = {"constraints": $constraints, "nowPlaying": $now_playing, "previouslyPlaying": $previously_playing, "report": $report, "timestamp": $timestamp, "userActivity": $user_activity, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -139,7 +139,7 @@ export def "baggage-trip-and-contact" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -177,19 +177,23 @@ export def "all-fares" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --catalogues: string # Specifies in which catalogue the fares need to be searched (e.g.'4U;OS').
-  --origin: string # Enter journey origin (e.g 'FRA').
-  --destination: string # Enter journey destination (e.g 'MAD').
-  --travel-date: string # Enter journey travel-date (e.g 2016-10-20)
+  --catalogues: string # Specifies in which catalogue the fares need to be searched (e.g.'4U;OS'). (required)
+  --origin: string # Enter journey origin (e.g 'FRA'). (required)
+  --destination: string # Enter journey destination (e.g 'MAD'). (required)
+  --travel-date: string # Enter journey travel-date (e.g 2016-10-20) (required)
   --return-date: string # Enter journey return-date (e.g 2016-10-31)'.
   --cabin-class: string # Enter the required cabin class (e.g econonmy, business etc.). (Acceptable values are: "", "economy", "premium economy", "business", "first") (default: economy)
   --travelers: string # Specifies the type and number of travelers (e.g. '(adult=2;child=2;infant=1)') For LH only (adult=1) possible.
   --fare-family: string # Mandatory for 4U. Specifies, which fares to be returned, such as basic, smart, best, smartflex, bestflex . (Acceptable values are: "", "basic", "smart", "best", "smartflex", "bestflex") (default: smart)
   --trackingid: string # Austrian Airlines only - specify the web tracking id to be used in OS Deep link.
-  --hdr-accept: string # Mandatory http header: application/xml or application/json
+  --hdr-accept: string # Mandatory http header: application/xml or application/json (default: application/json)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($catalogues == null) { error make --unspanned { msg: "required query parameter 'catalogues' missing: pass --catalogues" } }
+  if ($origin == null) { error make --unspanned { msg: "required query parameter 'origin' missing: pass --origin" } }
+  if ($destination == null) { error make --unspanned { msg: "required query parameter 'destination' missing: pass --destination" } }
+  if ($travel_date == null) { error make --unspanned { msg: "required query parameter 'travel-date' missing: pass --travel-date" } }
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "fare-family" $fare_family "scalar") (serialize-qp "trackingid" $trackingid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers/fares/allfares" $qp $auth.query)
   let accept_val = "application/json"
@@ -224,20 +228,26 @@ export def "best-fares" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --catalogues: string # Search fares from these carriers' catalogues (e.g. '4U;OS;LH')
-  --origin: string # Journey origin. 3-letter IATA airport code (e.g. 'FRA')
-  --destination: string # Journey destination. 3-letter IATA airport code (e.g. 'MAD')
-  --travel-date: string # Journey travel-date (YYYY-MM-DD)
-  --trip-duration: string # Trip duration in days (e.g. '7')
-  --range: string # Fare range: 'byday' or 'bymonth' (Acceptable values are: "byday", "bymonth")
+  --catalogues: string # Search fares from these carriers' catalogues (e.g. '4U;OS;LH') (required)
+  --origin: string # Journey origin. 3-letter IATA airport code (e.g. 'FRA') (required)
+  --destination: string # Journey destination. 3-letter IATA airport code (e.g. 'MAD') (required)
+  --travel-date: string # Journey travel-date (YYYY-MM-DD) (required)
+  --trip-duration: string # Trip duration in days (e.g. '7') (required)
+  --range: string # Fare range: 'byday' or 'bymonth' (Acceptable values are: "byday", "bymonth") (required)
   --cabin-class: string # Cabin class: 'economy', 'premium_economy', 'business', 'first' (Acceptable values are: "", "economy", "premium_economy", "business", "first")
   --country: string # Country code of requestor. 2-letter ISO 3166-1 country code (e.g. 'de')
   --trackingid: string # Austrian Airlines only - specify the web tracking id to be used in OS Deep link.
   --fare-family: string # Fare family: basic, smart, best, smartflex, bestflex - Germanwings only (Acceptable values are: "", "basic", "smart", "best", "smartflex", "bestflex")
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($catalogues == null) { error make --unspanned { msg: "required query parameter 'catalogues' missing: pass --catalogues" } }
+  if ($origin == null) { error make --unspanned { msg: "required query parameter 'origin' missing: pass --origin" } }
+  if ($destination == null) { error make --unspanned { msg: "required query parameter 'destination' missing: pass --destination" } }
+  if ($travel_date == null) { error make --unspanned { msg: "required query parameter 'travel-date' missing: pass --travel-date" } }
+  if ($trip_duration == null) { error make --unspanned { msg: "required query parameter 'trip-duration' missing: pass --trip-duration" } }
+  if ($range == null) { error make --unspanned { msg: "required query parameter 'range' missing: pass --range" } }
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "trip-duration" $trip_duration "scalar") (serialize-qp "range" $range "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "trackingid" $trackingid "scalar") (serialize-qp "fare-family" $fare_family "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers/fares/bestfares" $qp $auth.query)
   let accept_val = "application/json"
@@ -272,10 +282,10 @@ export def "deep-links" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --catalogues: string # Carrier for which the deep link will be created (e.g. 'LH')
-  --trackingid: string # Deep link tracking ID
-  --country: string # 2-letter ISO 3166-1 country code
-  --lang: string # 2-letter ISO 3166-1 language code
+  --catalogues: string # Carrier for which the deep link will be created (e.g. 'LH') (required)
+  --trackingid: string # Deep link tracking ID (required)
+  --country: string # 2-letter ISO 3166-1 country code (required)
+  --lang: string # 2-letter ISO 3166-1 language code (required)
   --origin: string # Journey origin. 3-letter IATA airport or city code (e.g. 'FRA')
   --origin-name: string # Journey origin airport or city name (e.g. 'frankfurt')
   --destination: string # Journey destination. 3-letter IATA airport or city code (e.g. 'MAD')
@@ -291,10 +301,14 @@ export def "deep-links" [
   --fare-currency: string # Fare currency (e.g. 'EUR')
   --partnerid: string # Deep link partner id (e.g. '1247')
   --encryption-key: string # Deep link encryption-key
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($catalogues == null) { error make --unspanned { msg: "required query parameter 'catalogues' missing: pass --catalogues" } }
+  if ($trackingid == null) { error make --unspanned { msg: "required query parameter 'trackingid' missing: pass --trackingid" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "trackingid" $trackingid "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "origin-name" $origin_name "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "destination-name" $destination_name "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "outbound-segments" $outbound_segments "scalar") (serialize-qp "return-segments" $return_segments "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "fare" $fare "scalar") (serialize-qp "net-fare" $net_fare "scalar") (serialize-qp "fare-currency" $fare_currency "scalar") (serialize-qp "partnerid" $partnerid "scalar") (serialize-qp "encryption-key" $encryption_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers/fares/deeplink" $qp $auth.query)
   let accept_val = "application/json"
@@ -329,22 +343,29 @@ export def "lh-deep-links-ffp" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --catalogues: string # Carrier for which the deep link will be created (e.g. 'LH')
-  --origin: string # Journey origin. 3-letter IATA airport or city code (e.g. 'FRA')
-  --destination: string # Journey destination. 3-letter IATA airport or city code (e.g. 'MAD')
-  --travel-date: string # Journey travel-date (YYYY-MM-DD)
-  --trackingid: string # Deep link tracking ID
-  --country: string # 2-letter ISO 3166-1 country code
-  --lang: string # 2-letter ISO 3166-1 language code
+  --catalogues: string # Carrier for which the deep link will be created (e.g. 'LH') (required)
+  --origin: string # Journey origin. 3-letter IATA airport or city code (e.g. 'FRA') (required)
+  --destination: string # Journey destination. 3-letter IATA airport or city code (e.g. 'MAD') (required)
+  --travel-date: string # Journey travel-date (YYYY-MM-DD) (required)
+  --trackingid: string # Deep link tracking ID (required)
+  --country: string # 2-letter ISO 3166-1 country code (required)
+  --lang: string # 2-letter ISO 3166-1 language code (required)
   --return-date: string # Journey return-date (YYYY-MM-DD)
   --cabin-class: string # Cabin class: 'economy', 'premium_economy', 'business', 'first' (Acceptable values are: "", "economy", "premium_economy", "business", "first")
   --travelers: string # Type and number of travelers (e.g. '(adult=2;child=2;infant=1)')
   --partnerid: string # Deep link partner id (e.g. '1247')
   --encryption-key: string # Deep link encryption-key
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($catalogues == null) { error make --unspanned { msg: "required query parameter 'catalogues' missing: pass --catalogues" } }
+  if ($origin == null) { error make --unspanned { msg: "required query parameter 'origin' missing: pass --origin" } }
+  if ($destination == null) { error make --unspanned { msg: "required query parameter 'destination' missing: pass --destination" } }
+  if ($travel_date == null) { error make --unspanned { msg: "required query parameter 'travel-date' missing: pass --travel-date" } }
+  if ($trackingid == null) { error make --unspanned { msg: "required query parameter 'trackingid' missing: pass --trackingid" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "trackingid" $trackingid "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "partnerid" $partnerid "scalar") (serialize-qp "encryption-key" $encryption_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers/fares/deeplink/ffp" $qp $auth.query)
   let accept_val = "application/json"
@@ -379,16 +400,16 @@ export def "lh-deep-links-itco" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --catalogues: string # Carrier for which the deep link will be created (e.g. 'LH')
-  --origin: string # Journey origin. 3-letter IATA airport or city code (e.g. 'FRA')
-  --destination: string # Journey destination. 3-letter IATA airport or city code (e.g. 'MAD')
-  --travel-date: string # Journey travel-date (YYYY-MM-DD)
-  --outbound-segments: string # Outbound flight segments in the sequence of travel (e.g. 'LH096;LH480')
-  --fare: string # Travel fare (e.g. '1341.45')
-  --fare-currency: string # Fare currency (e.g. 'EUR')
-  --trackingid: string # Deep link tracking ID
-  --country: string # 2-letter ISO 3166-1 country code
-  --lang: string # 2-letter ISO 3166-1 language code
+  --catalogues: string # Carrier for which the deep link will be created (e.g. 'LH') (required)
+  --origin: string # Journey origin. 3-letter IATA airport or city code (e.g. 'FRA') (required)
+  --destination: string # Journey destination. 3-letter IATA airport or city code (e.g. 'MAD') (required)
+  --travel-date: string # Journey travel-date (YYYY-MM-DD) (required)
+  --outbound-segments: string # Outbound flight segments in the sequence of travel (e.g. 'LH096;LH480') (required)
+  --fare: string # Travel fare (e.g. '1341.45') (required)
+  --fare-currency: string # Fare currency (e.g. 'EUR') (required)
+  --trackingid: string # Deep link tracking ID (required)
+  --country: string # 2-letter ISO 3166-1 country code (required)
+  --lang: string # 2-letter ISO 3166-1 language code (required)
   --return-date: string # Journey return-date (YYYY-MM-DD)
   --cabin-class: string # Cabin class: 'economy', 'premium_economy', 'business', 'first' (Acceptable values are: "", "economy", "premium_economy", "business", "first")
   --return-segments: string # Flight segments in the sequence of travel (e.g. 'LH7465;LH431')
@@ -396,10 +417,20 @@ export def "lh-deep-links-itco" [
   --net-fare: string # Travel net fare. Total fare less taxes and charges (e.g. '1140')
   --partnerid: string # Deep link partner id (e.g. '1247')
   --encryption-key: string # Deep link encryption-key
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($catalogues == null) { error make --unspanned { msg: "required query parameter 'catalogues' missing: pass --catalogues" } }
+  if ($origin == null) { error make --unspanned { msg: "required query parameter 'origin' missing: pass --origin" } }
+  if ($destination == null) { error make --unspanned { msg: "required query parameter 'destination' missing: pass --destination" } }
+  if ($travel_date == null) { error make --unspanned { msg: "required query parameter 'travel-date' missing: pass --travel-date" } }
+  if ($outbound_segments == null) { error make --unspanned { msg: "required query parameter 'outbound-segments' missing: pass --outbound-segments" } }
+  if ($fare == null) { error make --unspanned { msg: "required query parameter 'fare' missing: pass --fare" } }
+  if ($fare_currency == null) { error make --unspanned { msg: "required query parameter 'fare-currency' missing: pass --fare-currency" } }
+  if ($trackingid == null) { error make --unspanned { msg: "required query parameter 'trackingid' missing: pass --trackingid" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "outbound-segments" $outbound_segments "scalar") (serialize-qp "fare" $fare "scalar") (serialize-qp "fare-currency" $fare_currency "scalar") (serialize-qp "trackingid" $trackingid "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "return-segments" $return_segments "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "net-fare" $net_fare "scalar") (serialize-qp "partnerid" $partnerid "scalar") (serialize-qp "encryption-key" $encryption_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers/fares/deeplink/itco" $qp $auth.query)
   let accept_val = "application/json"
@@ -434,15 +465,18 @@ export def "fares" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --catalogues: string # Search fares from these carriers' catalogues - currently active for Germanwings only (4U)
-  --segments: string # Journey details e.g. (origin=TXL;destination=CGN;travel-date=2016-12-15;return-date=2016-12-20;cabin=Economy)
-  --carriers: string # Include fares for these carriers e.g. ('4U;LH')
+  --catalogues: string # Search fares from these carriers' catalogues - currently active for Germanwings only (4U) (required)
+  --segments: string # Journey details e.g. (origin=TXL;destination=CGN;travel-date=2016-12-15;return-date=2016-12-20;cabin=Economy) (required)
+  --carriers: string # Include fares for these carriers e.g. ('4U;LH') (required)
   --travelers: string # Type and number of travelers e.g. (adult=1;child=1;infant=1)
   --fare-types: string # Fares family: basic,smart, best, smartflex, bestflex - Germanwings only (Acceptable values are: "", "basic", "smart", "best", "smartflex", "bestflex") (default: basic)
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($catalogues == null) { error make --unspanned { msg: "required query parameter 'catalogues' missing: pass --catalogues" } }
+  if ($segments == null) { error make --unspanned { msg: "required query parameter 'segments' missing: pass --segments" } }
+  if ($carriers == null) { error make --unspanned { msg: "required query parameter 'carriers' missing: pass --carriers" } }
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "segments" $segments "scalar") (serialize-qp "carriers" $carriers "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "fare-types" $fare_types "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers/fares/fares" $qp $auth.query)
   let accept_val = "application/json"
@@ -477,19 +511,23 @@ export def "lowest-fares" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --catalogues: string # Search fares from these carriers' catalogues e.g. '4U;OS;LH'
-  --origin: string # Journey origin. 3-letter IATA aiport code e.g. 'FRA'
-  --destination: string # Journey destination. 3-letter IATA airport code e.g. 'MAD'
-  --travel-date: string # Journey travel-date YYYY-MM-DD
+  --catalogues: string # Search fares from these carriers' catalogues e.g. '4U;OS;LH' (required)
+  --origin: string # Journey origin. 3-letter IATA aiport code e.g. 'FRA' (required)
+  --destination: string # Journey destination. 3-letter IATA airport code e.g. 'MAD' (required)
+  --travel-date: string # Journey travel-date YYYY-MM-DD (required)
   --return-date: string # Journey return-date - mandatory for OS and LH searches YYYY-MM-DD
   --cabin-class: string # Cabin class: 'economy', 'premium_economy', 'business', 'first' (Acceptable values are: "", "economy", "premium_economy", "business", "first")
   --travelers: string # Type and number of travelers e.g. '(adult=2;child=2;infant=1)'. For LH only (adult=1) possible
   --fare-family: string # Fare family: basic, smart, best, smartflex, bestflex - Germanwings only (Acceptable values are: "", "basic", "smart", "best", "smartflex", "bestflex") (default: basic)
   --country: string # Country code of requestor. 2-letter ISO 3166-1 country code (e.g. 'de')
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($catalogues == null) { error make --unspanned { msg: "required query parameter 'catalogues' missing: pass --catalogues" } }
+  if ($origin == null) { error make --unspanned { msg: "required query parameter 'origin' missing: pass --origin" } }
+  if ($destination == null) { error make --unspanned { msg: "required query parameter 'destination' missing: pass --destination" } }
+  if ($travel_date == null) { error make --unspanned { msg: "required query parameter 'travel-date' missing: pass --travel-date" } }
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "fare-family" $fare_family "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers/fares/lowestfares" $qp $auth.query)
   let accept_val = "application/json"
@@ -524,18 +562,24 @@ export def "fares-subscriptions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --origin: string # Journey origin. 3-leter IATA airport code (e.g. 'FRA')
-  --destination: string # Journey destination. 3-letter IATA airport code (e.g. 'MAD')
-  --cabin-class: string # Cabin class: 'economy', 'premium_economy', 'business', 'first' (Acceptable values are: "", "economy", "premium_economy", "business", "first")
-  --trip-duration: string # Trip duration in days (e.g. '7')
-  --email: string # Email Address')
-  --lang: string # 2-letter ISO 3166-1 language code
+  --origin: string # Journey origin. 3-leter IATA airport code (e.g. 'FRA') (required)
+  --destination: string # Journey destination. 3-letter IATA airport code (e.g. 'MAD') (required)
+  --cabin-class: string # Cabin class: 'economy', 'premium_economy', 'business', 'first' (Acceptable values are: "", "economy", "premium_economy", "business", "first") (required)
+  --trip-duration: string # Trip duration in days (e.g. '7') (required)
+  --email: string # Email Address') (required)
+  --lang: string # 2-letter ISO 3166-1 language code (required)
   --country: string # 2-letter ISO 3166-1 country code
   --trackingid: string # Tracking parameter
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($origin == null) { error make --unspanned { msg: "required query parameter 'origin' missing: pass --origin" } }
+  if ($destination == null) { error make --unspanned { msg: "required query parameter 'destination' missing: pass --destination" } }
+  if ($cabin_class == null) { error make --unspanned { msg: "required query parameter 'cabin-class' missing: pass --cabin-class" } }
+  if ($trip_duration == null) { error make --unspanned { msg: "required query parameter 'trip-duration' missing: pass --trip-duration" } }
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
   let qp = [(serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "trip-duration" $trip_duration "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "trackingid" $trackingid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers/fares/subscriptions" $qp $auth.query)
   let accept_val = "application/json"
@@ -575,7 +619,7 @@ export def "ond-route" [
   --catalogues: string # Carrier for which the OND will be retrieved (e.g. 'LH') (default: LH)
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken)
   --offset: string # Number of records skipped. Defaults to 0
-  --hdr-accept: string # Mandatory http header: application/xml or application/json
+  --hdr-accept: string # Mandatory http header: application/xml or application/json (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -618,7 +662,7 @@ export def "ond-status" [
   --catalogues: string # Carrier for which the OND will be retrieved (e.g. 'LH') (default: LH)
   --new-routes: string # Enter if newly added routes should be returned in the response. (Acceptable values are: "", "true", "false")
   --old-routes: string # Enter if old (deleted) routes should be returned in the response. (Acceptable values are: "", "true", "false")
-  --hdr-accept: string # Mandatory http header: application/xml or application/json
+  --hdr-accept: string # Mandatory http header: application/xml or application/json (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -658,7 +702,7 @@ export def "top-ond" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --catalogues: string # Carrier for which the OND will be retrieved (e.g. 'LH') (default: LH)
   --origin: string # Enter the origin country code (e.g. 'DE'). Leave empty to search Top OND across all countries
-  --hdr-accept: string # Mandatory http header: application/xml or application/json
+  --hdr-accept: string # Mandatory http header: application/xml or application/json (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -698,7 +742,7 @@ export def "orders" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -738,12 +782,13 @@ export def "auto-check-in" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --email-address: string # Email address
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --email-address: string # Email address (required)
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ticketnumber | is-empty) { error make --unspanned { msg: "path parameter 'ticketnumber' must be non-empty" } }
+  if ($email_address == null) { error make --unspanned { msg: "required query parameter 'emailAddress' missing: pass --email-address" } }
   let qp = [(serialize-qp "emailAddress" $email_address "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ticketnumber: (encode-path-segment $ticketnumber)} | format pattern "/preflight/autocheckin/{ticketnumber}") $qp $auth.query)
   let accept_val = "application/json"
@@ -780,14 +825,16 @@ export def "price-offers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --departure-date: string # Departure date in local time (YYYY-MM-DD)
-  --return-date: string # Return date in local time (YYYY-MM-DD)
+  --departure-date: string # Departure date in local time (YYYY-MM-DD) (required)
+  --return-date: string # Return date in local time (YYYY-MM-DD) (required)
   --service: string # Optional parameter. (default: amadeusBestPrice)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($origin | is-empty) { error make --unspanned { msg: "path parameter 'origin' must be non-empty" } }
   if ($destination | is-empty) { error make --unspanned { msg: "path parameter 'destination' must be non-empty" } }
+  if ($departure_date == null) { error make --unspanned { msg: "required query parameter 'departureDate' missing: pass --departure-date" } }
+  if ($return_date == null) { error make --unspanned { msg: "required query parameter 'returnDate' missing: pass --return-date" } }
   let qp = [(serialize-qp "departureDate" $departure_date "scalar") (serialize-qp "returnDate" $return_date "scalar") (serialize-qp "service" $service "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({origin: (encode-path-segment $origin), destination: (encode-path-segment $destination)} | format pattern "/promotions/priceoffers/flights/ond/{origin}/{destination}") $qp $auth.query)
   let accept_val = "application/json"
@@ -823,7 +870,7 @@ export def "seat-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # 2-letter ISO 3166-1 language code
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

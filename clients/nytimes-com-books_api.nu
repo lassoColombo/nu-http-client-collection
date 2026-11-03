@@ -95,6 +95,7 @@ def base-url-completer [] { ["https://api.nytimes.com/svc/books/v3"] }
 def auth-scheme-completer [] { ["query-api-key"] }
 
 # Completers for enum parameters
+def format-completer [] { ["json" "jsonp"] }
 def sort-order-completer [] { ["ASC" "DESC"] }
 
 # List all available API commands with their parameters
@@ -125,7 +126,7 @@ export def commands []: nothing -> table {
 # GET /lists.{format}
 # operationId: GET_lists-format
 export def "get-lists-format" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +215,7 @@ export def "get-lists-best-sellers-history-json" [
 # GET /lists/names.{format}
 # operationId: GET_lists-names-format
 export def "get-lists-names-format" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +253,7 @@ export def "get-lists-names-format" [
 # GET /lists/overview.{format}
 # operationId: GET_lists-overview-format
 export def "get-lists-overview-format" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +340,7 @@ export def "get-lists-date-list-json" [
 # GET /reviews.{format}
 # operationId: GET_reviews-format
 export def "get-reviews-format" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

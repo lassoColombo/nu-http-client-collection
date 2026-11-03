@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {x-api-key: $token_val}, query: "", location: "header"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "x-api-key" => { {scheme: $scheme, headers: {"x-api-key": $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -163,12 +163,13 @@ export def "create-corpus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --customer-id: int # The Customer ID to use for the request.
+  --customer-id: int # The Customer ID to use for the request. (required)
   --corpus: record # shape: {customDimensions?: list, description?: string, dtProvision?: string, enabled?: bool, encoderId?: string, encrypted?: bool, filterAttributes?: list, id?: int, metadataMaxBytes?: int, name?: string, swapIenc?: bool, swapQenc?: bool, textless?: bool}
 ]: any -> record<corpusId: int, status: record<code: string, statusDetail: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id == null) { error make --unspanned { msg: "required header parameter 'customer-id' missing: pass --customer-id" } }
   let full_url = (build-url $base "/v1/create-corpus" $auth.query)
   let req_body = {"corpus": $corpus} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -204,13 +205,14 @@ export def "delete-corpus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --customer-id: int # The Customer ID to use for the request.
+  --customer-id: int # The Customer ID to use for the request. (required)
   --corpus-id: int # The Corpus ID to be deleted. (format: int64)
   --customer-id-body: int # The Customer ID that contains the corpus to be deleted. (format: int64) (body field)
 ]: any -> record<status: record<code: string, statusDetail: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id == null) { error make --unspanned { msg: "required header parameter 'customer-id' missing: pass --customer-id" } }
   let full_url = (build-url $base "/v1/delete-corpus" $auth.query)
   let req_body = {"corpusId": $corpus_id, "customerId": $customer_id_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -246,7 +248,7 @@ export def "delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --customer-id: int # The Customer ID to use for the request.
+  --customer-id: int # The Customer ID to use for the request. (required)
   --corpus-id: string # The Corpus ID that contains the document. (format: int64)
   --customer-id-body: string # The Customer ID to issue the request for. (format: int64) (body field)
   --document-id: string # The Document ID to be deleted.
@@ -254,6 +256,7 @@ export def "delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id == null) { error make --unspanned { msg: "required header parameter 'customer-id' missing: pass --customer-id" } }
   let full_url = (build-url $base "/v1/delete-doc" $auth.query)
   let req_body = {"corpusId": $corpus_id, "customerId": $customer_id_body, "documentId": $document_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -290,7 +293,7 @@ export def "index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --customer-id: int # The Customer ID to use for the request.
+  --customer-id: int # The Customer ID to use for the request. (required)
   --corpus-id: string # format: int64
   --customer-id-body: string # format: int64 (body field)
   --document: record # A document to index. — shape: {customDims?: list, description?: string, documentId?: string, metadataJson?: string, section?: list, title?: string}
@@ -298,6 +301,7 @@ export def "index" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id == null) { error make --unspanned { msg: "required header parameter 'customer-id' missing: pass --customer-id" } }
   let full_url = (build-url $base "/v1/index" $auth.query)
   let req_body = {"corpusId": $corpus_id, "customerId": $customer_id_body, "document": $document} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -333,7 +337,7 @@ export def "list-corpora" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --customer-id: int # The Customer ID to use for the request.
+  --customer-id: int # The Customer ID to use for the request. (required)
   --filter: string # A regex to match corpora against.
   --num-results: int # The maximum results to return. (format: int64)
   --page-key: string # A key that is passed in to retrieve a specific page of results. (format: byte)
@@ -341,6 +345,7 @@ export def "list-corpora" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id == null) { error make --unspanned { msg: "required header parameter 'customer-id' missing: pass --customer-id" } }
   let full_url = (build-url $base "/v1/list-corpora" $auth.query)
   let req_body = {"filter": $filter, "numResults": $num_results, "pageKey": $page_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -377,12 +382,13 @@ export def "query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --customer-id: int # The Customer ID to use for the request.
+  --customer-id: int # The Customer ID to use for the request. (required)
   --query: list # item shape: {corpusKey?: list, numResults?: int, query?: string, rerankingConfig?: record, start?: int}
 ]: any -> record<metrics: record<queryEncodeMs: int, rerankMs: int, retrievalMs: int, userdataRetrievalMs: int>, responseSet: table<document: list, response: list, status: list>, status: table<code: string, statusDetail: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id == null) { error make --unspanned { msg: "required header parameter 'customer-id' missing: pass --customer-id" } }
   let full_url = (build-url $base "/v1/query" $auth.query)
   let req_body = {"query": $query} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -418,13 +424,14 @@ export def "reset-corpus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --customer-id: int # The Customer ID to use for the request.
+  --customer-id: int # The Customer ID to use for the request. (required)
   --corpus-id: int # The Corpus ID to be reset. (format: int64)
   --customer-id-body: int # The Customer ID that contains the corpus to be reset. (format: int64) (body field)
 ]: any -> record<status: record<code: string, statusDetail: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id == null) { error make --unspanned { msg: "required header parameter 'customer-id' missing: pass --customer-id" } }
   let full_url = (build-url $base "/v1/reset-corpus" $auth.query)
   let req_body = {"corpusId": $corpus_id, "customerId": $customer_id_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -461,12 +468,13 @@ export def "stream-query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --customer-id: int # The Customer ID to use for the request.
+  --customer-id: int # The Customer ID to use for the request. (required)
   --query: list # item shape: {corpusKey?: list, numResults?: int, query?: string, rerankingConfig?: record, start?: int}
 ]: any -> record<error: record<code: int, details: list<record>, message: string>, result: record<document: list<record>, response: list<record>, status: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id == null) { error make --unspanned { msg: "required header parameter 'customer-id' missing: pass --customer-id" } }
   let full_url = (build-url $base "/v1/stream-query" $auth.query)
   let req_body = {"query": $query} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -502,8 +510,8 @@ export def "file-upload" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --c: int # Customer ID
-  --o: int # Corpus ID
+  --c: int # Customer ID (required)
+  --o: int # Corpus ID (required)
   --d: oneof<nothing, bool> # If true, the server returns the extracted document that was indexed
   --doc-metadata: string # A JSON string of any additional metadata you want attached to the file.
   --file: string # The file to be indexed into Vectara. (format: binary)
@@ -511,14 +519,16 @@ export def "file-upload" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($c == null) { error make --unspanned { msg: "required query parameter 'c' missing: pass --c" } }
+  if ($o == null) { error make --unspanned { msg: "required query parameter 'o' missing: pass --o" } }
   let qp = [(serialize-qp "c" $c "scalar") (serialize-qp "o" $o "scalar") (serialize-qp "d" $d "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/upload" $qp $auth.query)
   let req_body = {"doc_metadata": $doc_metadata, "file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url

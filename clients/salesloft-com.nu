@@ -1,4 +1,4 @@
-# Auto-generated client for SalesLoft Platform vv2
+# Auto-generated client for SalesLoft Platform v2
 # Source: https://api.apis.guru/v2/specs/salesloft.com/v2/openapi.json
 # Auth: --token flag or $env.SALESLOFT_PLATFORM_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -887,14 +887,14 @@ export def "post-v2-activities-calls-json" [
   --notes: string # Notes to log for the call. This is similar to the notes endpoint, but ensures that the notes get synced to the user's CRM
   person_id: int # The ID of the person whom this call will be logged for
   --sentiment: string # The sentiment of the call. Can be required on a per-team basis. Must be present in the sentiment list.
-  --body-to: string # The phone number that was called
+  --to: string # The phone number that was called
   --user-guid: string # Guid of the user whom this call should be logged for. Defaults to the authenticated user. Only team admins can pass another user's guid
 ]: any -> record<action: record<_href: string, id: int>, cadence: record<_href: string, id: int>, called_person: record<_href: string, id: int>, created_at: string, crm_activity: record<_href: string, id: int>, disposition: string, duration: int, id: int, note: record<_href: string, id: int>, recordings: table<recording_status: string, status: string, url: string>, sentiment: string, step: record<_href: string, id: int>, to: string, updated_at: string, user: record<_href: string, id: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/activities/calls.json" $auth.query)
-  let req_body = {"action_id": $action_id, "crm_params": $crm_params, "disposition": $disposition, "duration": $duration, "linked_call_data_record_ids": $linked_call_data_record_ids, "notes": $notes, "person_id": $person_id, "sentiment": $sentiment, "to": $body_to, "user_guid": $user_guid} | compact
+  let req_body = {"action_id": $action_id, "crm_params": $crm_params, "disposition": $disposition, "duration": $duration, "linked_call_data_record_ids": $linked_call_data_record_ids, "notes": $notes, "person_id": $person_id, "sentiment": $sentiment, "to": $to, "user_guid": $user_guid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1488,13 +1488,15 @@ export def "post-v2-cadence-memberships-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --person-id: int # ID of the person to create a cadence membership for
-  --cadence-id: int # ID of the cadence to create a cadence membership for
+  --person-id: int # ID of the person to create a cadence membership for (required)
+  --cadence-id: int # ID of the cadence to create a cadence membership for (required)
   --user-id: int # ID of the user to create a cadence membership for. The associated cadence must be owned by the user, or it must be a team cadence
   --step-id: int # ID of the step on which the person should start the cadence. Start on first step is the default behavior without this parameter.
 ]: nothing -> record<added_at: string, cadence: record<_href: string, id: int>, counts: record<bounces: int, calls: int, clicks: int, replies: int, sent_emails: int, views: int>, created_at: string, current_state: string, currently_on_cadence: bool, id: int, latest_action: record<_href: string, id: int>, person: record<_href: string, id: int>, person_deleted: bool, updated_at: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($person_id == null) { error make --unspanned { msg: "required query parameter 'person_id' missing: pass --person-id" } }
+  if ($cadence_id == null) { error make --unspanned { msg: "required query parameter 'cadence_id' missing: pass --cadence-id" } }
   let qp = [(serialize-qp "person_id" $person_id "scalar") (serialize-qp "cadence_id" $cadence_id "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "step_id" $step_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/cadence_memberships.json" $qp $auth.query)
   let accept_val = "*/*"
@@ -1938,16 +1940,16 @@ export def "post-v2-conversations-calls" [
   --call-created-at: string # Timestamp for when the call started. If not provided, will default to the time the request was received
   --direction: string # Call direction
   duration: float # Duration of call in seconds
-  --body-from: string # Phone number that call was made from
+  from: string # Phone number that call was made from
   recording: record # Object containing recording info including the audio file (.mp3, .wav, .ogg, .m4a)
-  --body-to: string # Phone number that was called
+  to: string # Phone number that was called
   --user-guid: string # Guid of the Salesloft User to assign the call to. If not provided, will default to the user within the authentication token
 ]: any -> record<call_created_at: string, direction: string, duration: float, from: string, recording: record, to: string, user_guid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/conversations/calls" $auth.query)
-  let req_body = {"call_created_at": $call_created_at, "direction": $direction, "duration": $duration, "from": $body_from, "recording": $recording, "to": $body_to, "user_guid": $user_guid} | compact
+  let req_body = {"call_created_at": $call_created_at, "direction": $direction, "duration": $duration, "from": $from, "recording": $recording, "to": $to, "user_guid": $user_guid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2056,7 +2058,7 @@ export def "get-v2-crm-activity-fields-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-source: string # Return only records with this source
+  --source: string # Return only records with this source
   --sort-by: string # Key to sort on, must be one of: title, updated_at. Defaults to title
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to ASC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
@@ -2066,14 +2068,14 @@ export def "get-v2-crm-activity-fields-json" [
 ]: nothing -> table<created_at: string, crm_object_type: string, field: string, field_type: string, id: int, picklist_values: record, salesforce_object_type: string, source: string, title: string, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "source" $qp_source "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "source" $source "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/crm_activity_fields.json" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"source": $qp_source, "sort_by": $sort_by, "sort_direction": $sort_direction, "per_page": $per_page, "page": $page, "include_paging_counts": $include_paging_counts, "limit_paging_counts": $limit_paging_counts} | compact)
+    query: ({"source": $source, "sort_by": $sort_by, "sort_direction": $sort_direction, "per_page": $per_page, "page": $page, "include_paging_counts": $include_paging_counts, "limit_paging_counts": $limit_paging_counts} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2470,6 +2472,7 @@ export def "post-v2-external-emails-json" [
   let full_url = (build-url $base "/v2/external_emails.json" $auth.query)
   let req_body = {"mailbox": $mailbox, "raw": $body_raw} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "raw") == null) { error make --unspanned { msg: "required body field 'raw' missing: pass --body-raw or pipe a record" } }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -4013,10 +4016,11 @@ export def "get-v2-phone-numbers-caller-ids-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --phone-number: string # E.164 Phone Number
+  --phone-number: string # E.164 Phone Number (required)
 ]: nothing -> table<account_name: string, display_name: string, person: record<_href: string, id: int>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($phone_number == null) { error make --unspanned { msg: "required query parameter 'phone_number' missing: pass --phone-number" } }
   let qp = [(serialize-qp "phone_number" $phone_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/phone_numbers/caller_ids.json" $qp $auth.query)
   let accept_val = "*/*"

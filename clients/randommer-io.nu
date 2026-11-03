@@ -1,4 +1,4 @@
-# Auto-generated client for Randommer API vv1
+# Auto-generated client for Randommer API v1
 # Source: https://api.apis.guru/v2/specs/randommer.io/v1/openapi.json
 # Auth: --token flag or $env.RANDOMMER_API_TOKEN
 
@@ -363,12 +363,14 @@ export def "post-api-finance-vat-validator" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country: string
-  --vat: string
+  --country: string # required
+  --vat: string # required
   --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
+  if ($vat == null) { error make --unspanned { msg: "required query parameter 'vat' missing: pass --vat" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "vat" $vat "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Finance/Vat/Validator" $qp $auth.query)
   let accept_val = "application/json"
@@ -434,12 +436,13 @@ export def "get-api-misc-random-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --number: int # format: int32
+  --number: int # required, format: int32
   --culture: string # default: en
   --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Misc/Random-Address" $qp $auth.query)
   let accept_val = "application/json"
@@ -473,12 +476,14 @@ export def "get-api-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name-type: string@name-type-completer
-  --quantity: int # format: int32
+  --name-type: string@name-type-completer # required
+  --quantity: int # required, format: int32
   --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name_type == null) { error make --unspanned { msg: "required query parameter 'nameType' missing: pass --name-type" } }
+  if ($quantity == null) { error make --unspanned { msg: "required query parameter 'quantity' missing: pass --quantity" } }
   let qp = [(serialize-qp "nameType" $name_type "scalar") (serialize-qp "quantity" $quantity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Name" $qp $auth.query)
   let accept_val = "application/json"
@@ -512,11 +517,12 @@ export def "post-api-name-brand-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --starting-words: string
+  --starting-words: string # required
   --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($starting_words == null) { error make --unspanned { msg: "required query parameter 'startingWords' missing: pass --starting-words" } }
   let qp = [(serialize-qp "startingWords" $starting_words "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Name/BrandName" $qp $auth.query)
   let accept_val = "application/json"
@@ -550,12 +556,13 @@ export def "post-api-name-business-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --number: int # format: int32
+  --number: int # required, format: int32
   --culture-code: string # default: en_US
   --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "cultureCode" $culture_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Name/BusinessName" $qp $auth.query)
   let accept_val = "application/json"
@@ -625,11 +632,12 @@ export def "get-api-name-suggestions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --starting-words: string
+  --starting-words: string # required
   --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($starting_words == null) { error make --unspanned { msg: "required query parameter 'startingWords' missing: pass --starting-words" } }
   let qp = [(serialize-qp "startingWords" $starting_words "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Name/Suggestions" $qp $auth.query)
   let accept_val = "application/json"
@@ -699,12 +707,14 @@ export def "get-api-phone-generate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-code: string
-  --quantity: int # format: int32
+  --country-code: string # required
+  --quantity: int # required, format: int32
   --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country_code == null) { error make --unspanned { msg: "required query parameter 'CountryCode' missing: pass --country-code" } }
+  if ($quantity == null) { error make --unspanned { msg: "required query parameter 'Quantity' missing: pass --quantity" } }
   let qp = [(serialize-qp "CountryCode" $country_code "scalar") (serialize-qp "Quantity" $quantity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Phone/Generate" $qp $auth.query)
   let accept_val = "application/json"
@@ -738,11 +748,12 @@ export def "get-api-phone-imei" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --quantity: int # format: int32
+  --quantity: int # required, format: int32
   --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($quantity == null) { error make --unspanned { msg: "required query parameter 'Quantity' missing: pass --quantity" } }
   let qp = [(serialize-qp "Quantity" $quantity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Phone/IMEI" $qp $auth.query)
   let accept_val = "application/json"
@@ -776,12 +787,13 @@ export def "get-api-phone-validate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --telephone: string
+  --telephone: string # required
   --country-code: string
   --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($telephone == null) { error make --unspanned { msg: "required query parameter 'telephone' missing: pass --telephone" } }
   let qp = [(serialize-qp "telephone" $telephone "scalar") (serialize-qp "CountryCode" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Phone/Validate" $qp $auth.query)
   let accept_val = "application/json"
@@ -851,7 +863,7 @@ export def "post-api-social-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id-type: string@id-type-completer
+  --id-type: string@id-type-completer # required
   --x-api-key: string # Enter your key
   country: string
   number: string
@@ -859,6 +871,7 @@ export def "post-api-social-number" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_type == null) { error make --unspanned { msg: "required query parameter 'idType' missing: pass --id-type" } }
   let qp = [(serialize-qp "idType" $id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/SocialNumber" $qp $auth.query)
   let req_body = {"country": $country, "number": $number} | compact
@@ -934,13 +947,16 @@ export def "get-api-text-lorem-ipsum" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lorem-type: string@lorem-type-completer
-  --type: string@type-completer
-  --number: int # format: int32
+  --lorem-type: string@lorem-type-completer # required
+  --type: string@type-completer # required
+  --number: int # required, format: int32
   --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lorem_type == null) { error make --unspanned { msg: "required query parameter 'loremType' missing: pass --lorem-type" } }
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "loremType" $lorem_type "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Text/LoremIpsum" $qp $auth.query)
   let accept_val = "application/json"
@@ -974,14 +990,18 @@ export def "get-api-text-password" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --length: int # format: int32
-  --has-digits: oneof<nothing, bool>
-  --has-uppercase: oneof<nothing, bool>
-  --has-special: oneof<nothing, bool>
+  --length: int # required, format: int32
+  --has-digits: oneof<nothing, bool> # required
+  --has-uppercase: oneof<nothing, bool> # required
+  --has-special: oneof<nothing, bool> # required
   --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($length == null) { error make --unspanned { msg: "required query parameter 'length' missing: pass --length" } }
+  if ($has_digits == null) { error make --unspanned { msg: "required query parameter 'hasDigits' missing: pass --has-digits" } }
+  if ($has_uppercase == null) { error make --unspanned { msg: "required query parameter 'hasUppercase' missing: pass --has-uppercase" } }
+  if ($has_special == null) { error make --unspanned { msg: "required query parameter 'hasSpecial' missing: pass --has-special" } }
   let qp = [(serialize-qp "length" $length "scalar") (serialize-qp "hasDigits" $has_digits "scalar") (serialize-qp "hasUppercase" $has_uppercase "scalar") (serialize-qp "hasSpecial" $has_special "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Text/Password" $qp $auth.query)
   let accept_val = "application/json"
@@ -1015,12 +1035,14 @@ export def "post-api-text-review" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product: string
-  --quantity: int # format: int32
+  --product: string # required
+  --quantity: int # required, format: int32
   --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($product == null) { error make --unspanned { msg: "required query parameter 'product' missing: pass --product" } }
+  if ($quantity == null) { error make --unspanned { msg: "required query parameter 'quantity' missing: pass --quantity" } }
   let qp = [(serialize-qp "product" $product "scalar") (serialize-qp "quantity" $quantity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Text/Review" $qp $auth.query)
   let accept_val = "application/json"
@@ -1054,7 +1076,7 @@ export def "post-api-text-transform" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --text-action-type: string@text-action-type-completer
+  --text-action-type: string@text-action-type-completer # required
   --case-type: string@case-type-completer
   --find: string
   --replace: string
@@ -1064,6 +1086,7 @@ export def "post-api-text-transform" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($text_action_type == null) { error make --unspanned { msg: "required query parameter 'textActionType' missing: pass --text-action-type" } }
   let qp = [(serialize-qp "textActionType" $text_action_type "scalar") (serialize-qp "caseType" $case_type "scalar") (serialize-qp "find" $find "scalar") (serialize-qp "replace" $replace "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Text/Transform" $qp $auth.query)
   let req_body = {"text": $text} | compact

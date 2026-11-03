@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -172,7 +172,7 @@ export def "create-bot-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --checksum: string # Identifies a specific revision of the $LATEST version of the bot. If you specify a checksum and the $LATEST version of the bot has a different checksum, a PreconditionFailedException exception is returned and Amazon Lex doesn't publish a new version. If you don't specify a checksum, Amazon Lex publishes the $LATEST version.
-]: any -> record<name: record, description: record, intents: record, clarificationPrompt: record<messages: record, maxAttempts: record, responseCard: record>, abortStatement: record<messages: record, responseCard: record>, status: record, failureReason: record, lastUpdatedDate: record, createdDate: record, idleSessionTTLInSeconds: record, voiceId: record, checksum: record, version: record, locale: record, childDirected: record, enableModelImprovements: record, detectSentiment: record> {
+]: any -> record<name: string, description: string, intents: table<intentName: string, intentVersion: string>, clarificationPrompt: record<messages: list<record>, maxAttempts: int, responseCard: string>, abortStatement: record<messages: list<record>, responseCard: string>, status: string, failureReason: string, lastUpdatedDate: string, createdDate: string, idleSessionTTLInSeconds: int, voiceId: string, checksum: string, version: string, locale: string, childDirected: bool, enableModelImprovements: bool, detectSentiment: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -221,7 +221,7 @@ export def "create-intent-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --checksum: string # Checksum of the $LATEST version of the intent that should be used to create the new version. If you specify a checksum and the $LATEST version of the intent has a different checksum, Amazon Lex returns a PreconditionFailedException exception and doesn't publish a new version. If you don't specify a checksum, Amazon Lex publishes the $LATEST version.
-]: any -> record<name: record, description: record, slots: record, sampleUtterances: record, confirmationPrompt: record<messages: record, maxAttempts: record, responseCard: record>, rejectionStatement: record<messages: record, responseCard: record>, followUpPrompt: record<prompt: record<messages: record, maxAttempts: record, responseCard: record>, rejectionStatement: record<messages: record, responseCard: record>>, conclusionStatement: record<messages: record, responseCard: record>, dialogCodeHook: record<uri: record, messageVersion: record>, fulfillmentActivity: record<type: record, codeHook: record<uri: record, messageVersion: record>>, parentIntentSignature: record, lastUpdatedDate: record, createdDate: record, version: record, checksum: record, kendraConfiguration: record<kendraIndex: record, queryFilterString: record, role: record>, inputContexts: record, outputContexts: record> {
+]: any -> record<name: string, description: string, slots: table<name: string, description: string, slotConstraint: string, slotType: string, slotTypeVersion: string, valueElicitationPrompt: record, priority: int, sampleUtterances: list, responseCard: string, obfuscationSetting: string, defaultValueSpec: record>, sampleUtterances: list<string>, confirmationPrompt: record<messages: list<record>, maxAttempts: int, responseCard: string>, rejectionStatement: record<messages: list<record>, responseCard: string>, followUpPrompt: record<prompt: record<messages: list, maxAttempts: int, responseCard: string>, rejectionStatement: record<messages: list, responseCard: string>>, conclusionStatement: record<messages: list<record>, responseCard: string>, dialogCodeHook: record<uri: string, messageVersion: string>, fulfillmentActivity: record<type: string, codeHook: record<uri: string, messageVersion: string>>, parentIntentSignature: string, lastUpdatedDate: string, createdDate: string, version: string, checksum: string, kendraConfiguration: record<kendraIndex: string, queryFilterString: string, role: string>, inputContexts: table<name: string>, outputContexts: table<name: string, timeToLiveInSeconds: int, turnsToLive: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -270,7 +270,7 @@ export def "create-slot-type-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --checksum: string # Checksum for the $LATEST version of the slot type that you want to publish. If you specify a checksum and the $LATEST version of the slot type has a different checksum, Amazon Lex returns a PreconditionFailedException exception and doesn't publish the new version. If you don't specify a checksum, Amazon Lex publishes the $LATEST version.
-]: any -> record<name: record, description: record, enumerationValues: record, lastUpdatedDate: record, createdDate: record, version: record, checksum: record, valueSelectionStrategy: record, parentSlotTypeSignature: record, slotTypeConfigurations: record> {
+]: any -> record<name: string, description: string, enumerationValues: table<value: string, synonyms: list>, lastUpdatedDate: string, createdDate: string, version: string, checksum: string, valueSelectionStrategy: string, parentSlotTypeSignature: string, slotTypeConfigurations: table<regexConfiguration: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -411,7 +411,7 @@ export def "get-bot-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<name: record, description: record, botVersion: record, botName: record, lastUpdatedDate: record, createdDate: record, checksum: record, conversationLogs: record<logSettings: record, iamRoleArn: record>> {
+]: nothing -> record<name: string, description: string, botVersion: string, botName: string, lastUpdatedDate: string, createdDate: string, checksum: string, conversationLogs: record<logSettings: list<record>, iamRoleArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_name | is-empty) { error make --unspanned { msg: "path parameter 'botName' must be non-empty" } }
@@ -439,8 +439,8 @@ export def "get-bot-alias" [
 #
 # PUT /bots/{botName}/aliases/{name}
 # operationId: PutBotAlias
-# --conversationLogs shape: {logSettings?: any, iamRoleArn?: any}
-# --tags item shape: {key: any, value: any}
+# --conversationLogs shape: {logSettings?: list, iamRoleArn?: string}
+# --tags item shape: {key: string, value: string}
 export def "put-bot-alias" [
   bot_name: string
   name: string
@@ -463,9 +463,9 @@ export def "put-bot-alias" [
   --description: string # A description of the alias.
   bot_version: string # The version of the bot.
   --checksum: string # Identifies a specific revision of the $LATEST version. When you create a new bot alias, leave the checksum field blank. If you specify a checksum you get a BadRequestException exception. When you want to update a bot alias, set the checksum field to the checksum of the most recent revision of the $LATEST version. If you don't specify the checksum field, or if the checksum does not match the $LATEST version, you get a PreconditionFailedException exception.
-  --conversation-logs: record # Provides the settings needed for conversation logs. — shape: {logSettings?: any, iamRoleArn?: any}
-  --tags: list # A list of tags to add to the bot alias. You can only add tags when you create an alias, you can't use the PutBotAlias operation to update the tags on a bot alias. To update tags, use the TagResource operation. — item shape: {key: any, value: any}
-]: any -> record<name: record, description: record, botVersion: record, botName: record, lastUpdatedDate: record, createdDate: record, checksum: record, conversationLogs: record<logSettings: record, iamRoleArn: record>, tags: record> {
+  --conversation-logs: record # Provides the settings needed for conversation logs. — shape: {logSettings?: list, iamRoleArn?: string}
+  --tags: list # A list of tags to add to the bot alias. You can only add tags when you create an alias, you can't use the PutBotAlias operation to update the tags on a bot alias. To update tags, use the TagResource operation. — item shape: {key: string, value: string}
+]: any -> record<name: string, description: string, botVersion: string, botName: string, lastUpdatedDate: string, createdDate: string, checksum: string, conversationLogs: record<logSettings: list<record>, iamRoleArn: string>, tags: table<key: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -565,7 +565,7 @@ export def "get-bot-channel-association" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<name: record, description: record, botAlias: record, botName: record, createdDate: record, type: record, botConfiguration: record, status: record, failureReason: record> {
+]: nothing -> record<name: string, description: string, botAlias: string, botName: string, createdDate: string, type: string, botConfiguration: record, status: string, failureReason: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_name | is-empty) { error make --unspanned { msg: "path parameter 'botName' must be non-empty" } }
@@ -752,7 +752,7 @@ export def "get-intent" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<name: record, description: record, slots: record, sampleUtterances: record, confirmationPrompt: record<messages: record, maxAttempts: record, responseCard: record>, rejectionStatement: record<messages: record, responseCard: record>, followUpPrompt: record<prompt: record<messages: record, maxAttempts: record, responseCard: record>, rejectionStatement: record<messages: record, responseCard: record>>, conclusionStatement: record<messages: record, responseCard: record>, dialogCodeHook: record<uri: record, messageVersion: record>, fulfillmentActivity: record<type: record, codeHook: record<uri: record, messageVersion: record>>, parentIntentSignature: record, lastUpdatedDate: record, createdDate: record, version: record, checksum: record, kendraConfiguration: record<kendraIndex: record, queryFilterString: record, role: record>, inputContexts: record, outputContexts: record> {
+]: nothing -> record<name: string, description: string, slots: table<name: string, description: string, slotConstraint: string, slotType: string, slotTypeVersion: string, valueElicitationPrompt: record, priority: int, sampleUtterances: list, responseCard: string, obfuscationSetting: string, defaultValueSpec: record>, sampleUtterances: list<string>, confirmationPrompt: record<messages: list<record>, maxAttempts: int, responseCard: string>, rejectionStatement: record<messages: list<record>, responseCard: string>, followUpPrompt: record<prompt: record<messages: list, maxAttempts: int, responseCard: string>, rejectionStatement: record<messages: list, responseCard: string>>, conclusionStatement: record<messages: list<record>, responseCard: string>, dialogCodeHook: record<uri: string, messageVersion: string>, fulfillmentActivity: record<type: string, codeHook: record<uri: string, messageVersion: string>>, parentIntentSignature: string, lastUpdatedDate: string, createdDate: string, version: string, checksum: string, kendraConfiguration: record<kendraIndex: string, queryFilterString: string, role: string>, inputContexts: table<name: string>, outputContexts: table<name: string, timeToLiveInSeconds: int, turnsToLive: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -938,7 +938,7 @@ export def "get-bot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<name: record, description: record, intents: record, enableModelImprovements: record, nluIntentConfidenceThreshold: record, clarificationPrompt: record<messages: record, maxAttempts: record, responseCard: record>, abortStatement: record<messages: record, responseCard: record>, status: record, failureReason: record, lastUpdatedDate: record, createdDate: record, idleSessionTTLInSeconds: record, voiceId: record, checksum: record, version: record, locale: record, childDirected: record, detectSentiment: record> {
+]: nothing -> record<name: string, description: string, intents: table<intentName: string, intentVersion: string>, enableModelImprovements: bool, nluIntentConfidenceThreshold: float, clarificationPrompt: record<messages: list<record>, maxAttempts: int, responseCard: string>, abortStatement: record<messages: list<record>, responseCard: string>, status: string, failureReason: string, lastUpdatedDate: string, createdDate: string, idleSessionTTLInSeconds: int, voiceId: string, checksum: string, version: string, locale: string, childDirected: bool, detectSentiment: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -987,7 +987,7 @@ export def "get-bot-aliases" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BotAliases: record, nextToken: record> {
+]: nothing -> record<BotAliases: table<name: string, description: string, botVersion: string, botName: string, lastUpdatedDate: string, createdDate: string, checksum: string, conversationLogs: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_name | is-empty) { error make --unspanned { msg: "path parameter 'botName' must be non-empty" } }
@@ -1037,7 +1037,7 @@ export def "get-bot-channel-associations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<botChannelAssociations: record, nextToken: record> {
+]: nothing -> record<botChannelAssociations: table<name: string, description: string, botAlias: string, botName: string, createdDate: string, type: string, botConfiguration: record, status: string, failureReason: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_name | is-empty) { error make --unspanned { msg: "path parameter 'botName' must be non-empty" } }
@@ -1086,7 +1086,7 @@ export def "get-bot-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<bots: record, nextToken: record> {
+]: nothing -> record<bots: table<name: string, description: string, status: string, lastUpdatedDate: string, createdDate: string, version: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1134,7 +1134,7 @@ export def "get-bots" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<bots: record, nextToken: record> {
+]: nothing -> record<bots: table<name: string, description: string, status: string, lastUpdatedDate: string, createdDate: string, version: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nameContains" $name_contains "scalar")] | flatten | str join "&"
@@ -1179,7 +1179,7 @@ export def "get-builtin-intent" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<signature: record, supportedLocales: record, slots: record> {
+]: nothing -> record<signature: string, supportedLocales: list<string>, slots: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($signature | is-empty) { error make --unspanned { msg: "path parameter 'signature' must be non-empty" } }
@@ -1227,7 +1227,7 @@ export def "get-builtin-intents" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<intents: record, nextToken: record> {
+]: nothing -> record<intents: table<signature: string, supportedLocales: list>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "signatureContains" $signature_contains "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -1275,7 +1275,7 @@ export def "get-builtin-slot-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<slotTypes: record, nextToken: record> {
+]: nothing -> record<slotTypes: table<signature: string, supportedLocales: list>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "signatureContains" $signature_contains "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -1312,10 +1312,10 @@ export def "get-export" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # The name of the bot to export.
-  --version: string # The version of the bot to export.
-  --resource-type: string@resource-type-completer # The type of resource to export.
-  --export-type: string@export-type-completer # The format of the exported data.
+  --name: string # The name of the bot to export. (required)
+  --version: string # The version of the bot to export. (required)
+  --resource-type: string@resource-type-completer # The type of resource to export. (required)
+  --export-type: string@export-type-completer # The format of the exported data. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1323,9 +1323,13 @@ export def "get-export" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<name: record, version: record, resourceType: record, exportType: record, exportStatus: record, failureReason: record, url: record> {
+]: nothing -> record<name: string, version: string, resourceType: string, exportType: string, exportStatus: string, failureReason: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
+  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
+  if ($resource_type == null) { error make --unspanned { msg: "required query parameter 'resourceType' missing: pass --resource-type" } }
+  if ($export_type == null) { error make --unspanned { msg: "required query parameter 'exportType' missing: pass --export-type" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "resourceType" $resource_type "scalar") (serialize-qp "exportType" $export_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/exports/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1368,7 +1372,7 @@ export def "get-import" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<name: record, resourceType: record, mergeStrategy: record, importId: record, importStatus: record, failureReason: record, createdDate: record> {
+]: nothing -> record<name: string, resourceType: string, mergeStrategy: string, importId: string, importStatus: string, failureReason: list<string>, createdDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($import_id | is-empty) { error make --unspanned { msg: "path parameter 'importId' must be non-empty" } }
@@ -1415,7 +1419,7 @@ export def "get-intent-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<intents: record, nextToken: record> {
+]: nothing -> record<intents: table<name: string, description: string, lastUpdatedDate: string, createdDate: string, version: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1463,7 +1467,7 @@ export def "get-intents" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<intents: record, nextToken: record> {
+]: nothing -> record<intents: table<name: string, description: string, lastUpdatedDate: string, createdDate: string, version: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nameContains" $name_contains "scalar")] | flatten | str join "&"
@@ -1508,7 +1512,7 @@ export def "get-migration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<migrationId: record, v1BotName: record, v1BotVersion: record, v1BotLocale: record, v2BotId: record, v2BotRole: record, migrationStatus: record, migrationStrategy: record, migrationTimestamp: record, alerts: record> {
+]: nothing -> record<migrationId: string, v1BotName: string, v1BotVersion: string, v1BotLocale: string, v2BotId: string, v2BotRole: string, migrationStatus: string, migrationStrategy: string, migrationTimestamp: string, alerts: table<type: string, message: string, details: list, referenceURLs: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($migration_id | is-empty) { error make --unspanned { msg: "path parameter 'migrationId' must be non-empty" } }
@@ -1558,7 +1562,7 @@ export def "get-migrations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<migrationSummaries: record, nextToken: record> {
+]: nothing -> record<migrationSummaries: table<migrationId: string, v1BotName: string, v1BotVersion: string, v1BotLocale: string, v2BotId: string, v2BotRole: string, migrationStatus: string, migrationStrategy: string, migrationTimestamp: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sortByAttribute" $sort_by_attribute "scalar") (serialize-qp "sortByOrder" $sort_by_order "scalar") (serialize-qp "v1BotNameContains" $v1_bot_name_contains "scalar") (serialize-qp "migrationStatusEquals" $migration_status_equals "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -1607,7 +1611,7 @@ export def "start-migration" [
   v2_bot_name: string # The name of the Amazon Lex V2 bot that you are migrating the Amazon Lex V1 bot to. If the Amazon Lex V2 bot doesn't exist, you must use the CREATE_NEW migration strategy. If the Amazon Lex V2 bot exists, you must use the UPDATE_EXISTING migration strategy to change the contents of the Amazon Lex V2 bot.
   v2_bot_role: string # The IAM role that Amazon Lex uses to run the Amazon Lex V2 bot.
   migration_strategy: string@migration-strategy-completer # The strategy used to conduct the migration. CREATE_NEW - Creates a new Amazon Lex V2 bot and migrates the Amazon Lex V1 bot to the new bot. UPDATE_EXISTING - Overwrites the existing Amazon Lex V2 bot metadata and the locale being migrated. It doesn't change any other locales in the Amazon Lex V2 bot. If the locale doesn't exist, a new locale is created in the Amazon Lex V2 bot.
-]: any -> record<v1BotName: record, v1BotVersion: record, v1BotLocale: record, v2BotId: record, v2BotRole: record, migrationId: record, migrationStrategy: record, migrationTimestamp: record> {
+]: any -> record<v1BotName: string, v1BotVersion: string, v1BotLocale: string, v2BotId: string, v2BotRole: string, migrationId: string, migrationStrategy: string, migrationTimestamp: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1655,7 +1659,7 @@ export def "get-slot-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<name: record, description: record, enumerationValues: record, lastUpdatedDate: record, createdDate: record, version: record, checksum: record, valueSelectionStrategy: record, parentSlotTypeSignature: record, slotTypeConfigurations: record> {
+]: nothing -> record<name: string, description: string, enumerationValues: table<value: string, synonyms: list>, lastUpdatedDate: string, createdDate: string, version: string, checksum: string, valueSelectionStrategy: string, parentSlotTypeSignature: string, slotTypeConfigurations: table<regexConfiguration: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1703,7 +1707,7 @@ export def "get-slot-type-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<slotTypes: record, nextToken: record> {
+]: nothing -> record<slotTypes: table<name: string, description: string, lastUpdatedDate: string, createdDate: string, version: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1751,7 +1755,7 @@ export def "get-slot-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<slotTypes: record, nextToken: record> {
+]: nothing -> record<slotTypes: table<name: string, description: string, lastUpdatedDate: string, createdDate: string, version: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nameContains" $name_contains "scalar")] | flatten | str join "&"
@@ -1789,9 +1793,9 @@ export def "get-utterances-view" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --bot-versions: list # An array of bot versions for which utterance information should be returned. The limit is 5 versions per request.
-  --status-type: string@status-type-completer # To return utterances that were recognized and handled, use Detected. To return utterances that were not recognized, use Missed.
-  --view: string@view-completer
+  --bot-versions: list # An array of bot versions for which utterance information should be returned. The limit is 5 versions per request. (required)
+  --status-type: string@status-type-completer # To return utterances that were recognized and handled, use Detected. To return utterances that were not recognized, use Missed. (required)
+  --view: string@view-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1799,10 +1803,13 @@ export def "get-utterances-view" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<botName: record, utterances: record> {
+]: nothing -> record<botName: string, utterances: table<botVersion: string, utterances: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($botname | is-empty) { error make --unspanned { msg: "path parameter 'botname' must be non-empty" } }
+  if ($bot_versions == null) { error make --unspanned { msg: "required query parameter 'bot_versions' missing: pass --bot-versions" } }
+  if ($status_type == null) { error make --unspanned { msg: "required query parameter 'status_type' missing: pass --status-type" } }
+  let view = ($view | default "aggregation")
   let qp = [(serialize-qp "bot_versions" $bot_versions "multi") (serialize-qp "status_type" $status_type "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({botname: (encode-path-segment $botname)} | format pattern "/bots/{botname}/utterances") $qp $auth.query)
   let accept_val = "application/json"
@@ -1845,7 +1852,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: record> {
+]: nothing -> record<tags: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -1872,7 +1879,7 @@ export def "list-tags-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-# --tags item shape: {key: any, value: any}
+# --tags item shape: {key: string, value: string}
 export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1891,7 +1898,7 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  tags: list # A list of tag keys to add to the resource. If a tag key already exists, the existing value is replaced with the new value. — item shape: {key: any, value: any}
+  tags: list # A list of tag keys to add to the resource. If a tag key already exists, the existing value is replaced with the new value. — item shape: {key: string, value: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1922,10 +1929,10 @@ export def "tag-resource" [
 #
 # PUT /bots/{name}/versions/$LATEST
 # operationId: PutBot
-# --intents item shape: {intentName: any, intentVersion: any}
-# --clarificationPrompt shape: {messages?: any, maxAttempts?: any, responseCard?: any}
-# --abortStatement shape: {messages?: any, responseCard?: any}
-# --tags item shape: {key: any, value: any}
+# --intents item shape: {intentName: string, intentVersion: string}
+# --clarificationPrompt shape: {messages?: list, maxAttempts?: int, responseCard?: string}
+# --abortStatement shape: {messages?: list, responseCard?: string}
+# --tags item shape: {key: string, value: string}
 export def "put-bot" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1945,11 +1952,11 @@ export def "put-bot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # A description of the bot.
-  --intents: list # An array of Intent objects. Each intent represents a command that a user can express. For example, a pizza ordering bot might support an OrderPizza intent. For more information, see how-it-works. — item shape: {intentName: any, intentVersion: any}
+  --intents: list # An array of Intent objects. Each intent represents a command that a user can express. For example, a pizza ordering bot might support an OrderPizza intent. For more information, see how-it-works. — item shape: {intentName: string, intentVersion: string}
   --enable-model-improvements: oneof<nothing, bool> # Set to true to enable access to natural language understanding improvements. When you set the enableModelImprovements parameter to true you can use the nluIntentConfidenceThreshold parameter to configure confidence scores. For more information, see Confidence Scores (https://docs.aws.amazon.com/lex/latest/dg/confidence-scores.html). You can only set the enableModelImprovements parameter in certain Regions. If you set the parameter to true, your bot has access to accuracy improvements. The Regions where you can set the enableModelImprovements parameter to true are: US East (N. Virginia) (us-east-1) US West (Oregon) (us-west-2) Asia Pacific (Sydney) (ap-southeast-2) EU (Ireland) (eu-west-1) In other Regions, the enableModelImprovements parameter is set to true by default. In these Regions setting the parameter to false throws a ValidationException exception.
   --nlu-intent-confidence-threshold: float # Determines the threshold where Amazon Lex will insert the AMAZON.FallbackIntent, AMAZON.KendraSearchIntent, or both when returning alternative intents in a PostContent (https://docs.aws.amazon.com/lex/latest/dg/API_runtime_PostContent.html) or PostText (https://docs.aws.amazon.com/lex/latest/dg/API_runtime_PostText.html) response. AMAZON.FallbackIntent and AMAZON.KendraSearchIntent are only inserted if they are configured for the bot. You must set the enableModelImprovements parameter to true to use confidence scores in the following regions. US East (N. Virginia) (us-east-1) US West (Oregon) (us-west-2) Asia Pacific (Sydney) (ap-southeast-2) EU (Ireland) (eu-west-1) In other Regions, the enableModelImprovements parameter is set to true by default. For example, suppose a bot is configured with the confidence threshold of 0.80 and the AMAZON.FallbackIntent. Amazon Lex returns three alternative intents with the following confidence scores: IntentA (0.70), IntentB (0.60), IntentC (0.50). The response from the PostText operation would be: AMAZON.FallbackIntent IntentA IntentB IntentC (format: double)
-  --clarification-prompt: record # Obtains information from the user. To define a prompt, provide one or more messages and specify the number of attempts to get information from the user. If you provide more than one message, Amazon Lex chooses one of the messages to use to prompt the user. For more information, see how-it-works. — shape: {messages?: any, maxAttempts?: any, responseCard?: any}
-  --abort-statement: record # A collection of messages that convey information to the user. At runtime, Amazon Lex selects the message to convey. — shape: {messages?: any, responseCard?: any}
+  --clarification-prompt: record # Obtains information from the user. To define a prompt, provide one or more messages and specify the number of attempts to get information from the user. If you provide more than one message, Amazon Lex chooses one of the messages to use to prompt the user. For more information, see how-it-works. — shape: {messages?: list, maxAttempts?: int, responseCard?: string}
+  --abort-statement: record # A collection of messages that convey information to the user. At runtime, Amazon Lex selects the message to convey. — shape: {messages?: list, responseCard?: string}
   --idle-session-ttl-in-seconds: int # The maximum time in seconds that Amazon Lex retains the data gathered in a conversation. A user interaction session remains active for the amount of time specified. If no conversation occurs during this time, the session expires and Amazon Lex deletes any data provided before the timeout. For example, suppose that a user chooses the OrderPizza intent, but gets sidetracked halfway through placing an order. If the user doesn't complete the order within the specified time, Amazon Lex discards the slot information that it gathered, and the user must start over. If you don't include the idleSessionTTLInSeconds element in a PutBot operation request, Amazon Lex uses the default value. This is also true if the request replaces an existing bot. The default is 300 seconds (5 minutes).
   --voice-id: string # The Amazon Polly voice ID that you want Amazon Lex to use for voice interactions with the user. The locale configured for the voice must match the locale of the bot. For more information, see Voices in Amazon Polly (https://docs.aws.amazon.com/polly/latest/dg/voicelist.html) in the Amazon Polly Developer Guide.
   --checksum: string # Identifies a specific revision of the $LATEST version. When you create a new bot, leave the checksum field blank. If you specify a checksum you get a BadRequestException exception. When you want to update a bot, set the checksum field to the checksum of the most recent revision of the $LATEST version. If you don't specify the checksum field, or if the checksum does not match the $LATEST version, you get a PreconditionFailedException exception.
@@ -1958,8 +1965,8 @@ export def "put-bot" [
   --child-directed: oneof<nothing, bool> # For each Amazon Lex bot created with the Amazon Lex Model Building Service, you must specify whether your use of Amazon Lex is related to a website, program, or other application that is directed or targeted, in whole or in part, to children under age 13 and subject to the Children's Online Privacy Protection Act (COPPA) by specifying true or false in the childDirected field. By specifying true in the childDirected field, you confirm that your use of Amazon Lex is related to a website, program, or other application that is directed or targeted, in whole or in part, to children under age 13 and subject to COPPA. By specifying false in the childDirected field, you confirm that your use of Amazon Lex is not related to a website, program, or other application that is directed or targeted, in whole or in part, to children under age 13 and subject to COPPA. You may not specify a default value for the childDirected field that does not accurately reflect whether your use of Amazon Lex is related to a website, program, or other application that is directed or targeted, in whole or in part, to children under age 13 and subject to COPPA. If your use of Amazon Lex relates to a website, program, or other application that is directed in whole or in part, to children under age 13, you must obtain any required verifiable parental consent under COPPA. For information regarding the use of Amazon Lex in connection with websites, programs, or other applications that are directed or targeted, in whole or in part, to children under age 13, see the Amazon Lex FAQ. (https://aws.amazon.com/lex/faqs#data-security)
   --detect-sentiment: oneof<nothing, bool> # When set to true user utterances are sent to Amazon Comprehend for sentiment analysis. If you don't specify detectSentiment, the default is false.
   --create-version: oneof<nothing, bool> # When set to true a new numbered version of the bot is created. This is the same as calling the CreateBotVersion operation. If you don't specify createVersion, the default is false.
-  --tags: list # A list of tags to add to the bot. You can only add tags when you create a bot, you can't use the PutBot operation to update the tags on a bot. To update tags, use the TagResource operation. — item shape: {key: any, value: any}
-]: any -> record<name: record, description: record, intents: record, enableModelImprovements: record, nluIntentConfidenceThreshold: record, clarificationPrompt: record<messages: record, maxAttempts: record, responseCard: record>, abortStatement: record<messages: record, responseCard: record>, status: record, failureReason: record, lastUpdatedDate: record, createdDate: record, idleSessionTTLInSeconds: record, voiceId: record, checksum: record, version: record, locale: record, childDirected: record, createVersion: record, detectSentiment: record, tags: record> {
+  --tags: list # A list of tags to add to the bot. You can only add tags when you create a bot, you can't use the PutBot operation to update the tags on a bot. To update tags, use the TagResource operation. — item shape: {key: string, value: string}
+]: any -> record<name: string, description: string, intents: table<intentName: string, intentVersion: string>, enableModelImprovements: bool, nluIntentConfidenceThreshold: float, clarificationPrompt: record<messages: list<record>, maxAttempts: int, responseCard: string>, abortStatement: record<messages: list<record>, responseCard: string>, status: string, failureReason: string, lastUpdatedDate: string, createdDate: string, idleSessionTTLInSeconds: int, voiceId: string, checksum: string, version: string, locale: string, childDirected: bool, createVersion: bool, detectSentiment: bool, tags: table<key: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1967,6 +1974,7 @@ export def "put-bot" [
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/bots/{name}/versions/$LATEST") $auth.query)
   let req_body = {"description": $description, "intents": $intents, "enableModelImprovements": $enable_model_improvements, "nluIntentConfidenceThreshold": $nlu_intent_confidence_threshold, "clarificationPrompt": $clarification_prompt, "abortStatement": $abort_statement, "idleSessionTTLInSeconds": $idle_session_ttl_in_seconds, "voiceId": $voice_id, "checksum": $checksum, "processBehavior": $process_behavior, "locale": $locale, "childDirected": $child_directed, "detectSentiment": $detect_sentiment, "createVersion": $create_version, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "childDirected") == null) { error make --unspanned { msg: "required body field 'childDirected' missing: pass --child-directed or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
@@ -1989,16 +1997,16 @@ export def "put-bot" [
 #
 # PUT /intents/{name}/versions/$LATEST
 # operationId: PutIntent
-# --slots item shape: {name: any, description?: any, slotConstraint: any, slotType?: any, slotTypeVersion?: any, valueElicitationPrompt?: any, priority?: any, sampleUtterances?: any, responseCard?: any, obfuscationSetting?: any, defaultValueSpec?: any}
-# --confirmationPrompt shape: {messages?: any, maxAttempts?: any, responseCard?: any}
-# --rejectionStatement shape: {messages?: any, responseCard?: any}
-# --followUpPrompt shape: {prompt?: any, rejectionStatement?: any}
-# --conclusionStatement shape: {messages?: any, responseCard?: any}
-# --dialogCodeHook shape: {uri?: any, messageVersion?: any}
-# --fulfillmentActivity shape: {type?: any, codeHook?: any}
-# --kendraConfiguration shape: {kendraIndex?: any, queryFilterString?: any, role?: any}
-# --inputContexts item shape: {name: any}
-# --outputContexts item shape: {name: any, timeToLiveInSeconds: any, turnsToLive: any}
+# --slots item shape: {name: string, description?: string, slotConstraint: "Required"|"Optional", slotType?: string, slotTypeVersion?: string, valueElicitationPrompt?: record, priority?: int, sampleUtterances?: list<string>, responseCard?: string, obfuscationSetting?: "NONE"|"DEFAULT_OBFUSCATION", defaultValueSpec?: record}
+# --confirmationPrompt shape: {messages?: list, maxAttempts?: int, responseCard?: string}
+# --rejectionStatement shape: {messages?: list, responseCard?: string}
+# --followUpPrompt shape: {prompt?: record, rejectionStatement?: record}
+# --conclusionStatement shape: {messages?: list, responseCard?: string}
+# --dialogCodeHook shape: {uri?: string, messageVersion?: string}
+# --fulfillmentActivity shape: {type?: "ReturnIntent"|"CodeHook", codeHook?: record}
+# --kendraConfiguration shape: {kendraIndex?: string, queryFilterString?: string, role?: string}
+# --inputContexts item shape: {name: string}
+# --outputContexts item shape: {name: string, timeToLiveInSeconds: int, turnsToLive: int}
 export def "put-intent" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2018,21 +2026,21 @@ export def "put-intent" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # A description of the intent.
-  --slots: list # An array of intent slots. At runtime, Amazon Lex elicits required slot values from the user using prompts defined in the slots. For more information, see how-it-works. — item shape: {name: any, description?: any, slotConstraint: any, slotType?: any, slotTypeVersion?: any, valueElicitationPrompt?: any, priority?: any, sampleUtterances?: any, responseCard?: any, obfuscationSetting?: any, defaultValueSpec?: any}
+  --slots: list # An array of intent slots. At runtime, Amazon Lex elicits required slot values from the user using prompts defined in the slots. For more information, see how-it-works. — item shape: {name: string, description?: string, slotConstraint: "Required"|"Optional", slotType?: string, slotTypeVersion?: string, valueElicitationPrompt?: record, priority?: int, sampleUtterances?: list<string>, responseCard?: string, obfuscationSetting?: "NONE"|"DEFAULT_OBFUSCATION", defaultValueSpec?: record}
   --sample-utterances: list<string> # An array of utterances (strings) that a user might say to signal the intent. For example, "I want {PizzaSize} pizza", "Order {Quantity} {PizzaSize} pizzas". In each utterance, a slot name is enclosed in curly braces.
-  --confirmation-prompt: record # Obtains information from the user. To define a prompt, provide one or more messages and specify the number of attempts to get information from the user. If you provide more than one message, Amazon Lex chooses one of the messages to use to prompt the user. For more information, see how-it-works. — shape: {messages?: any, maxAttempts?: any, responseCard?: any}
-  --rejection-statement: record # A collection of messages that convey information to the user. At runtime, Amazon Lex selects the message to convey. — shape: {messages?: any, responseCard?: any}
-  --follow-up-prompt: record # A prompt for additional activity after an intent is fulfilled. For example, after the OrderPizza intent is fulfilled, you might prompt the user to find out whether the user wants to order drinks. — shape: {prompt?: any, rejectionStatement?: any}
-  --conclusion-statement: record # A collection of messages that convey information to the user. At runtime, Amazon Lex selects the message to convey. — shape: {messages?: any, responseCard?: any}
-  --dialog-code-hook: record # Specifies a Lambda function that verifies requests to a bot or fulfills the user's request to a bot.. — shape: {uri?: any, messageVersion?: any}
-  --fulfillment-activity: record # Describes how the intent is fulfilled after the user provides all of the information required for the intent. You can provide a Lambda function to process the intent, or you can return the intent information to the client application. We recommend that you use a Lambda function so that the relevant logic lives in the Cloud and limit the client-side code primarily to presentation. If you need to update the logic, you only update the Lambda function; you don't need to upgrade your client application. Consider the following examples: In a pizza ordering application, after the user provides all of the information for placing an order, you use a Lambda function to place an order with a pizzeria. In a gaming application, when a user says "pick up a rock," this information must go back to the client application so that it can perform the operation and update the graphics. In this case, you want Amazon Lex to return the intent data to the client. — shape: {type?: any, codeHook?: any}
+  --confirmation-prompt: record # Obtains information from the user. To define a prompt, provide one or more messages and specify the number of attempts to get information from the user. If you provide more than one message, Amazon Lex chooses one of the messages to use to prompt the user. For more information, see how-it-works. — shape: {messages?: list, maxAttempts?: int, responseCard?: string}
+  --rejection-statement: record # A collection of messages that convey information to the user. At runtime, Amazon Lex selects the message to convey. — shape: {messages?: list, responseCard?: string}
+  --follow-up-prompt: record # A prompt for additional activity after an intent is fulfilled. For example, after the OrderPizza intent is fulfilled, you might prompt the user to find out whether the user wants to order drinks. — shape: {prompt?: record, rejectionStatement?: record}
+  --conclusion-statement: record # A collection of messages that convey information to the user. At runtime, Amazon Lex selects the message to convey. — shape: {messages?: list, responseCard?: string}
+  --dialog-code-hook: record # Specifies a Lambda function that verifies requests to a bot or fulfills the user's request to a bot.. — shape: {uri?: string, messageVersion?: string}
+  --fulfillment-activity: record # Describes how the intent is fulfilled after the user provides all of the information required for the intent. You can provide a Lambda function to process the intent, or you can return the intent information to the client application. We recommend that you use a Lambda function so that the relevant logic lives in the Cloud and limit the client-side code primarily to presentation. If you need to update the logic, you only update the Lambda function; you don't need to upgrade your client application. Consider the following examples: In a pizza ordering application, after the user provides all of the information for placing an order, you use a Lambda function to place an order with a pizzeria. In a gaming application, when a user says "pick up a rock," this information must go back to the client application so that it can perform the operation and update the graphics. In this case, you want Amazon Lex to return the intent data to the client. — shape: {type?: "ReturnIntent"|"CodeHook", codeHook?: record}
   --parent-intent-signature: string # A unique identifier for the built-in intent to base this intent on. To find the signature for an intent, see Standard Built-in Intents (https://developer.amazon.com/public/solutions/alexa/alexa-skills-kit/docs/built-in-intent-ref/standard-intents) in the Alexa Skills Kit.
   --checksum: string # Identifies a specific revision of the $LATEST version. When you create a new intent, leave the checksum field blank. If you specify a checksum you get a BadRequestException exception. When you want to update a intent, set the checksum field to the checksum of the most recent revision of the $LATEST version. If you don't specify the checksum field, or if the checksum does not match the $LATEST version, you get a PreconditionFailedException exception.
   --create-version: oneof<nothing, bool> # When set to true a new numbered version of the intent is created. This is the same as calling the CreateIntentVersion operation. If you do not specify createVersion, the default is false.
-  --kendra-configuration: record # Provides configuration information for the AMAZON.KendraSearchIntent intent. When you use this intent, Amazon Lex searches the specified Amazon Kendra index and returns documents from the index that match the user's utterance. For more information, see AMAZON.KendraSearchIntent (http://docs.aws.amazon.com/lex/latest/dg/built-in-intent-kendra-search.html). — shape: {kendraIndex?: any, queryFilterString?: any, role?: any}
-  --input-contexts: list # An array of InputContext objects that lists the contexts that must be active for Amazon Lex to choose the intent in a conversation with the user. — item shape: {name: any}
-  --output-contexts: list # An array of OutputContext objects that lists the contexts that the intent activates when the intent is fulfilled. — item shape: {name: any, timeToLiveInSeconds: any, turnsToLive: any}
-]: any -> record<name: record, description: record, slots: record, sampleUtterances: record, confirmationPrompt: record<messages: record, maxAttempts: record, responseCard: record>, rejectionStatement: record<messages: record, responseCard: record>, followUpPrompt: record<prompt: record<messages: record, maxAttempts: record, responseCard: record>, rejectionStatement: record<messages: record, responseCard: record>>, conclusionStatement: record<messages: record, responseCard: record>, dialogCodeHook: record<uri: record, messageVersion: record>, fulfillmentActivity: record<type: record, codeHook: record<uri: record, messageVersion: record>>, parentIntentSignature: record, lastUpdatedDate: record, createdDate: record, version: record, checksum: record, createVersion: record, kendraConfiguration: record<kendraIndex: record, queryFilterString: record, role: record>, inputContexts: record, outputContexts: record> {
+  --kendra-configuration: record # Provides configuration information for the AMAZON.KendraSearchIntent intent. When you use this intent, Amazon Lex searches the specified Amazon Kendra index and returns documents from the index that match the user's utterance. For more information, see AMAZON.KendraSearchIntent (http://docs.aws.amazon.com/lex/latest/dg/built-in-intent-kendra-search.html). — shape: {kendraIndex?: string, queryFilterString?: string, role?: string}
+  --input-contexts: list # An array of InputContext objects that lists the contexts that must be active for Amazon Lex to choose the intent in a conversation with the user. — item shape: {name: string}
+  --output-contexts: list # An array of OutputContext objects that lists the contexts that the intent activates when the intent is fulfilled. — item shape: {name: string, timeToLiveInSeconds: int, turnsToLive: int}
+]: any -> record<name: string, description: string, slots: table<name: string, description: string, slotConstraint: string, slotType: string, slotTypeVersion: string, valueElicitationPrompt: record, priority: int, sampleUtterances: list, responseCard: string, obfuscationSetting: string, defaultValueSpec: record>, sampleUtterances: list<string>, confirmationPrompt: record<messages: list<record>, maxAttempts: int, responseCard: string>, rejectionStatement: record<messages: list<record>, responseCard: string>, followUpPrompt: record<prompt: record<messages: list, maxAttempts: int, responseCard: string>, rejectionStatement: record<messages: list, responseCard: string>>, conclusionStatement: record<messages: list<record>, responseCard: string>, dialogCodeHook: record<uri: string, messageVersion: string>, fulfillmentActivity: record<type: string, codeHook: record<uri: string, messageVersion: string>>, parentIntentSignature: string, lastUpdatedDate: string, createdDate: string, version: string, checksum: string, createVersion: bool, kendraConfiguration: record<kendraIndex: string, queryFilterString: string, role: string>, inputContexts: table<name: string>, outputContexts: table<name: string, timeToLiveInSeconds: int, turnsToLive: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2062,8 +2070,8 @@ export def "put-intent" [
 #
 # PUT /slottypes/{name}/versions/$LATEST
 # operationId: PutSlotType
-# --enumerationValues item shape: {value: any, synonyms?: any}
-# --slotTypeConfigurations item shape: {regexConfiguration?: any}
+# --enumerationValues item shape: {value: string, synonyms?: list<string>}
+# --slotTypeConfigurations item shape: {regexConfiguration?: record}
 export def "put-slot-type" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2083,13 +2091,13 @@ export def "put-slot-type" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # A description of the slot type.
-  --enumeration-values: list # A list of EnumerationValue objects that defines the values that the slot type can take. Each value can have a list of synonyms, which are additional values that help train the machine learning model about the values that it resolves for a slot. A regular expression slot type doesn't require enumeration values. All other slot types require a list of enumeration values. When Amazon Lex resolves a slot value, it generates a resolution list that contains up to five possible values for the slot. If you are using a Lambda function, this resolution list is passed to the function. If you are not using a Lambda function you can choose to return the value that the user entered or the first value in the resolution list as the slot value. The valueSelectionStrategy field indicates the option to use. — item shape: {value: any, synonyms?: any}
+  --enumeration-values: list # A list of EnumerationValue objects that defines the values that the slot type can take. Each value can have a list of synonyms, which are additional values that help train the machine learning model about the values that it resolves for a slot. A regular expression slot type doesn't require enumeration values. All other slot types require a list of enumeration values. When Amazon Lex resolves a slot value, it generates a resolution list that contains up to five possible values for the slot. If you are using a Lambda function, this resolution list is passed to the function. If you are not using a Lambda function you can choose to return the value that the user entered or the first value in the resolution list as the slot value. The valueSelectionStrategy field indicates the option to use. — item shape: {value: string, synonyms?: list<string>}
   --checksum: string # Identifies a specific revision of the $LATEST version. When you create a new slot type, leave the checksum field blank. If you specify a checksum you get a BadRequestException exception. When you want to update a slot type, set the checksum field to the checksum of the most recent revision of the $LATEST version. If you don't specify the checksum field, or if the checksum does not match the $LATEST version, you get a PreconditionFailedException exception.
   --value-selection-strategy: string@value-selection-strategy-completer # Determines the slot resolution strategy that Amazon Lex uses to return slot type values. The field can be set to one of the following values: ORIGINAL_VALUE - Returns the value entered by the user, if the user value is similar to the slot value. TOP_RESOLUTION - If there is a resolution list for the slot, return the first value in the resolution list as the slot type value. If there is no resolution list, null is returned. If you don't specify the valueSelectionStrategy, the default is ORIGINAL_VALUE.
   --create-version: oneof<nothing, bool> # When set to true a new numbered version of the slot type is created. This is the same as calling the CreateSlotTypeVersion operation. If you do not specify createVersion, the default is false.
   --parent-slot-type-signature: string # The built-in slot type used as the parent of the slot type. When you define a parent slot type, the new slot type has all of the same configuration as the parent. Only AMAZON.AlphaNumeric is supported.
-  --slot-type-configurations: list # Configuration information that extends the parent built-in slot type. The configuration is added to the settings for the parent slot type. — item shape: {regexConfiguration?: any}
-]: any -> record<name: record, description: record, enumerationValues: record, lastUpdatedDate: record, createdDate: record, version: record, checksum: record, valueSelectionStrategy: record, createVersion: record, parentSlotTypeSignature: record, slotTypeConfigurations: record> {
+  --slot-type-configurations: list # Configuration information that extends the parent built-in slot type. The configuration is added to the settings for the parent slot type. — item shape: {regexConfiguration?: record}
+]: any -> record<name: string, description: string, enumerationValues: table<value: string, synonyms: list>, lastUpdatedDate: string, createdDate: string, version: string, checksum: string, valueSelectionStrategy: string, createVersion: bool, parentSlotTypeSignature: string, slotTypeConfigurations: table<regexConfiguration: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2119,7 +2127,7 @@ export def "put-slot-type" [
 #
 # POST /imports/
 # operationId: StartImport
-# --tags item shape: {key: any, value: any}
+# --tags item shape: {key: string, value: string}
 export def "start-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2140,8 +2148,8 @@ export def "start-import" [
   payload: string # A zip archive in binary format. The archive should contain one file, a JSON file containing the resource to import. The resource should match the type specified in the resourceType field.
   resource_type: string@resource-type-completer # Specifies the type of resource to export. Each resource also exports any resources that it depends on. A bot exports dependent intents. An intent exports dependent slot types.
   merge_strategy: string@merge-strategy-completer # Specifies the action that the StartImport operation should take when there is an existing resource with the same name. FAIL_ON_CONFLICT - The import operation is stopped on the first conflict between a resource in the import file and an existing resource. The name of the resource causing the conflict is in the failureReason field of the response to the GetImport operation. OVERWRITE_LATEST - The import operation proceeds even if there is a conflict with an existing resource. The $LASTEST version of the existing resource is overwritten with the data from the import file.
-  --tags: list # A list of tags to add to the imported bot. You can only add tags when you import a bot, you can't add tags to an intent or slot type. — item shape: {key: any, value: any}
-]: any -> record<name: record, resourceType: record, mergeStrategy: record, importId: record, importStatus: record, tags: record, createdDate: record> {
+  --tags: list # A list of tags to add to the imported bot. You can only add tags when you import a bot, you can't add tags to an intent or slot type. — item shape: {key: string, value: string}
+]: any -> record<name: string, resourceType: string, mergeStrategy: string, importId: string, importStatus: string, tags: table<key: string, value: string>, createdDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2181,7 +2189,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # A list of tag keys to remove from the resource. If a tag key does not exist on the resource, it is ignored.
+  --tag-keys: list # A list of tag keys to remove from the resource. If a tag key does not exist on the resource, it is ignored. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2193,6 +2201,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

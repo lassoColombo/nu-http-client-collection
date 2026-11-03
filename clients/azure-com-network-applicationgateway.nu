@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableRequestHeaders
 # operationId: ApplicationGateways_ListAvailableRequestHeaders
 export def "application-gateways-list-available-request-headers" [
-  subscription_id: any
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,17 +159,20 @@ export def "application-gateways-list-available-request-headers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version. (required)
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableRequestHeaders") $auth.query)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableRequestHeaders") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: {}
+    query: ({"api-version": $api_version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -185,7 +188,7 @@ export def "application-gateways-list-available-request-headers" [
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableResponseHeaders
 # operationId: ApplicationGateways_ListAvailableResponseHeaders
 export def "application-gateways-list-available-response-headers" [
-  subscription_id: any
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,17 +198,20 @@ export def "application-gateways-list-available-response-headers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version. (required)
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableResponseHeaders") $auth.query)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableResponseHeaders") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: {}
+    query: ({"api-version": $api_version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -221,7 +227,7 @@ export def "application-gateways-list-available-response-headers" [
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableServerVariables
 # operationId: ApplicationGateways_ListAvailableServerVariables
 export def "application-gateways-list-available-server-variables" [
-  subscription_id: any
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,17 +237,20 @@ export def "application-gateways-list-available-server-variables" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version. (required)
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableServerVariables") $auth.query)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableServerVariables") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: {}
+    query: ({"api-version": $api_version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -257,7 +266,7 @@ export def "application-gateways-list-available-server-variables" [
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default
 # operationId: ApplicationGateways_ListAvailableSslOptions
 export def "application-gateways-list-available-ssl-options" [
-  subscription_id: any
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,17 +276,20 @@ export def "application-gateways-list-available-ssl-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<properties: record<availableCipherSuites: list<string>, availableProtocols: list<string>, defaultPolicy: string, predefinedPolicies: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default") $auth.query)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: {}
+    query: ({"api-version": $api_version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -293,7 +305,7 @@ export def "application-gateways-list-available-ssl-options" [
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default/predefinedPolicies
 # operationId: ApplicationGateways_ListAvailableSslPredefinedPolicies
 export def "application-gateways-list-available-ssl-predefined-policies" [
-  subscription_id: any
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,17 +315,20 @@ export def "application-gateways-list-available-ssl-predefined-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<name: string, properties: record, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default/predefinedPolicies") $auth.query)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default/predefinedPolicies") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: {}
+    query: ({"api-version": $api_version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -329,7 +344,7 @@ export def "application-gateways-list-available-ssl-predefined-policies" [
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default/predefinedPolicies/{predefinedPolicyName}
 # operationId: ApplicationGateways_GetSslPredefinedPolicy
 export def "application-gateways-get-ssl-predefined-policy" [
-  subscription_id: any
+  subscription_id: string
   predefined_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -340,18 +355,21 @@ export def "application-gateways-get-ssl-predefined-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<name: string, properties: record<cipherSuites: list<string>, minProtocolVersion: string>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($predefined_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'predefinedPolicyName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), predefined_policy_name: (encode-path-segment $predefined_policy_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default/predefinedPolicies/{predefined_policy_name}") $auth.query)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), predefined_policy_name: (encode-path-segment $predefined_policy_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default/predefinedPolicies/{predefined_policy_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: {}
+    query: ({"api-version": $api_version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -367,7 +385,7 @@ export def "application-gateways-get-ssl-predefined-policy" [
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableWafRuleSets
 # operationId: ApplicationGateways_ListAvailableWafRuleSets
 export def "application-gateways-list-available-waf-rule-sets" [
-  subscription_id: any
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,17 +395,20 @@ export def "application-gateways-list-available-waf-rule-sets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableWafRuleSets") $auth.query)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGatewayAvailableWafRuleSets") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: {}
+    query: ({"api-version": $api_version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -403,7 +424,7 @@ export def "application-gateways-list-available-waf-rule-sets" [
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGateways
 # operationId: ApplicationGateways_ListAll
 export def "application-gateways-list-all" [
-  subscription_id: any
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,17 +434,20 @@ export def "application-gateways-list-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, identity: record, properties: record, zones: list, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGateways") $auth.query)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/applicationGateways") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: {}
+    query: ({"api-version": $api_version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -439,7 +463,7 @@ export def "application-gateways-list-all" [
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways
 # operationId: ApplicationGateways_List
 export def "application-gateways-list" [
-  subscription_id: any
+  subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -450,18 +474,21 @@ export def "application-gateways-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, identity: record, properties: record, zones: list, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways") $auth.query)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: {}
+    query: ({"api-version": $api_version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -477,7 +504,7 @@ export def "application-gateways-list" [
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}
 # operationId: ApplicationGateways_Delete
 export def "application-gateways-delete" [
-  subscription_id: any
+  subscription_id: string
   resource_group_name: string
   application_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -489,19 +516,22 @@ export def "application-gateways-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationGatewayName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}") $auth.query)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
-    query: {}
+    query: ({"api-version": $api_version} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -517,7 +547,7 @@ export def "application-gateways-delete" [
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}
 # operationId: ApplicationGateways_Get
 export def "application-gateways-get" [
-  subscription_id: any
+  subscription_id: string
   resource_group_name: string
   application_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -529,19 +559,22 @@ export def "application-gateways-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<authenticationCertificates: list<record>, autoscaleConfiguration: record<maxCapacity: int, minCapacity: int>, backendAddressPools: list<record>, backendHttpSettingsCollection: list<record>, customErrorConfigurations: list<record>, enableFips: bool, enableHttp2: bool, firewallPolicy: record<id: string>, frontendIPConfigurations: list<record>, frontendPorts: list<record>, gatewayIPConfigurations: list<record>, httpListeners: list<record>, operationalState: string, probes: list<record>, provisioningState: string, redirectConfigurations: list<record>, requestRoutingRules: list<record>, resourceGuid: string, rewriteRuleSets: list<record>, sku: record<capacity: int, name: string, tier: string>, sslCertificates: list<record>, sslPolicy: record<cipherSuites: list, disabledSslProtocols: list, minProtocolVersion: string, policyName: string, policyType: string>, trustedRootCertificates: list<record>, urlPathMaps: list<record>, webApplicationFirewallConfiguration: record<disabledRuleGroups: list, enabled: bool, exclusions: list, fileUploadLimitInMb: int, firewallMode: string, maxRequestBodySize: int, maxRequestBodySizeInKb: int, requestBodyCheck: bool, ruleSetType: string, ruleSetVersion: string>>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationGatewayName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}") $auth.query)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: {}
+    query: ({"api-version": $api_version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -557,7 +590,7 @@ export def "application-gateways-get" [
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}
 # operationId: ApplicationGateways_UpdateTags
 export def "application-gateways-update-tags" [
-  subscription_id: any
+  subscription_id: string
   resource_group_name: string
   application_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -569,6 +602,7 @@ export def "application-gateways-update-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version. (required)
   --tags: record # Resource tags.
 ]: any -> record<etag: string, identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<authenticationCertificates: list<record>, autoscaleConfiguration: record<maxCapacity: int, minCapacity: int>, backendAddressPools: list<record>, backendHttpSettingsCollection: list<record>, customErrorConfigurations: list<record>, enableFips: bool, enableHttp2: bool, firewallPolicy: record<id: string>, frontendIPConfigurations: list<record>, frontendPorts: list<record>, gatewayIPConfigurations: list<record>, httpListeners: list<record>, operationalState: string, probes: list<record>, provisioningState: string, redirectConfigurations: list<record>, requestRoutingRules: list<record>, resourceGuid: string, rewriteRuleSets: list<record>, sku: record<capacity: int, name: string, tier: string>, sslCertificates: list<record>, sslPolicy: record<cipherSuites: list, disabledSslProtocols: list, minProtocolVersion: string, policyName: string, policyType: string>, trustedRootCertificates: list<record>, urlPathMaps: list<record>, webApplicationFirewallConfiguration: record<disabledRuleGroups: list, enabled: bool, exclusions: list, fileUploadLimitInMb: int, firewallMode: string, maxRequestBodySize: int, maxRequestBodySizeInKb: int, requestBodyCheck: bool, ruleSetType: string, ruleSetVersion: string>>, zones: list<string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
@@ -577,7 +611,9 @@ export def "application-gateways-update-tags" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationGatewayName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}") $auth.query)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -585,7 +621,7 @@ export def "application-gateways-update-tags" [
   let req = {
     method: "patch"
     url: $full_url
-    query: {}
+    query: ({"api-version": $api_version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -603,7 +639,7 @@ export def "application-gateways-update-tags" [
 # --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
 # --properties shape: {authenticationCertificates?: list, autoscaleConfiguration?: any, backendAddressPools?: list, backendHttpSettingsCollection?: list, customErrorConfigurations?: list, enableFips?: bool, enableHttp2?: bool, firewallPolicy?: any, frontendIPConfigurations?: list, frontendPorts?: list, gatewayIPConfigurations?: list, httpListeners?: list, probes?: list, redirectConfigurations?: list, requestRoutingRules?: list, resourceGuid?: string, rewriteRuleSets?: list, sku?: any, sslCertificates?: list, ... (4 more fields)}
 export def "application-gateways-create-or-update" [
-  subscription_id: any
+  subscription_id: string
   resource_group_name: string
   application_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -615,6 +651,7 @@ export def "application-gateways-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version. (required)
   --etag: string # A unique read-only string that changes whenever the resource is updated.
   --identity: any # Identity for the resource. — shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
   --properties: any # Properties of the application gateway. — shape: {authenticationCertificates?: list, autoscaleConfiguration?: any, backendAddressPools?: list, backendHttpSettingsCollection?: list, customErrorConfigurations?: list, enableFips?: bool, enableHttp2?: bool, firewallPolicy?: any, frontendIPConfigurations?: list, frontendPorts?: list, gatewayIPConfigurations?: list, httpListeners?: list, probes?: list, redirectConfigurations?: list, requestRoutingRules?: list, resourceGuid?: string, rewriteRuleSets?: list, sku?: any, sslCertificates?: list, ... (4 more fields)}
@@ -629,7 +666,9 @@ export def "application-gateways-create-or-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationGatewayName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}") $auth.query)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}") $qp $auth.query)
   let req_body = {"etag": $etag, "identity": $identity, "properties": $properties, "zones": $zones, "id": $id, "location": $location, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -637,7 +676,7 @@ export def "application-gateways-create-or-update" [
   let req = {
     method: "put"
     url: $full_url
-    query: {}
+    query: ({"api-version": $api_version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -665,7 +704,7 @@ export def "application-gateways-backend-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --expand: string # Expands BackendAddressPool and BackendHttpSettings referenced in backend health.
 ]: nothing -> record<backendAddressPools: table<backendAddressPool: record, backendHttpSettingsCollection: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -673,6 +712,7 @@ export def "application-gateways-backend-health" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationGatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}/backendhealth") $qp $auth.query)
   let accept_val = "application/json"
@@ -699,7 +739,7 @@ export def "application-gateways-backend-health" [
 # --backendHttpSettings shape: {id?: string}
 # --match shape: {body?: string, statusCodes?: list<string>}
 export def "application-gateways-backend-health-on-demand" [
-  subscription_id: any
+  subscription_id: string
   resource_group_name: string
   application_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -711,11 +751,12 @@ export def "application-gateways-backend-health-on-demand" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version. (required)
   --expand: string # Expands BackendAddressPool and BackendHttpSettings referenced in backend health.
   --backend-address-pool: any # Reference to another subresource. — shape: {id?: string}
   --backend-http-settings: any # Reference to another subresource. — shape: {id?: string}
   --host: string # Host name to send the probe to.
-  --body-match: any # Application gateway probe health response match. — shape: {body?: string, statusCodes?: list<string>}
+  --match: any # Application gateway probe health response match. — shape: {body?: string, statusCodes?: list<string>}
   --path: string # Relative path of probe. Valid path starts from '/'. Probe is sent to ://:.
   --pick-host-name-from-backend-http-settings: oneof<nothing, bool> # Whether the host header should be picked from the backend http settings. Default value is false.
   --protocol: string@protocol-completer # Application Gateway protocol.
@@ -727,16 +768,17 @@ export def "application-gateways-backend-health-on-demand" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationGatewayName' must be non-empty" } }
-  let qp = [(serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}/getBackendHealthOnDemand") $qp $auth.query)
-  let req_body = {"backendAddressPool": $backend_address_pool, "backendHttpSettings": $backend_http_settings, "host": $host, "match": $body_match, "path": $path, "pickHostNameFromBackendHttpSettings": $pick_host_name_from_backend_http_settings, "protocol": $protocol, "timeout": $timeout} | compact
+  let req_body = {"backendAddressPool": $backend_address_pool, "backendHttpSettings": $backend_http_settings, "host": $host, "match": $match, "path": $path, "pickHostNameFromBackendHttpSettings": $pick_host_name_from_backend_http_settings, "protocol": $protocol, "timeout": $timeout} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"$expand": $expand} | compact)
+    query: ({"api-version": $api_version, "$expand": $expand} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -752,7 +794,7 @@ export def "application-gateways-backend-health-on-demand" [
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}/start
 # operationId: ApplicationGateways_Start
 export def "application-gateways-start" [
-  subscription_id: any
+  subscription_id: string
   resource_group_name: string
   application_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -764,19 +806,22 @@ export def "application-gateways-start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationGatewayName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}/start") $auth.query)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}/start") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: {}
+    query: ({"api-version": $api_version} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -792,7 +837,7 @@ export def "application-gateways-start" [
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}/stop
 # operationId: ApplicationGateways_Stop
 export def "application-gateways-stop" [
-  subscription_id: any
+  subscription_id: string
   resource_group_name: string
   application_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -804,19 +849,22 @@ export def "application-gateways-stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string # Client API version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationGatewayName' must be non-empty" } }
-  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}/stop") $auth.query)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_gateway_name: (encode-path-segment $application_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/applicationGateways/{application_gateway_name}/stop") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: {}
+    query: ({"api-version": $api_version} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"

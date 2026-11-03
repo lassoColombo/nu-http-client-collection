@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "token" => { {scheme: $scheme, headers: {Token: $token_val}, query: "", location: "header"} }
+    "token" => { {scheme: $scheme, headers: {"Token": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -325,14 +325,17 @@ export def "get-domestic-summary-report" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Output format. 'xml' and 'csv' values are accepted. Default format - json
-  --country-code: string # ISO 2-letter country code which will be used for determining which country is domestic.
+  --country-code: string # ISO 2-letter country code which will be used for determining which country is domestic. (required)
   --currency-code: string # ISO 3-letter currency code, e.g. EUR or USD. Defaults to the one assigned to MOSS calculations for a given country code.
-  --start-month: string # Period start month in yyyy-MM format.
-  --end-month: string # Period end month in yyyy-MM format.
+  --start-month: string # Period start month in yyyy-MM format. (required)
+  --end-month: string # Period end month in yyyy-MM format. (required)
   --fx-date-type: string # Which date should be used for FX.
 ]: nothing -> record<currency_code: string, domestic_refunds_amount: float, domestic_refunds_tax_amount: float, domestic_sales_amount: float, domestic_tax_amount: float, end_date: string, eu_tax_deducted_refunds: float, eu_tax_deducted_sales: float, global_refunds_amount: float, global_refunds_tax_amount: float, global_sales_amount: float, global_sales_tax_amount: float, start_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
+  if ($country_code == null) { error make --unspanned { msg: "required query parameter 'country_code' missing: pass --country-code" } }
+  if ($start_month == null) { error make --unspanned { msg: "required query parameter 'start_month' missing: pass --start-month" } }
+  if ($end_month == null) { error make --unspanned { msg: "required query parameter 'end_month' missing: pass --end-month" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "country_code" $country_code "scalar") (serialize-qp "currency_code" $currency_code "scalar") (serialize-qp "start_month" $start_month "scalar") (serialize-qp "end_month" $end_month "scalar") (serialize-qp "fx_date_type" $fx_date_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/reports/domestic/summary" $qp $auth.query)
   let accept_val = "application/json"
@@ -369,15 +372,18 @@ export def "get-eu-vies-report" [
   --lff-sequence-number: string # Sequence number used to generate report in Large Filer Format. If not specified then '0000000001' will be used.
   --transformation: string # Which transformation should be applied. Please note that transformation will be applied only for xml and csv formats.
   --currency-code: string # ISO 3-letter currency code, e.g. EUR or USD. Defaults to the one assigned to MOSS calculations for a given country code.
-  --end-month: string # Period end month in yyyy-MM format.
+  --end-month: string # Period end month in yyyy-MM format. (required)
   --tax-id: string # MOSS-assigned tax ID - if not provided, merchant's national tax number will be used.
-  --start-month: string # Period start month in yyyy-MM format.
-  --eu-country-code: string # ISO 2-letter country code which will be used for determining which country is domestic.
+  --start-month: string # Period start month in yyyy-MM format. (required)
+  --eu-country-code: string # ISO 2-letter country code which will be used for determining which country is domestic. (required)
   --fx-date-type: string # Which date should be used for FX.
   --format: string # Output format. 'xml', 'csv' and 'lff' (only for Ireland) values are accepted as well
 ]: nothing -> record<currency_code: string, end_date: string, report: table<amount: float, country_code: string, country_name: string, country_subdivision: string, currency_code: string, skip_moss: bool, tax_amount: float, tax_rate: float, tax_region: string>, start_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
+  if ($end_month == null) { error make --unspanned { msg: "required query parameter 'end_month' missing: pass --end-month" } }
+  if ($start_month == null) { error make --unspanned { msg: "required query parameter 'start_month' missing: pass --start-month" } }
+  if ($eu_country_code == null) { error make --unspanned { msg: "required query parameter 'eu_country_code' missing: pass --eu-country-code" } }
   let qp = [(serialize-qp "period_length" $period_length "scalar") (serialize-qp "lff_sequence_number" $lff_sequence_number "scalar") (serialize-qp "transformation" $transformation "scalar") (serialize-qp "currency_code" $currency_code "scalar") (serialize-qp "end_month" $end_month "scalar") (serialize-qp "tax_id" $tax_id "scalar") (serialize-qp "start_month" $start_month "scalar") (serialize-qp "eu_country_code" $eu_country_code "scalar") (serialize-qp "fx_date_type" $fx_date_type "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/reports/eu/vies" $qp $auth.query)
   let accept_val = "application/json"
@@ -454,10 +460,11 @@ export def "get-refunds" [
   --format: string # Output format. 'csv' value is accepted as well
   --moss-country-code: string # MOSS country code, used to determine currency. If ommited, merchant default setting is used.
   --tax-region: string # Tax region key, defaults to EU for backwards compatibility.
-  --date-from: string # Take only refunds issued at or after the date. Format: yyyy-MM-dd
+  --date-from: string # Take only refunds issued at or after the date. Format: yyyy-MM-dd (required)
 ]: nothing -> record<report: table<amount: float, country_code: string, country_name: string, country_subdivision: string, currency_code: string, skip_moss: bool, tax_amount: float, tax_rate: float, tax_region: string>> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'date_from' missing: pass --date-from" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "moss_country_code" $moss_country_code "scalar") (serialize-qp "tax_region" $tax_region "scalar") (serialize-qp "date_from" $date_from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/settlement/refunds" $qp $auth.query)
   let accept_val = "application/json"
@@ -577,11 +584,13 @@ export def "get-settlement-stats-by-country" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --date-from: string # Date from in yyyy-MM format.
-  --date-to: string # Date to in yyyy-MM format.
+  --date-from: string # Date from in yyyy-MM format. (required)
+  --date-to: string # Date to in yyyy-MM format. (required)
 ]: nothing -> record<by_country: table<currency_code: string, tax_country_code: string, tax_country_name: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'date_from' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'date_to' missing: pass --date-to" } }
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/stats/settlement/by_country" $qp $auth.query)
   let accept_val = "application/json"
@@ -614,11 +623,13 @@ export def "get-settlement-stats-by-taxation-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --date-from: string # Date from in yyyy-MM format.
-  --date-to: string # Date to in yyyy-MM format.
+  --date-from: string # Date from in yyyy-MM format. (required)
+  --date-to: string # Date to in yyyy-MM format. (required)
 ]: nothing -> record<by_taxation_type: record<deducted_count: float, eu_b2b: int, eu_taxed: int, taxed_count: float, transactions_count: float>> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'date_from' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'date_to' missing: pass --date-to" } }
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/stats/settlement/by_taxation_type" $qp $auth.query)
   let accept_val = "application/json"
@@ -651,12 +662,15 @@ export def "get-daily-settlement-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --interval: string # Interval type - day, week, month.
-  --date-from: string # Date from in yyyy-MM format.
-  --date-to: string # Date to in yyyy-MM format.
+  --interval: string # Interval type - day, week, month. (required)
+  --date-from: string # Date from in yyyy-MM format. (required)
+  --date-to: string # Date to in yyyy-MM format. (required)
 ]: nothing -> record<settlement_daily: table<b2b: int, b2c: int, count: int, day: string, day_raw: string, eu_b2b: int, eu_taxed: int, eu_total: int, untaxed: int>> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
+  if ($interval == null) { error make --unspanned { msg: "required query parameter 'interval' missing: pass --interval" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'date_from' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'date_to' missing: pass --date-to" } }
   let qp = [(serialize-qp "interval" $interval "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/stats/settlement/daily" $qp $auth.query)
   let accept_val = "application/json"
@@ -689,12 +703,14 @@ export def "get-transactions-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --date-from: string # Date from in yyyy-MM format.
-  --date-to: string # Date to in yyyy-MM format.
+  --date-from: string # Date from in yyyy-MM format. (required)
+  --date-to: string # Date to in yyyy-MM format. (required)
   --interval: string # Interval. Accepted values are 'day', 'week' and 'month'.
 ]: nothing -> record<by_status: record<C: list<record>, N: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'date_from' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'date_to' missing: pass --date-to" } }
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/stats/transactions" $qp $auth.query)
   let accept_val = "application/json"
@@ -728,11 +744,13 @@ export def "get-transactions-stats-by-country" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --global-currency-code: string # Global currency code to use for conversion - in addition to country's currency if rate is available. Conversion is indicative and based on most-recent rate from ECB.
-  --date-from: string # Date from in yyyy-MM format.
-  --date-to: string # Date to in yyyy-MM format.
+  --date-from: string # Date from in yyyy-MM format. (required)
+  --date-to: string # Date to in yyyy-MM format. (required)
 ]: nothing -> record<by_country: table<currency_code: string, tax_country_code: string, tax_country_name: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'date_from' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'date_to' missing: pass --date-to" } }
   let qp = [(serialize-qp "global_currency_code" $global_currency_code "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/stats/transactions/by_country" $qp $auth.query)
   let accept_val = "application/json"
@@ -768,7 +786,7 @@ export def "calculate-simple-tax" [
   --product-type: string # Product type, according to dictionary /dictionaries/product_types.
   --invoice-address-city: string # Invoice address/postal_code
   --buyer-credit-card-prefix: string # First 6 digits of buyer's credit card prefix.
-  --currency-code: string # Currency code for transaction - e.g. EUR.
+  --currency-code: string # Currency code for transaction - e.g. EUR. (required)
   --invoice-address-region: string # Invoice address/region
   --unit-price: float # Unit price.
   --quantity: float # Quantity Defaults to 1.
@@ -783,6 +801,7 @@ export def "calculate-simple-tax" [
 ]: nothing -> record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
+  if ($currency_code == null) { error make --unspanned { msg: "required query parameter 'currency_code' missing: pass --currency-code" } }
   let qp = [(serialize-qp "product_type" $product_type "scalar") (serialize-qp "invoice_address_city" $invoice_address_city "scalar") (serialize-qp "buyer_credit_card_prefix" $buyer_credit_card_prefix "scalar") (serialize-qp "currency_code" $currency_code "scalar") (serialize-qp "invoice_address_region" $invoice_address_region "scalar") (serialize-qp "unit_price" $unit_price "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "buyer_tax_number" $buyer_tax_number "scalar") (serialize-qp "force_country_code" $force_country_code "scalar") (serialize-qp "order_date" $order_date "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "billing_country_code" $billing_country_code "scalar") (serialize-qp "invoice_address_postal_code" $invoice_address_postal_code "scalar") (serialize-qp "total_amount" $total_amount "scalar") (serialize-qp "tax_deducted" $tax_deducted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/tax/calculate" $qp $auth.query)
   let accept_val = "application/json"

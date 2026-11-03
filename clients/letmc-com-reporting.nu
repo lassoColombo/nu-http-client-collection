@@ -1,4 +1,4 @@
-# Auto-generated client for LetMC Api V3, reporting vv3-reporting
+# Auto-generated client for LetMC Api V3, reporting v3-reporting
 # Source: https://api.apis.guru/v2/specs/letmc.com/reporting/v3-reporting/swagger.json
 # Auth: --token flag or $env.LETMC_API_V3_REPORTING_TOKEN
 
@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "apikey" => { {scheme: $scheme, headers: {ApiKey: $token_val}, query: "", location: "header"} }
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "apikey" => { {scheme: $scheme, headers: {"ApiKey": $token_val}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -138,14 +138,18 @@ export def "reporting-controller-mortgages-by-created-date" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --branch-id: string # The unique ID of the Branch
-  --start-date: string # The date to search from. (format: date-time)
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --branch-id: string # The unique ID of the Branch (required)
+  --start-date: string # The date to search from. (required, format: date-time)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<Amount: float, BorrowersAccountName: string, CreatedAt: string, DisplayType: string, ExtraNotes: string, From: string, IntrestRate: float, MarketValue: float, MonthlyPayment: float, MortgageAccountNumber: string, MortgageProvider: string, PropertyOwnableID: string, SalesInstructionID: string, Type: string, ValuationDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($branch_id == null) { error make --unspanned { msg: "required query parameter 'branchID' missing: pass --branch-id" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/reporting/{short_name}/mortgagesbycreateddate") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -180,14 +184,18 @@ export def "reporting-controller-mortgages-by-updated-date" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --branch-id: string # The unique ID of the Branch
-  --start-date: string # The date to search from. (format: date-time)
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --branch-id: string # The unique ID of the Branch (required)
+  --start-date: string # The date to search from. (required, format: date-time)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<Amount: float, BorrowersAccountName: string, CreatedAt: string, DisplayType: string, ExtraNotes: string, From: string, IntrestRate: float, MarketValue: float, MonthlyPayment: float, MortgageAccountNumber: string, MortgageProvider: string, PropertyOwnableID: string, SalesInstructionID: string, Type: string, ValuationDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($branch_id == null) { error make --unspanned { msg: "required query parameter 'branchID' missing: pass --branch-id" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/reporting/{short_name}/mortgagesbyupdateddate") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -222,14 +230,18 @@ export def "reporting-controller-repossessions-by-created-date" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --branch-id: string # The unique ID of the Branch
-  --start-date: string # The date to search from. (format: date-time)
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --branch-id: string # The unique ID of the Branch (required)
+  --start-date: string # The date to search from. (required, format: date-time)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<CaseDetails: record, ExitStrategy: list, Litigation: list>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($branch_id == null) { error make --unspanned { msg: "required query parameter 'branchID' missing: pass --branch-id" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/reporting/{short_name}/repossesionsbycreateddate") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -264,14 +276,18 @@ export def "reporting-controller-repossessions-by-updated-date" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --branch-id: string # The unique ID of the Branch
-  --start-date: string # The date to search from. (format: date-time)
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --branch-id: string # The unique ID of the Branch (required)
+  --start-date: string # The date to search from. (required, format: date-time)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<CaseDetails: record, ExitStrategy: list, Litigation: list>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($branch_id == null) { error make --unspanned { msg: "required query parameter 'branchID' missing: pass --branch-id" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/reporting/{short_name}/repossesionsbyupdateddate") $qp $auth.query)
   let accept_val = ($accept | default "application/json")

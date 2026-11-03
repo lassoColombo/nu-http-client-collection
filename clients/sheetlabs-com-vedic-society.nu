@@ -130,10 +130,11 @@ export def "get-resources" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --description: string # The string you are looking for in the word meaning, for example, chariot. Wildcards are allowed, for example, char\*.
+  --description: string # The string you are looking for in the word meaning, for example, chariot. Wildcards are allowed, for example, char\*. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($description == null) { error make --unspanned { msg: "required query parameter 'description' missing: pass --description" } }
   let qp = [(serialize-qp "description" $description "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources" $qp $auth.query)
   let accept_val = "application/json"

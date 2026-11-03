@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -215,10 +215,11 @@ export def "get-conversations-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --conv-ids: list<string> # The array of IDs of the conversations which should be retrieved
+  --conv-ids: list<string> # The array of IDs of the conversations which should be retrieved (required)
 ]: nothing -> table<avatar: string, avatarLarge: string, convId: string, creationTime: float, creatorId: string, creatorTenantId: string, description: string, isGuestAccessDisabled: bool, isModerated: bool, modificationTime: float, participants: list<string>, topic: string, topicPlaceholder: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($conv_ids == null) { error make --unspanned { msg: "required query parameter 'convIds' missing: pass --conv-ids" } }
   let qp = [(serialize-qp "convIds" $conv_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/conversations/byIds" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -252,7 +253,7 @@ export def "get-community-conversations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-sort: string@sort-completer # Defines the type of sorting for the community conversations (default is alphabetical) (default: ALPHABETICALLY)
+  --sort: string@sort-completer # Defines the type of sorting for the community conversations (default is alphabetical) (default: ALPHABETICALLY)
   --order: string@order-completer # Defines the ordering of the conversations (default is ascending) (default: ASCENDING)
   --include-own: oneof<nothing, bool> # If set to false only conversations are returned where the user is no member of, otherwise all community conversations are returned (default: false)
   --start-index: float # The index of the conversation that is the first one that has to be returned. E.g. if a request starts with startIndex 40 and results 20 the conversations 40 to 60 are returned (format: int32, default: 0)
@@ -260,14 +261,14 @@ export def "get-community-conversations" [
 ]: nothing -> table<avatar: string, avatarLarge: string, convId: string, creationTime: float, creatorId: string, creatorTenantId: string, description: string, isGuestAccessDisabled: bool, isModerated: bool, modificationTime: float, participants: list<string>, topic: string, topicPlaceholder: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "includeOwn" $include_own "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "results" $results "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "includeOwn" $include_own "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "results" $results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/conversations/community" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "order": $order, "includeOwn": $include_own, "startIndex": $start_index, "results": $results} | compact)
+    query: ({"sort": $sort, "order": $order, "includeOwn": $include_own, "startIndex": $start_index, "results": $results} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -416,11 +417,12 @@ export def "remove-participant-community" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --participants: list<string> # The IDs or the unique email addresses of the Circuit users that have to be removed
+  --participants: list<string> # The IDs or the unique email addresses of the Circuit users that have to be removed (required)
 ]: nothing -> record<avatar: string, avatarLarge: string, convId: string, creationTime: float, creatorId: string, creatorTenantId: string, description: string, isGuestAccessDisabled: bool, isModerated: bool, modificationTime: float, participants: list<string>, topic: string, topicPlaceholder: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($conv_id | is-empty) { error make --unspanned { msg: "path parameter 'convId' must be non-empty" } }
+  if ($participants == null) { error make --unspanned { msg: "required query parameter 'participants' missing: pass --participants" } }
   let qp = [(serialize-qp "participants" $participants "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({conv_id: (encode-path-segment $conv_id)} | format pattern "/conversations/community/{conv_id}/participants") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -496,10 +498,11 @@ export def "get-join-details-multiple" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --conv-ids: list<string> # An array of IDs of the conversations for which the join details should be returned
+  --conv-ids: list<string> # An array of IDs of the conversations for which the join details should be returned (required)
 ]: nothing -> table<bridgeNumbers: list<record>, convId: string, conversationCreatorId: string, isModerationAllowed: bool, isRecordingAllowed: bool, link: string, pin: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($conv_ids == null) { error make --unspanned { msg: "required query parameter 'convIds' missing: pass --conv-ids" } }
   let qp = [(serialize-qp "convIds" $conv_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/conversations/conversationdetails" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -533,10 +536,11 @@ export def "get-direct-conversation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --participant: string # The participant that will be part of this conversation together with the creator, specified by the Circuit user ID or the unique email address
+  --participant: string # The participant that will be part of this conversation together with the creator, specified by the Circuit user ID or the unique email address (required)
 ]: nothing -> record<avatar: string, avatarLarge: string, convId: string, creationTime: float, creatorId: string, creatorTenantId: string, description: string, isGuestAccessDisabled: bool, isModerated: bool, modificationTime: float, participants: list<string>, topic: string, topicPlaceholder: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($participant == null) { error make --unspanned { msg: "required query parameter 'participant' missing: pass --participant" } }
   let qp = [(serialize-qp "participant" $participant "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/conversations/direct" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -728,11 +732,12 @@ export def "remove-participant-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --participants: list<string> # The IDs or the unique email addresses of the Circuit users that have to be removed
+  --participants: list<string> # The IDs or the unique email addresses of the Circuit users that have to be removed (required)
 ]: nothing -> record<avatar: string, avatarLarge: string, convId: string, creationTime: float, creatorId: string, creatorTenantId: string, description: string, isGuestAccessDisabled: bool, isModerated: bool, modificationTime: float, participants: list<string>, topic: string, topicPlaceholder: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($conv_id | is-empty) { error make --unspanned { msg: "path parameter 'convId' must be non-empty" } }
+  if ($participants == null) { error make --unspanned { msg: "required query parameter 'participants' missing: pass --participants" } }
   let qp = [(serialize-qp "participants" $participants "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({conv_id: (encode-path-segment $conv_id)} | format pattern "/conversations/group/{conv_id}/participants") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -955,10 +960,11 @@ export def "resolve-invitation-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The invite token to resolve
+  --qp-token: string # The invite token to resolve (required)
 ]: nothing -> record<avatar: string, avatarLarge: string, convId: string, creationTime: float, creatorId: string, creatorTenantId: string, description: string, isGuestAccessDisabled: bool, isModerated: bool, modificationTime: float, participants: list<string>, topic: string, topicPlaceholder: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/conversations/resolveinvitetoken" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -992,12 +998,13 @@ export def "search-conversations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --term: string # The search term
+  --term: string # The search term (required)
   --include-item-ids: oneof<nothing, bool> # Optional parameter to specify if a deep or normal search is executed. In a deep search all matching item IDs inside every conversation are returned (up to a maximum of 100). For a normal search only the conversation IDs are returned. Default is a normal search (without item IDs). (default: false)
   --scope: string@scope-completer # The search scope, FILES||PEOPLE||MEMBERS||MESSAGES||SENTBY||ALL||CONVERSATIONS||LABEL||FILTER (default: ALL)
 ]: nothing -> record<matchingConversations: table<convId: string, itemIds: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($term == null) { error make --unspanned { msg: "required query parameter 'term' missing: pass --term" } }
   let qp = [(serialize-qp "term" $term "scalar") (serialize-qp "includeItemIds" $include_item_ids "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/conversations/search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1863,7 +1870,7 @@ export def "get-participants-by-conv-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --page-size: float # The page size of the hit list (format: int32)
+  --page-size: float # The page size of the hit list (required, format: int32)
   --name: string # Part of name to filter the results
   --type: string@type-completer # Type of participant to filter the results (default: REGULAR)
   --search-pointer: string # Pointer for paged output. Add to consecutive request to get next page
@@ -1871,6 +1878,7 @@ export def "get-participants-by-conv-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($conv_id | is-empty) { error make --unspanned { msg: "path parameter 'convId' must be non-empty" } }
+  if ($page_size == null) { error make --unspanned { msg: "required query parameter 'pageSize' missing: pass --page-size" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "searchPointer" $search_pointer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({conv_id: (encode-path-segment $conv_id)} | format pattern "/conversations/{conv_id}/participants") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2139,15 +2147,18 @@ export def "get-directory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --sort-by: string@sort-by-completer # sort the spaces by LAST_CONTENT, NAME, NUMBER_OF_USERS or CREATION_DATE (default: LAST_CONTENT)
-  --sort-order: string@sort-order-completer # ascending or descending (default: ASCENDING)
-  --filter: string@filter-completer # filter for spaces (JOINED, REQUESTED, OPEN, CLOSED or NOT_JOINED_REQUESTED) (default: NONE)
+  --sort-by: string@sort-by-completer # sort the spaces by LAST_CONTENT, NAME, NUMBER_OF_USERS or CREATION_DATE (required, default: LAST_CONTENT)
+  --sort-order: string@sort-order-completer # ascending or descending (required, default: ASCENDING)
+  --filter: string@filter-completer # filter for spaces (JOINED, REQUESTED, OPEN, CLOSED or NOT_JOINED_REQUESTED) (required, default: NONE)
   --query: string # some sort of query
   --page-pointer: string # page pointer, start with nothing and for next query use returned pointer
   --number-of-results: float # number of results to return, 25 by default. (format: int32, default: 25)
 ]: nothing -> record<hasMore: bool, searchPointer: string, spaces: table<accessModeType: string, creationTime: float, creatorId: string, defaultRole: string, description: string, largePictureBase64: string, largePictureContentType: string, largePictureId: string, lastContentCreationTime: float, lastContentCreatorId: string, modificationTime: float, name: string, numberOfExternalParticipants: float, numberOfParticipants: float, numberOfPinnedTopics: float, numberOfReplies: float, numberOfTopics: float, ownerId: string, smallPictureBase64: string, smallPictureContentType: string, smallPictureId: string, spaceId: string, status: string, tags: list, tenantId: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let sort_by = ($sort_by | default "LAST_CONTENT")
+  let sort_order = ($sort_order | default "ASCENDING")
+  let filter = ($filter | default "NONE")
   let qp = [(serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "pagePointer" $page_pointer "scalar") (serialize-qp "numberOfResults" $number_of_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/spaces/directory" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2253,13 +2264,15 @@ export def "get-flagged-items" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --search-direction: string@search-direction-completer # before or after the time stamp (default: BEFORE)
-  --timestamp: string # The timestamp according to which you want to retrieve the flagged items (format: date-time)
+  --search-direction: string@search-direction-completer # before or after the time stamp (required, default: BEFORE)
+  --timestamp: string # The timestamp according to which you want to retrieve the flagged items (required, format: date-time)
   --search-pointer: string # The searchpointer for the search (initially not set).
   --number-of-results: float # The number of results you want to retrieve. (format: int32, default: 25)
 ]: nothing -> record<flaggedItems: table<item: record, parentItem: record>, hasMore: bool, searchPointer: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let search_direction = ($search_direction | default "BEFORE")
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "searchDirection" $search_direction "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "searchPointer" $search_pointer "scalar") (serialize-qp "numberOfResults" $number_of_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/spaces/flagged" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2293,10 +2306,11 @@ export def "get-spaces-by-ids" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --ids: list<string> # an array of ids
+  --ids: list<string> # an array of ids (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/spaces/ids" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2554,14 +2568,16 @@ export def "start-basic-spaces-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --scope: string@scope-completer-1 # the scope of the search
-  --search-term: string # the term to search for
+  --scope: string@scope-completer-1 # the scope of the search (required)
+  --search-term: string # the term to search for (required)
   --start-time: string # the starttime (format: date-time)
   --end-time: string # the end time (format: date-time)
   --priority-spaces: list<string> # list of prioritized spaces
 ]: nothing -> record<spaces: table<accessModeType: string, creationTime: float, creatorId: string, defaultRole: string, description: string, largePictureBase64: string, largePictureContentType: string, largePictureId: string, lastContentCreationTime: float, lastContentCreatorId: string, modificationTime: float, name: string, numberOfExternalParticipants: float, numberOfParticipants: float, numberOfPinnedTopics: float, numberOfReplies: float, numberOfTopics: float, ownerId: string, smallPictureBase64: string, smallPictureContentType: string, smallPictureId: string, spaceId: string, status: string, tags: list, tenantId: string, type: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($scope == null) { error make --unspanned { msg: "required query parameter 'scope' missing: pass --scope" } }
+  if ($search_term == null) { error make --unspanned { msg: "required query parameter 'searchTerm' missing: pass --search-term" } }
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "searchTerm" $search_term "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "prioritySpaces" $priority_spaces "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/spaces/search/startBasic" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2595,15 +2611,18 @@ export def "start-detailed-space-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --scope: string@scope-completer-1 # the scope of the search
-  --search-term: string # the term to search for
+  --scope: string@scope-completer-1 # the scope of the search (required)
+  --search-term: string # the term to search for (required)
   --start-time: string # the starttime (format: date-time)
   --end-time: string # the end time (format: date-time)
-  --space-id: string # missing documentation
+  --space-id: string # missing documentation (required)
   --search-id: string # missing documentation
 ]: nothing -> table<resList: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($scope == null) { error make --unspanned { msg: "required query parameter 'scope' missing: pass --scope" } }
+  if ($search_term == null) { error make --unspanned { msg: "required query parameter 'searchTerm' missing: pass --search-term" } }
+  if ($space_id == null) { error make --unspanned { msg: "required query parameter 'spaceId' missing: pass --space-id" } }
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "searchTerm" $search_term "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "spaceId" $space_id "scalar") (serialize-qp "searchId" $search_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/spaces/search/startDetailed" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3080,9 +3099,9 @@ export def "get-space-participants" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --sort-by: string@sort-by-completer-1 # sort the spaces by LAST_CONTENT, NAME, NUMBER_OF_USERS or CREATION_DATE (default: NAME)
-  --sort-order: string@sort-order-completer # ascending or descending (default: ASCENDING)
-  --filter-type: string@filter-type-completer # filtertype for participants (ACCESS_TYPE, ROLE or STATE)
+  --sort-by: string@sort-by-completer-1 # sort the spaces by LAST_CONTENT, NAME, NUMBER_OF_USERS or CREATION_DATE (required, default: NAME)
+  --sort-order: string@sort-order-completer # ascending or descending (required, default: ASCENDING)
+  --filter-type: string@filter-type-completer # filtertype for participants (ACCESS_TYPE, ROLE or STATE) (required)
   --filter-value: string # value for the filter
   --query: string # some sort of query
   --search-pointer: string # The search pointer (leave empty initially).
@@ -3091,6 +3110,9 @@ export def "get-space-participants" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let sort_by = ($sort_by | default "NAME")
+  let sort_order = ($sort_order | default "ASCENDING")
+  if ($filter_type == null) { error make --unspanned { msg: "required query parameter 'filterType' missing: pass --filter-type" } }
   let qp = [(serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "filterType" $filter_type "scalar") (serialize-qp "filterValue" $filter_value "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "searchPointer" $search_pointer "scalar") (serialize-qp "numberOfResults" $number_of_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/participants") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3202,11 +3224,12 @@ export def "search-participants-to-add" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --query: string # The query
+  --query: string # The query (required)
 ]: nothing -> table<department: string, firstName: string, isMember: bool, jobTitle: string, lastName: string, smallImageUri: string, tenantId: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/searchParticipantsToAdd") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3241,11 +3264,12 @@ export def "search-space-participants" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --query: string # The query to search with. If searchpointer/hasMotre is returned, refine query.
+  --query: string # The query to search with. If searchpointer/hasMotre is returned, refine query. (required)
 ]: nothing -> table<hasMore: bool, participants: list<record>, searchPointer: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spaces/{id}/searchSpaceParticipants") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3664,7 +3688,7 @@ export def "get-space-replies" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --search-direction: string@search-direction-completer # Search before or after a certain timestamp (default: BEFORE)
+  --search-direction: string@search-direction-completer # Search before or after a certain timestamp (required, default: BEFORE)
   --timestamp: string # Timestamp to start the search from (format: date-time)
   --number-of-results: float # The number of results that should be returned (format: int32, default: 25)
 ]: nothing -> record<parentTopicId: string, spaceItem: record<Status: string, attachments: list<record>, complex: bool, content: string, creationTime: float, creatorId: string, deletedBy: string, externalAttachments: list<record>, formMetaData: string, itemId: string, mentionedUsers: list<string>, modificationTime: float, numberOfLikes: float, previews: list<record>, sharedItems: list<record>, spaceId: string, tenantId: string>> {
@@ -3672,6 +3696,7 @@ export def "get-space-replies" [
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
   if ($topic_id | is-empty) { error make --unspanned { msg: "path parameter 'topicId' must be non-empty" } }
+  let search_direction = ($search_direction | default "BEFORE")
   let qp = [(serialize-qp "searchDirection" $search_direction "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "numberOfResults" $number_of_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({space_id: (encode-path-segment $space_id), topic_id: (encode-path-segment $topic_id)} | format pattern "/spaces/{space_id}/topic/{topic_id}/reply") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3804,13 +3829,14 @@ export def "get-space-topics" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --search-direction: string@search-direction-completer # Search before or after a certain timestamp (default: BEFORE)
+  --search-direction: string@search-direction-completer # Search before or after a certain timestamp (required, default: BEFORE)
   --timestamp: string # Timestamp to start the search from (format: date-time)
   --number-of-results: float # The number of results that should be returned (format: int32, default: 25)
 ]: nothing -> table<lastContentCreationTime: float, lastContentCreatorId: string, numberOfReplies: float, pinned: bool, spaceItem: record<Status: string, attachments: list, complex: bool, content: string, creationTime: float, creatorId: string, deletedBy: string, externalAttachments: list, formMetaData: string, itemId: string, mentionedUsers: list, modificationTime: float, numberOfLikes: float, previews: list, sharedItems: list, spaceId: string, tenantId: string>, subject: string, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }
+  let search_direction = ($search_direction | default "BEFORE")
   let qp = [(serialize-qp "searchDirection" $search_direction "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "numberOfResults" $number_of_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({space_id: (encode-path-segment $space_id)} | format pattern "/spaces/{space_id}/topics") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4074,10 +4100,11 @@ export def "search-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --name: string # Search for a user by name
+  --name: string # Search for a user by name (required)
 ]: nothing -> table<avatar: string, avatarLarge: string, company: string, department: string, displayName: string, emailAddress: string, emailAddresses: list<record>, firstName: string, jobTitle: string, lastName: string, locale: string, phoneNumber: string, phoneNumbers: list<record>, primaryTenantId: string, secondaryEmailAddress: string, secondaryTenantId: string, userId: string, userState: string, userType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4222,12 +4249,13 @@ export def "search-users-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --name: list<string> # Multiple email addresses or UUIDs.
+  --name: list<string> # Multiple email addresses or UUIDs. (required)
   --return-full-user-info: oneof<nothing, bool> # Boolean, return full user info? (default: false)
   --secondary-lookup: oneof<nothing, bool> # Boolean, lookup secondary email? (default: false)
 ]: nothing -> table<avatar: string, avatarLarge: string, company: string, department: string, displayName: string, emailAddress: string, emailAddresses: list<record>, firstName: string, jobTitle: string, lastName: string, locale: string, phoneNumber: string, phoneNumbers: list<record>, primaryTenantId: string, secondaryEmailAddress: string, secondaryTenantId: string, userId: string, userState: string, userType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "multi") (serialize-qp "returnFullUserInfo" $return_full_user_info "scalar") (serialize-qp "secondaryLookup" $secondary_lookup "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/list" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4261,10 +4289,11 @@ export def "get-presence" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-ids: list<string> # A list of unique user IDs or email addresses of the users you want to query the presence state for
+  --user-ids: list<string> # A list of unique user IDs or email addresses of the users you want to query the presence state for (required)
 ]: nothing -> table<dndUntil: float, isOptedOut: bool, latitude: float, locationText: string, longitude: float, mobile: bool, poor: bool, state: string, statusMessage: string, timeZoneOffset: float, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_ids == null) { error make --unspanned { msg: "required query parameter 'userIds' missing: pass --user-ids" } }
   let qp = [(serialize-qp "userIds" $user_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/users/presence" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

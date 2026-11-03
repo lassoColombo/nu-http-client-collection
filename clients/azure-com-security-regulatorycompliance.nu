@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -133,12 +133,13 @@ export def "regulatory-compliance-standards-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
+  --api-version: string # API version for the operation (required)
   --filter: string # OData filter. Optional.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/regulatoryComplianceStandards") $qp $auth.query)
   let accept_val = "application/json"
@@ -173,12 +174,13 @@ export def "regulatory-compliance-standards-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<properties: record<failedControls: int, passedControls: int, skippedControls: int, state: string, unsupportedControls: int>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> record<properties: record<failedControls: int, passedControls: int, skippedControls: int, state: string, unsupportedControls: int>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($regulatory_compliance_standard_name | is-empty) { error make --unspanned { msg: "path parameter 'regulatoryComplianceStandardName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), regulatory_compliance_standard_name: (encode-path-segment $regulatory_compliance_standard_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/regulatoryComplianceStandards/{regulatory_compliance_standard_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -213,13 +215,14 @@ export def "regulatory-compliance-controls-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
+  --api-version: string # API version for the operation (required)
   --filter: string # OData filter. Optional.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($regulatory_compliance_standard_name | is-empty) { error make --unspanned { msg: "path parameter 'regulatoryComplianceStandardName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), regulatory_compliance_standard_name: (encode-path-segment $regulatory_compliance_standard_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/regulatoryComplianceStandards/{regulatory_compliance_standard_name}/regulatoryComplianceControls") $qp $auth.query)
   let accept_val = "application/json"
@@ -255,13 +258,14 @@ export def "regulatory-compliance-controls-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<properties: record<description: string, failedAssessments: int, passedAssessments: int, skippedAssessments: int, state: string>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> record<properties: record<description: string, failedAssessments: int, passedAssessments: int, skippedAssessments: int, state: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($regulatory_compliance_standard_name | is-empty) { error make --unspanned { msg: "path parameter 'regulatoryComplianceStandardName' must be non-empty" } }
   if ($regulatory_compliance_control_name | is-empty) { error make --unspanned { msg: "path parameter 'regulatoryComplianceControlName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), regulatory_compliance_standard_name: (encode-path-segment $regulatory_compliance_standard_name), regulatory_compliance_control_name: (encode-path-segment $regulatory_compliance_control_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/regulatoryComplianceStandards/{regulatory_compliance_standard_name}/regulatoryComplianceControls/{regulatory_compliance_control_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -297,14 +301,15 @@ export def "regulatory-compliance-assessments-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
+  --api-version: string # API version for the operation (required)
   --filter: string # OData filter. Optional.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($regulatory_compliance_standard_name | is-empty) { error make --unspanned { msg: "path parameter 'regulatoryComplianceStandardName' must be non-empty" } }
   if ($regulatory_compliance_control_name | is-empty) { error make --unspanned { msg: "path parameter 'regulatoryComplianceControlName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), regulatory_compliance_standard_name: (encode-path-segment $regulatory_compliance_standard_name), regulatory_compliance_control_name: (encode-path-segment $regulatory_compliance_control_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/regulatoryComplianceStandards/{regulatory_compliance_standard_name}/regulatoryComplianceControls/{regulatory_compliance_control_name}/regulatoryComplianceAssessments") $qp $auth.query)
   let accept_val = "application/json"
@@ -341,14 +346,15 @@ export def "regulatory-compliance-assessments-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<properties: record<assessmentDetailsLink: string, assessmentType: string, description: string, failedResources: int, passedResources: int, skippedResources: int, state: string, unsupportedResources: int>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> record<properties: record<assessmentDetailsLink: string, assessmentType: string, description: string, failedResources: int, passedResources: int, skippedResources: int, state: string, unsupportedResources: int>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($regulatory_compliance_standard_name | is-empty) { error make --unspanned { msg: "path parameter 'regulatoryComplianceStandardName' must be non-empty" } }
   if ($regulatory_compliance_control_name | is-empty) { error make --unspanned { msg: "path parameter 'regulatoryComplianceControlName' must be non-empty" } }
   if ($regulatory_compliance_assessment_name | is-empty) { error make --unspanned { msg: "path parameter 'regulatoryComplianceAssessmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), regulatory_compliance_standard_name: (encode-path-segment $regulatory_compliance_standard_name), regulatory_compliance_control_name: (encode-path-segment $regulatory_compliance_control_name), regulatory_compliance_assessment_name: (encode-path-segment $regulatory_compliance_assessment_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/regulatoryComplianceStandards/{regulatory_compliance_standard_name}/regulatoryComplianceControls/{regulatory_compliance_control_name}/regulatoryComplianceAssessments/{regulatory_compliance_assessment_name}") $qp $auth.query)
   let accept_val = "application/json"

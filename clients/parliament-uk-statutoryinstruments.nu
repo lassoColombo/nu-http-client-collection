@@ -1,4 +1,4 @@
-# Auto-generated client for Statutory Instruments API vv1
+# Auto-generated client for Statutory Instruments API v1
 # Source: https://api.apis.guru/v2/specs/parliament.uk/statutoryinstruments/v1/openapi.json
 # Auth: --token flag or $env.STATUTORY_INSTRUMENTS_API_TOKEN
 

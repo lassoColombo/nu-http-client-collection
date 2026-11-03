@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -96,7 +96,9 @@ def base-url-completer [] { ["http://cloud9.us-east-1.amazonaws.com" "http://clo
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def connection-type-completer [] { ["CONNECT_SSH" "CONNECT_SSM"] }
 def x-amz-target-completer [] { ["AWSCloud9WorkspaceManagementService.CreateEnvironmentEC2"] }
+def permissions-completer [] { ["read-only" "read-write"] }
 def x-amz-target-completer-1 [] { ["AWSCloud9WorkspaceManagementService.CreateEnvironmentMembership"] }
 def x-amz-target-completer-2 [] { ["AWSCloud9WorkspaceManagementService.DeleteEnvironment"] }
 def x-amz-target-completer-3 [] { ["AWSCloud9WorkspaceManagementService.DeleteEnvironmentMembership"] }
@@ -107,6 +109,7 @@ def x-amz-target-completer-7 [] { ["AWSCloud9WorkspaceManagementService.ListEnvi
 def x-amz-target-completer-8 [] { ["AWSCloud9WorkspaceManagementService.ListTagsForResource"] }
 def x-amz-target-completer-9 [] { ["AWSCloud9WorkspaceManagementService.TagResource"] }
 def x-amz-target-completer-10 [] { ["AWSCloud9WorkspaceManagementService.UntagResource"] }
+def managed-credentials-action-completer [] { ["DISABLE" "ENABLE"] }
 def x-amz-target-completer-11 [] { ["AWSCloud9WorkspaceManagementService.UpdateEnvironment"] }
 def x-amz-target-completer-12 [] { ["AWSCloud9WorkspaceManagementService.UpdateEnvironmentMembership"] }
 
@@ -137,6 +140,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateEnvironmentEC2
+# --tags item shape: {Key: string, Value: string}
 export def "create-environment-ec2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -154,22 +158,23 @@ export def "create-environment-ec2" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  name: any
-  --description: any
-  --client-request-token: any
-  instance_type: any
-  --subnet-id: any
-  --image-id: any
-  --automatic-stop-time-minutes: any
-  --owner-arn: any
-  --tags: any
-  --connection-type: any
-  --body-dry-run: any
-]: any -> record<environmentId: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  name: string # The name of the environment to create. This name is visible to other IAM users in the same Amazon Web Services account.
+  --description: string # The description of the environment to create. (format: password)
+  --client-request-token: string # A unique, case-sensitive string that helps Cloud9 to ensure this operation completes no more than one time. For more information, see Client Tokens (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/Run_Instance_Idempotency.html) in the Amazon EC2 API Reference.
+  instance_type: string # The type of instance to connect to the environment (for example, t2.micro).
+  --subnet-id: string # The ID of the subnet in Amazon VPC that Cloud9 will use to communicate with the Amazon EC2 instance.
+  --image-id: string # The identifier for the Amazon Machine Image (AMI) that's used to create the EC2 instance. To choose an AMI for the instance, you must specify a valid AMI alias or a valid Amazon EC2 Systems Manager (SSM) path. The default Amazon Linux AMI is currently used if the parameter isn't explicitly assigned a value in the request. In the future the parameter for Amazon Linux will no longer be available when you specify an AMI for your instance. Amazon Linux 2 will then become the default AMI, which is used to launch your instance if no parameter is explicitly defined. AMI aliases Amazon Linux (default): amazonlinux-1-x86_64 Amazon Linux 2: amazonlinux-2-x86_64 Ubuntu 18.04: ubuntu-18.04-x86_64 SSM paths Amazon Linux (default): resolve:ssm:/aws/service/cloud9/amis/amazonlinux-1-x86_64 Amazon Linux 2: resolve:ssm:/aws/service/cloud9/amis/amazonlinux-2-x86_64 Ubuntu 18.04: resolve:ssm:/aws/service/cloud9/amis/ubuntu-18.04-x86_64
+  --automatic-stop-time-minutes: int # The number of minutes until the running instance is shut down after the environment has last been used.
+  --owner-arn: string # The Amazon Resource Name (ARN) of the environment owner. This ARN can be the ARN of any IAM principal. If this value is not specified, the ARN defaults to this environment's creator.
+  --tags: list # An array of key-value pairs that will be associated with the new Cloud9 development environment. — item shape: {Key: string, Value: string}
+  --connection-type: string@connection-type-completer # The connection type used for connecting to an Amazon EC2 environment. Valid values are CONNECT_SSH (default) and CONNECT_SSM (connected through Amazon EC2 Systems Manager). For more information, see Accessing no-ingress EC2 instances with Amazon EC2 Systems Manager (https://docs.aws.amazon.com/cloud9/latest/user-guide/ec2-ssm.html) in the Cloud9 User Guide.
+  --body-dry-run: oneof<nothing, bool> # Checks whether you have the required permissions for the action, without actually making the request, and provides an error response. If you have the required permissions, the error response is DryRunOperation. Otherwise, it is UnauthorizedOperation.
+]: any -> record<environmentId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCloud9WorkspaceManagementService.CreateEnvironmentEC2")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "description": $description, "clientRequestToken": $client_request_token, "instanceType": $instance_type, "subnetId": $subnet_id, "imageId": $image_id, "automaticStopTimeMinutes": $automatic_stop_time_minutes, "ownerArn": $owner_arn, "tags": $tags, "connectionType": $connection_type, "dryRun": $body_dry_run} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -212,14 +217,15 @@ export def "create-environment-membership" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  environment_id: any
-  user_arn: any
-  permissions: any
-]: any -> record<membership: record<permissions: record, userId: record, userArn: record, environmentId: record, lastAccess: record>> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  environment_id: string # The ID of the environment that contains the environment member you want to add.
+  user_arn: string # The Amazon Resource Name (ARN) of the environment member you want to add.
+  permissions: string@permissions-completer # The type of environment member permissions you want to associate with this environment member. Available values include: read-only: Has read-only access to the environment. read-write: Has read-write access to the environment.
+]: any -> record<membership: record<permissions: string, userId: string, userArn: string, environmentId: string, lastAccess: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCloud9WorkspaceManagementService.CreateEnvironmentMembership")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"environmentId": $environment_id, "userArn": $user_arn, "permissions": $permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -262,12 +268,13 @@ export def "delete-environment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  environment_id: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  environment_id: string # The ID of the environment to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCloud9WorkspaceManagementService.DeleteEnvironment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"environmentId": $environment_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -310,13 +317,14 @@ export def "delete-environment-membership" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  environment_id: any
-  user_arn: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  environment_id: string # The ID of the environment to delete the environment member from.
+  user_arn: string # The Amazon Resource Name (ARN) of the environment member to delete from the environment.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCloud9WorkspaceManagementService.DeleteEnvironmentMembership")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"environmentId": $environment_id, "userArn": $user_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -361,16 +369,17 @@ export def "describe-environment-memberships" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  --user-arn: any
-  --environment-id: any
-  --permissions: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<memberships: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  --user-arn: string # The Amazon Resource Name (ARN) of an individual environment member to get information about. If no value is specified, information about all environment members are returned.
+  --environment-id: string # The ID of the environment to get environment member information about.
+  --permissions: list<string> # The type of environment member permissions to get information about. Available values include: owner: Owns the environment. read-only: Has read-only access to the environment. read-write: Has read-write access to the environment. If no value is specified, information about all environment members are returned.
+  --next-token-body: string # During a previous call, if there are more than 25 items in the list, only the first 25 items are returned, along with a unique string called a next token. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
+  --max-results-body: int # The maximum number of environment members to get information about. (body field)
+]: any -> record<memberships: table<permissions: string, userId: string, userArn: string, environmentId: string, lastAccess: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCloud9WorkspaceManagementService.DescribeEnvironmentMemberships")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"userArn": $user_arn, "environmentId": $environment_id, "permissions": $permissions, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -414,12 +423,13 @@ export def "describe-environment-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  environment_id: any
-]: any -> record<status: record, message: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  environment_id: string # The ID of the environment to get status information about.
+]: any -> record<status: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCloud9WorkspaceManagementService.DescribeEnvironmentStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"environmentId": $environment_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -462,12 +472,13 @@ export def "describe-environments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  environment_ids: any
-]: any -> record<environments: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  environment_ids: list<string> # The IDs of individual environments to get information about.
+]: any -> record<environments: table<id: string, name: string, description: string, type: string, connectionType: string, arn: string, ownerArn: string, lifecycle: record, managedCredentialsStatus: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCloud9WorkspaceManagementService.DescribeEnvironments")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"environmentIds": $environment_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -512,13 +523,14 @@ export def "list-environments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<nextToken: record, environmentIds: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  --next-token-body: string # During a previous call, if there are more than 25 items in the list, only the first 25 items are returned, along with a unique string called a next token. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned. (body field)
+  --max-results-body: int # The maximum number of environments to get identifiers for. (body field)
+]: any -> record<nextToken: string, environmentIds: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCloud9WorkspaceManagementService.ListEnvironments")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -562,12 +574,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  resource_arn: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the Cloud9 development environment to get the tags for.
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCloud9WorkspaceManagementService.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -593,6 +606,7 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -610,13 +624,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the Cloud9 development environment to add tags to.
+  tags: list # The list of tags to add to the given Cloud9 development environment. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCloud9WorkspaceManagementService.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -659,13 +674,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the Cloud9 development environment to remove tags from.
+  tag_keys: list<string> # The tag names of the tags to remove from the given Cloud9 development environment.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCloud9WorkspaceManagementService.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -708,15 +724,16 @@ export def "update-environment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  environment_id: any
-  --name: any
-  --description: any
-  --managed-credentials-action: any
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  environment_id: string # The ID of the environment to change settings.
+  --name: string # A replacement name for the environment.
+  --description: string # Any new or replacement description for the environment. (format: password)
+  --managed-credentials-action: string@managed-credentials-action-completer # Allows the environment owner to turn on or turn off the Amazon Web Services managed temporary credentials for an Cloud9 environment by using one of the following values: ENABLE DISABLE Only the environment owner can change the status of managed temporary credentials. An AccessDeniedException is thrown if an attempt to turn on or turn off managed temporary credentials is made by an account that's not the environment owner.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCloud9WorkspaceManagementService.UpdateEnvironment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"environmentId": $environment_id, "name": $name, "description": $description, "managedCredentialsAction": $managed_credentials_action} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -759,14 +776,15 @@ export def "update-environment-membership" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  environment_id: any
-  user_arn: any
-  permissions: any
-]: any -> record<membership: record<permissions: record, userId: record, userArn: record, environmentId: record, lastAccess: record>> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  environment_id: string # The ID of the environment for the environment member whose settings you want to change.
+  user_arn: string # The Amazon Resource Name (ARN) of the environment member whose settings you want to change.
+  permissions: string@permissions-completer # The replacement type of environment member permissions you want to associate with this environment member. Available values include: read-only: Has read-only access to the environment. read-write: Has read-write access to the environment.
+]: any -> record<membership: record<permissions: string, userId: string, userArn: string, environmentId: string, lastAccess: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCloud9WorkspaceManagementService.UpdateEnvironmentMembership")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"environmentId": $environment_id, "userArn": $user_arn, "permissions": $permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

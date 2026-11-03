@@ -132,7 +132,7 @@ export def "ecosystems-one" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<about: string, alternatives_background_color: string, alternatives_color: string, attribution: bool, body_background_color: string, body_button_background_color: string, body_button_color: string, body_color: string, body_link_color: string, card_settings: record<background_color: string, border_color: string, border_radius: string, border_size: string, color: string, columns: int, description_lines: int, icon_border_radius: string, icon_shadow_enabled: bool, icon_size: int, shadow_enabled: bool, show_action: bool, show_badges: bool, show_category: bool, show_description: bool, style: string>, categories_count_badge: bool, categories_show_max_items: int, collections_count_badge: bool, collections_title: string, create_link: string, created_at: string, cta_settings: record<background_color: string, button_background_color: string, button_color: string, button_label: string, button_link: string, color: string, description: string, enabled: bool, title: string>, custom_domain: string, custom_settings: record<css: string, css_link: string, domain: string, html_footer: string, html_nav: string, java_script_link: string>, detail_pages_enabled: bool, footer_background_color: string, footer_color: string, google_site_verification_id: string, hide_install_buttons: bool, home_page_collection_category_cards: bool, home_page_show_all_listings: bool, id: string, installation_request_flow_enabled: bool, integration_settings: record<albacross_id: string, automate_enabled: bool, blendr_enabled: bool, combidesk_enabled: bool, crisp_id: string, drift_id: string, google_analytics_id: string, google_tag_manager_id: string, heap_id: string, hubspot_portal_id: string, integromat_enabled: bool, intercom_app_id: string, iubenda_cookie_policy_id: string, iubenda_site_id: string, journy_io_domain: string, journy_io_id: string, livechat_id: string, metomic_id: string, microsoft_flow_enabled: bool, microsoft_flow_id: string, onetrust_id: string, piesync_enabled: bool, segment_enabled: bool, segment_id: string, tray_io_enabled: bool, zapier_beta_link: string, zapier_enabled: bool, zapier_id: string>, is_published: bool, lead_form_settings: record<capture_form_enabled: bool, first_name_field_enabled: bool, first_name_field_required: bool, integration_enabled: bool, last_name_field_enabled: bool, last_name_field_required: bool, telephone_field_enabled: bool, telephone_field_required: bool, work_email_validation: bool>, listing_settings: record<description_text_template: string, description_title: string, features_text_template: string, features_title: string, install_button_label: string, name_postfix: string, naming: string, native_integration_link: string, pricing_disabled: bool, pricing_text_template: string, pricing_title: string, sidebar_position: string>, masthead_settings: record<background: string, background_color: string, color: string, columns: int, description: string, title: string>, menu_position: string, menu_style: string, meta_tag_settings: record<description: string, description_category_page: string, description_collection_page: string, description_listing_page: string, keywords: string, title: string, title_postfix: string>, name: string, navigation_background_color: string, navigation_color: string, navigation_logo_post_fix: string, navigation_mobile_menu_type: string, navigation_sticky: bool, primary_color: string, privacy_link: string, request_link: string, shadow_page_description: string, shadow_pages_enabled: bool, show_attribution_badge: bool, show_requested_listings: bool, slug: string, terms_link: string, total_published_listings: int, unify_application_id: string, updated_at: string, utm_campaign: string, website: string, zaps_menu_title: string, zaps_page_enabled: bool>, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ecosystem_id | is-empty) { error make --unspanned { msg: "path parameter 'ecosystem_id' must be non-empty" } }
@@ -170,7 +170,7 @@ export def "categories-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of records to return (default: 50)
-]: nothing -> any {
+]: nothing -> record<data: table<count: int, created_at: string, description: string, id: string, listing_description_text_template: string, listing_features_text_template: string, listing_pricing_text_template: string, logo: record, name: string, slug: string, translations: list, updated_at: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ecosystem_id | is-empty) { error make --unspanned { msg: "path parameter 'ecosystem_id' must be non-empty" } }
@@ -208,7 +208,7 @@ export def "categories-one" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<count: int, created_at: string, description: string, id: string, listing_description_text_template: string, listing_features_text_template: string, listing_pricing_text_template: string, logo: record<content_type: string, id: string, type: string, url: string>, name: string, slug: string, translations: list<record>, updated_at: string>, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ecosystem_id | is-empty) { error make --unspanned { msg: "path parameter 'ecosystem_id' must be non-empty" } }
@@ -248,7 +248,7 @@ export def "category-listings-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of records to return (default: 50)
-]: nothing -> any {
+]: nothing -> record<data: table<automate_id: string, blendr_id: string, card_background_color: string, card_background_image: record, categories: list, cloud_service_id: string, collections: list, combidesk_id: string, created_at: string, description: string, detail_page_disabled: bool, external_id: string, features: string, id: string, integromat_id: string, logo: record, media: list, meta_tag_description: string, meta_tag_keywords: string, meta_tag_title: string, microsoft_flow_id: string, name: string, native_integration: bool, native_integration_link: string, partner: record, piesync_id: string, pricing: string, products: list, published: bool, published_at: string, screenshots: list, segment_id: string, slug: string, sticky: bool, tag_line: string, third_party_integration: bool, third_party_integration_link: string, translations: list, tray_io_id: string, unify_connector_id: string, upcoming: bool, updated_at: string, zapier_id: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ecosystem_id | is-empty) { error make --unspanned { msg: "path parameter 'ecosystem_id' must be non-empty" } }
@@ -288,7 +288,7 @@ export def "collections-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of records to return (default: 50)
-]: nothing -> any {
+]: nothing -> record<data: table<card_background_color: string, card_background_image: record, card_columns: int, card_style: string, count: int, description: string, hidden_from_homepage: bool, id: string, logo: record, name: string, sequence: int, show_max_items_homepage: int, slug: string, translations: list, visible: bool>, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ecosystem_id | is-empty) { error make --unspanned { msg: "path parameter 'ecosystem_id' must be non-empty" } }
@@ -326,7 +326,7 @@ export def "collections-one" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<card_background_color: string, card_background_image: record<content_type: string, created_at: string, id: string, type: string, updated_at: string, url: string>, card_columns: int, card_style: string, count: int, description: string, hidden_from_homepage: bool, id: string, logo: record<content_type: string, created_at: string, id: string, type: string, updated_at: string, url: string>, name: string, sequence: int, show_max_items_homepage: int, slug: string, translations: list<record>, visible: bool>, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ecosystem_id | is-empty) { error make --unspanned { msg: "path parameter 'ecosystem_id' must be non-empty" } }
@@ -366,7 +366,7 @@ export def "collection-listings-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of records to return (default: 50)
-]: nothing -> any {
+]: nothing -> record<data: table<automate_id: string, blendr_id: string, card_background_color: string, card_background_image: record, categories: list, cloud_service_id: string, collections: list, combidesk_id: string, created_at: string, description: string, detail_page_disabled: bool, external_id: string, features: string, id: string, integromat_id: string, logo: record, media: list, meta_tag_description: string, meta_tag_keywords: string, meta_tag_title: string, microsoft_flow_id: string, name: string, native_integration: bool, native_integration_link: string, partner: record, piesync_id: string, pricing: string, products: list, published: bool, published_at: string, screenshots: list, segment_id: string, slug: string, sticky: bool, tag_line: string, third_party_integration: bool, third_party_integration_link: string, translations: list, tray_io_id: string, unify_connector_id: string, upcoming: bool, updated_at: string, zapier_id: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ecosystem_id | is-empty) { error make --unspanned { msg: "path parameter 'ecosystem_id' must be non-empty" } }
@@ -407,7 +407,7 @@ export def "listings-all" [
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of records to return (default: 50)
   --external-id: string # Filter on external_id
-]: nothing -> any {
+]: nothing -> record<data: table<automate_id: string, blendr_id: string, card_background_color: string, card_background_image: record, categories: list, cloud_service_id: string, collections: list, combidesk_id: string, created_at: string, description: string, detail_page_disabled: bool, external_id: string, features: string, id: string, integromat_id: string, logo: record, media: list, meta_tag_description: string, meta_tag_keywords: string, meta_tag_title: string, microsoft_flow_id: string, name: string, native_integration: bool, native_integration_link: string, partner: record, piesync_id: string, pricing: string, products: list, published: bool, published_at: string, screenshots: list, segment_id: string, slug: string, sticky: bool, tag_line: string, third_party_integration: bool, third_party_integration_link: string, translations: list, tray_io_id: string, unify_connector_id: string, upcoming: bool, updated_at: string, zapier_id: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ecosystem_id | is-empty) { error make --unspanned { msg: "path parameter 'ecosystem_id' must be non-empty" } }
@@ -445,7 +445,7 @@ export def "listings-one" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<automate_id: string, blendr_id: string, card_background_color: string, card_background_image: record<content_type: string, created_at: string, id: string, type: string, updated_at: string, url: string>, categories: list<record>, cloud_service_id: string, collections: list<record>, combidesk_id: string, created_at: string, description: string, detail_page_disabled: bool, external_id: string, features: string, id: string, integromat_id: string, logo: record<content_type: string, id: string, type: string, url: string>, media: list<record>, meta_tag_description: string, meta_tag_keywords: string, meta_tag_title: string, microsoft_flow_id: string, name: string, native_integration: bool, native_integration_link: string, partner: record<company: string, contacts: list, created_at: string, icon: record, id: string, listed: string, twitter: string, updated_at: string, website: string>, piesync_id: string, pricing: string, products: list<record>, published: bool, published_at: string, screenshots: list<record>, segment_id: string, slug: string, sticky: bool, tag_line: string, third_party_integration: bool, third_party_integration_link: string, translations: list<record>, tray_io_id: string, unify_connector_id: string, upcoming: bool, updated_at: string, zapier_id: string>, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ecosystem_id | is-empty) { error make --unspanned { msg: "path parameter 'ecosystem_id' must be non-empty" } }
@@ -482,7 +482,7 @@ export def "products-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: table<count: int, description: string, id: string, logo: record, name: string, sequence: int, slug: string, translations: list, visible: bool>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ecosystem_id | is-empty) { error make --unspanned { msg: "path parameter 'ecosystem_id' must be non-empty" } }
@@ -519,7 +519,7 @@ export def "products-one" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<count: int, description: string, id: string, logo: record<content_type: string, created_at: string, id: string, type: string, updated_at: string, url: string>, name: string, sequence: int, slug: string, translations: list<record>, visible: bool>, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ecosystem_id | is-empty) { error make --unspanned { msg: "path parameter 'ecosystem_id' must be non-empty" } }
@@ -559,7 +559,7 @@ export def "product-listings-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of records to return (default: 50)
-]: nothing -> any {
+]: nothing -> record<data: table<automate_id: string, blendr_id: string, card_background_color: string, card_background_image: record, categories: list, cloud_service_id: string, collections: list, combidesk_id: string, created_at: string, description: string, detail_page_disabled: bool, external_id: string, features: string, id: string, integromat_id: string, logo: record, media: list, meta_tag_description: string, meta_tag_keywords: string, meta_tag_title: string, microsoft_flow_id: string, name: string, native_integration: bool, native_integration_link: string, partner: record, piesync_id: string, pricing: string, products: list, published: bool, published_at: string, screenshots: list, segment_id: string, slug: string, sticky: bool, tag_line: string, third_party_integration: bool, third_party_integration_link: string, translations: list, tray_io_id: string, unify_connector_id: string, upcoming: bool, updated_at: string, zapier_id: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ecosystem_id | is-empty) { error make --unspanned { msg: "path parameter 'ecosystem_id' must be non-empty" } }

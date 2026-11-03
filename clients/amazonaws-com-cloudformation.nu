@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -232,8 +232,8 @@ export def "get-activate-type" [
   --execution-role-arn: string # The name of the IAM execution role to use to activate the extension.
   --version-bump: string@version-bump-completer # Manually updates a previously-activated type to a new major or minor version, if available. You can also use this parameter to update the value of AutoUpdate. MAJOR: CloudFormation updates the extension to the newest major version, if one is available. MINOR: CloudFormation updates the extension to the newest minor version, if one is available.
   --major-version: int # The major version of this extension you want to activate, if multiple major versions are available. The default is the latest major version. CloudFormation uses the latest available minor version of the major version selected. You can specify MajorVersion or VersionBump, but not both.
-  --action: string@action-completer
-  --version: string@version-completer
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -241,9 +241,11 @@ export def "get-activate-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record> {
+]: nothing -> record<Arn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ActivateType")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Type" $type "scalar") (serialize-qp "PublicTypeArn" $public_type_arn "scalar") (serialize-qp "PublisherId" $publisher_id "scalar") (serialize-qp "TypeName" $type_name "scalar") (serialize-qp "TypeNameAlias" $type_name_alias "scalar") (serialize-qp "AutoUpdate" $auto_update "scalar") (serialize-qp "LoggingConfig" $logging_config "multi") (serialize-qp "ExecutionRoleArn" $execution_role_arn "scalar") (serialize-qp "VersionBump" $version_bump "scalar") (serialize-qp "MajorVersion" $major_version "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -278,8 +280,8 @@ export def "post-activate-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer
-  --version: string@version-completer
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -288,10 +290,12 @@ export def "post-activate-type" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Arn: record> {
+]: any -> record<Arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ActivateType")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -328,9 +332,9 @@ export def "get-batch-describe-type-configurations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --type-configuration-identifiers: list # The list of identifiers for the desired extension configurations.
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --type-configuration-identifiers: list # The list of identifiers for the desired extension configurations. (required)
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -338,9 +342,12 @@ export def "get-batch-describe-type-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Errors: record, UnprocessedTypeConfigurations: record, TypeConfigurations: record> {
+]: nothing -> record<Errors: table<ErrorCode: string, ErrorMessage: string, TypeConfigurationIdentifier: record>, UnprocessedTypeConfigurations: table<TypeArn: string, TypeConfigurationAlias: string, TypeConfigurationArn: string, Type: string, TypeName: string>, TypeConfigurations: table<Arn: string, Alias: string, Configuration: string, LastUpdated: string, TypeArn: string, TypeName: string, IsDefaultConfiguration: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($type_configuration_identifiers == null) { error make --unspanned { msg: "required query parameter 'TypeConfigurationIdentifiers' missing: pass --type-configuration-identifiers" } }
+  let action = ($action | default "BatchDescribeTypeConfigurations")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "TypeConfigurationIdentifiers" $type_configuration_identifiers "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -375,8 +382,8 @@ export def "post-batch-describe-type-configurations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -385,10 +392,12 @@ export def "post-batch-describe-type-configurations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Errors: record, UnprocessedTypeConfigurations: record, TypeConfigurations: record> {
+]: any -> record<Errors: table<ErrorCode: string, ErrorMessage: string, TypeConfigurationIdentifier: record>, UnprocessedTypeConfigurations: table<TypeArn: string, TypeConfigurationAlias: string, TypeConfigurationArn: string, Type: string, TypeName: string>, TypeConfigurations: table<Arn: string, Alias: string, Configuration: string, LastUpdated: string, TypeArn: string, TypeName: string, IsDefaultConfiguration: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "BatchDescribeTypeConfigurations")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -425,10 +434,10 @@ export def "get-cancel-update-stack" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-name: string # The name or the unique stack ID that's associated with the stack.
+  --stack-name: string # The name or the unique stack ID that's associated with the stack. (required)
   --client-request-token: string # A unique identifier for this CancelUpdateStack request. Specify this token if you plan to retry requests so that CloudFormation knows that you're not attempting to cancel an update on a stack with the same name. You might retry CancelUpdateStack requests to ensure that CloudFormation successfully received them.
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -439,6 +448,9 @@ export def "get-cancel-update-stack" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
+  let action = ($action | default "CancelUpdateStack")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "ClientRequestToken" $client_request_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -473,8 +485,8 @@ export def "post-cancel-update-stack" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -487,6 +499,8 @@ export def "post-cancel-update-stack" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CancelUpdateStack")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -523,12 +537,12 @@ export def "get-continue-update-rollback" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-name: string # The name or the unique ID of the stack that you want to continue rolling back. Don't specify the name of a nested stack (a stack that was created by using the AWS::CloudFormation::Stack resource). Instead, use this operation on the parent stack (the stack that contains the AWS::CloudFormation::Stack resource).
+  --stack-name: string # The name or the unique ID of the stack that you want to continue rolling back. Don't specify the name of a nested stack (a stack that was created by using the AWS::CloudFormation::Stack resource). Instead, use this operation on the parent stack (the stack that contains the AWS::CloudFormation::Stack resource). (required)
   --role-arn: string # The Amazon Resource Name (ARN) of an Identity and Access Management (IAM) role that CloudFormation assumes to roll back the stack. CloudFormation uses the role's credentials to make calls on your behalf. CloudFormation always uses this role for all future operations on the stack. Provided that users have permission to operate on the stack, CloudFormation uses this role even if the users don't have permission to pass it. Ensure that the role grants least permission. If you don't specify a value, CloudFormation uses the role that was previously associated with the stack. If no role is available, CloudFormation uses a temporary session that's generated from your user credentials.
   --resources-to-skip: list # A list of the logical IDs of the resources that CloudFormation skips during the continue update rollback operation. You can specify only resources that are in the UPDATE_FAILED state because a rollback failed. You can't specify resources that are in the UPDATE_FAILED state for other reasons, for example, because an update was canceled. To check why a resource update failed, use the DescribeStackResources action, and view the resource status reason. Specify this property to skip rolling back resources that CloudFormation can't successfully roll back. We recommend that you troubleshoot (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/troubleshooting.html#troubleshooting-errors-update-rollback-failed) resources before skipping them. CloudFormation sets the status of the specified resources to UPDATE_COMPLETE and continues to roll back the stack. After the rollback is complete, the state of the skipped resources will be inconsistent with the state of the resources in the stack template. Before performing another stack update, you must update the stack or resources to be consistent with each other. If you don't, subsequent stack updates might fail, and the stack will become unrecoverable. Specify the minimum number of resources required to successfully roll back your stack. For example, a failed resource update might cause dependent resources to fail. In this case, it might not be necessary to skip the dependent resources. To skip resources that are part of nested stacks, use the following format: NestedStackName.ResourceLogicalID. If you want to specify the logical ID of a stack resource (Type: AWS::CloudFormation::Stack) in the ResourcesToSkip list, then its corresponding embedded stack must be in one of the following states: DELETE_IN_PROGRESS, DELETE_COMPLETE, or DELETE_FAILED. Don't confuse a child stack's name with its corresponding logical ID defined in the parent stack. For an example of a continue update rollback operation with nested stacks, see Using ResourcesToSkip to recover a nested stacks hierarchy (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-updating-stacks-continueupdaterollback.html#nested-stacks).
   --client-request-token: string # A unique identifier for this ContinueUpdateRollback request. Specify this token if you plan to retry requests so that CloudFormationknows that you're not attempting to continue the rollback to a stack with the same name. You might retry ContinueUpdateRollback requests to ensure that CloudFormation successfully received them.
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -539,6 +553,9 @@ export def "get-continue-update-rollback" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
+  let action = ($action | default "ContinueUpdateRollback")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "RoleARN" $role_arn "scalar") (serialize-qp "ResourcesToSkip" $resources_to_skip "multi") (serialize-qp "ClientRequestToken" $client_request_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -573,8 +590,8 @@ export def "post-continue-update-rollback" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -587,6 +604,8 @@ export def "post-continue-update-rollback" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ContinueUpdateRollback")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -623,7 +642,7 @@ export def "get-create-change-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-name: string # The name or the unique ID of the stack for which you are creating a change set. CloudFormation generates the change set by comparing this stack's information with the information that you submit, such as a modified template or different parameter input values.
+  --stack-name: string # The name or the unique ID of the stack for which you are creating a change set. CloudFormation generates the change set by comparing this stack's information with the information that you submit, such as a modified template or different parameter input values. (required)
   --template-body: string # A structure that contains the body of the revised template, with a minimum length of 1 byte and a maximum length of 51,200 bytes. CloudFormation generates the change set by comparing this template with the template of the stack that you specified. Conditional: You must specify only TemplateBody or TemplateURL.
   --template-url: string # The location of the file that contains the revised template. The URL must point to a template (max size: 460,800 bytes) that's located in an Amazon S3 bucket or a Systems Manager document. CloudFormation generates the change set by comparing this template with the stack that you specified. Conditional: You must specify only TemplateBody or TemplateURL.
   --use-previous-template: oneof<nothing, bool> # Whether to reuse the template that's associated with the stack to create the change set.
@@ -634,14 +653,14 @@ export def "get-create-change-set" [
   --rollback-configuration: record # The rollback triggers for CloudFormation to monitor during stack creation and updating operations, and for the specified monitoring period afterwards.
   --notification-ar-ns: list # The Amazon Resource Names (ARNs) of Amazon Simple Notification Service (Amazon SNS) topics that CloudFormation associates with the stack. To remove all associated notification topics, specify an empty list.
   --tags: list # Key-value pairs to associate with this stack. CloudFormation also propagates these tags to resources in the stack. You can specify a maximum of 50 tags.
-  --change-set-name: string # The name of the change set. The name must be unique among all change sets that are associated with the specified stack. A change set name can contain only alphanumeric, case sensitive characters, and hyphens. It must start with an alphabetical character and can't exceed 128 characters.
+  --change-set-name: string # The name of the change set. The name must be unique among all change sets that are associated with the specified stack. A change set name can contain only alphanumeric, case sensitive characters, and hyphens. It must start with an alphabetical character and can't exceed 128 characters. (required)
   --client-token: string # A unique identifier for this CreateChangeSet request. Specify this token if you plan to retry requests so that CloudFormation knows that you're not attempting to create another change set with the same name. You might retry CreateChangeSet requests to ensure that CloudFormation successfully received them.
   --description: string # A description to help you identify this change set.
   --change-set-type: string@change-set-type-completer # The type of change set operation. To create a change set for a new stack, specify CREATE. To create a change set for an existing stack, specify UPDATE. To create a change set for an import operation, specify IMPORT. If you create a change set for a new stack, CloudFormation creates a stack with a unique stack ID, but no template or resources. The stack will be in the REVIEW_IN_PROGRESS (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-describing-stacks.html#d0e11995) state until you execute the change set. By default, CloudFormation specifies UPDATE. You can't use the UPDATE type to create a change set for a new stack or the CREATE type to create a change set for an existing stack.
   --resources-to-import: list # The resources to import into your stack.
   --include-nested-stacks: oneof<nothing, bool> # Creates a change set for the all nested stacks specified in the template. The default behavior of this action is set to False. To include nested sets in a change set, specify True.
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -649,9 +668,13 @@ export def "get-create-change-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Id: record, StackId: record> {
+]: nothing -> record<Id: string, StackId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
+  if ($change_set_name == null) { error make --unspanned { msg: "required query parameter 'ChangeSetName' missing: pass --change-set-name" } }
+  let action = ($action | default "CreateChangeSet")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "TemplateBody" $template_body "scalar") (serialize-qp "TemplateURL" $template_url "scalar") (serialize-qp "UsePreviousTemplate" $use_previous_template "scalar") (serialize-qp "Parameters" $parameters "multi") (serialize-qp "Capabilities" $capabilities "multi") (serialize-qp "ResourceTypes" $resource_types "multi") (serialize-qp "RoleARN" $role_arn "scalar") (serialize-qp "RollbackConfiguration" $rollback_configuration "multi") (serialize-qp "NotificationARNs" $notification_ar_ns "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "ChangeSetName" $change_set_name "scalar") (serialize-qp "ClientToken" $client_token "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "ChangeSetType" $change_set_type "scalar") (serialize-qp "ResourcesToImport" $resources_to_import "multi") (serialize-qp "IncludeNestedStacks" $include_nested_stacks "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -686,8 +709,8 @@ export def "post-create-change-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -696,10 +719,12 @@ export def "post-create-change-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Id: record, StackId: record> {
+]: any -> record<Id: string, StackId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateChangeSet")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -736,7 +761,7 @@ export def "get-create-stack" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-name: string # The name that's associated with the stack. The name must be unique in the Region in which you are creating the stack. A stack name can contain only alphanumeric characters (case sensitive) and hyphens. It must start with an alphabetical character and can't be longer than 128 characters.
+  --stack-name: string # The name that's associated with the stack. The name must be unique in the Region in which you are creating the stack. A stack name can contain only alphanumeric characters (case sensitive) and hyphens. It must start with an alphabetical character and can't be longer than 128 characters. (required)
   --template-body: string # Structure containing the template body with a minimum length of 1 byte and a maximum length of 51,200 bytes. For more information, go to Template anatomy (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-anatomy.html) in the CloudFormation User Guide. Conditional: You must specify either the TemplateBody or the TemplateURL parameter, but not both.
   --template-url: string # Location of file containing the template body. The URL must point to a template (max size: 460,800 bytes) that's located in an Amazon S3 bucket or a Systems Manager document. For more information, go to the Template anatomy (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-anatomy.html) in the CloudFormation User Guide. Conditional: You must specify either the TemplateBody or the TemplateURL parameter, but not both.
   --parameters: list # A list of Parameter structures that specify input parameters for the stack. For more information, see the Parameter (https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_Parameter.html) data type.
@@ -753,8 +778,8 @@ export def "get-create-stack" [
   --tags: list # Key-value pairs to associate with this stack. CloudFormation also propagates these tags to the resources created in the stack. A maximum number of 50 tags can be specified.
   --client-request-token: string # A unique identifier for this CreateStack request. Specify this token if you plan to retry requests so that CloudFormation knows that you're not attempting to create a stack with the same name. You might retry CreateStack requests to ensure that CloudFormation successfully received them. All events initiated by a given stack operation are assigned the same client request token, which you can use to track operations. For example, if you execute a CreateStack operation with the token token1, then all the StackEvents generated by that operation will have ClientRequestToken set as token1. In the console, stack operations display the client request token on the Events tab. Stack operations that are initiated from the console use the token format Console-StackOperation-ID, which helps you easily identify the stack operation . For example, if you create a stack using the console, each stack event would be assigned the same token in the following format: Console-CreateStack-7f59c3cf-00d2-40c7-b2ff-e75db0987002.
   --enable-termination-protection: oneof<nothing, bool> # Whether to enable termination protection on the specified stack. If a user attempts to delete a stack with termination protection enabled, the operation fails and the stack remains unchanged. For more information, see Protecting a Stack From Being Deleted (http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-protect-stacks.html) in the CloudFormation User Guide. Termination protection is deactivated on stacks by default. For nested stacks (http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-nested-stacks.html), termination protection is set on the root stack and can't be changed directly on the nested stack.
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -762,9 +787,12 @@ export def "get-create-stack" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackId: record> {
+]: nothing -> record<StackId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
+  let action = ($action | default "CreateStack")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "TemplateBody" $template_body "scalar") (serialize-qp "TemplateURL" $template_url "scalar") (serialize-qp "Parameters" $parameters "multi") (serialize-qp "DisableRollback" $disable_rollback "scalar") (serialize-qp "RollbackConfiguration" $rollback_configuration "multi") (serialize-qp "TimeoutInMinutes" $timeout_in_minutes "scalar") (serialize-qp "NotificationARNs" $notification_ar_ns "multi") (serialize-qp "Capabilities" $capabilities "multi") (serialize-qp "ResourceTypes" $resource_types "multi") (serialize-qp "RoleARN" $role_arn "scalar") (serialize-qp "OnFailure" $on_failure "scalar") (serialize-qp "StackPolicyBody" $stack_policy_body "scalar") (serialize-qp "StackPolicyURL" $stack_policy_url "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "ClientRequestToken" $client_request_token "scalar") (serialize-qp "EnableTerminationProtection" $enable_termination_protection "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -799,8 +827,8 @@ export def "post-create-stack" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -809,10 +837,12 @@ export def "post-create-stack" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackId: record> {
+]: any -> record<StackId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateStack")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -849,16 +879,16 @@ export def "get-create-stack-instances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-set-name: string # The name or unique ID of the stack set that you want to create stack instances from.
+  --stack-set-name: string # The name or unique ID of the stack set that you want to create stack instances from. (required)
   --accounts: list # [Self-managed permissions] The names of one or more Amazon Web Services accounts that you want to create stack instances in the specified Region(s) for. You can specify Accounts or DeploymentTargets, but not both.
   --deployment-targets: record # [Service-managed permissions] The Organizations accounts for which to create stack instances in the specified Amazon Web Services Regions. You can specify Accounts or DeploymentTargets, but not both.
-  --regions: list # The names of one or more Amazon Web Services Regions where you want to create stack instances using the specified Amazon Web Services accounts.
+  --regions: list # The names of one or more Amazon Web Services Regions where you want to create stack instances using the specified Amazon Web Services accounts. (required)
   --parameter-overrides: list # A list of stack set parameters whose values you want to override in the selected stack instances. Any overridden parameter values will be applied to all stack instances in the specified accounts and Amazon Web Services Regions. When specifying parameters and their values, be aware of how CloudFormation sets parameter values during stack instance operations: To override the current value for a parameter, include the parameter and specify its value. To leave an overridden parameter set to its present value, include the parameter and specify UsePreviousValue as true. (You can't specify both a value and set UsePreviousValue to true.) To set an overridden parameter back to the value specified in the stack set, specify a parameter list but don't include the parameter in the list. To leave all parameters set to their present values, don't specify this property at all. During stack set updates, any parameter values overridden for a stack instance aren't updated, but retain their overridden value. You can only override the parameter values that are specified in the stack set; to add or delete a parameter itself, use UpdateStackSet (https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_UpdateStackSet.html) to update the stack set template.
   --operation-preferences: record # Preferences for how CloudFormation performs this stack set operation.
   --operation-id: string # The unique identifier for this stack set operation. The operation ID also functions as an idempotency token, to ensure that CloudFormation performs the stack set operation only once, even if you retry the request multiple times. You might retry stack set operation requests to ensure that CloudFormation successfully received them. If you don't specify an operation ID, the SDK generates one automatically. Repeating this stack set operation with a new operation ID retries all stack instances whose status is OUTDATED.
   --call-as: string@call-as-completer # [Service-managed permissions] Specifies whether you are acting as an account administrator in the organization's management account or as a delegated administrator in a member account. By default, SELF is specified. Use SELF for stack sets with self-managed permissions. If you are signed in to the management account, specify SELF. If you are signed in to a delegated administrator account, specify DELEGATED_ADMIN. Your Amazon Web Services account must be registered as a delegated administrator in the management account. For more information, see Register a delegated administrator (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-orgs-delegated-admin.html) in the CloudFormation User Guide.
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -866,9 +896,13 @@ export def "get-create-stack-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OperationId: record> {
+]: nothing -> record<OperationId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
+  if ($regions == null) { error make --unspanned { msg: "required query parameter 'Regions' missing: pass --regions" } }
+  let action = ($action | default "CreateStackInstances")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackSetName" $stack_set_name "scalar") (serialize-qp "Accounts" $accounts "multi") (serialize-qp "DeploymentTargets" $deployment_targets "multi") (serialize-qp "Regions" $regions "multi") (serialize-qp "ParameterOverrides" $parameter_overrides "multi") (serialize-qp "OperationPreferences" $operation_preferences "multi") (serialize-qp "OperationId" $operation_id "scalar") (serialize-qp "CallAs" $call_as "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -903,8 +937,8 @@ export def "post-create-stack-instances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -913,10 +947,12 @@ export def "post-create-stack-instances" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<OperationId: record> {
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateStackInstances")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -953,7 +989,7 @@ export def "get-create-stack-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-set-name: string # The name to associate with the stack set. The name must be unique in the Region where you create your stack set. A stack name can contain only alphanumeric characters (case-sensitive) and hyphens. It must start with an alphabetic character and can't be longer than 128 characters.
+  --stack-set-name: string # The name to associate with the stack set. The name must be unique in the Region where you create your stack set. A stack name can contain only alphanumeric characters (case-sensitive) and hyphens. It must start with an alphabetic character and can't be longer than 128 characters. (required)
   --description: string # A description of the stack set. You can use the description to identify the stack set's purpose or other important information.
   --template-body: string # The structure that contains the template body, with a minimum length of 1 byte and a maximum length of 51,200 bytes. For more information, see Template Anatomy (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-anatomy.html) in the CloudFormation User Guide. Conditional: You must specify either the TemplateBody or the TemplateURL parameter, but not both.
   --template-url: string # The location of the file that contains the template body. The URL must point to a template (maximum size: 460,800 bytes) that's located in an Amazon S3 bucket or a Systems Manager document. For more information, see Template Anatomy (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-anatomy.html) in the CloudFormation User Guide. Conditional: You must specify either the TemplateBody or the TemplateURL parameter, but not both.
@@ -968,8 +1004,8 @@ export def "get-create-stack-set" [
   --call-as: string@call-as-completer # [Service-managed permissions] Specifies whether you are acting as an account administrator in the organization's management account or as a delegated administrator in a member account. By default, SELF is specified. Use SELF for stack sets with self-managed permissions. To create a stack set with service-managed permissions while signed in to the management account, specify SELF. To create a stack set with service-managed permissions while signed in to a delegated administrator account, specify DELEGATED_ADMIN. Your Amazon Web Services account must be registered as a delegated admin in the management account. For more information, see Register a delegated administrator (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-orgs-delegated-admin.html) in the CloudFormation User Guide. Stack sets with service-managed permissions are created in the management account, including stack sets that are created by delegated administrators.
   --client-request-token: string # A unique identifier for this CreateStackSet request. Specify this token if you plan to retry requests so that CloudFormation knows that you're not attempting to create another stack set with the same name. You might retry CreateStackSet requests to ensure that CloudFormation successfully received them. If you don't specify an operation ID, the SDK generates one automatically.
   --managed-execution: record # Describes whether StackSets performs non-conflicting operations concurrently and queues conflicting operations.
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -977,9 +1013,12 @@ export def "get-create-stack-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackSetId: record> {
+]: nothing -> record<StackSetId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
+  let action = ($action | default "CreateStackSet")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackSetName" $stack_set_name "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "TemplateBody" $template_body "scalar") (serialize-qp "TemplateURL" $template_url "scalar") (serialize-qp "StackId" $stack_id "scalar") (serialize-qp "Parameters" $parameters "multi") (serialize-qp "Capabilities" $capabilities "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "AdministrationRoleARN" $administration_role_arn "scalar") (serialize-qp "ExecutionRoleName" $execution_role_name "scalar") (serialize-qp "PermissionModel" $permission_model "scalar") (serialize-qp "AutoDeployment" $auto_deployment "multi") (serialize-qp "CallAs" $call_as "scalar") (serialize-qp "ClientRequestToken" $client_request_token "scalar") (serialize-qp "ManagedExecution" $managed_execution "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1014,8 +1053,8 @@ export def "post-create-stack-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1024,10 +1063,12 @@ export def "post-create-stack-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackSetId: record> {
+]: any -> record<StackSetId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateStackSet")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1067,8 +1108,8 @@ export def "get-deactivate-type" [
   --type-name: string # The type name of the extension, in this account and region. If you specified a type name alias when enabling the extension, use the type name alias. Conditional: You must specify either Arn, or TypeName and Type.
   --type: string@type-completer # The extension type. Conditional: You must specify either Arn, or TypeName and Type.
   --arn: string # The Amazon Resource Name (ARN) for the extension, in this account and region. Conditional: You must specify either Arn, or TypeName and Type.
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1079,6 +1120,8 @@ export def "get-deactivate-type" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeactivateType")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "TypeName" $type_name "scalar") (serialize-qp "Type" $type "scalar") (serialize-qp "Arn" $arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1113,8 +1156,8 @@ export def "post-deactivate-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1127,6 +1170,8 @@ export def "post-deactivate-type" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeactivateType")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1163,10 +1208,10 @@ export def "get-delete-change-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --change-set-name: string # The name or Amazon Resource Name (ARN) of the change set that you want to delete.
+  --change-set-name: string # The name or Amazon Resource Name (ARN) of the change set that you want to delete. (required)
   --stack-name: string # If you specified the name of a change set to delete, specify the stack name or Amazon Resource Name (ARN) that's associated with it.
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1177,6 +1222,9 @@ export def "get-delete-change-set" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($change_set_name == null) { error make --unspanned { msg: "required query parameter 'ChangeSetName' missing: pass --change-set-name" } }
+  let action = ($action | default "DeleteChangeSet")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "ChangeSetName" $change_set_name "scalar") (serialize-qp "StackName" $stack_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1211,8 +1259,8 @@ export def "post-delete-change-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1225,6 +1273,8 @@ export def "post-delete-change-set" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteChangeSet")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1261,12 +1311,12 @@ export def "get-delete-stack" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-name: string # The name or the unique stack ID that's associated with the stack.
+  --stack-name: string # The name or the unique stack ID that's associated with the stack. (required)
   --retain-resources: list # For stacks in the DELETE_FAILED state, a list of resource logical IDs that are associated with the resources you want to retain. During deletion, CloudFormation deletes the stack but doesn't delete the retained resources. Retaining resources is useful when you can't delete a resource, such as a non-empty S3 bucket, but you want to delete the stack.
   --role-arn: string # The Amazon Resource Name (ARN) of an Identity and Access Management (IAM) role that CloudFormation assumes to delete the stack. CloudFormation uses the role's credentials to make calls on your behalf. If you don't specify a value, CloudFormation uses the role that was previously associated with the stack. If no role is available, CloudFormation uses a temporary session that's generated from your user credentials.
   --client-request-token: string # A unique identifier for this DeleteStack request. Specify this token if you plan to retry requests so that CloudFormation knows that you're not attempting to delete a stack with the same name. You might retry DeleteStack requests to ensure that CloudFormation successfully received them. All events initiated by a given stack operation are assigned the same client request token, which you can use to track operations. For example, if you execute a CreateStack operation with the token token1, then all the StackEvents generated by that operation will have ClientRequestToken set as token1. In the console, stack operations display the client request token on the Events tab. Stack operations that are initiated from the console use the token format Console-StackOperation-ID, which helps you easily identify the stack operation . For example, if you create a stack using the console, each stack event would be assigned the same token in the following format: Console-CreateStack-7f59c3cf-00d2-40c7-b2ff-e75db0987002.
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1277,6 +1327,9 @@ export def "get-delete-stack" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
+  let action = ($action | default "DeleteStack")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "RetainResources" $retain_resources "multi") (serialize-qp "RoleARN" $role_arn "scalar") (serialize-qp "ClientRequestToken" $client_request_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1311,8 +1364,8 @@ export def "post-delete-stack" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1325,6 +1378,8 @@ export def "post-delete-stack" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteStack")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1361,16 +1416,16 @@ export def "get-delete-stack-instances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-set-name: string # The name or unique ID of the stack set that you want to delete stack instances for.
+  --stack-set-name: string # The name or unique ID of the stack set that you want to delete stack instances for. (required)
   --accounts: list # [Self-managed permissions] The names of the Amazon Web Services accounts that you want to delete stack instances for. You can specify Accounts or DeploymentTargets, but not both.
   --deployment-targets: record # [Service-managed permissions] The Organizations accounts from which to delete stack instances. You can specify Accounts or DeploymentTargets, but not both.
-  --regions: list # The Amazon Web Services Regions where you want to delete stack set instances.
+  --regions: list # The Amazon Web Services Regions where you want to delete stack set instances. (required)
   --operation-preferences: record # Preferences for how CloudFormation performs this stack set operation.
-  --retain-stacks: oneof<nothing, bool> # Removes the stack instances from the specified stack set, but doesn't delete the stacks. You can't reassociate a retained stack or add an existing, saved stack to a new stack set. For more information, see Stack set operation options (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-concepts.html#stackset-ops-options).
+  --retain-stacks: oneof<nothing, bool> # Removes the stack instances from the specified stack set, but doesn't delete the stacks. You can't reassociate a retained stack or add an existing, saved stack to a new stack set. For more information, see Stack set operation options (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-concepts.html#stackset-ops-options). (required)
   --operation-id: string # The unique identifier for this stack set operation. If you don't specify an operation ID, the SDK generates one automatically. The operation ID also functions as an idempotency token, to ensure that CloudFormation performs the stack set operation only once, even if you retry the request multiple times. You can retry stack set operation requests to ensure that CloudFormation successfully received them. Repeating this stack set operation with a new operation ID retries all stack instances whose status is OUTDATED.
   --call-as: string@call-as-completer # [Service-managed permissions] Specifies whether you are acting as an account administrator in the organization's management account or as a delegated administrator in a member account. By default, SELF is specified. Use SELF for stack sets with self-managed permissions. If you are signed in to the management account, specify SELF. If you are signed in to a delegated administrator account, specify DELEGATED_ADMIN. Your Amazon Web Services account must be registered as a delegated administrator in the management account. For more information, see Register a delegated administrator (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-orgs-delegated-admin.html) in the CloudFormation User Guide.
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1378,9 +1433,14 @@ export def "get-delete-stack-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OperationId: record> {
+]: nothing -> record<OperationId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
+  if ($regions == null) { error make --unspanned { msg: "required query parameter 'Regions' missing: pass --regions" } }
+  if ($retain_stacks == null) { error make --unspanned { msg: "required query parameter 'RetainStacks' missing: pass --retain-stacks" } }
+  let action = ($action | default "DeleteStackInstances")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackSetName" $stack_set_name "scalar") (serialize-qp "Accounts" $accounts "multi") (serialize-qp "DeploymentTargets" $deployment_targets "multi") (serialize-qp "Regions" $regions "multi") (serialize-qp "OperationPreferences" $operation_preferences "multi") (serialize-qp "RetainStacks" $retain_stacks "scalar") (serialize-qp "OperationId" $operation_id "scalar") (serialize-qp "CallAs" $call_as "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1415,8 +1475,8 @@ export def "post-delete-stack-instances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1425,10 +1485,12 @@ export def "post-delete-stack-instances" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<OperationId: record> {
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteStackInstances")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1465,10 +1527,10 @@ export def "get-delete-stack-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-set-name: string # The name or unique ID of the stack set that you're deleting. You can obtain this value by running ListStackSets.
+  --stack-set-name: string # The name or unique ID of the stack set that you're deleting. You can obtain this value by running ListStackSets. (required)
   --call-as: string@call-as-completer # [Service-managed permissions] Specifies whether you are acting as an account administrator in the organization's management account or as a delegated administrator in a member account. By default, SELF is specified. Use SELF for stack sets with self-managed permissions. If you are signed in to the management account, specify SELF. If you are signed in to a delegated administrator account, specify DELEGATED_ADMIN. Your Amazon Web Services account must be registered as a delegated administrator in the management account. For more information, see Register a delegated administrator (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-orgs-delegated-admin.html) in the CloudFormation User Guide.
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1479,6 +1541,9 @@ export def "get-delete-stack-set" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
+  let action = ($action | default "DeleteStackSet")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackSetName" $stack_set_name "scalar") (serialize-qp "CallAs" $call_as "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1513,8 +1578,8 @@ export def "post-delete-stack-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1527,6 +1592,8 @@ export def "post-delete-stack-set" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteStackSet")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1567,8 +1634,8 @@ export def "get-deregister-type" [
   --type: string@type-completer # The kind of extension. Conditional: You must specify either TypeName and Type, or Arn.
   --type-name: string # The name of the extension. Conditional: You must specify either TypeName and Type, or Arn.
   --version-id: string # The ID of a specific version of the extension. The version ID is the value at the end of the Amazon Resource Name (ARN) assigned to the extension version when it is registered.
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1579,6 +1646,8 @@ export def "get-deregister-type" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeregisterType")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Arn" $arn "scalar") (serialize-qp "Type" $type "scalar") (serialize-qp "TypeName" $type_name "scalar") (serialize-qp "VersionId" $version_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1613,8 +1682,8 @@ export def "post-deregister-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1627,6 +1696,8 @@ export def "post-deregister-type" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeregisterType")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1664,8 +1735,8 @@ export def "get-describe-account-limits" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # A string that identifies the next page of limits that you want to retrieve.
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1673,9 +1744,11 @@ export def "get-describe-account-limits" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AccountLimits: record, NextToken: record> {
+]: nothing -> record<AccountLimits: table<Name: string, Value: int>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAccountLimits")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1711,8 +1784,8 @@ export def "post-describe-account-limits" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Pagination token
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1721,10 +1794,12 @@ export def "post-describe-account-limits" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AccountLimits: record, NextToken: record> {
+]: any -> record<AccountLimits: table<Name: string, Value: int>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAccountLimits")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1761,11 +1836,11 @@ export def "get-describe-change-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --change-set-name: string # The name or Amazon Resource Name (ARN) of the change set that you want to describe.
+  --change-set-name: string # The name or Amazon Resource Name (ARN) of the change set that you want to describe. (required)
   --stack-name: string # If you specified the name of a change set, specify the stack name or ID (ARN) of the change set you want to describe.
   --next-token: string # A string (provided by the DescribeChangeSet response output) that identifies the next page of information that you want to retrieve.
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1773,9 +1848,12 @@ export def "get-describe-change-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ChangeSetName: record, ChangeSetId: record, StackId: record, StackName: record, Description: record, Parameters: record, CreationTime: record, ExecutionStatus: record, Status: record, StatusReason: record, NotificationARNs: record, RollbackConfiguration: record<RollbackTriggers: record, MonitoringTimeInMinutes: record>, Capabilities: record, Tags: record, Changes: record, NextToken: record, IncludeNestedStacks: record, ParentChangeSetId: record, RootChangeSetId: record> {
+]: nothing -> record<ChangeSetName: string, ChangeSetId: string, StackId: string, StackName: string, Description: string, Parameters: table<ParameterKey: string, ParameterValue: string, UsePreviousValue: bool, ResolvedValue: string>, CreationTime: string, ExecutionStatus: string, Status: string, StatusReason: string, NotificationARNs: list<string>, RollbackConfiguration: record<RollbackTriggers: list<record>, MonitoringTimeInMinutes: int>, Capabilities: list<string>, Tags: table<Key: string, Value: string>, Changes: table<Type: string, HookInvocationCount: int, ResourceChange: record>, NextToken: string, IncludeNestedStacks: bool, ParentChangeSetId: string, RootChangeSetId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($change_set_name == null) { error make --unspanned { msg: "required query parameter 'ChangeSetName' missing: pass --change-set-name" } }
+  let action = ($action | default "DescribeChangeSet")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "ChangeSetName" $change_set_name "scalar") (serialize-qp "StackName" $stack_name "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1810,8 +1888,8 @@ export def "post-describe-change-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1820,10 +1898,12 @@ export def "post-describe-change-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ChangeSetName: record, ChangeSetId: record, StackId: record, StackName: record, Description: record, Parameters: record, CreationTime: record, ExecutionStatus: record, Status: record, StatusReason: record, NotificationARNs: record, RollbackConfiguration: record<RollbackTriggers: record, MonitoringTimeInMinutes: record>, Capabilities: record, Tags: record, Changes: record, NextToken: record, IncludeNestedStacks: record, ParentChangeSetId: record, RootChangeSetId: record> {
+]: any -> record<ChangeSetName: string, ChangeSetId: string, StackId: string, StackName: string, Description: string, Parameters: table<ParameterKey: string, ParameterValue: string, UsePreviousValue: bool, ResolvedValue: string>, CreationTime: string, ExecutionStatus: string, Status: string, StatusReason: string, NotificationARNs: list<string>, RollbackConfiguration: record<RollbackTriggers: list<record>, MonitoringTimeInMinutes: int>, Capabilities: list<string>, Tags: table<Key: string, Value: string>, Changes: table<Type: string, HookInvocationCount: int, ResourceChange: record>, NextToken: string, IncludeNestedStacks: bool, ParentChangeSetId: string, RootChangeSetId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeChangeSet")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1860,12 +1940,12 @@ export def "get-describe-change-set-hooks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --change-set-name: string # The name or Amazon Resource Name (ARN) of the change set that you want to describe.
+  --change-set-name: string # The name or Amazon Resource Name (ARN) of the change set that you want to describe. (required)
   --stack-name: string # If you specified the name of a change set, specify the stack name or stack ID (ARN) of the change set you want to describe.
   --next-token: string # A string, provided by the DescribeChangeSetHooks response output, that identifies the next page of information that you want to retrieve.
   --logical-resource-id: string # If specified, lists only the hooks related to the specified LogicalResourceId.
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1873,9 +1953,12 @@ export def "get-describe-change-set-hooks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ChangeSetId: record, ChangeSetName: record, Hooks: record, Status: record, NextToken: record, StackId: record, StackName: record> {
+]: nothing -> record<ChangeSetId: string, ChangeSetName: string, Hooks: table<InvocationPoint: string, FailureMode: string, TypeName: string, TypeVersionId: string, TypeConfigurationVersionId: string, TargetDetails: record>, Status: string, NextToken: string, StackId: string, StackName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($change_set_name == null) { error make --unspanned { msg: "required query parameter 'ChangeSetName' missing: pass --change-set-name" } }
+  let action = ($action | default "DescribeChangeSetHooks")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "ChangeSetName" $change_set_name "scalar") (serialize-qp "StackName" $stack_name "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "LogicalResourceId" $logical_resource_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1910,8 +1993,8 @@ export def "post-describe-change-set-hooks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1920,10 +2003,12 @@ export def "post-describe-change-set-hooks" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ChangeSetId: record, ChangeSetName: record, Hooks: record, Status: record, NextToken: record, StackId: record, StackName: record> {
+]: any -> record<ChangeSetId: string, ChangeSetName: string, Hooks: table<InvocationPoint: string, FailureMode: string, TypeName: string, TypeVersionId: string, TypeConfigurationVersionId: string, TargetDetails: record>, Status: string, NextToken: string, StackId: string, StackName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeChangeSetHooks")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1961,8 +2046,8 @@ export def "get-describe-publisher" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --publisher-id: string # The ID of the extension publisher. If you don't supply a PublisherId, and you have registered as an extension publisher, DescribePublisher returns information about your own publisher account.
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1970,9 +2055,11 @@ export def "get-describe-publisher" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PublisherId: record, PublisherStatus: record, IdentityProvider: record, PublisherProfile: record> {
+]: nothing -> record<PublisherId: string, PublisherStatus: string, IdentityProvider: string, PublisherProfile: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribePublisher")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "PublisherId" $publisher_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2007,8 +2094,8 @@ export def "post-describe-publisher" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2017,10 +2104,12 @@ export def "post-describe-publisher" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PublisherId: record, PublisherStatus: record, IdentityProvider: record, PublisherProfile: record> {
+]: any -> record<PublisherId: string, PublisherStatus: string, IdentityProvider: string, PublisherProfile: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribePublisher")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2057,9 +2146,9 @@ export def "get-describe-stack-drift-detection-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-drift-detection-id: string # The ID of the drift detection results of this operation. CloudFormation generates new results, with a new drift detection ID, each time this operation is run. However, the number of drift results CloudFormation retains for any given stack, and for how long, may vary.
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --stack-drift-detection-id: string # The ID of the drift detection results of this operation. CloudFormation generates new results, with a new drift detection ID, each time this operation is run. However, the number of drift results CloudFormation retains for any given stack, and for how long, may vary. (required)
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2067,9 +2156,12 @@ export def "get-describe-stack-drift-detection-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackId: record, StackDriftDetectionId: record, StackDriftStatus: record, DetectionStatus: record, DetectionStatusReason: record, DriftedStackResourceCount: record, Timestamp: record> {
+]: nothing -> record<StackId: string, StackDriftDetectionId: string, StackDriftStatus: string, DetectionStatus: string, DetectionStatusReason: string, DriftedStackResourceCount: int, Timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_drift_detection_id == null) { error make --unspanned { msg: "required query parameter 'StackDriftDetectionId' missing: pass --stack-drift-detection-id" } }
+  let action = ($action | default "DescribeStackDriftDetectionStatus")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackDriftDetectionId" $stack_drift_detection_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2104,8 +2196,8 @@ export def "post-describe-stack-drift-detection-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2114,10 +2206,12 @@ export def "post-describe-stack-drift-detection-status" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackId: record, StackDriftDetectionId: record, StackDriftStatus: record, DetectionStatus: record, DetectionStatusReason: record, DriftedStackResourceCount: record, Timestamp: record> {
+]: any -> record<StackId: string, StackDriftDetectionId: string, StackDriftStatus: string, DetectionStatus: string, DetectionStatusReason: string, DriftedStackResourceCount: int, Timestamp: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeStackDriftDetectionStatus")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2156,8 +2250,8 @@ export def "get-describe-stack-events" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --stack-name: string # The name or the unique stack ID that's associated with the stack, which aren't always interchangeable: Running stacks: You can specify either the stack's name or its unique stack ID. Deleted stacks: You must specify the unique stack ID. Default: There is no default value.
   --next-token: string # A string that identifies the next page of events that you want to retrieve.
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2165,9 +2259,11 @@ export def "get-describe-stack-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackEvents: record, NextToken: record> {
+]: nothing -> record<StackEvents: table<StackId: string, EventId: string, StackName: string, LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, Timestamp: string, ResourceStatus: string, ResourceStatusReason: string, ResourceProperties: string, ClientRequestToken: string, HookType: string, HookStatus: string, HookStatusReason: string, HookInvocationPoint: string, HookFailureMode: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeStackEvents")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2203,8 +2299,8 @@ export def "post-describe-stack-events" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Pagination token
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2213,10 +2309,12 @@ export def "post-describe-stack-events" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackEvents: record, NextToken: record> {
+]: any -> record<StackEvents: table<StackId: string, EventId: string, StackName: string, LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, Timestamp: string, ResourceStatus: string, ResourceStatusReason: string, ResourceProperties: string, ClientRequestToken: string, HookType: string, HookStatus: string, HookStatusReason: string, HookInvocationPoint: string, HookFailureMode: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeStackEvents")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2253,12 +2351,12 @@ export def "get-describe-stack-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-set-name: string # The name or the unique stack ID of the stack set that you want to get stack instance information for.
-  --stack-instance-account: string # The ID of an Amazon Web Services account that's associated with this stack instance.
-  --stack-instance-region: string # The name of a Region that's associated with this stack instance.
+  --stack-set-name: string # The name or the unique stack ID of the stack set that you want to get stack instance information for. (required)
+  --stack-instance-account: string # The ID of an Amazon Web Services account that's associated with this stack instance. (required)
+  --stack-instance-region: string # The name of a Region that's associated with this stack instance. (required)
   --call-as: string@call-as-completer # [Service-managed permissions] Specifies whether you are acting as an account administrator in the organization's management account or as a delegated administrator in a member account. By default, SELF is specified. Use SELF for stack sets with self-managed permissions. If you are signed in to the management account, specify SELF. If you are signed in to a delegated administrator account, specify DELEGATED_ADMIN. Your Amazon Web Services account must be registered as a delegated administrator in the management account. For more information, see Register a delegated administrator (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-orgs-delegated-admin.html) in the CloudFormation User Guide.
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2266,9 +2364,14 @@ export def "get-describe-stack-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackInstance: record<StackSetId: record, Region: record, Account: record, StackId: record, ParameterOverrides: record, Status: record, StackInstanceStatus: record<DetailedStatus: record>, StatusReason: record, OrganizationalUnitId: record, DriftStatus: record, LastDriftCheckTimestamp: record, LastOperationId: record>> {
+]: nothing -> record<StackInstance: record<StackSetId: string, Region: string, Account: string, StackId: string, ParameterOverrides: list<record>, Status: string, StackInstanceStatus: record<DetailedStatus: string>, StatusReason: string, OrganizationalUnitId: string, DriftStatus: string, LastDriftCheckTimestamp: string, LastOperationId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
+  if ($stack_instance_account == null) { error make --unspanned { msg: "required query parameter 'StackInstanceAccount' missing: pass --stack-instance-account" } }
+  if ($stack_instance_region == null) { error make --unspanned { msg: "required query parameter 'StackInstanceRegion' missing: pass --stack-instance-region" } }
+  let action = ($action | default "DescribeStackInstance")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackSetName" $stack_set_name "scalar") (serialize-qp "StackInstanceAccount" $stack_instance_account "scalar") (serialize-qp "StackInstanceRegion" $stack_instance_region "scalar") (serialize-qp "CallAs" $call_as "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2303,8 +2406,8 @@ export def "post-describe-stack-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2313,10 +2416,12 @@ export def "post-describe-stack-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackInstance: record<StackSetId: record, Region: record, Account: record, StackId: record, ParameterOverrides: record, Status: record, StackInstanceStatus: record<DetailedStatus: record>, StatusReason: record, OrganizationalUnitId: record, DriftStatus: record, LastDriftCheckTimestamp: record, LastOperationId: record>> {
+]: any -> record<StackInstance: record<StackSetId: string, Region: string, Account: string, StackId: string, ParameterOverrides: list<record>, Status: string, StackInstanceStatus: record<DetailedStatus: string>, StatusReason: string, OrganizationalUnitId: string, DriftStatus: string, LastDriftCheckTimestamp: string, LastOperationId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeStackInstance")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2353,10 +2458,10 @@ export def "get-describe-stack-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-name: string # The name or the unique stack ID that's associated with the stack, which aren't always interchangeable: Running stacks: You can specify either the stack's name or its unique stack ID. Deleted stacks: You must specify the unique stack ID. Default: There is no default value.
-  --logical-resource-id: string # The logical name of the resource as specified in the template. Default: There is no default value.
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --stack-name: string # The name or the unique stack ID that's associated with the stack, which aren't always interchangeable: Running stacks: You can specify either the stack's name or its unique stack ID. Deleted stacks: You must specify the unique stack ID. Default: There is no default value. (required)
+  --logical-resource-id: string # The logical name of the resource as specified in the template. Default: There is no default value. (required)
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2364,9 +2469,13 @@ export def "get-describe-stack-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackResourceDetail: record<StackName: record, StackId: record, LogicalResourceId: record, PhysicalResourceId: record, ResourceType: record, LastUpdatedTimestamp: record, ResourceStatus: record, ResourceStatusReason: record, Description: record, Metadata: record, DriftInformation: record<StackResourceDriftStatus: record, LastCheckTimestamp: record>, ModuleInfo: record<TypeHierarchy: record, LogicalIdHierarchy: record>>> {
+]: nothing -> record<StackResourceDetail: record<StackName: string, StackId: string, LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, LastUpdatedTimestamp: string, ResourceStatus: string, ResourceStatusReason: string, Description: string, Metadata: string, DriftInformation: record<StackResourceDriftStatus: string, LastCheckTimestamp: string>, ModuleInfo: record<TypeHierarchy: string, LogicalIdHierarchy: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
+  if ($logical_resource_id == null) { error make --unspanned { msg: "required query parameter 'LogicalResourceId' missing: pass --logical-resource-id" } }
+  let action = ($action | default "DescribeStackResource")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "LogicalResourceId" $logical_resource_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2401,8 +2510,8 @@ export def "post-describe-stack-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2411,10 +2520,12 @@ export def "post-describe-stack-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackResourceDetail: record<StackName: record, StackId: record, LogicalResourceId: record, PhysicalResourceId: record, ResourceType: record, LastUpdatedTimestamp: record, ResourceStatus: record, ResourceStatusReason: record, Description: record, Metadata: record, DriftInformation: record<StackResourceDriftStatus: record, LastCheckTimestamp: record>, ModuleInfo: record<TypeHierarchy: record, LogicalIdHierarchy: record>>> {
+]: any -> record<StackResourceDetail: record<StackName: string, StackId: string, LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, LastUpdatedTimestamp: string, ResourceStatus: string, ResourceStatusReason: string, Description: string, Metadata: string, DriftInformation: record<StackResourceDriftStatus: string, LastCheckTimestamp: string>, ModuleInfo: record<TypeHierarchy: string, LogicalIdHierarchy: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeStackResource")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2451,12 +2562,12 @@ export def "get-describe-stack-resource-drifts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-name: string # The name of the stack for which you want drift information.
+  --stack-name: string # The name of the stack for which you want drift information. (required)
   --stack-resource-drift-status-filters: list # The resource drift status values to use as filters for the resource drift results returned. DELETED: The resource differs from its expected template configuration in that the resource has been deleted. MODIFIED: One or more resource properties differ from their expected template values. IN_SYNC: The resource's actual configuration matches its expected template configuration. NOT_CHECKED: CloudFormation doesn't currently return this value.
   --next-token: string # A string that identifies the next page of stack resource drift results.
   --max-results: int # The maximum number of results to be returned with a single call. If the number of available results exceeds this maximum, the response includes a NextToken value that you can assign to the NextToken request parameter to get the next set of results.
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2464,9 +2575,12 @@ export def "get-describe-stack-resource-drifts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackResourceDrifts: record, NextToken: record> {
+]: nothing -> record<StackResourceDrifts: table<StackId: string, LogicalResourceId: string, PhysicalResourceId: string, PhysicalResourceIdContext: list, ResourceType: string, ExpectedProperties: string, ActualProperties: string, PropertyDifferences: list, StackResourceDriftStatus: string, Timestamp: string, ModuleInfo: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
+  let action = ($action | default "DescribeStackResourceDrifts")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "StackResourceDriftStatusFilters" $stack_resource_drift_status_filters "multi") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2503,8 +2617,8 @@ export def "post-describe-stack-resource-drifts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2513,10 +2627,12 @@ export def "post-describe-stack-resource-drifts" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackResourceDrifts: record, NextToken: record> {
+]: any -> record<StackResourceDrifts: table<StackId: string, LogicalResourceId: string, PhysicalResourceId: string, PhysicalResourceIdContext: list, ResourceType: string, ExpectedProperties: string, ActualProperties: string, PropertyDifferences: list, StackResourceDriftStatus: string, Timestamp: string, ModuleInfo: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeStackResourceDrifts")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2556,8 +2672,8 @@ export def "get-describe-stack-resources" [
   --stack-name: string # The name or the unique stack ID that is associated with the stack, which aren't always interchangeable: Running stacks: You can specify either the stack's name or its unique stack ID. Deleted stacks: You must specify the unique stack ID. Default: There is no default value. Required: Conditional. If you don't specify StackName, you must specify PhysicalResourceId.
   --logical-resource-id: string # The logical name of the resource as specified in the template. Default: There is no default value.
   --physical-resource-id: string # The name or unique identifier that corresponds to a physical instance ID of a resource supported by CloudFormation. For example, for an Amazon Elastic Compute Cloud (EC2) instance, PhysicalResourceId corresponds to the InstanceId. You can pass the EC2 InstanceId to DescribeStackResources to find which stack the instance belongs to and what other resources are part of the stack. Required: Conditional. If you don't specify PhysicalResourceId, you must specify StackName. Default: There is no default value.
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2565,9 +2681,11 @@ export def "get-describe-stack-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackResources: record> {
+]: nothing -> record<StackResources: table<StackName: string, StackId: string, LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, Timestamp: string, ResourceStatus: string, ResourceStatusReason: string, Description: string, DriftInformation: record, ModuleInfo: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeStackResources")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "LogicalResourceId" $logical_resource_id "scalar") (serialize-qp "PhysicalResourceId" $physical_resource_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2602,8 +2720,8 @@ export def "post-describe-stack-resources" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2612,10 +2730,12 @@ export def "post-describe-stack-resources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackResources: record> {
+]: any -> record<StackResources: table<StackName: string, StackId: string, LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, Timestamp: string, ResourceStatus: string, ResourceStatusReason: string, Description: string, DriftInformation: record, ModuleInfo: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeStackResources")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2652,10 +2772,10 @@ export def "get-describe-stack-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-set-name: string # The name or unique ID of the stack set whose description you want.
+  --stack-set-name: string # The name or unique ID of the stack set whose description you want. (required)
   --call-as: string@call-as-completer # [Service-managed permissions] Specifies whether you are acting as an account administrator in the organization's management account or as a delegated administrator in a member account. By default, SELF is specified. Use SELF for stack sets with self-managed permissions. If you are signed in to the management account, specify SELF. If you are signed in to a delegated administrator account, specify DELEGATED_ADMIN. Your Amazon Web Services account must be registered as a delegated administrator in the management account. For more information, see Register a delegated administrator (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-orgs-delegated-admin.html) in the CloudFormation User Guide.
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2663,9 +2783,12 @@ export def "get-describe-stack-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackSet: record<StackSetName: record, StackSetId: record, Description: record, Status: record, TemplateBody: record, Parameters: record, Capabilities: record, Tags: record, StackSetARN: record, AdministrationRoleARN: record, ExecutionRoleName: record, StackSetDriftDetectionDetails: record<DriftStatus: record, DriftDetectionStatus: record, LastDriftCheckTimestamp: record, TotalStackInstancesCount: record, DriftedStackInstancesCount: record, InSyncStackInstancesCount: record, InProgressStackInstancesCount: record, FailedStackInstancesCount: record>, AutoDeployment: record<Enabled: record, RetainStacksOnAccountRemoval: record>, PermissionModel: record, OrganizationalUnitIds: record, ManagedExecution: record<Active: record>, Regions: list<string>>> {
+]: nothing -> record<StackSet: record<StackSetName: string, StackSetId: string, Description: string, Status: string, TemplateBody: string, Parameters: list<record>, Capabilities: list<string>, Tags: list<record>, StackSetARN: string, AdministrationRoleARN: string, ExecutionRoleName: string, StackSetDriftDetectionDetails: record<DriftStatus: string, DriftDetectionStatus: string, LastDriftCheckTimestamp: string, TotalStackInstancesCount: int, DriftedStackInstancesCount: int, InSyncStackInstancesCount: int, InProgressStackInstancesCount: int, FailedStackInstancesCount: int>, AutoDeployment: record<Enabled: bool, RetainStacksOnAccountRemoval: bool>, PermissionModel: string, OrganizationalUnitIds: list<string>, ManagedExecution: record<Active: bool>, Regions: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
+  let action = ($action | default "DescribeStackSet")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackSetName" $stack_set_name "scalar") (serialize-qp "CallAs" $call_as "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2700,8 +2823,8 @@ export def "post-describe-stack-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2710,10 +2833,12 @@ export def "post-describe-stack-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackSet: record<StackSetName: record, StackSetId: record, Description: record, Status: record, TemplateBody: record, Parameters: record, Capabilities: record, Tags: record, StackSetARN: record, AdministrationRoleARN: record, ExecutionRoleName: record, StackSetDriftDetectionDetails: record<DriftStatus: record, DriftDetectionStatus: record, LastDriftCheckTimestamp: record, TotalStackInstancesCount: record, DriftedStackInstancesCount: record, InSyncStackInstancesCount: record, InProgressStackInstancesCount: record, FailedStackInstancesCount: record>, AutoDeployment: record<Enabled: record, RetainStacksOnAccountRemoval: record>, PermissionModel: record, OrganizationalUnitIds: record, ManagedExecution: record<Active: record>, Regions: list<string>>> {
+]: any -> record<StackSet: record<StackSetName: string, StackSetId: string, Description: string, Status: string, TemplateBody: string, Parameters: list<record>, Capabilities: list<string>, Tags: list<record>, StackSetARN: string, AdministrationRoleARN: string, ExecutionRoleName: string, StackSetDriftDetectionDetails: record<DriftStatus: string, DriftDetectionStatus: string, LastDriftCheckTimestamp: string, TotalStackInstancesCount: int, DriftedStackInstancesCount: int, InSyncStackInstancesCount: int, InProgressStackInstancesCount: int, FailedStackInstancesCount: int>, AutoDeployment: record<Enabled: bool, RetainStacksOnAccountRemoval: bool>, PermissionModel: string, OrganizationalUnitIds: list<string>, ManagedExecution: record<Active: bool>, Regions: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeStackSet")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2750,11 +2875,11 @@ export def "get-describe-stack-set-operation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-set-name: string # The name or the unique stack ID of the stack set for the stack operation.
-  --operation-id: string # The unique ID of the stack set operation.
+  --stack-set-name: string # The name or the unique stack ID of the stack set for the stack operation. (required)
+  --operation-id: string # The unique ID of the stack set operation. (required)
   --call-as: string@call-as-completer # [Service-managed permissions] Specifies whether you are acting as an account administrator in the organization's management account or as a delegated administrator in a member account. By default, SELF is specified. Use SELF for stack sets with self-managed permissions. If you are signed in to the management account, specify SELF. If you are signed in to a delegated administrator account, specify DELEGATED_ADMIN. Your Amazon Web Services account must be registered as a delegated administrator in the management account. For more information, see Register a delegated administrator (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-orgs-delegated-admin.html) in the CloudFormation User Guide.
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2762,9 +2887,13 @@ export def "get-describe-stack-set-operation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackSetOperation: record<OperationId: record, StackSetId: record, Action: record, Status: record, OperationPreferences: record<RegionConcurrencyType: record, RegionOrder: record, FailureToleranceCount: record, FailureTolerancePercentage: record, MaxConcurrentCount: record, MaxConcurrentPercentage: record>, RetainStacks: record, AdministrationRoleARN: record, ExecutionRoleName: record, CreationTimestamp: record, EndTimestamp: record, DeploymentTargets: record<Accounts: record, AccountsUrl: record, OrganizationalUnitIds: record, AccountFilterType: record>, StackSetDriftDetectionDetails: record<DriftStatus: record, DriftDetectionStatus: record, LastDriftCheckTimestamp: record, TotalStackInstancesCount: record, DriftedStackInstancesCount: record, InSyncStackInstancesCount: record, InProgressStackInstancesCount: record, FailedStackInstancesCount: record>, StatusReason: record, StatusDetails: record<FailedStackInstancesCount: record>>> {
+]: nothing -> record<StackSetOperation: record<OperationId: string, StackSetId: string, Action: string, Status: string, OperationPreferences: record<RegionConcurrencyType: string, RegionOrder: list, FailureToleranceCount: int, FailureTolerancePercentage: int, MaxConcurrentCount: int, MaxConcurrentPercentage: int>, RetainStacks: bool, AdministrationRoleARN: string, ExecutionRoleName: string, CreationTimestamp: string, EndTimestamp: string, DeploymentTargets: record<Accounts: list, AccountsUrl: string, OrganizationalUnitIds: list, AccountFilterType: string>, StackSetDriftDetectionDetails: record<DriftStatus: string, DriftDetectionStatus: string, LastDriftCheckTimestamp: string, TotalStackInstancesCount: int, DriftedStackInstancesCount: int, InSyncStackInstancesCount: int, InProgressStackInstancesCount: int, FailedStackInstancesCount: int>, StatusReason: string, StatusDetails: record<FailedStackInstancesCount: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
+  if ($operation_id == null) { error make --unspanned { msg: "required query parameter 'OperationId' missing: pass --operation-id" } }
+  let action = ($action | default "DescribeStackSetOperation")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackSetName" $stack_set_name "scalar") (serialize-qp "OperationId" $operation_id "scalar") (serialize-qp "CallAs" $call_as "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2799,8 +2928,8 @@ export def "post-describe-stack-set-operation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2809,10 +2938,12 @@ export def "post-describe-stack-set-operation" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackSetOperation: record<OperationId: record, StackSetId: record, Action: record, Status: record, OperationPreferences: record<RegionConcurrencyType: record, RegionOrder: record, FailureToleranceCount: record, FailureTolerancePercentage: record, MaxConcurrentCount: record, MaxConcurrentPercentage: record>, RetainStacks: record, AdministrationRoleARN: record, ExecutionRoleName: record, CreationTimestamp: record, EndTimestamp: record, DeploymentTargets: record<Accounts: record, AccountsUrl: record, OrganizationalUnitIds: record, AccountFilterType: record>, StackSetDriftDetectionDetails: record<DriftStatus: record, DriftDetectionStatus: record, LastDriftCheckTimestamp: record, TotalStackInstancesCount: record, DriftedStackInstancesCount: record, InSyncStackInstancesCount: record, InProgressStackInstancesCount: record, FailedStackInstancesCount: record>, StatusReason: record, StatusDetails: record<FailedStackInstancesCount: record>>> {
+]: any -> record<StackSetOperation: record<OperationId: string, StackSetId: string, Action: string, Status: string, OperationPreferences: record<RegionConcurrencyType: string, RegionOrder: list, FailureToleranceCount: int, FailureTolerancePercentage: int, MaxConcurrentCount: int, MaxConcurrentPercentage: int>, RetainStacks: bool, AdministrationRoleARN: string, ExecutionRoleName: string, CreationTimestamp: string, EndTimestamp: string, DeploymentTargets: record<Accounts: list, AccountsUrl: string, OrganizationalUnitIds: list, AccountFilterType: string>, StackSetDriftDetectionDetails: record<DriftStatus: string, DriftDetectionStatus: string, LastDriftCheckTimestamp: string, TotalStackInstancesCount: int, DriftedStackInstancesCount: int, InSyncStackInstancesCount: int, InProgressStackInstancesCount: int, FailedStackInstancesCount: int>, StatusReason: string, StatusDetails: record<FailedStackInstancesCount: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeStackSetOperation")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2851,8 +2982,8 @@ export def "get-describe-stacks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --stack-name: string # The name or the unique stack ID that's associated with the stack, which aren't always interchangeable: Running stacks: You can specify either the stack's name or its unique stack ID. Deleted stacks: You must specify the unique stack ID. Default: There is no default value.
   --next-token: string # A string that identifies the next page of stacks that you want to retrieve.
-  --action: string@action-completer-26
-  --version: string@version-completer
+  --action: string@action-completer-26 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2860,9 +2991,11 @@ export def "get-describe-stacks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Stacks: record, NextToken: record> {
+]: nothing -> record<Stacks: table<StackId: string, StackName: string, ChangeSetId: string, Description: string, Parameters: list, CreationTime: string, DeletionTime: string, LastUpdatedTime: string, RollbackConfiguration: record, StackStatus: string, StackStatusReason: string, DisableRollback: bool, NotificationARNs: list, TimeoutInMinutes: int, Capabilities: list, Outputs: list, RoleARN: string, Tags: list, EnableTerminationProtection: bool, ParentId: string, RootId: string, DriftInformation: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeStacks")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2898,8 +3031,8 @@ export def "post-describe-stacks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Pagination token
-  --action: string@action-completer-26
-  --version: string@version-completer
+  --action: string@action-completer-26 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2908,10 +3041,12 @@ export def "post-describe-stacks" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Stacks: record, NextToken: record> {
+]: any -> record<Stacks: table<StackId: string, StackName: string, ChangeSetId: string, Description: string, Parameters: list, CreationTime: string, DeletionTime: string, LastUpdatedTime: string, RollbackConfiguration: record, StackStatus: string, StackStatusReason: string, DisableRollback: bool, NotificationARNs: list, TimeoutInMinutes: int, Capabilities: list, Outputs: list, RoleARN: string, Tags: list, EnableTerminationProtection: bool, ParentId: string, RootId: string, DriftInformation: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeStacks")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2954,8 +3089,8 @@ export def "get-describe-type" [
   --version-id: string # The ID of a specific version of the extension. The version ID is the value at the end of the Amazon Resource Name (ARN) assigned to the extension version when it is registered. If you specify a VersionId, DescribeType returns information about that specific extension version. Otherwise, it returns information about the default extension version.
   --publisher-id: string # The publisher ID of the extension publisher. Extensions provided by Amazon Web Services are not assigned a publisher ID.
   --public-version-number: string # The version number of a public third-party extension.
-  --action: string@action-completer-27
-  --version: string@version-completer
+  --action: string@action-completer-27 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2963,9 +3098,11 @@ export def "get-describe-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, Type: record, TypeName: record, DefaultVersionId: record, IsDefaultVersion: record, TypeTestsStatus: record, TypeTestsStatusDescription: record, Description: record, Schema: record, ProvisioningType: record, DeprecatedStatus: record, LoggingConfig: record<LogRoleArn: record, LogGroupName: record>, RequiredActivatedTypes: record, ExecutionRoleArn: record, Visibility: record, SourceUrl: record, DocumentationUrl: record, LastUpdated: record, TimeCreated: record, ConfigurationSchema: record, PublisherId: record, OriginalTypeName: record, OriginalTypeArn: record, PublicVersionNumber: record, LatestPublicVersion: record, IsActivated: record, AutoUpdate: record> {
+]: nothing -> record<Arn: string, Type: string, TypeName: string, DefaultVersionId: string, IsDefaultVersion: bool, TypeTestsStatus: string, TypeTestsStatusDescription: string, Description: string, Schema: string, ProvisioningType: string, DeprecatedStatus: string, LoggingConfig: record<LogRoleArn: string, LogGroupName: string>, RequiredActivatedTypes: table<TypeNameAlias: string, OriginalTypeName: string, PublisherId: string, SupportedMajorVersions: list>, ExecutionRoleArn: string, Visibility: string, SourceUrl: string, DocumentationUrl: string, LastUpdated: string, TimeCreated: string, ConfigurationSchema: string, PublisherId: string, OriginalTypeName: string, OriginalTypeArn: string, PublicVersionNumber: string, LatestPublicVersion: string, IsActivated: bool, AutoUpdate: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeType")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Type" $type "scalar") (serialize-qp "TypeName" $type_name "scalar") (serialize-qp "Arn" $arn "scalar") (serialize-qp "VersionId" $version_id "scalar") (serialize-qp "PublisherId" $publisher_id "scalar") (serialize-qp "PublicVersionNumber" $public_version_number "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3000,8 +3137,8 @@ export def "post-describe-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-27
-  --version: string@version-completer
+  --action: string@action-completer-27 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3010,10 +3147,12 @@ export def "post-describe-type" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Arn: record, Type: record, TypeName: record, DefaultVersionId: record, IsDefaultVersion: record, TypeTestsStatus: record, TypeTestsStatusDescription: record, Description: record, Schema: record, ProvisioningType: record, DeprecatedStatus: record, LoggingConfig: record<LogRoleArn: record, LogGroupName: record>, RequiredActivatedTypes: record, ExecutionRoleArn: record, Visibility: record, SourceUrl: record, DocumentationUrl: record, LastUpdated: record, TimeCreated: record, ConfigurationSchema: record, PublisherId: record, OriginalTypeName: record, OriginalTypeArn: record, PublicVersionNumber: record, LatestPublicVersion: record, IsActivated: record, AutoUpdate: record> {
+]: any -> record<Arn: string, Type: string, TypeName: string, DefaultVersionId: string, IsDefaultVersion: bool, TypeTestsStatus: string, TypeTestsStatusDescription: string, Description: string, Schema: string, ProvisioningType: string, DeprecatedStatus: string, LoggingConfig: record<LogRoleArn: string, LogGroupName: string>, RequiredActivatedTypes: table<TypeNameAlias: string, OriginalTypeName: string, PublisherId: string, SupportedMajorVersions: list>, ExecutionRoleArn: string, Visibility: string, SourceUrl: string, DocumentationUrl: string, LastUpdated: string, TimeCreated: string, ConfigurationSchema: string, PublisherId: string, OriginalTypeName: string, OriginalTypeArn: string, PublicVersionNumber: string, LatestPublicVersion: string, IsActivated: bool, AutoUpdate: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeType")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3050,9 +3189,9 @@ export def "get-describe-type-registration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --registration-token: string # The identifier for this registration request. This registration token is generated by CloudFormation when you initiate a registration request using RegisterType .
-  --action: string@action-completer-28
-  --version: string@version-completer
+  --registration-token: string # The identifier for this registration request. This registration token is generated by CloudFormation when you initiate a registration request using RegisterType . (required)
+  --action: string@action-completer-28 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3060,9 +3199,12 @@ export def "get-describe-type-registration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ProgressStatus: record, Description: record, TypeArn: record, TypeVersionArn: record> {
+]: nothing -> record<ProgressStatus: string, Description: string, TypeArn: string, TypeVersionArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($registration_token == null) { error make --unspanned { msg: "required query parameter 'RegistrationToken' missing: pass --registration-token" } }
+  let action = ($action | default "DescribeTypeRegistration")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "RegistrationToken" $registration_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3097,8 +3239,8 @@ export def "post-describe-type-registration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-28
-  --version: string@version-completer
+  --action: string@action-completer-28 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3107,10 +3249,12 @@ export def "post-describe-type-registration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ProgressStatus: record, Description: record, TypeArn: record, TypeVersionArn: record> {
+]: any -> record<ProgressStatus: string, Description: string, TypeArn: string, TypeVersionArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeTypeRegistration")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3147,10 +3291,10 @@ export def "get-detect-stack-drift" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-name: string # The name of the stack for which you want to detect drift.
+  --stack-name: string # The name of the stack for which you want to detect drift. (required)
   --logical-resource-ids: list # The logical names of any resources you want to use as filters.
-  --action: string@action-completer-29
-  --version: string@version-completer
+  --action: string@action-completer-29 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3158,9 +3302,12 @@ export def "get-detect-stack-drift" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackDriftDetectionId: record> {
+]: nothing -> record<StackDriftDetectionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
+  let action = ($action | default "DetectStackDrift")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "LogicalResourceIds" $logical_resource_ids "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3195,8 +3342,8 @@ export def "post-detect-stack-drift" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-29
-  --version: string@version-completer
+  --action: string@action-completer-29 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3205,10 +3352,12 @@ export def "post-detect-stack-drift" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackDriftDetectionId: record> {
+]: any -> record<StackDriftDetectionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DetectStackDrift")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3245,10 +3394,10 @@ export def "get-detect-stack-resource-drift" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-name: string # The name of the stack to which the resource belongs.
-  --logical-resource-id: string # The logical name of the resource for which to return drift information.
-  --action: string@action-completer-30
-  --version: string@version-completer
+  --stack-name: string # The name of the stack to which the resource belongs. (required)
+  --logical-resource-id: string # The logical name of the resource for which to return drift information. (required)
+  --action: string@action-completer-30 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3256,9 +3405,13 @@ export def "get-detect-stack-resource-drift" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackResourceDrift: record<StackId: record, LogicalResourceId: record, PhysicalResourceId: record, PhysicalResourceIdContext: record, ResourceType: record, ExpectedProperties: record, ActualProperties: record, PropertyDifferences: record, StackResourceDriftStatus: record, Timestamp: record, ModuleInfo: record<TypeHierarchy: record, LogicalIdHierarchy: record>>> {
+]: nothing -> record<StackResourceDrift: record<StackId: string, LogicalResourceId: string, PhysicalResourceId: string, PhysicalResourceIdContext: list<record>, ResourceType: string, ExpectedProperties: string, ActualProperties: string, PropertyDifferences: list<record>, StackResourceDriftStatus: string, Timestamp: string, ModuleInfo: record<TypeHierarchy: string, LogicalIdHierarchy: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
+  if ($logical_resource_id == null) { error make --unspanned { msg: "required query parameter 'LogicalResourceId' missing: pass --logical-resource-id" } }
+  let action = ($action | default "DetectStackResourceDrift")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "LogicalResourceId" $logical_resource_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3293,8 +3446,8 @@ export def "post-detect-stack-resource-drift" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-30
-  --version: string@version-completer
+  --action: string@action-completer-30 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3303,10 +3456,12 @@ export def "post-detect-stack-resource-drift" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackResourceDrift: record<StackId: record, LogicalResourceId: record, PhysicalResourceId: record, PhysicalResourceIdContext: record, ResourceType: record, ExpectedProperties: record, ActualProperties: record, PropertyDifferences: record, StackResourceDriftStatus: record, Timestamp: record, ModuleInfo: record<TypeHierarchy: record, LogicalIdHierarchy: record>>> {
+]: any -> record<StackResourceDrift: record<StackId: string, LogicalResourceId: string, PhysicalResourceId: string, PhysicalResourceIdContext: list<record>, ResourceType: string, ExpectedProperties: string, ActualProperties: string, PropertyDifferences: list<record>, StackResourceDriftStatus: string, Timestamp: string, ModuleInfo: record<TypeHierarchy: string, LogicalIdHierarchy: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DetectStackResourceDrift")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3343,12 +3498,12 @@ export def "get-detect-stack-set-drift" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-set-name: string # The name of the stack set on which to perform the drift detection operation.
+  --stack-set-name: string # The name of the stack set on which to perform the drift detection operation. (required)
   --operation-preferences: record
   --operation-id: string # The ID of the stack set operation.
   --call-as: string@call-as-completer # [Service-managed permissions] Specifies whether you are acting as an account administrator in the organization's management account or as a delegated administrator in a member account. By default, SELF is specified. Use SELF for stack sets with self-managed permissions. If you are signed in to the management account, specify SELF. If you are signed in to a delegated administrator account, specify DELEGATED_ADMIN. Your Amazon Web Services account must be registered as a delegated administrator in the management account. For more information, see Register a delegated administrator (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-orgs-delegated-admin.html) in the CloudFormation User Guide.
-  --action: string@action-completer-31
-  --version: string@version-completer
+  --action: string@action-completer-31 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3356,9 +3511,12 @@ export def "get-detect-stack-set-drift" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OperationId: record> {
+]: nothing -> record<OperationId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
+  let action = ($action | default "DetectStackSetDrift")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackSetName" $stack_set_name "scalar") (serialize-qp "OperationPreferences" $operation_preferences "multi") (serialize-qp "OperationId" $operation_id "scalar") (serialize-qp "CallAs" $call_as "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3393,8 +3551,8 @@ export def "post-detect-stack-set-drift" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-31
-  --version: string@version-completer
+  --action: string@action-completer-31 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3403,10 +3561,12 @@ export def "post-detect-stack-set-drift" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<OperationId: record> {
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DetectStackSetDrift")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3446,8 +3606,8 @@ export def "get-estimate-template-cost" [
   --template-body: string # Structure containing the template body with a minimum length of 1 byte and a maximum length of 51,200 bytes. (For more information, go to Template Anatomy (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-anatomy.html) in the CloudFormation User Guide.) Conditional: You must pass TemplateBody or TemplateURL. If both are passed, only TemplateBody is used.
   --template-url: string # Location of file containing the template body. The URL must point to a template that's located in an Amazon S3 bucket or a Systems Manager document. For more information, go to Template Anatomy (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-anatomy.html) in the CloudFormation User Guide. Conditional: You must pass TemplateURL or TemplateBody. If both are passed, only TemplateBody is used.
   --parameters: list # A list of Parameter structures that specify input parameters.
-  --action: string@action-completer-32
-  --version: string@version-completer
+  --action: string@action-completer-32 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3455,9 +3615,11 @@ export def "get-estimate-template-cost" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Url: record> {
+]: nothing -> record<Url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "EstimateTemplateCost")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "TemplateBody" $template_body "scalar") (serialize-qp "TemplateURL" $template_url "scalar") (serialize-qp "Parameters" $parameters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3492,8 +3654,8 @@ export def "post-estimate-template-cost" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-32
-  --version: string@version-completer
+  --action: string@action-completer-32 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3502,10 +3664,12 @@ export def "post-estimate-template-cost" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Url: record> {
+]: any -> record<Url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "EstimateTemplateCost")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3542,12 +3706,12 @@ export def "get-execute-change-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --change-set-name: string # The name or Amazon Resource Name (ARN) of the change set that you want use to update the specified stack.
+  --change-set-name: string # The name or Amazon Resource Name (ARN) of the change set that you want use to update the specified stack. (required)
   --stack-name: string # If you specified the name of a change set, specify the stack name or Amazon Resource Name (ARN) that's associated with the change set you want to execute.
   --client-request-token: string # A unique identifier for this ExecuteChangeSet request. Specify this token if you plan to retry requests so that CloudFormation knows that you're not attempting to execute a change set to update a stack with the same name. You might retry ExecuteChangeSet requests to ensure that CloudFormation successfully received them.
   --disable-rollback: oneof<nothing, bool> # Preserves the state of previously provisioned resources when an operation fails. Default: True
-  --action: string@action-completer-33
-  --version: string@version-completer
+  --action: string@action-completer-33 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3558,6 +3722,9 @@ export def "get-execute-change-set" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($change_set_name == null) { error make --unspanned { msg: "required query parameter 'ChangeSetName' missing: pass --change-set-name" } }
+  let action = ($action | default "ExecuteChangeSet")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "ChangeSetName" $change_set_name "scalar") (serialize-qp "StackName" $stack_name "scalar") (serialize-qp "ClientRequestToken" $client_request_token "scalar") (serialize-qp "DisableRollback" $disable_rollback "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3592,8 +3759,8 @@ export def "post-execute-change-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-33
-  --version: string@version-completer
+  --action: string@action-completer-33 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3606,6 +3773,8 @@ export def "post-execute-change-set" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ExecuteChangeSet")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3642,9 +3811,9 @@ export def "get-get-stack-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-name: string # The name or unique stack ID that's associated with the stack whose policy you want to get.
-  --action: string@action-completer-34
-  --version: string@version-completer
+  --stack-name: string # The name or unique stack ID that's associated with the stack whose policy you want to get. (required)
+  --action: string@action-completer-34 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3652,9 +3821,12 @@ export def "get-get-stack-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackPolicyBody: record> {
+]: nothing -> record<StackPolicyBody: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
+  let action = ($action | default "GetStackPolicy")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3689,8 +3861,8 @@ export def "post-get-stack-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-34
-  --version: string@version-completer
+  --action: string@action-completer-34 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3699,10 +3871,12 @@ export def "post-get-stack-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackPolicyBody: record> {
+]: any -> record<StackPolicyBody: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetStackPolicy")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3742,8 +3916,8 @@ export def "get-get-template" [
   --stack-name: string # The name or the unique stack ID that's associated with the stack, which aren't always interchangeable: Running stacks: You can specify either the stack's name or its unique stack ID. Deleted stacks: You must specify the unique stack ID. Default: There is no default value.
   --change-set-name: string # The name or Amazon Resource Name (ARN) of a change set for which CloudFormation returns the associated template. If you specify a name, you must also specify the StackName.
   --template-stage: string@template-stage-completer # For templates that include transforms, the stage of the template that CloudFormation returns. To get the user-submitted template, specify Original. To get the template after CloudFormation has processed all transforms, specify Processed. If the template doesn't include transforms, Original and Processed return the same template. By default, CloudFormation specifies Processed.
-  --action: string@action-completer-35
-  --version: string@version-completer
+  --action: string@action-completer-35 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3751,9 +3925,11 @@ export def "get-get-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TemplateBody: record, StagesAvailable: record> {
+]: nothing -> record<TemplateBody: string, StagesAvailable: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetTemplate")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "ChangeSetName" $change_set_name "scalar") (serialize-qp "TemplateStage" $template_stage "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3788,8 +3964,8 @@ export def "post-get-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-35
-  --version: string@version-completer
+  --action: string@action-completer-35 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3798,10 +3974,12 @@ export def "post-get-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TemplateBody: record, StagesAvailable: record> {
+]: any -> record<TemplateBody: string, StagesAvailable: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetTemplate")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3843,8 +4021,8 @@ export def "get-get-template-summary" [
   --stack-name: string # The name or the stack ID that's associated with the stack, which aren't always interchangeable. For running stacks, you can specify either the stack's name or its unique stack ID. For deleted stack, you must specify the unique stack ID. Conditional: You must specify only one of the following parameters: StackName, StackSetName, TemplateBody, or TemplateURL.
   --stack-set-name: string # The name or unique ID of the stack set from which the stack was created. Conditional: You must specify only one of the following parameters: StackName, StackSetName, TemplateBody, or TemplateURL.
   --call-as: string@call-as-completer # [Service-managed permissions] Specifies whether you are acting as an account administrator in the organization's management account or as a delegated administrator in a member account. By default, SELF is specified. Use SELF for stack sets with self-managed permissions. If you are signed in to the management account, specify SELF. If you are signed in to a delegated administrator account, specify DELEGATED_ADMIN. Your Amazon Web Services account must be registered as a delegated administrator in the management account. For more information, see Register a delegated administrator (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-orgs-delegated-admin.html) in the CloudFormation User Guide.
-  --action: string@action-completer-36
-  --version: string@version-completer
+  --action: string@action-completer-36 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3852,9 +4030,11 @@ export def "get-get-template-summary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Parameters: record, Description: record, Capabilities: record, CapabilitiesReason: record, ResourceTypes: record, Version: record, Metadata: record, DeclaredTransforms: record, ResourceIdentifierSummaries: record> {
+]: nothing -> record<Parameters: table<ParameterKey: string, DefaultValue: string, ParameterType: string, NoEcho: bool, Description: string, ParameterConstraints: record>, Description: string, Capabilities: list<string>, CapabilitiesReason: string, ResourceTypes: list<string>, Version: string, Metadata: string, DeclaredTransforms: list<string>, ResourceIdentifierSummaries: table<ResourceType: string, LogicalResourceIds: list, ResourceIdentifiers: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetTemplateSummary")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "TemplateBody" $template_body "scalar") (serialize-qp "TemplateURL" $template_url "scalar") (serialize-qp "StackName" $stack_name "scalar") (serialize-qp "StackSetName" $stack_set_name "scalar") (serialize-qp "CallAs" $call_as "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3889,8 +4069,8 @@ export def "post-get-template-summary" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-36
-  --version: string@version-completer
+  --action: string@action-completer-36 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3899,10 +4079,12 @@ export def "post-get-template-summary" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Parameters: record, Description: record, Capabilities: record, CapabilitiesReason: record, ResourceTypes: record, Version: record, Metadata: record, DeclaredTransforms: record, ResourceIdentifierSummaries: record> {
+]: any -> record<Parameters: table<ParameterKey: string, DefaultValue: string, ParameterType: string, NoEcho: bool, Description: string, ParameterConstraints: record>, Description: string, Capabilities: list<string>, CapabilitiesReason: string, ResourceTypes: list<string>, Version: string, Metadata: string, DeclaredTransforms: list<string>, ResourceIdentifierSummaries: table<ResourceType: string, LogicalResourceIds: list, ResourceIdentifiers: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetTemplateSummary")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3939,15 +4121,15 @@ export def "get-import-stacks-to-stack-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-set-name: string # The name of the stack set. The name must be unique in the Region where you create your stack set.
+  --stack-set-name: string # The name of the stack set. The name must be unique in the Region where you create your stack set. (required)
   --stack-ids: list # The IDs of the stacks you are importing into a stack set. You import up to 10 stacks per stack set at a time. Specify either StackIds or StackIdsUrl.
   --stack-ids-url: string # The Amazon S3 URL which contains list of stack ids to be inputted. Specify either StackIds or StackIdsUrl.
   --organizational-unit-ids: list # The list of OU ID's to which the stacks being imported has to be mapped as deployment target.
   --operation-preferences: record
   --operation-id: string # A unique, user defined, identifier for the stack set operation.
   --call-as: string@call-as-completer # By default, SELF is specified. Use SELF for stack sets with self-managed permissions. If you are signed in to the management account, specify SELF. For service managed stack sets, specify DELEGATED_ADMIN.
-  --action: string@action-completer-37
-  --version: string@version-completer
+  --action: string@action-completer-37 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3955,9 +4137,12 @@ export def "get-import-stacks-to-stack-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OperationId: record> {
+]: nothing -> record<OperationId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
+  let action = ($action | default "ImportStacksToStackSet")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackSetName" $stack_set_name "scalar") (serialize-qp "StackIds" $stack_ids "multi") (serialize-qp "StackIdsUrl" $stack_ids_url "scalar") (serialize-qp "OrganizationalUnitIds" $organizational_unit_ids "multi") (serialize-qp "OperationPreferences" $operation_preferences "multi") (serialize-qp "OperationId" $operation_id "scalar") (serialize-qp "CallAs" $call_as "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3992,8 +4177,8 @@ export def "post-import-stacks-to-stack-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-37
-  --version: string@version-completer
+  --action: string@action-completer-37 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4002,10 +4187,12 @@ export def "post-import-stacks-to-stack-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<OperationId: record> {
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ImportStacksToStackSet")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4042,10 +4229,10 @@ export def "get-list-change-sets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-name: string # The name or the Amazon Resource Name (ARN) of the stack for which you want to list change sets.
+  --stack-name: string # The name or the Amazon Resource Name (ARN) of the stack for which you want to list change sets. (required)
   --next-token: string # A string (provided by the ListChangeSets response output) that identifies the next page of change sets that you want to retrieve.
-  --action: string@action-completer-38
-  --version: string@version-completer
+  --action: string@action-completer-38 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4053,9 +4240,12 @@ export def "get-list-change-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Summaries: record, NextToken: record> {
+]: nothing -> record<Summaries: table<StackId: string, StackName: string, ChangeSetId: string, ChangeSetName: string, ExecutionStatus: string, Status: string, StatusReason: string, CreationTime: string, Description: string, IncludeNestedStacks: bool, ParentChangeSetId: string, RootChangeSetId: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
+  let action = ($action | default "ListChangeSets")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4091,8 +4281,8 @@ export def "post-list-change-sets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Pagination token
-  --action: string@action-completer-38
-  --version: string@version-completer
+  --action: string@action-completer-38 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4101,10 +4291,12 @@ export def "post-list-change-sets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Summaries: record, NextToken: record> {
+]: any -> record<Summaries: table<StackId: string, StackName: string, ChangeSetId: string, ChangeSetName: string, ExecutionStatus: string, Status: string, StatusReason: string, CreationTime: string, Description: string, IncludeNestedStacks: bool, ParentChangeSetId: string, RootChangeSetId: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListChangeSets")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4142,8 +4334,8 @@ export def "get-list-exports" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # A string (provided by the ListExports response output) that identifies the next page of exported output values that you asked to retrieve.
-  --action: string@action-completer-39
-  --version: string@version-completer
+  --action: string@action-completer-39 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4151,9 +4343,11 @@ export def "get-list-exports" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Exports: record, NextToken: record> {
+]: nothing -> record<Exports: table<ExportingStackId: string, Name: string, Value: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListExports")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4189,8 +4383,8 @@ export def "post-list-exports" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Pagination token
-  --action: string@action-completer-39
-  --version: string@version-completer
+  --action: string@action-completer-39 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4199,10 +4393,12 @@ export def "post-list-exports" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Exports: record, NextToken: record> {
+]: any -> record<Exports: table<ExportingStackId: string, Name: string, Value: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListExports")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4239,10 +4435,10 @@ export def "get-list-imports" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --export-name: string # The name of the exported output value. CloudFormation returns the stack names that are importing this value.
+  --export-name: string # The name of the exported output value. CloudFormation returns the stack names that are importing this value. (required)
   --next-token: string # A string (provided by the ListImports response output) that identifies the next page of stacks that are importing the specified exported output value.
-  --action: string@action-completer-40
-  --version: string@version-completer
+  --action: string@action-completer-40 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4250,9 +4446,12 @@ export def "get-list-imports" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Imports: record, NextToken: record> {
+]: nothing -> record<Imports: list<string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($export_name == null) { error make --unspanned { msg: "required query parameter 'ExportName' missing: pass --export-name" } }
+  let action = ($action | default "ListImports")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "ExportName" $export_name "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4288,8 +4487,8 @@ export def "post-list-imports" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Pagination token
-  --action: string@action-completer-40
-  --version: string@version-completer
+  --action: string@action-completer-40 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4298,10 +4497,12 @@ export def "post-list-imports" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Imports: record, NextToken: record> {
+]: any -> record<Imports: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListImports")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4338,15 +4539,15 @@ export def "get-list-stack-instances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-set-name: string # The name or unique ID of the stack set that you want to list stack instances for.
+  --stack-set-name: string # The name or unique ID of the stack set that you want to list stack instances for. (required)
   --next-token: string # If the previous request didn't return all the remaining results, the response's NextToken parameter value is set to a token. To retrieve the next set of results, call ListStackInstances again and assign that token to the request object's NextToken parameter. If there are no remaining results, the previous response object's NextToken parameter is set to null.
   --max-results: int # The maximum number of results to be returned with a single call. If the number of available results exceeds this maximum, the response includes a NextToken value that you can assign to the NextToken request parameter to get the next set of results.
   --filters: list # The filter to apply to stack instances
   --stack-instance-account: string # The name of the Amazon Web Services account that you want to list stack instances for.
   --stack-instance-region: string # The name of the Region where you want to list stack instances.
   --call-as: string@call-as-completer # [Service-managed permissions] Specifies whether you are acting as an account administrator in the organization's management account or as a delegated administrator in a member account. By default, SELF is specified. Use SELF for stack sets with self-managed permissions. If you are signed in to the management account, specify SELF. If you are signed in to a delegated administrator account, specify DELEGATED_ADMIN. Your Amazon Web Services account must be registered as a delegated administrator in the management account. For more information, see Register a delegated administrator (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-orgs-delegated-admin.html) in the CloudFormation User Guide.
-  --action: string@action-completer-41
-  --version: string@version-completer
+  --action: string@action-completer-41 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4354,9 +4555,12 @@ export def "get-list-stack-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Summaries: record, NextToken: record> {
+]: nothing -> record<Summaries: table<StackSetId: string, Region: string, Account: string, StackId: string, Status: string, StatusReason: string, StackInstanceStatus: record, OrganizationalUnitId: string, DriftStatus: string, LastDriftCheckTimestamp: string, LastOperationId: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
+  let action = ($action | default "ListStackInstances")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackSetName" $stack_set_name "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "StackInstanceAccount" $stack_instance_account "scalar") (serialize-qp "StackInstanceRegion" $stack_instance_region "scalar") (serialize-qp "CallAs" $call_as "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4393,8 +4597,8 @@ export def "post-list-stack-instances" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-41
-  --version: string@version-completer
+  --action: string@action-completer-41 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4403,10 +4607,12 @@ export def "post-list-stack-instances" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Summaries: record, NextToken: record> {
+]: any -> record<Summaries: table<StackSetId: string, Region: string, Account: string, StackId: string, Status: string, StatusReason: string, StackInstanceStatus: record, OrganizationalUnitId: string, DriftStatus: string, LastDriftCheckTimestamp: string, LastOperationId: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListStackInstances")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4443,10 +4649,10 @@ export def "get-list-stack-resources" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-name: string # The name or the unique stack ID that is associated with the stack, which aren't always interchangeable: Running stacks: You can specify either the stack's name or its unique stack ID. Deleted stacks: You must specify the unique stack ID. Default: There is no default value.
+  --stack-name: string # The name or the unique stack ID that is associated with the stack, which aren't always interchangeable: Running stacks: You can specify either the stack's name or its unique stack ID. Deleted stacks: You must specify the unique stack ID. Default: There is no default value. (required)
   --next-token: string # A string that identifies the next page of stack resources that you want to retrieve.
-  --action: string@action-completer-42
-  --version: string@version-completer
+  --action: string@action-completer-42 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4454,9 +4660,12 @@ export def "get-list-stack-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackResourceSummaries: record, NextToken: record> {
+]: nothing -> record<StackResourceSummaries: table<LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, LastUpdatedTimestamp: string, ResourceStatus: string, ResourceStatusReason: string, DriftInformation: record, ModuleInfo: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
+  let action = ($action | default "ListStackResources")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4492,8 +4701,8 @@ export def "post-list-stack-resources" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Pagination token
-  --action: string@action-completer-42
-  --version: string@version-completer
+  --action: string@action-completer-42 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4502,10 +4711,12 @@ export def "post-list-stack-resources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackResourceSummaries: record, NextToken: record> {
+]: any -> record<StackResourceSummaries: table<LogicalResourceId: string, PhysicalResourceId: string, ResourceType: string, LastUpdatedTimestamp: string, ResourceStatus: string, ResourceStatusReason: string, DriftInformation: record, ModuleInfo: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListStackResources")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4542,14 +4753,14 @@ export def "get-list-stack-set-operation-results" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-set-name: string # The name or unique ID of the stack set that you want to get operation results for.
-  --operation-id: string # The ID of the stack set operation.
+  --stack-set-name: string # The name or unique ID of the stack set that you want to get operation results for. (required)
+  --operation-id: string # The ID of the stack set operation. (required)
   --next-token: string # If the previous request didn't return all the remaining results, the response object's NextToken parameter value is set to a token. To retrieve the next set of results, call ListStackSetOperationResults again and assign that token to the request object's NextToken parameter. If there are no remaining results, the previous response object's NextToken parameter is set to null.
   --max-results: int # The maximum number of results to be returned with a single call. If the number of available results exceeds this maximum, the response includes a NextToken value that you can assign to the NextToken request parameter to get the next set of results.
   --call-as: string@call-as-completer # [Service-managed permissions] Specifies whether you are acting as an account administrator in the organization's management account or as a delegated administrator in a member account. By default, SELF is specified. Use SELF for stack sets with self-managed permissions. If you are signed in to the management account, specify SELF. If you are signed in to a delegated administrator account, specify DELEGATED_ADMIN. Your Amazon Web Services account must be registered as a delegated administrator in the management account. For more information, see Register a delegated administrator (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-orgs-delegated-admin.html) in the CloudFormation User Guide.
   --filters: list # The filter to apply to operation results.
-  --action: string@action-completer-43
-  --version: string@version-completer
+  --action: string@action-completer-43 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4557,9 +4768,13 @@ export def "get-list-stack-set-operation-results" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Summaries: record, NextToken: record> {
+]: nothing -> record<Summaries: table<Account: string, Region: string, Status: string, StatusReason: string, AccountGateResult: record, OrganizationalUnitId: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
+  if ($operation_id == null) { error make --unspanned { msg: "required query parameter 'OperationId' missing: pass --operation-id" } }
+  let action = ($action | default "ListStackSetOperationResults")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackSetName" $stack_set_name "scalar") (serialize-qp "OperationId" $operation_id "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "CallAs" $call_as "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4596,8 +4811,8 @@ export def "post-list-stack-set-operation-results" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-43
-  --version: string@version-completer
+  --action: string@action-completer-43 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4606,10 +4821,12 @@ export def "post-list-stack-set-operation-results" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Summaries: record, NextToken: record> {
+]: any -> record<Summaries: table<Account: string, Region: string, Status: string, StatusReason: string, AccountGateResult: record, OrganizationalUnitId: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListStackSetOperationResults")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4646,12 +4863,12 @@ export def "get-list-stack-set-operations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-set-name: string # The name or unique ID of the stack set that you want to get operation summaries for.
+  --stack-set-name: string # The name or unique ID of the stack set that you want to get operation summaries for. (required)
   --next-token: string # If the previous paginated request didn't return all of the remaining results, the response object's NextToken parameter value is set to a token. To retrieve the next set of results, call ListStackSetOperations again and assign that token to the request object's NextToken parameter. If there are no remaining results, the previous response object's NextToken parameter is set to null.
   --max-results: int # The maximum number of results to be returned with a single call. If the number of available results exceeds this maximum, the response includes a NextToken value that you can assign to the NextToken request parameter to get the next set of results.
   --call-as: string@call-as-completer # [Service-managed permissions] Specifies whether you are acting as an account administrator in the organization's management account or as a delegated administrator in a member account. By default, SELF is specified. Use SELF for stack sets with self-managed permissions. If you are signed in to the management account, specify SELF. If you are signed in to a delegated administrator account, specify DELEGATED_ADMIN. Your Amazon Web Services account must be registered as a delegated administrator in the management account. For more information, see Register a delegated administrator (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-orgs-delegated-admin.html) in the CloudFormation User Guide.
-  --action: string@action-completer-44
-  --version: string@version-completer
+  --action: string@action-completer-44 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4659,9 +4876,12 @@ export def "get-list-stack-set-operations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Summaries: record, NextToken: record> {
+]: nothing -> record<Summaries: table<OperationId: string, Action: string, Status: string, CreationTimestamp: string, EndTimestamp: string, StatusReason: string, StatusDetails: record, OperationPreferences: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
+  let action = ($action | default "ListStackSetOperations")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackSetName" $stack_set_name "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "CallAs" $call_as "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4698,8 +4918,8 @@ export def "post-list-stack-set-operations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-44
-  --version: string@version-completer
+  --action: string@action-completer-44 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4708,10 +4928,12 @@ export def "post-list-stack-set-operations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Summaries: record, NextToken: record> {
+]: any -> record<Summaries: table<OperationId: string, Action: string, Status: string, CreationTimestamp: string, EndTimestamp: string, StatusReason: string, StatusDetails: record, OperationPreferences: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListStackSetOperations")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4752,8 +4974,8 @@ export def "get-list-stack-sets" [
   --max-results: int # The maximum number of results to be returned with a single call. If the number of available results exceeds this maximum, the response includes a NextToken value that you can assign to the NextToken request parameter to get the next set of results.
   --status: string@status-completer # The status of the stack sets that you want to get summary information about.
   --call-as: string@call-as-completer # [Service-managed permissions] Specifies whether you are acting as an account administrator in the management account or as a delegated administrator in a member account. By default, SELF is specified. Use SELF for stack sets with self-managed permissions. If you are signed in to the management account, specify SELF. If you are signed in to a delegated administrator account, specify DELEGATED_ADMIN. Your Amazon Web Services account must be registered as a delegated administrator in the management account. For more information, see Register a delegated administrator (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-orgs-delegated-admin.html) in the CloudFormation User Guide.
-  --action: string@action-completer-45
-  --version: string@version-completer
+  --action: string@action-completer-45 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4761,9 +4983,11 @@ export def "get-list-stack-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Summaries: record, NextToken: record> {
+]: nothing -> record<Summaries: table<StackSetName: string, StackSetId: string, Description: string, Status: string, AutoDeployment: record, PermissionModel: string, DriftStatus: string, LastDriftCheckTimestamp: string, ManagedExecution: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListStackSets")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "CallAs" $call_as "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4800,8 +5024,8 @@ export def "post-list-stack-sets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-45
-  --version: string@version-completer
+  --action: string@action-completer-45 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4810,10 +5034,12 @@ export def "post-list-stack-sets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Summaries: record, NextToken: record> {
+]: any -> record<Summaries: table<StackSetName: string, StackSetId: string, Description: string, Status: string, AutoDeployment: record, PermissionModel: string, DriftStatus: string, LastDriftCheckTimestamp: string, ManagedExecution: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListStackSets")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4852,8 +5078,8 @@ export def "get-list-stacks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # A string that identifies the next page of stacks that you want to retrieve.
   --stack-status-filter: list # Stack status to use as a filter. Specify one or more stack status codes to list only stacks with the specified status codes. For a complete list of stack status codes, see the StackStatus parameter of the Stack data type.
-  --action: string@action-completer-46
-  --version: string@version-completer
+  --action: string@action-completer-46 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4861,9 +5087,11 @@ export def "get-list-stacks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackSummaries: record, NextToken: record> {
+]: nothing -> record<StackSummaries: table<StackId: string, StackName: string, TemplateDescription: string, CreationTime: string, LastUpdatedTime: string, DeletionTime: string, StackStatus: string, StackStatusReason: string, ParentId: string, RootId: string, DriftInformation: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListStacks")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "StackStatusFilter" $stack_status_filter "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4899,8 +5127,8 @@ export def "post-list-stacks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Pagination token
-  --action: string@action-completer-46
-  --version: string@version-completer
+  --action: string@action-completer-46 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4909,10 +5137,12 @@ export def "post-list-stacks" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackSummaries: record, NextToken: record> {
+]: any -> record<StackSummaries: table<StackId: string, StackName: string, TemplateDescription: string, CreationTime: string, LastUpdatedTime: string, DeletionTime: string, StackStatus: string, StackStatusReason: string, ParentId: string, RootId: string, DriftInformation: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListStacks")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4955,8 +5185,8 @@ export def "get-list-type-registrations" [
   --registration-status-filter: string@registration-status-filter-completer # The current status of the extension registration request. The default is IN_PROGRESS.
   --max-results: int # The maximum number of results to be returned with a single call. If the number of available results exceeds this maximum, the response includes a NextToken value that you can assign to the NextToken request parameter to get the next set of results.
   --next-token: string # If the previous paginated request didn't return all the remaining results, the response object's NextToken parameter value is set to a token. To retrieve the next set of results, call this action again and assign that token to the request object's NextToken parameter. If there are no remaining results, the previous response object's NextToken parameter is set to null.
-  --action: string@action-completer-47
-  --version: string@version-completer
+  --action: string@action-completer-47 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4964,9 +5194,11 @@ export def "get-list-type-registrations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RegistrationTokenList: record, NextToken: record> {
+]: nothing -> record<RegistrationTokenList: list<string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListTypeRegistrations")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Type" $type "scalar") (serialize-qp "TypeName" $type_name "scalar") (serialize-qp "TypeArn" $type_arn "scalar") (serialize-qp "RegistrationStatusFilter" $registration_status_filter "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5003,8 +5235,8 @@ export def "post-list-type-registrations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-47
-  --version: string@version-completer
+  --action: string@action-completer-47 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5013,10 +5245,12 @@ export def "post-list-type-registrations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<RegistrationTokenList: record, NextToken: record> {
+]: any -> record<RegistrationTokenList: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListTypeRegistrations")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5060,8 +5294,8 @@ export def "get-list-type-versions" [
   --next-token: string # If the previous paginated request didn't return all of the remaining results, the response object's NextToken parameter value is set to a token. To retrieve the next set of results, call this action again and assign that token to the request object's NextToken parameter. If there are no remaining results, the previous response object's NextToken parameter is set to null.
   --deprecated-status: string@deprecated-status-completer # The deprecation status of the extension versions that you want to get summary information about. Valid values include: LIVE: The extension version is registered and can be used in CloudFormation operations, dependent on its provisioning behavior and visibility scope. DEPRECATED: The extension version has been deregistered and can no longer be used in CloudFormation operations. The default is LIVE.
   --publisher-id: string # The publisher ID of the extension publisher. Extensions published by Amazon aren't assigned a publisher ID.
-  --action: string@action-completer-48
-  --version: string@version-completer
+  --action: string@action-completer-48 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5069,9 +5303,11 @@ export def "get-list-type-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TypeVersionSummaries: record, NextToken: record> {
+]: nothing -> record<TypeVersionSummaries: table<Type: string, TypeName: string, VersionId: string, IsDefaultVersion: bool, Arn: string, TimeCreated: string, Description: string, PublicVersionNumber: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListTypeVersions")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Type" $type "scalar") (serialize-qp "TypeName" $type_name "scalar") (serialize-qp "Arn" $arn "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "DeprecatedStatus" $deprecated_status "scalar") (serialize-qp "PublisherId" $publisher_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5108,8 +5344,8 @@ export def "post-list-type-versions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-48
-  --version: string@version-completer
+  --action: string@action-completer-48 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5118,10 +5354,12 @@ export def "post-list-type-versions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TypeVersionSummaries: record, NextToken: record> {
+]: any -> record<TypeVersionSummaries: table<Type: string, TypeName: string, VersionId: string, IsDefaultVersion: bool, Arn: string, TimeCreated: string, Description: string, PublicVersionNumber: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListTypeVersions")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5165,8 +5403,8 @@ export def "get-list-types" [
   --filters: record # Filter criteria to use in determining which extensions to return. Filters must be compatible with Visibility to return valid results. For example, specifying AWS_TYPES for Category and PRIVATE for Visibility returns an empty list of types, but specifying PUBLIC for Visibility returns the desired list.
   --max-results: int # The maximum number of results to be returned with a single call. If the number of available results exceeds this maximum, the response includes a NextToken value that you can assign to the NextToken request parameter to get the next set of results.
   --next-token: string # If the previous paginated request didn't return all the remaining results, the response object's NextToken parameter value is set to a token. To retrieve the next set of results, call this action again and assign that token to the request object's NextToken parameter. If there are no remaining results, the previous response object's NextToken parameter is set to null.
-  --action: string@action-completer-49
-  --version: string@version-completer
+  --action: string@action-completer-49 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5174,9 +5412,11 @@ export def "get-list-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TypeSummaries: record, NextToken: record> {
+]: nothing -> record<TypeSummaries: table<Type: string, TypeName: string, DefaultVersionId: string, TypeArn: string, LastUpdated: string, Description: string, PublisherId: string, OriginalTypeName: string, PublicVersionNumber: string, LatestPublicVersion: string, PublisherIdentity: string, PublisherName: string, IsActivated: bool>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListTypes")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Visibility" $visibility "scalar") (serialize-qp "ProvisioningType" $provisioning_type "scalar") (serialize-qp "DeprecatedStatus" $deprecated_status "scalar") (serialize-qp "Type" $type "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5213,8 +5453,8 @@ export def "post-list-types" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-49
-  --version: string@version-completer
+  --action: string@action-completer-49 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5223,10 +5463,12 @@ export def "post-list-types" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TypeSummaries: record, NextToken: record> {
+]: any -> record<TypeSummaries: table<Type: string, TypeName: string, DefaultVersionId: string, TypeArn: string, LastUpdated: string, Description: string, PublisherId: string, OriginalTypeName: string, PublicVersionNumber: string, LatestPublicVersion: string, PublisherIdentity: string, PublisherName: string, IsActivated: bool>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListTypes")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5267,8 +5509,8 @@ export def "get-publish-type" [
   --arn: string # The Amazon Resource Name (ARN) of the extension. Conditional: You must specify Arn, or TypeName and Type.
   --type-name: string # The name of the extension. Conditional: You must specify Arn, or TypeName and Type.
   --public-version-number: string # The version number to assign to this version of the extension. Use the following format, and adhere to semantic versioning when assigning a version number to your extension: MAJOR.MINOR.PATCH For more information, see Semantic Versioning 2.0.0 (https://semver.org/). If you don't specify a version number, CloudFormation increments the version number by one minor version release. You cannot specify a version number the first time you publish a type. CloudFormation automatically sets the first version number to be 1.0.0.
-  --action: string@action-completer-50
-  --version: string@version-completer
+  --action: string@action-completer-50 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5276,9 +5518,11 @@ export def "get-publish-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PublicTypeArn: record> {
+]: nothing -> record<PublicTypeArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PublishType")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Type" $type "scalar") (serialize-qp "Arn" $arn "scalar") (serialize-qp "TypeName" $type_name "scalar") (serialize-qp "PublicVersionNumber" $public_version_number "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5313,8 +5557,8 @@ export def "post-publish-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-50
-  --version: string@version-completer
+  --action: string@action-completer-50 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5323,10 +5567,12 @@ export def "post-publish-type" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PublicTypeArn: record> {
+]: any -> record<PublicTypeArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PublishType")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5363,15 +5609,15 @@ export def "get-record-handler-progress" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --bearer-token: string # Reserved for use by the CloudFormation CLI (https://docs.aws.amazon.com/cloudformation-cli/latest/userguide/what-is-cloudformation-cli.html).
-  --operation-status: string@operation-status-completer # Reserved for use by the CloudFormation CLI (https://docs.aws.amazon.com/cloudformation-cli/latest/userguide/what-is-cloudformation-cli.html).
+  --bearer-token: string # Reserved for use by the CloudFormation CLI (https://docs.aws.amazon.com/cloudformation-cli/latest/userguide/what-is-cloudformation-cli.html). (required)
+  --operation-status: string@operation-status-completer # Reserved for use by the CloudFormation CLI (https://docs.aws.amazon.com/cloudformation-cli/latest/userguide/what-is-cloudformation-cli.html). (required)
   --current-operation-status: string@current-operation-status-completer # Reserved for use by the CloudFormation CLI (https://docs.aws.amazon.com/cloudformation-cli/latest/userguide/what-is-cloudformation-cli.html).
   --status-message: string # Reserved for use by the CloudFormation CLI (https://docs.aws.amazon.com/cloudformation-cli/latest/userguide/what-is-cloudformation-cli.html).
   --error-code: string@error-code-completer # Reserved for use by the CloudFormation CLI (https://docs.aws.amazon.com/cloudformation-cli/latest/userguide/what-is-cloudformation-cli.html).
   --resource-model: string # Reserved for use by the CloudFormation CLI (https://docs.aws.amazon.com/cloudformation-cli/latest/userguide/what-is-cloudformation-cli.html).
   --client-request-token: string # Reserved for use by the CloudFormation CLI (https://docs.aws.amazon.com/cloudformation-cli/latest/userguide/what-is-cloudformation-cli.html).
-  --action: string@action-completer-51
-  --version: string@version-completer
+  --action: string@action-completer-51 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5382,6 +5628,10 @@ export def "get-record-handler-progress" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bearer_token == null) { error make --unspanned { msg: "required query parameter 'BearerToken' missing: pass --bearer-token" } }
+  if ($operation_status == null) { error make --unspanned { msg: "required query parameter 'OperationStatus' missing: pass --operation-status" } }
+  let action = ($action | default "RecordHandlerProgress")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "BearerToken" $bearer_token "scalar") (serialize-qp "OperationStatus" $operation_status "scalar") (serialize-qp "CurrentOperationStatus" $current_operation_status "scalar") (serialize-qp "StatusMessage" $status_message "scalar") (serialize-qp "ErrorCode" $error_code "scalar") (serialize-qp "ResourceModel" $resource_model "scalar") (serialize-qp "ClientRequestToken" $client_request_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5416,8 +5666,8 @@ export def "post-record-handler-progress" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-51
-  --version: string@version-completer
+  --action: string@action-completer-51 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5430,6 +5680,8 @@ export def "post-record-handler-progress" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RecordHandlerProgress")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5468,8 +5720,8 @@ export def "get-register-publisher" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-terms-and-conditions: oneof<nothing, bool> # Whether you accept the Terms and Conditions (https://cloudformation-registry-documents.s3.amazonaws.com/Terms_and_Conditions_for_AWS_CloudFormation_Registry_Publishers.pdf) for publishing extensions in the CloudFormation registry. You must accept the terms and conditions in order to register to publish public extensions to the CloudFormation registry. The default is false.
   --connection-arn: string # If you are using a Bitbucket or GitHub account for identity verification, the Amazon Resource Name (ARN) for your connection to that account. For more information, see Registering your account to publish CloudFormation extensions (https://docs.aws.amazon.com/cloudformation-cli/latest/userguide/publish-extension.html#publish-extension-prereqs) in the CloudFormation CLI User Guide.
-  --action: string@action-completer-52
-  --version: string@version-completer
+  --action: string@action-completer-52 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5477,9 +5729,11 @@ export def "get-register-publisher" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PublisherId: record> {
+]: nothing -> record<PublisherId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RegisterPublisher")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "AcceptTermsAndConditions" $accept_terms_and_conditions "scalar") (serialize-qp "ConnectionArn" $connection_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5514,8 +5768,8 @@ export def "post-register-publisher" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-52
-  --version: string@version-completer
+  --action: string@action-completer-52 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5524,10 +5778,12 @@ export def "post-register-publisher" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PublisherId: record> {
+]: any -> record<PublisherId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RegisterPublisher")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5565,13 +5821,13 @@ export def "get-register-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # The kind of extension.
-  --type-name: string # The name of the extension being registered. We suggest that extension names adhere to the following patterns: For resource types, company_or_organization::service::type. For modules, company_or_organization::service::type::MODULE. For hooks, MyCompany::Testing::MyTestHook. The following organization namespaces are reserved and can't be used in your extension names: Alexa AMZN Amazon AWS Custom Dev
-  --schema-handler-package: string # A URL to the S3 bucket containing the extension project package that contains the necessary files for the extension you want to register. For information about generating a schema handler package for the extension you want to register, see submit (https://docs.aws.amazon.com/cloudformation-cli/latest/userguide/resource-type-cli-submit.html) in the CloudFormation CLI User Guide. The user registering the extension must be able to access the package in the S3 bucket. That's, the user needs to have GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html) permissions for the schema handler package. For more information, see Actions, Resources, and Condition Keys for Amazon S3 (https://docs.aws.amazon.com/IAM/latest/UserGuide/list_amazons3.html) in the Identity and Access Management User Guide.
+  --type-name: string # The name of the extension being registered. We suggest that extension names adhere to the following patterns: For resource types, company_or_organization::service::type. For modules, company_or_organization::service::type::MODULE. For hooks, MyCompany::Testing::MyTestHook. The following organization namespaces are reserved and can't be used in your extension names: Alexa AMZN Amazon AWS Custom Dev (required)
+  --schema-handler-package: string # A URL to the S3 bucket containing the extension project package that contains the necessary files for the extension you want to register. For information about generating a schema handler package for the extension you want to register, see submit (https://docs.aws.amazon.com/cloudformation-cli/latest/userguide/resource-type-cli-submit.html) in the CloudFormation CLI User Guide. The user registering the extension must be able to access the package in the S3 bucket. That's, the user needs to have GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html) permissions for the schema handler package. For more information, see Actions, Resources, and Condition Keys for Amazon S3 (https://docs.aws.amazon.com/IAM/latest/UserGuide/list_amazons3.html) in the Identity and Access Management User Guide. (required)
   --logging-config: record # Specifies logging configuration information for an extension.
   --execution-role-arn: string # The Amazon Resource Name (ARN) of the IAM role for CloudFormation to assume when invoking the extension. For CloudFormation to assume the specified execution role, the role must contain a trust relationship with the CloudFormation service principle (resources.cloudformation.amazonaws.com). For more information about adding trust relationships, see Modifying a role trust policy (IAM/latest/UserGuide/roles-managingrole-editing-console.html#roles-managingrole_edit-trust-policy) in the Identity and Access Management User Guide. If your extension calls Amazon Web Services APIs in any of its handlers, you must create an IAM execution role (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html) that includes the necessary permissions to call those Amazon Web Services APIs, and provision that execution role in your account. When CloudFormation needs to invoke the resource type handler, CloudFormation assumes this execution role to create a temporary session token, which it then passes to the resource type handler, thereby supplying your resource type with the appropriate credentials.
   --client-request-token: string # A unique identifier that acts as an idempotency key for this registration request. Specifying a client request token prevents CloudFormation from generating more than one version of an extension from the same registration request, even if the request is submitted multiple times.
-  --action: string@action-completer-53
-  --version: string@version-completer
+  --action: string@action-completer-53 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5579,9 +5835,13 @@ export def "get-register-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RegistrationToken: record> {
+]: nothing -> record<RegistrationToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($type_name == null) { error make --unspanned { msg: "required query parameter 'TypeName' missing: pass --type-name" } }
+  if ($schema_handler_package == null) { error make --unspanned { msg: "required query parameter 'SchemaHandlerPackage' missing: pass --schema-handler-package" } }
+  let action = ($action | default "RegisterType")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Type" $type "scalar") (serialize-qp "TypeName" $type_name "scalar") (serialize-qp "SchemaHandlerPackage" $schema_handler_package "scalar") (serialize-qp "LoggingConfig" $logging_config "multi") (serialize-qp "ExecutionRoleArn" $execution_role_arn "scalar") (serialize-qp "ClientRequestToken" $client_request_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5616,8 +5876,8 @@ export def "post-register-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-53
-  --version: string@version-completer
+  --action: string@action-completer-53 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5626,10 +5886,12 @@ export def "post-register-type" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<RegistrationToken: record> {
+]: any -> record<RegistrationToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RegisterType")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5666,11 +5928,11 @@ export def "get-rollback-stack" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-name: string # The name that's associated with the stack.
+  --stack-name: string # The name that's associated with the stack. (required)
   --role-arn: string # The Amazon Resource Name (ARN) of an Identity and Access Management role that CloudFormation assumes to rollback the stack.
   --client-request-token: string # A unique identifier for this RollbackStack request.
-  --action: string@action-completer-54
-  --version: string@version-completer
+  --action: string@action-completer-54 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5678,9 +5940,12 @@ export def "get-rollback-stack" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackId: record> {
+]: nothing -> record<StackId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
+  let action = ($action | default "RollbackStack")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "RoleARN" $role_arn "scalar") (serialize-qp "ClientRequestToken" $client_request_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5715,8 +5980,8 @@ export def "post-rollback-stack" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-54
-  --version: string@version-completer
+  --action: string@action-completer-54 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5725,10 +5990,12 @@ export def "post-rollback-stack" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackId: record> {
+]: any -> record<StackId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RollbackStack")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5765,11 +6032,11 @@ export def "get-set-stack-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-name: string # The name or unique stack ID that you want to associate a policy with.
+  --stack-name: string # The name or unique stack ID that you want to associate a policy with. (required)
   --stack-policy-body: string # Structure containing the stack policy body. For more information, go to Prevent updates to stack resources (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/protect-stack-resources.html) in the CloudFormation User Guide. You can specify either the StackPolicyBody or the StackPolicyURL parameter, but not both.
   --stack-policy-url: string # Location of a file containing the stack policy. The URL must point to a policy (maximum size: 16 KB) located in an Amazon S3 bucket in the same Amazon Web Services Region as the stack. You can specify either the StackPolicyBody or the StackPolicyURL parameter, but not both.
-  --action: string@action-completer-55
-  --version: string@version-completer
+  --action: string@action-completer-55 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5780,6 +6047,9 @@ export def "get-set-stack-policy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
+  let action = ($action | default "SetStackPolicy")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "StackPolicyBody" $stack_policy_body "scalar") (serialize-qp "StackPolicyURL" $stack_policy_url "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -5814,8 +6084,8 @@ export def "post-set-stack-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-55
-  --version: string@version-completer
+  --action: string@action-completer-55 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5828,6 +6098,8 @@ export def "post-set-stack-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetStackPolicy")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5865,12 +6137,12 @@ export def "get-set-type-configuration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --type-arn: string # The Amazon Resource Name (ARN) for the extension, in this account and region. For public extensions, this will be the ARN assigned when you activate the type (https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_ActivateType.html) in this account and region. For private extensions, this will be the ARN assigned when you register the type (https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_RegisterType.html) in this account and region. Do not include the extension versions suffix at the end of the ARN. You can set the configuration for an extension, but not for a specific extension version.
-  --configuration: string # The configuration data for the extension, in this account and region. The configuration data must be formatted as JSON, and validate against the schema returned in the ConfigurationSchema response element of API_DescribeType (AWSCloudFormation/latest/APIReference/API_DescribeType.html). For more information, see Defining account-level configuration data for an extension (https://docs.aws.amazon.com/cloudformation-cli/latest/userguide/resource-type-model.html#resource-type-howto-configuration) in the CloudFormation CLI User Guide.
+  --configuration: string # The configuration data for the extension, in this account and region. The configuration data must be formatted as JSON, and validate against the schema returned in the ConfigurationSchema response element of API_DescribeType (AWSCloudFormation/latest/APIReference/API_DescribeType.html). For more information, see Defining account-level configuration data for an extension (https://docs.aws.amazon.com/cloudformation-cli/latest/userguide/resource-type-model.html#resource-type-howto-configuration) in the CloudFormation CLI User Guide. (required)
   --configuration-alias: string # An alias by which to refer to this extension configuration data. Conditional: Specifying a configuration alias is required when setting a configuration for a resource type extension.
   --type-name: string # The name of the extension. Conditional: You must specify ConfigurationArn, or Type and TypeName.
   --type: string@type-completer # The type of extension. Conditional: You must specify ConfigurationArn, or Type and TypeName.
-  --action: string@action-completer-56
-  --version: string@version-completer
+  --action: string@action-completer-56 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5878,9 +6150,12 @@ export def "get-set-type-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConfigurationArn: record> {
+]: nothing -> record<ConfigurationArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($configuration == null) { error make --unspanned { msg: "required query parameter 'Configuration' missing: pass --configuration" } }
+  let action = ($action | default "SetTypeConfiguration")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "TypeArn" $type_arn "scalar") (serialize-qp "Configuration" $configuration "scalar") (serialize-qp "ConfigurationAlias" $configuration_alias "scalar") (serialize-qp "TypeName" $type_name "scalar") (serialize-qp "Type" $type "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5915,8 +6190,8 @@ export def "post-set-type-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-56
-  --version: string@version-completer
+  --action: string@action-completer-56 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5925,10 +6200,12 @@ export def "post-set-type-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ConfigurationArn: record> {
+]: any -> record<ConfigurationArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetTypeConfiguration")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5969,8 +6246,8 @@ export def "get-set-type-default-version" [
   --type: string@type-completer # The kind of extension. Conditional: You must specify either TypeName and Type, or Arn.
   --type-name: string # The name of the extension. Conditional: You must specify either TypeName and Type, or Arn.
   --version-id: string # The ID of a specific version of the extension. The version ID is the value at the end of the Amazon Resource Name (ARN) assigned to the extension version when it is registered.
-  --action: string@action-completer-57
-  --version: string@version-completer
+  --action: string@action-completer-57 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5981,6 +6258,8 @@ export def "get-set-type-default-version" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetTypeDefaultVersion")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Arn" $arn "scalar") (serialize-qp "Type" $type "scalar") (serialize-qp "TypeName" $type_name "scalar") (serialize-qp "VersionId" $version_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -6015,8 +6294,8 @@ export def "post-set-type-default-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-57
-  --version: string@version-completer
+  --action: string@action-completer-57 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6029,6 +6308,8 @@ export def "post-set-type-default-version" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetTypeDefaultVersion")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6065,12 +6346,12 @@ export def "get-signal-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-name: string # The stack name or unique stack ID that includes the resource that you want to signal.
-  --logical-resource-id: string # The logical ID of the resource that you want to signal. The logical ID is the name of the resource that given in the template.
-  --unique-id: string # A unique ID of the signal. When you signal Amazon EC2 instances or Auto Scaling groups, specify the instance ID that you are signaling as the unique ID. If you send multiple signals to a single resource (such as signaling a wait condition), each signal requires a different unique ID.
-  --status: string@status-completer-1 # The status of the signal, which is either success or failure. A failure signal causes CloudFormation to immediately fail the stack creation or update.
-  --action: string@action-completer-58
-  --version: string@version-completer
+  --stack-name: string # The stack name or unique stack ID that includes the resource that you want to signal. (required)
+  --logical-resource-id: string # The logical ID of the resource that you want to signal. The logical ID is the name of the resource that given in the template. (required)
+  --unique-id: string # A unique ID of the signal. When you signal Amazon EC2 instances or Auto Scaling groups, specify the instance ID that you are signaling as the unique ID. If you send multiple signals to a single resource (such as signaling a wait condition), each signal requires a different unique ID. (required)
+  --status: string@status-completer-1 # The status of the signal, which is either success or failure. A failure signal causes CloudFormation to immediately fail the stack creation or update. (required)
+  --action: string@action-completer-58 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6081,6 +6362,12 @@ export def "get-signal-resource" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
+  if ($logical_resource_id == null) { error make --unspanned { msg: "required query parameter 'LogicalResourceId' missing: pass --logical-resource-id" } }
+  if ($unique_id == null) { error make --unspanned { msg: "required query parameter 'UniqueId' missing: pass --unique-id" } }
+  if ($status == null) { error make --unspanned { msg: "required query parameter 'Status' missing: pass --status" } }
+  let action = ($action | default "SignalResource")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "LogicalResourceId" $logical_resource_id "scalar") (serialize-qp "UniqueId" $unique_id "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -6115,8 +6402,8 @@ export def "post-signal-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-58
-  --version: string@version-completer
+  --action: string@action-completer-58 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6129,6 +6416,8 @@ export def "post-signal-resource" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SignalResource")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6165,11 +6454,11 @@ export def "get-stop-stack-set-operation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-set-name: string # The name or unique ID of the stack set that you want to stop the operation for.
-  --operation-id: string # The ID of the stack operation.
+  --stack-set-name: string # The name or unique ID of the stack set that you want to stop the operation for. (required)
+  --operation-id: string # The ID of the stack operation. (required)
   --call-as: string@call-as-completer # [Service-managed permissions] Specifies whether you are acting as an account administrator in the organization's management account or as a delegated administrator in a member account. By default, SELF is specified. Use SELF for stack sets with self-managed permissions. If you are signed in to the management account, specify SELF. If you are signed in to a delegated administrator account, specify DELEGATED_ADMIN. Your Amazon Web Services account must be registered as a delegated administrator in the management account. For more information, see Register a delegated administrator (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-orgs-delegated-admin.html) in the CloudFormation User Guide.
-  --action: string@action-completer-59
-  --version: string@version-completer
+  --action: string@action-completer-59 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6180,6 +6469,10 @@ export def "get-stop-stack-set-operation" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
+  if ($operation_id == null) { error make --unspanned { msg: "required query parameter 'OperationId' missing: pass --operation-id" } }
+  let action = ($action | default "StopStackSetOperation")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackSetName" $stack_set_name "scalar") (serialize-qp "OperationId" $operation_id "scalar") (serialize-qp "CallAs" $call_as "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -6214,8 +6507,8 @@ export def "post-stop-stack-set-operation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-59
-  --version: string@version-completer
+  --action: string@action-completer-59 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6228,6 +6521,8 @@ export def "post-stop-stack-set-operation" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "StopStackSetOperation")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6269,8 +6564,8 @@ export def "get-test-type" [
   --type-name: string # The name of the extension to test. Conditional: You must specify Arn, or TypeName and Type.
   --version-id: string # The version of the extension to test. You can specify the version id with either Arn, or with TypeName and Type. If you don't specify a version, CloudFormation uses the default version of the extension in this account and region for testing.
   --log-delivery-bucket: string # The S3 bucket to which CloudFormation delivers the contract test execution logs. CloudFormation delivers the logs by the time contract testing has completed and the extension has been assigned a test type status of PASSED or FAILED. The user calling TestType must be able to access items in the specified S3 bucket. Specifically, the user needs the following permissions: GetObject PutObject For more information, see Actions, Resources, and Condition Keys for Amazon S3 (https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazons3.html) in the Amazon Web Services Identity and Access Management User Guide.
-  --action: string@action-completer-60
-  --version: string@version-completer
+  --action: string@action-completer-60 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6278,9 +6573,11 @@ export def "get-test-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TypeVersionArn: record> {
+]: nothing -> record<TypeVersionArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "TestType")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Arn" $arn "scalar") (serialize-qp "Type" $type "scalar") (serialize-qp "TypeName" $type_name "scalar") (serialize-qp "VersionId" $version_id "scalar") (serialize-qp "LogDeliveryBucket" $log_delivery_bucket "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -6315,8 +6612,8 @@ export def "post-test-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-60
-  --version: string@version-completer
+  --action: string@action-completer-60 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6325,10 +6622,12 @@ export def "post-test-type" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TypeVersionArn: record> {
+]: any -> record<TypeVersionArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "TestType")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6365,7 +6664,7 @@ export def "get-update-stack" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-name: string # The name or unique stack ID of the stack to update.
+  --stack-name: string # The name or unique stack ID of the stack to update. (required)
   --template-body: string # Structure containing the template body with a minimum length of 1 byte and a maximum length of 51,200 bytes. (For more information, go to Template Anatomy (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-anatomy.html) in the CloudFormation User Guide.) Conditional: You must specify only one of the following parameters: TemplateBody, TemplateURL, or set the UsePreviousTemplate to true.
   --template-url: string # Location of file containing the template body. The URL must point to a template that's located in an Amazon S3 bucket or a Systems Manager document. For more information, go to Template Anatomy (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-anatomy.html) in the CloudFormation User Guide. Conditional: You must specify only one of the following parameters: TemplateBody, TemplateURL, or set the UsePreviousTemplate to true.
   --use-previous-template: oneof<nothing, bool> # Reuse the existing template that is associated with the stack that you are updating. Conditional: You must specify only one of the following parameters: TemplateBody, TemplateURL, or set the UsePreviousTemplate to true.
@@ -6382,8 +6681,8 @@ export def "get-update-stack" [
   --tags: list # Key-value pairs to associate with this stack. CloudFormation also propagates these tags to supported resources in the stack. You can specify a maximum number of 50 tags. If you don't specify this parameter, CloudFormation doesn't modify the stack's tags. If you specify an empty value, CloudFormation removes all associated tags.
   --disable-rollback: oneof<nothing, bool> # Preserve the state of previously provisioned resources when an operation fails. Default: False
   --client-request-token: string # A unique identifier for this UpdateStack request. Specify this token if you plan to retry requests so that CloudFormation knows that you're not attempting to update a stack with the same name. You might retry UpdateStack requests to ensure that CloudFormation successfully received them. All events triggered by a given stack operation are assigned the same client request token, which you can use to track operations. For example, if you execute a CreateStack operation with the token token1, then all the StackEvents generated by that operation will have ClientRequestToken set as token1. In the console, stack operations display the client request token on the Events tab. Stack operations that are initiated from the console use the token format Console-StackOperation-ID, which helps you easily identify the stack operation . For example, if you create a stack using the console, each stack event would be assigned the same token in the following format: Console-CreateStack-7f59c3cf-00d2-40c7-b2ff-e75db0987002.
-  --action: string@action-completer-61
-  --version: string@version-completer
+  --action: string@action-completer-61 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6391,9 +6690,12 @@ export def "get-update-stack" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackId: record> {
+]: nothing -> record<StackId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
+  let action = ($action | default "UpdateStack")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackName" $stack_name "scalar") (serialize-qp "TemplateBody" $template_body "scalar") (serialize-qp "TemplateURL" $template_url "scalar") (serialize-qp "UsePreviousTemplate" $use_previous_template "scalar") (serialize-qp "StackPolicyDuringUpdateBody" $stack_policy_during_update_body "scalar") (serialize-qp "StackPolicyDuringUpdateURL" $stack_policy_during_update_url "scalar") (serialize-qp "Parameters" $parameters "multi") (serialize-qp "Capabilities" $capabilities "multi") (serialize-qp "ResourceTypes" $resource_types "multi") (serialize-qp "RoleARN" $role_arn "scalar") (serialize-qp "RollbackConfiguration" $rollback_configuration "multi") (serialize-qp "StackPolicyBody" $stack_policy_body "scalar") (serialize-qp "StackPolicyURL" $stack_policy_url "scalar") (serialize-qp "NotificationARNs" $notification_ar_ns "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "DisableRollback" $disable_rollback "scalar") (serialize-qp "ClientRequestToken" $client_request_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -6428,8 +6730,8 @@ export def "post-update-stack" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-61
-  --version: string@version-completer
+  --action: string@action-completer-61 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6438,10 +6740,12 @@ export def "post-update-stack" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackId: record> {
+]: any -> record<StackId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateStack")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6478,16 +6782,16 @@ export def "get-update-stack-instances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-set-name: string # The name or unique ID of the stack set associated with the stack instances.
+  --stack-set-name: string # The name or unique ID of the stack set associated with the stack instances. (required)
   --accounts: list # [Self-managed permissions] The names of one or more Amazon Web Services accounts for which you want to update parameter values for stack instances. The overridden parameter values will be applied to all stack instances in the specified accounts and Amazon Web Services Regions. You can specify Accounts or DeploymentTargets, but not both.
   --deployment-targets: record # [Service-managed permissions] The Organizations accounts for which you want to update parameter values for stack instances. If your update targets OUs, the overridden parameter values only apply to the accounts that are currently in the target OUs and their child OUs. Accounts added to the target OUs and their child OUs in the future won't use the overridden values. You can specify Accounts or DeploymentTargets, but not both.
-  --regions: list # The names of one or more Amazon Web Services Regions in which you want to update parameter values for stack instances. The overridden parameter values will be applied to all stack instances in the specified accounts and Amazon Web Services Regions.
+  --regions: list # The names of one or more Amazon Web Services Regions in which you want to update parameter values for stack instances. The overridden parameter values will be applied to all stack instances in the specified accounts and Amazon Web Services Regions. (required)
   --parameter-overrides: list # A list of input parameters whose values you want to update for the specified stack instances. Any overridden parameter values will be applied to all stack instances in the specified accounts and Amazon Web Services Regions. When specifying parameters and their values, be aware of how CloudFormation sets parameter values during stack instance update operations: To override the current value for a parameter, include the parameter and specify its value. To leave an overridden parameter set to its present value, include the parameter and specify UsePreviousValue as true. (You can't specify both a value and set UsePreviousValue to true.) To set an overridden parameter back to the value specified in the stack set, specify a parameter list but don't include the parameter in the list. To leave all parameters set to their present values, don't specify this property at all. During stack set updates, any parameter values overridden for a stack instance aren't updated, but retain their overridden value. You can only override the parameter values that are specified in the stack set; to add or delete a parameter itself, use UpdateStackSet to update the stack set template. If you add a parameter to a template, before you can override the parameter value specified in the stack set you must first use UpdateStackSet (https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_UpdateStackSet.html) to update all stack instances with the updated template and parameter value specified in the stack set. Once a stack instance has been updated with the new parameter, you can then override the parameter value using UpdateStackInstances.
   --operation-preferences: record # Preferences for how CloudFormation performs this stack set operation.
   --operation-id: string # The unique identifier for this stack set operation. The operation ID also functions as an idempotency token, to ensure that CloudFormation performs the stack set operation only once, even if you retry the request multiple times. You might retry stack set operation requests to ensure that CloudFormation successfully received them. If you don't specify an operation ID, the SDK generates one automatically.
   --call-as: string@call-as-completer # [Service-managed permissions] Specifies whether you are acting as an account administrator in the organization's management account or as a delegated administrator in a member account. By default, SELF is specified. Use SELF for stack sets with self-managed permissions. If you are signed in to the management account, specify SELF. If you are signed in to a delegated administrator account, specify DELEGATED_ADMIN. Your Amazon Web Services account must be registered as a delegated administrator in the management account. For more information, see Register a delegated administrator (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-orgs-delegated-admin.html) in the CloudFormation User Guide.
-  --action: string@action-completer-62
-  --version: string@version-completer
+  --action: string@action-completer-62 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6495,9 +6799,13 @@ export def "get-update-stack-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OperationId: record> {
+]: nothing -> record<OperationId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
+  if ($regions == null) { error make --unspanned { msg: "required query parameter 'Regions' missing: pass --regions" } }
+  let action = ($action | default "UpdateStackInstances")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackSetName" $stack_set_name "scalar") (serialize-qp "Accounts" $accounts "multi") (serialize-qp "DeploymentTargets" $deployment_targets "multi") (serialize-qp "Regions" $regions "multi") (serialize-qp "ParameterOverrides" $parameter_overrides "multi") (serialize-qp "OperationPreferences" $operation_preferences "multi") (serialize-qp "OperationId" $operation_id "scalar") (serialize-qp "CallAs" $call_as "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -6532,8 +6840,8 @@ export def "post-update-stack-instances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-62
-  --version: string@version-completer
+  --action: string@action-completer-62 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6542,10 +6850,12 @@ export def "post-update-stack-instances" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<OperationId: record> {
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateStackInstances")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6582,7 +6892,7 @@ export def "get-update-stack-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stack-set-name: string # The name or unique ID of the stack set that you want to update.
+  --stack-set-name: string # The name or unique ID of the stack set that you want to update. (required)
   --description: string # A brief description of updates that you are making.
   --template-body: string # The structure that contains the template body, with a minimum length of 1 byte and a maximum length of 51,200 bytes. For more information, see Template Anatomy (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-anatomy.html) in the CloudFormation User Guide. Conditional: You must specify only one of the following parameters: TemplateBody or TemplateURL—or set UsePreviousTemplate to true.
   --template-url: string # The location of the file that contains the template body. The URL must point to a template (maximum size: 460,800 bytes) that is located in an Amazon S3 bucket or a Systems Manager document. For more information, see Template Anatomy (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-anatomy.html) in the CloudFormation User Guide. Conditional: You must specify only one of the following parameters: TemplateBody or TemplateURL—or set UsePreviousTemplate to true.
@@ -6601,8 +6911,8 @@ export def "get-update-stack-set" [
   --regions: list # The Amazon Web Services Regions in which to update associated stack instances. If you specify Regions, you must also specify accounts in which to update stack set instances. To update all the stack instances associated with this stack set, do not specify the Accounts or Regions properties. If the stack set update includes changes to the template (that is, if the TemplateBody or TemplateURL properties are specified), or the Parameters property, CloudFormation marks all stack instances with a status of OUTDATED prior to updating the stack instances in the specified accounts and Regions. If the stack set update does not include changes to the template or parameters, CloudFormation updates the stack instances in the specified accounts and Regions, while leaving all other stack instances with their existing stack instance status.
   --call-as: string@call-as-completer # [Service-managed permissions] Specifies whether you are acting as an account administrator in the organization's management account or as a delegated administrator in a member account. By default, SELF is specified. Use SELF for stack sets with self-managed permissions. If you are signed in to the management account, specify SELF. If you are signed in to a delegated administrator account, specify DELEGATED_ADMIN. Your Amazon Web Services account must be registered as a delegated administrator in the management account. For more information, see Register a delegated administrator (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-orgs-delegated-admin.html) in the CloudFormation User Guide.
   --managed-execution: record # Describes whether StackSets performs non-conflicting operations concurrently and queues conflicting operations.
-  --action: string@action-completer-63
-  --version: string@version-completer
+  --action: string@action-completer-63 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6610,9 +6920,12 @@ export def "get-update-stack-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OperationId: record> {
+]: nothing -> record<OperationId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stack_set_name == null) { error make --unspanned { msg: "required query parameter 'StackSetName' missing: pass --stack-set-name" } }
+  let action = ($action | default "UpdateStackSet")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "StackSetName" $stack_set_name "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "TemplateBody" $template_body "scalar") (serialize-qp "TemplateURL" $template_url "scalar") (serialize-qp "UsePreviousTemplate" $use_previous_template "scalar") (serialize-qp "Parameters" $parameters "multi") (serialize-qp "Capabilities" $capabilities "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "OperationPreferences" $operation_preferences "multi") (serialize-qp "AdministrationRoleARN" $administration_role_arn "scalar") (serialize-qp "ExecutionRoleName" $execution_role_name "scalar") (serialize-qp "DeploymentTargets" $deployment_targets "multi") (serialize-qp "PermissionModel" $permission_model "scalar") (serialize-qp "AutoDeployment" $auto_deployment "multi") (serialize-qp "OperationId" $operation_id "scalar") (serialize-qp "Accounts" $accounts "multi") (serialize-qp "Regions" $regions "multi") (serialize-qp "CallAs" $call_as "scalar") (serialize-qp "ManagedExecution" $managed_execution "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -6647,8 +6960,8 @@ export def "post-update-stack-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-63
-  --version: string@version-completer
+  --action: string@action-completer-63 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6657,10 +6970,12 @@ export def "post-update-stack-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<OperationId: record> {
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateStackSet")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6697,10 +7012,10 @@ export def "get-update-termination-protection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --enable-termination-protection: oneof<nothing, bool> # Whether to enable termination protection on the specified stack.
-  --stack-name: string # The name or unique ID of the stack for which you want to set termination protection.
-  --action: string@action-completer-64
-  --version: string@version-completer
+  --enable-termination-protection: oneof<nothing, bool> # Whether to enable termination protection on the specified stack. (required)
+  --stack-name: string # The name or unique ID of the stack for which you want to set termination protection. (required)
+  --action: string@action-completer-64 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6708,9 +7023,13 @@ export def "get-update-termination-protection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StackId: record> {
+]: nothing -> record<StackId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($enable_termination_protection == null) { error make --unspanned { msg: "required query parameter 'EnableTerminationProtection' missing: pass --enable-termination-protection" } }
+  if ($stack_name == null) { error make --unspanned { msg: "required query parameter 'StackName' missing: pass --stack-name" } }
+  let action = ($action | default "UpdateTerminationProtection")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "EnableTerminationProtection" $enable_termination_protection "scalar") (serialize-qp "StackName" $stack_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -6745,8 +7064,8 @@ export def "post-update-termination-protection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-64
-  --version: string@version-completer
+  --action: string@action-completer-64 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6755,10 +7074,12 @@ export def "post-update-termination-protection" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<StackId: record> {
+]: any -> record<StackId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateTerminationProtection")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6797,8 +7118,8 @@ export def "get-validate-template" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --template-body: string # Structure containing the template body with a minimum length of 1 byte and a maximum length of 51,200 bytes. For more information, go to Template Anatomy (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-anatomy.html) in the CloudFormation User Guide. Conditional: You must pass TemplateURL or TemplateBody. If both are passed, only TemplateBody is used.
   --template-url: string # Location of file containing the template body. The URL must point to a template (max size: 460,800 bytes) that is located in an Amazon S3 bucket or a Systems Manager document. For more information, go to Template Anatomy (https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-anatomy.html) in the CloudFormation User Guide. Conditional: You must pass TemplateURL or TemplateBody. If both are passed, only TemplateBody is used.
-  --action: string@action-completer-65
-  --version: string@version-completer
+  --action: string@action-completer-65 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6806,9 +7127,11 @@ export def "get-validate-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Parameters: record, Description: record, Capabilities: record, CapabilitiesReason: record, DeclaredTransforms: record> {
+]: nothing -> record<Parameters: table<ParameterKey: string, DefaultValue: string, NoEcho: bool, Description: string>, Description: string, Capabilities: list<string>, CapabilitiesReason: string, DeclaredTransforms: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ValidateTemplate")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "TemplateBody" $template_body "scalar") (serialize-qp "TemplateURL" $template_url "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -6843,8 +7166,8 @@ export def "post-validate-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-65
-  --version: string@version-completer
+  --action: string@action-completer-65 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6853,10 +7176,12 @@ export def "post-validate-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Parameters: record, Description: record, Capabilities: record, CapabilitiesReason: record, DeclaredTransforms: record> {
+]: any -> record<Parameters: table<ParameterKey: string, DefaultValue: string, NoEcho: bool, Description: string>, Description: string, Capabilities: list<string>, CapabilitiesReason: string, DeclaredTransforms: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ValidateTemplate")
+  let version = ($version | default "2010-05-15")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body

@@ -1,4 +1,4 @@
-# Auto-generated client for Flinkster_API_NG vv1
+# Auto-generated client for Flinkster_API_NG v1
 # Source: https://api.apis.guru/v2/specs/deutschebahn.com/flinkster/v1/swagger.json
 # Auth: --token flag or $env.FLINKSTER_API_NG_TOKEN
 

@@ -1,4 +1,4 @@
-# Auto-generated client for Enterobase-API vv2.0
+# Auto-generated client for Enterobase-API v2.0
 # Source: https://api.apis.guru/v2/specs/warwick.ac.uk/enterobase/v2.0/openapi.json
 # Auth: --token flag or $env.ENTEROBASE_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -1280,7 +1280,7 @@ export def "get-api-v2-0-database-scheme-alleles" [
   --seq: string
   --barcode: list<string> # Unique barcode for Strain records, _ e.g. SAL_AA0001AA
   --reldate: int # format: int32
-  --locus: string
+  --locus: string # required
   --only-fields: list<string>
   --limit: int # format: int32, default: 50
   --offset: int # format: int32, default: 0
@@ -1289,6 +1289,7 @@ export def "get-api-v2-0-database-scheme-alleles" [
   let base = ($base_url | default $BASE_URL)
   if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
   if ($scheme | is-empty) { error make --unspanned { msg: "path parameter 'scheme' must be non-empty" } }
+  if ($locus == null) { error make --unspanned { msg: "required query parameter 'locus' missing: pass --locus" } }
   let qp = [(serialize-qp "allele_id" $allele_id "scalar") (serialize-qp "seq" $seq "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "locus" $locus "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database), scheme: (encode-path-segment $scheme)} | format pattern "/api/v2.0/{database}/{scheme}/alleles") $qp $auth.query)
   let accept_val = "application/json"

@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -229,13 +229,15 @@ export def "list-funding-audit-deltas" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payor-id: string # format: uuid
-  --updated-since: string # format: date-time
+  --payor-id: string # required, format: uuid
+  --updated-since: string # required, format: date-time
   --page: int # Page number. Default is 1. (format: int32, default: 1)
   --page-size: int # The number of results to return in a page (format: int32, default: 25)
 ]: nothing -> record<content: table<amount: int, currency: string, fundingId: string, status: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payor_id == null) { error make --unspanned { msg: "required query parameter 'payorId' missing: pass --payor-id" } }
+  if ($updated_since == null) { error make --unspanned { msg: "required query parameter 'updatedSince' missing: pass --updated-since" } }
   let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "updatedSince" $updated_since "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/deltas/fundings" $qp $auth.query)
   let accept_val = "application/json"
@@ -270,13 +272,15 @@ export def "list-payment-changes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payor-id: string # The Payor ID to find associated Payments (format: uuid)
-  --updated-since: string # The updatedSince filter in the format YYYY-MM-DDThh:mm:ss+hh:mm (format: date-time)
+  --payor-id: string # The Payor ID to find associated Payments (required, format: uuid)
+  --updated-since: string # The updatedSince filter in the format YYYY-MM-DDThh:mm:ss+hh:mm (required, format: date-time)
   --page: int # Page number. Default is 1. (format: int32, default: 1)
   --page-size: int # The number of results to return in a page (format: int32, default: 100)
 ]: nothing -> record<content: table<paymentAmount: int, paymentCurrency: string, paymentId: string, payorPaymentId: string, payoutId: string, sourceAmount: int, sourceCurrency: string, status: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payor_id == null) { error make --unspanned { msg: "required query parameter 'payorId' missing: pass --payor-id" } }
+  if ($updated_since == null) { error make --unspanned { msg: "required query parameter 'updatedSince' missing: pass --updated-since" } }
   let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "updatedSince" $updated_since "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/deltas/payments" $qp $auth.query)
   let accept_val = "application/json"
@@ -453,21 +457,22 @@ export def "get-fundings-v1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payor-id: string # The account owner Payor ID (format: uuid)
+  --payor-id: string # The account owner Payor ID (required, format: uuid)
   --page: int # Page number. Default is 1. (format: int32, default: 1)
   --page-size: int # The number of results to return in a page (format: int32, default: 25)
-  --qp-sort: string # List of sort fields. Example: ```?sort=destinationCurrency:asc,destinationAmount:asc``` Default is no sort. The supported sort fields are: dateTime and amount.
+  --sort: string # List of sort fields. Example: ```?sort=destinationCurrency:asc,destinationAmount:asc``` Default is no sort. The supported sort fields are: dateTime and amount.
 ]: nothing -> record<content: table<amount: float, currency: string, dateTime: string, events: list, fundingAccountName: string, fundingType: string, sourceAccountName: string, status: string, topupType: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($payor_id == null) { error make --unspanned { msg: "required query parameter 'payorId' missing: pass --payor-id" } }
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/paymentaudit/fundings" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"payorId": $payor_id, "page": $page, "pageSize": $page_size, "sort": $qp_sort} | compact)
+    query: ({"payorId": $payor_id, "page": $page, "pageSize": $page_size, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -819,8 +824,8 @@ export def "payor-add-payor-logo-v1" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["logo"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["logo"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -859,6 +864,7 @@ export def "payor-email-opt-out" [
   let full_url = (build-url $base ({payor_id: (encode-path-segment $payor_id)} | format pattern "/v1/payors/{payor_id}/reminderEmailsUpdate") $auth.query)
   let req_body = {"reminderEmailsOptOut": $reminder_emails_opt_out} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "reminderEmailsOptOut") == null) { error make --unspanned { msg: "required body field 'reminderEmailsOptOut' missing: pass --reminder-emails-opt-out or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1010,10 +1016,11 @@ export def "list-webhooks-v1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. Default is 1. (format: int32, default: 1)
   --page-size: int # The number of results to return in a page (format: int32, default: 25)
-  --payor-id: string # The Payor ID (format: uuid)
+  --payor-id: string # The Payor ID (required, format: uuid)
 ]: nothing -> record<content: table<authorizationHeader: string, categories: list, enabled: bool, id: string, payorId: string, webhookUrl: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payor_id == null) { error make --unspanned { msg: "required query parameter 'payorId' missing: pass --payor-id" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "payorId" $payor_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/webhooks" $qp $auth.query)
   let accept_val = "application/json"
@@ -1058,6 +1065,7 @@ export def "create-webhook-v1" [
   let full_url = (build-url $base "/v1/webhooks" $auth.query)
   let req_body = {"authorizationHeader": $authorization_header, "categories": $categories, "enabled": $enabled, "payorId": $payor_id, "webhookUrl": $webhook_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1243,19 +1251,19 @@ export def "get-funding-accounts-v2" [
   --type: string # The type of funding account. (e.g. FBO)
   --page: int # Page number. Default is 1. (format: int32, default: 1)
   --page-size: int # The number of results to return in a page (format: int32, default: 25)
-  --qp-sort: string # List of sort fields (e.g. ?sort=accountName:asc,name:asc) Default is accountName:asc The supported sort fields are - accountName, name. (default: accountName:asc)
+  --sort: string # List of sort fields (e.g. ?sort=accountName:asc,name:asc) Default is accountName:asc The supported sort fields are - accountName, name. (default: accountName:asc)
   --sensitive: oneof<nothing, bool> # default: false
 ]: nothing -> record<content: table<accountName: string, accountNumber: string, archived: bool, country: string, currency: string, id: string, name: string, payorId: string, routingNumber: string, type: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/fundingAccounts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"payorId": $payor_id, "name": $name, "country": $country, "currency": $currency, "type": $type, "page": $page, "pageSize": $page_size, "sort": $qp_sort, "sensitive": $sensitive} | compact)
+    query: ({"payorId": $payor_id, "name": $name, "country": $country, "currency": $currency, "type": $type, "page": $page, "pageSize": $page_size, "sort": $sort, "sensitive": $sensitive} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1406,18 +1414,18 @@ export def "get-source-accounts-v2" [
   --funding-account-id: string # The funding account ID (format: uuid)
   --page: int # Page number. Default is 1. (format: int32, default: 1)
   --page-size: int # The number of results to return in a page (format: int32, default: 25)
-  --qp-sort: string # List of sort fields e.g. ?sort=name:asc Default is name:asc The supported sort fields are - fundingRef, name, balance (default: fundingRef:asc)
+  --sort: string # List of sort fields e.g. ?sort=name:asc Default is name:asc The supported sort fields are - fundingRef, name, balance (default: fundingRef:asc)
 ]: nothing -> record<content: table<accountType: string, autoTopUpConfig: record, balance: int, balanceVisible: bool, currency: string, customerId: string, fundingAccountId: string, fundingRef: string, id: string, name: string, notifications: record, payorId: string, physicalAccountId: string, physicalAccountName: string, pooled: bool, railsId: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "physicalAccountName" $physical_account_name "scalar") (serialize-qp "physicalAccountId" $physical_account_id "scalar") (serialize-qp "payorId" $payor_id "scalar") (serialize-qp "fundingAccountId" $funding_account_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "physicalAccountName" $physical_account_name "scalar") (serialize-qp "physicalAccountId" $physical_account_id "scalar") (serialize-qp "payorId" $payor_id "scalar") (serialize-qp "fundingAccountId" $funding_account_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/sourceAccounts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"physicalAccountName": $physical_account_name, "physicalAccountId": $physical_account_id, "payorId": $payor_id, "fundingAccountId": $funding_account_id, "page": $page, "pageSize": $page_size, "sort": $qp_sort} | compact)
+    query: ({"physicalAccountName": $physical_account_name, "physicalAccountId": $physical_account_id, "payorId": $payor_id, "fundingAccountId": $funding_account_id, "page": $page, "pageSize": $page_size, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1606,18 +1614,18 @@ export def "list-users" [
   --payee-type: string@payee-type-completer # The Type of the Payee entity. Either COMPANY or INDIVIDUAL. (e.g. COMPANY)
   --page: int # Page number. Default is 1. (format: int32, default: 1)
   --page-size: int # The number of results to return in a page (format: int32, default: 25)
-  --qp-sort: string # List of sort fields (e.g. ?sort=email:asc,lastName:asc) Default is email:asc 'name' The supported sort fields are - email, lastNmae. (default: email:asc)
+  --sort: string # List of sort fields (e.g. ?sort=email:asc,lastName:asc) Default is email:asc 'name' The supported sort fields are - email, lastNmae. (default: email:asc)
 ]: nothing -> record<content: table<companyName: string, email: string, entityId: string, firstName: string, id: string, lastName: string, lockedOut: bool, lockedOutTimestamp: string, mfaStatus: string, mfaType: string, primaryContactNumber: string, roles: list, secondaryContactNumber: string, smsNumber: string, status: string, userType: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "entityId" $entity_id "scalar") (serialize-qp "payeeType" $payee_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "entityId" $entity_id "scalar") (serialize-qp "payeeType" $payee_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/users" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"type": $type, "status": $status, "entityId": $entity_id, "payeeType": $payee_type, "page": $page, "pageSize": $page_size, "sort": $qp_sort} | compact)
+    query: ({"type": $type, "status": $status, "entityId": $entity_id, "payeeType": $payee_type, "page": $page, "pageSize": $page_size, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2275,7 +2283,7 @@ export def "list-payees-v3" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payor-id: string # The account owner Payor ID (format: uuid)
+  --payor-id: string # The account owner Payor ID (required, format: uuid)
   --watchlist-status: string # The watchlistStatus of the payees.
   --disabled: oneof<nothing, bool> # Payee disabled
   --onboarded-status: string # The onboarded status of the payees.
@@ -2286,18 +2294,19 @@ export def "list-payees-v3" [
   --payee-country: string # The country of the payee - 2 letter ISO 3166-1 country code (upper case) (e.g. US)
   --page: int # Page number. Default is 1. (format: int32, default: 1, e.g. 1)
   --page-size: int # Page size. Default is 25. Max allowable is 100. (format: int32, default: 25, e.g. 25)
-  --qp-sort: string # List of sort fields (e.g. ?sort=onboardedStatus:asc,name:asc) Default is name:asc 'name' is treated as company name for companies - last name + ',' + firstName for individuals The supported sort fields are - payeeId, displayName, payoutStatus, onboardedStatus. (default: displayName:asc, e.g. displayName:asc)
+  --sort: string # List of sort fields (e.g. ?sort=onboardedStatus:asc,name:asc) Default is name:asc 'name' is treated as company name for companies - last name + ',' + firstName for individuals The supported sort fields are - payeeId, displayName, payoutStatus, onboardedStatus. (default: displayName:asc, e.g. displayName:asc)
 ]: nothing -> record<content: table<company: record, country: string, created: string, disabled: bool, disabledComment: string, disabledUpdatedTimestamp: string, displayName: string, email: string, individual: record, language: string, onboardedStatus: string, payeeId: string, payeeType: string, payorRefs: list, watchlistOverrideComment: string, watchlistStatus: string, watchlistStatusUpdatedTimestamp: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>, summary: record<totalInvitedCount: int, totalOnboardedCount: int, totalPayeesCount: int, totalRegisteredCount: int, totalWatchlistFailedCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "watchlistStatus" $watchlist_status "scalar") (serialize-qp "disabled" $disabled "scalar") (serialize-qp "onboardedStatus" $onboarded_status "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "displayName" $display_name "scalar") (serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "payeeType" $payee_type "scalar") (serialize-qp "payeeCountry" $payee_country "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($payor_id == null) { error make --unspanned { msg: "required query parameter 'payorId' missing: pass --payor-id" } }
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "watchlistStatus" $watchlist_status "scalar") (serialize-qp "disabled" $disabled "scalar") (serialize-qp "onboardedStatus" $onboarded_status "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "displayName" $display_name "scalar") (serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "payeeType" $payee_type "scalar") (serialize-qp "payeeCountry" $payee_country "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/payees" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"payorId": $payor_id, "watchlistStatus": $watchlist_status, "disabled": $disabled, "onboardedStatus": $onboarded_status, "email": $email, "displayName": $display_name, "remoteId": $remote_id, "payeeType": $payee_type, "payeeCountry": $payee_country, "page": $page, "pageSize": $page_size, "sort": $qp_sort} | compact)
+    query: ({"payorId": $payor_id, "watchlistStatus": $watchlist_status, "disabled": $disabled, "onboardedStatus": $onboarded_status, "email": $email, "displayName": $display_name, "remoteId": $remote_id, "payeeType": $payee_type, "payeeCountry": $payee_country, "page": $page, "pageSize": $page_size, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2404,13 +2413,15 @@ export def "list-payee-changes-v3" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payor-id: string # The Payor ID to find associated Payees (format: uuid)
-  --updated-since: string # The updatedSince filter in the format YYYY-MM-DDThh:mm:ss+hh:mm (format: date-time)
+  --payor-id: string # The Payor ID to find associated Payees (required, format: uuid)
+  --updated-since: string # The updatedSince filter in the format YYYY-MM-DDThh:mm:ss+hh:mm (required, format: date-time)
   --page: int # Page number. Default is 1. (format: int32, default: 1, e.g. 1)
   --page-size: int # Page size. Default is 100. Max allowable is 1000. (format: int32, default: 100, e.g. 100)
 ]: nothing -> record<content: table<dbaName: string, displayName: string, email: string, onboardedStatus: string, payeeCountry: string, payeeId: string, remoteId: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payor_id == null) { error make --unspanned { msg: "required query parameter 'payorId' missing: pass --payor-id" } }
+  if ($updated_since == null) { error make --unspanned { msg: "required query parameter 'updatedSince' missing: pass --updated-since" } }
   let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "updatedSince" $updated_since "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/payees/deltas" $qp $auth.query)
   let accept_val = "application/json"
@@ -2719,19 +2730,19 @@ export def "list-payments-audit-v3" [
   --payment-memo: string # The payment memo filter. This filters via a case insensitive substring match.
   --page: int # Page number. Default is 1. (format: int32, default: 1)
   --page-size: int # The number of results to return in a page (format: int32, default: 25)
-  --qp-sort: string # List of sort fields (e.g. ?sort=submittedDateTime:asc,status:asc). Default is sort by remoteId The supported sort fields are: sourceAmount, sourceCurrency, paymentAmount, paymentCurrency, routingNumber, accountNumber, remoteId, submittedDateTime and status
+  --sort: string # List of sort fields (e.g. ?sort=submittedDateTime:asc,status:asc). Default is sort by remoteId The supported sort fields are: sourceAmount, sourceCurrency, paymentAmount, paymentCurrency, routingNumber, accountNumber, remoteId, submittedDateTime and status
   --sensitive: oneof<nothing, bool> # Optional. If omitted or set to false, any Personal Identifiable Information (PII) values are returned masked. If set to true, and you have permission, the PII values will be returned as their original unmasked values.
 ]: nothing -> record<content: table<accountName: string, accountNumber: string, countryCode: string, events: list, filenameReference: string, fundingStatus: string, iban: string, individualIdentificationNumber: string, invertedRate: float, payeeId: string, paymentAmount: int, paymentChannelId: string, paymentChannelName: string, paymentCurrency: string, paymentId: string, paymentMemo: string, paymentScheme: string, payorId: string, payorName: string, payorPaymentId: string, quoteId: string, railsBatchId: string, railsId: string, railsPaymentId: string, rate: float, rejectionReason: string, remoteId: string, returnCost: int, returnReason: string, routingNumber: string, sourceAccountId: string, sourceAccountName: string, sourceAmount: int, sourceCurrency: string, status: string, submittedDateTime: string, traceNumber: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payeeId" $payee_id "scalar") (serialize-qp "payorId" $payor_id "scalar") (serialize-qp "payorName" $payor_name "scalar") (serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sourceAccountName" $source_account_name "scalar") (serialize-qp "sourceAmountFrom" $source_amount_from "scalar") (serialize-qp "sourceAmountTo" $source_amount_to "scalar") (serialize-qp "sourceCurrency" $source_currency "scalar") (serialize-qp "paymentAmountFrom" $payment_amount_from "scalar") (serialize-qp "paymentAmountTo" $payment_amount_to "scalar") (serialize-qp "paymentCurrency" $payment_currency "scalar") (serialize-qp "submittedDateFrom" $submitted_date_from "scalar") (serialize-qp "submittedDateTo" $submitted_date_to "scalar") (serialize-qp "paymentMemo" $payment_memo "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payeeId" $payee_id "scalar") (serialize-qp "payorId" $payor_id "scalar") (serialize-qp "payorName" $payor_name "scalar") (serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sourceAccountName" $source_account_name "scalar") (serialize-qp "sourceAmountFrom" $source_amount_from "scalar") (serialize-qp "sourceAmountTo" $source_amount_to "scalar") (serialize-qp "sourceCurrency" $source_currency "scalar") (serialize-qp "paymentAmountFrom" $payment_amount_from "scalar") (serialize-qp "paymentAmountTo" $payment_amount_to "scalar") (serialize-qp "paymentCurrency" $payment_currency "scalar") (serialize-qp "submittedDateFrom" $submitted_date_from "scalar") (serialize-qp "submittedDateTo" $submitted_date_to "scalar") (serialize-qp "paymentMemo" $payment_memo "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/paymentaudit/payments" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"payeeId": $payee_id, "payorId": $payor_id, "payorName": $payor_name, "remoteId": $remote_id, "status": $status, "sourceAccountName": $source_account_name, "sourceAmountFrom": $source_amount_from, "sourceAmountTo": $source_amount_to, "sourceCurrency": $source_currency, "paymentAmountFrom": $payment_amount_from, "paymentAmountTo": $payment_amount_to, "paymentCurrency": $payment_currency, "submittedDateFrom": $submitted_date_from, "submittedDateTo": $submitted_date_to, "paymentMemo": $payment_memo, "page": $page, "pageSize": $page_size, "sort": $qp_sort, "sensitive": $sensitive} | compact)
+    query: ({"payeeId": $payee_id, "payorId": $payor_id, "payorName": $payor_name, "remoteId": $remote_id, "status": $status, "sourceAccountName": $source_account_name, "sourceAmountFrom": $source_amount_from, "sourceAmountTo": $source_amount_to, "sourceCurrency": $source_currency, "paymentAmountFrom": $payment_amount_from, "paymentAmountTo": $payment_amount_to, "paymentCurrency": $payment_currency, "submittedDateFrom": $submitted_date_from, "submittedDateTo": $submitted_date_to, "paymentMemo": $payment_memo, "page": $page, "pageSize": $page_size, "sort": $sort, "sensitive": $sensitive} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2798,25 +2809,26 @@ export def "get-payouts-for-payor-v3" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payor-id: string # The account owner Payor ID (format: uuid)
+  --payor-id: string # The account owner Payor ID (required, format: uuid)
   --payout-memo: string # Payout Memo filter - case insensitive sub-string match
   --status: string@status-completer-2 # Payout Status
   --submitted-date-from: string # The submitted date from range filter. Format is yyyy-MM-dd. (format: date)
   --submitted-date-to: string # The submitted date to range filter. Format is yyyy-MM-dd. (format: date)
   --page: int # Page number. Default is 1. (format: int32, default: 1)
   --page-size: int # The number of results to return in a page (format: int32, default: 25)
-  --qp-sort: string # List of sort fields (e.g. ?sort=submittedDateTime:asc,instructedDateTime:asc,status:asc) Default is submittedDateTime:asc The supported sort fields are: submittedDateTime, instructedDateTime, status.
+  --sort: string # List of sort fields (e.g. ?sort=submittedDateTime:asc,instructedDateTime:asc,status:asc) Default is submittedDateTime:asc The supported sort fields are: submittedDateTime, instructedDateTime, status.
 ]: nothing -> record<content: table<fxSummaries: list, instructedDateTime: string, payorId: string, payoutId: string, payoutMemo: string, sourceAccountSummary: list, status: string, submittedDateTime: string, totalFailedPayments: int, totalIncompletePayments: int, totalPayments: int, withdrawnDateTime: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "payoutMemo" $payout_memo "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "submittedDateFrom" $submitted_date_from "scalar") (serialize-qp "submittedDateTo" $submitted_date_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($payor_id == null) { error make --unspanned { msg: "required query parameter 'payorId' missing: pass --payor-id" } }
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "payoutMemo" $payout_memo "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "submittedDateFrom" $submitted_date_from "scalar") (serialize-qp "submittedDateTo" $submitted_date_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/paymentaudit/payouts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"payorId": $payor_id, "payoutMemo": $payout_memo, "status": $status, "submittedDateFrom": $submitted_date_from, "submittedDateTo": $submitted_date_to, "page": $page, "pageSize": $page_size, "sort": $qp_sort} | compact)
+    query: ({"payorId": $payor_id, "payoutMemo": $payout_memo, "status": $status, "submittedDateFrom": $submitted_date_from, "submittedDateTo": $submitted_date_to, "page": $page, "pageSize": $page_size, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2854,20 +2866,20 @@ export def "get-payments-for-payout-pa-v3" [
   --submitted-date-to: string # The submitted date to range filter. Format is yyyy-MM-dd. (format: date)
   --page: int # Page number. Default is 1. (format: int32, default: 1)
   --page-size: int # The number of results to return in a page (format: int32, default: 25)
-  --qp-sort: string # List of sort fields (e.g. ?sort=submittedDateTime:asc,status:asc). Default is sort by remoteId The supported sort fields are: sourceAmount, sourceCurrency, paymentAmount, paymentCurrency, routingNumber, accountNumber, remoteId, submittedDateTime and status
+  --sort: string # List of sort fields (e.g. ?sort=submittedDateTime:asc,status:asc). Default is sort by remoteId The supported sort fields are: sourceAmount, sourceCurrency, paymentAmount, paymentCurrency, routingNumber, accountNumber, remoteId, submittedDateTime and status
   --sensitive: oneof<nothing, bool> # Optional. If omitted or set to false, any Personal Identifiable Information (PII) values are returned masked. If set to true, and you have permission, the PII values will be returned as their original unmasked values.
 ]: nothing -> record<content: table<accountName: string, accountNumber: string, countryCode: string, events: list, filenameReference: string, fundingStatus: string, iban: string, individualIdentificationNumber: string, invertedRate: float, payeeId: string, paymentAmount: int, paymentChannelId: string, paymentChannelName: string, paymentCurrency: string, paymentId: string, paymentMemo: string, paymentScheme: string, payorId: string, payorName: string, payorPaymentId: string, quoteId: string, railsBatchId: string, railsId: string, railsPaymentId: string, rate: float, rejectionReason: string, remoteId: string, returnCost: int, returnReason: string, routingNumber: string, sourceAccountId: string, sourceAccountName: string, sourceAmount: int, sourceCurrency: string, status: string, submittedDateTime: string, traceNumber: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>, summary: record<confirmedPayments: int, failedPayments: int, incompletePayments: int, instructedDateTime: string, payoutMemo: string, payoutStatus: string, releasedPayments: int, submittedDateTime: string, totalPayments: int, withdrawnDateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payout_id | is-empty) { error make --unspanned { msg: "path parameter 'payoutId' must be non-empty" } }
-  let qp = [(serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sourceAmountFrom" $source_amount_from "scalar") (serialize-qp "sourceAmountTo" $source_amount_to "scalar") (serialize-qp "paymentAmountFrom" $payment_amount_from "scalar") (serialize-qp "paymentAmountTo" $payment_amount_to "scalar") (serialize-qp "submittedDateFrom" $submitted_date_from "scalar") (serialize-qp "submittedDateTo" $submitted_date_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sourceAmountFrom" $source_amount_from "scalar") (serialize-qp "sourceAmountTo" $source_amount_to "scalar") (serialize-qp "paymentAmountFrom" $payment_amount_from "scalar") (serialize-qp "paymentAmountTo" $payment_amount_to "scalar") (serialize-qp "submittedDateFrom" $submitted_date_from "scalar") (serialize-qp "submittedDateTo" $submitted_date_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payout_id: (encode-path-segment $payout_id)} | format pattern "/v3/paymentaudit/payouts/{payout_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"remoteId": $remote_id, "status": $status, "sourceAmountFrom": $source_amount_from, "sourceAmountTo": $source_amount_to, "paymentAmountFrom": $payment_amount_from, "paymentAmountTo": $payment_amount_to, "submittedDateFrom": $submitted_date_from, "submittedDateTo": $submitted_date_to, "page": $page, "pageSize": $page_size, "sort": $qp_sort, "sensitive": $sensitive} | compact)
+    query: ({"remoteId": $remote_id, "status": $status, "sourceAmountFrom": $source_amount_from, "sourceAmountTo": $source_amount_to, "paymentAmountFrom": $payment_amount_from, "paymentAmountTo": $payment_amount_to, "submittedDateFrom": $submitted_date_from, "submittedDateTo": $submitted_date_to, "page": $page, "pageSize": $page_size, "sort": $sort, "sensitive": $sensitive} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3214,6 +3226,7 @@ export def "schedule-for-payout" [
   let full_url = (build-url $base ({payout_id: (encode-path-segment $payout_id)} | format pattern "/v3/payouts/{payout_id}/schedule") $auth.query)
   let req_body = {"notificationsEnabled": $notifications_enabled, "scheduledFor": $scheduled_for} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "notificationsEnabled") == null) { error make --unspanned { msg: "required body field 'notificationsEnabled' missing: pass --notifications-enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3252,18 +3265,18 @@ export def "get-source-accounts-v3" [
   --type: string # The type of source account.
   --page: int # Page number. Default is 1. (format: int32, default: 1)
   --page-size: int # The number of results to return in a page (format: int32, default: 25)
-  --qp-sort: string # List of sort fields e.g. ?sort=name:asc Default is name:asc The supported sort fields are - fundingRef, name, balance (default: fundingRef:asc)
+  --sort: string # List of sort fields e.g. ?sort=name:asc Default is name:asc The supported sort fields are - fundingRef, name, balance (default: fundingRef:asc)
 ]: nothing -> record<content: table<autoTopUpConfig: record, balance: int, country: string, currency: string, customerId: string, deleted: bool, deletedAt: string, fundingRef: string, id: string, name: string, notifications: record, payorId: string, physicalAccountId: string, physicalAccountName: string, pooled: bool, railsId: string, type: string, userDeleted: bool>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "physicalAccountName" $physical_account_name "scalar") (serialize-qp "physicalAccountId" $physical_account_id "scalar") (serialize-qp "payorId" $payor_id "scalar") (serialize-qp "fundingAccountId" $funding_account_id "scalar") (serialize-qp "includeUserDeleted" $include_user_deleted "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "physicalAccountName" $physical_account_name "scalar") (serialize-qp "physicalAccountId" $physical_account_id "scalar") (serialize-qp "payorId" $payor_id "scalar") (serialize-qp "fundingAccountId" $funding_account_id "scalar") (serialize-qp "includeUserDeleted" $include_user_deleted "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/sourceAccounts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"physicalAccountName": $physical_account_name, "physicalAccountId": $physical_account_id, "payorId": $payor_id, "fundingAccountId": $funding_account_id, "includeUserDeleted": $include_user_deleted, "type": $type, "page": $page, "pageSize": $page_size, "sort": $qp_sort} | compact)
+    query: ({"physicalAccountName": $physical_account_name, "physicalAccountId": $physical_account_id, "payorId": $payor_id, "fundingAccountId": $funding_account_id, "includeUserDeleted": $include_user_deleted, "type": $type, "page": $page, "pageSize": $page_size, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3483,7 +3496,7 @@ export def "list-payees-v4" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payor-id: string # The account owner Payor ID (format: uuid)
+  --payor-id: string # The account owner Payor ID (required, format: uuid)
   --watchlist-status: string # The watchlistStatus of the payees.
   --disabled: oneof<nothing, bool> # Payee disabled
   --onboarded-status: string # The onboarded status of the payees.
@@ -3495,18 +3508,19 @@ export def "list-payees-v4" [
   --ofac-status: string # The ofacStatus of the payees.
   --page: int # Page number. Default is 1. (format: int32, default: 1, e.g. 1)
   --page-size: int # Page size. Default is 25. Max allowable is 100. (format: int32, default: 25, e.g. 25)
-  --qp-sort: string # List of sort fields (e.g. ?sort=onboardedStatus:asc,name:asc) Default is name:asc 'name' is treated as company name for companies - last name + ',' + firstName for individuals The supported sort fields are - payeeId, displayName, payoutStatus, onboardedStatus. (default: displayName:asc, e.g. displayName:asc)
+  --sort: string # List of sort fields (e.g. ?sort=onboardedStatus:asc,name:asc) Default is name:asc 'name' is treated as company name for companies - last name + ',' + firstName for individuals The supported sort fields are - payeeId, displayName, payoutStatus, onboardedStatus. (default: displayName:asc, e.g. displayName:asc)
 ]: nothing -> record<content: table<company: record, country: string, created: string, disabled: bool, disabledComment: string, disabledUpdatedTimestamp: string, displayName: string, email: string, individual: record, language: string, onboardedStatus: string, payeeId: string, payeeType: string, payorRefs: list, watchlistOverrideComment: string, watchlistStatus: string, watchlistStatusUpdatedTimestamp: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>, summary: record<totalInvitedCount: int, totalOnboardedCount: int, totalPayeesCount: int, totalRegisteredCount: int, totalWatchlistFailedCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "watchlistStatus" $watchlist_status "scalar") (serialize-qp "disabled" $disabled "scalar") (serialize-qp "onboardedStatus" $onboarded_status "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "displayName" $display_name "scalar") (serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "payeeType" $payee_type "scalar") (serialize-qp "payeeCountry" $payee_country "scalar") (serialize-qp "ofacStatus" $ofac_status "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($payor_id == null) { error make --unspanned { msg: "required query parameter 'payorId' missing: pass --payor-id" } }
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "watchlistStatus" $watchlist_status "scalar") (serialize-qp "disabled" $disabled "scalar") (serialize-qp "onboardedStatus" $onboarded_status "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "displayName" $display_name "scalar") (serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "payeeType" $payee_type "scalar") (serialize-qp "payeeCountry" $payee_country "scalar") (serialize-qp "ofacStatus" $ofac_status "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/payees" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"payorId": $payor_id, "watchlistStatus": $watchlist_status, "disabled": $disabled, "onboardedStatus": $onboarded_status, "email": $email, "displayName": $display_name, "remoteId": $remote_id, "payeeType": $payee_type, "payeeCountry": $payee_country, "ofacStatus": $ofac_status, "page": $page, "pageSize": $page_size, "sort": $qp_sort} | compact)
+    query: ({"payorId": $payor_id, "watchlistStatus": $watchlist_status, "disabled": $disabled, "onboardedStatus": $onboarded_status, "email": $email, "displayName": $display_name, "remoteId": $remote_id, "payeeType": $payee_type, "payeeCountry": $payee_country, "ofacStatus": $ofac_status, "page": $page, "pageSize": $page_size, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3607,13 +3621,15 @@ export def "list-payee-changes-v4" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payor-id: string # The Payor ID to find associated Payees (format: uuid)
-  --updated-since: string # The updatedSince filter in the format YYYY-MM-DDThh:mm:ss+hh:mm (format: date-time)
+  --payor-id: string # The Payor ID to find associated Payees (required, format: uuid)
+  --updated-since: string # The updatedSince filter in the format YYYY-MM-DDThh:mm:ss+hh:mm (required, format: date-time)
   --page: int # Page number. Default is 1. (format: int32, default: 1, e.g. 1)
   --page-size: int # Page size. Default is 100. Max allowable is 1000. (format: int32, default: 100, e.g. 100)
 ]: nothing -> record<content: table<dbaName: string, displayName: string, email: string, onboardedStatus: string, payeeCountry: string, payeeId: string, remoteId: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payor_id == null) { error make --unspanned { msg: "required query parameter 'payorId' missing: pass --payor-id" } }
+  if ($updated_since == null) { error make --unspanned { msg: "required query parameter 'updatedSince' missing: pass --updated-since" } }
   let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "updatedSince" $updated_since "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/payees/deltas" $qp $auth.query)
   let accept_val = "application/json"
@@ -3892,22 +3908,23 @@ export def "get-fundings-v4" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payor-id: string # The account owner Payor ID (format: uuid)
+  --payor-id: string # The account owner Payor ID (required, format: uuid)
   --source-account-name: string # The source account name
   --page: int # Page number. Default is 1. (format: int32, default: 1)
   --page-size: int # The number of results to return in a page (format: int32, default: 25)
-  --qp-sort: string # List of sort fields. Example: ```?sort=destinationCurrency:asc,destinationAmount:asc``` Default is no sort. The supported sort fields are: dateTime and amount.
+  --sort: string # List of sort fields. Example: ```?sort=destinationCurrency:asc,destinationAmount:asc``` Default is no sort. The supported sort fields are: dateTime and amount.
 ]: nothing -> record<content: table<amount: float, currency: string, dateTime: string, events: list, fundingAccountName: string, fundingType: string, sourceAccountName: string, status: string, topupType: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "sourceAccountName" $source_account_name "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($payor_id == null) { error make --unspanned { msg: "required query parameter 'payorId' missing: pass --payor-id" } }
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "sourceAccountName" $source_account_name "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/paymentaudit/fundings" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"payorId": $payor_id, "sourceAccountName": $source_account_name, "page": $page, "pageSize": $page_size, "sort": $qp_sort} | compact)
+    query: ({"payorId": $payor_id, "sourceAccountName": $source_account_name, "page": $page, "pageSize": $page_size, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3956,19 +3973,19 @@ export def "list-payments-audit-v4" [
   --post-instruct-fx-status: string@post-instruct-fx-status-completer # The status of the post instruct FX step if one was required for the payment
   --page: int # Page number. Default is 1. (format: int32, default: 1)
   --page-size: int # The number of results to return in a page (format: int32, default: 25)
-  --qp-sort: string # List of sort fields (e.g. ?sort=submittedDateTime:asc,status:asc). Default is sort by submittedDateTime:desc,paymentId:asc The supported sort fields are: sourceAmount, sourceCurrency, paymentAmount, paymentCurrency, routingNumber, accountNumber, remoteId, submittedDateTime, status and paymentId
+  --sort: string # List of sort fields (e.g. ?sort=submittedDateTime:asc,status:asc). Default is sort by submittedDateTime:desc,paymentId:asc The supported sort fields are: sourceAmount, sourceCurrency, paymentAmount, paymentCurrency, routingNumber, accountNumber, remoteId, submittedDateTime, status and paymentId
   --sensitive: oneof<nothing, bool> # Optional. If omitted or set to false, any Personal Identifiable Information (PII) values are returned masked. If set to true, and you have permission, the PII values will be returned as their original unmasked values.
 ]: nothing -> record<content: table<accountName: string, accountNumber: string, autoWithdrawnReasonCode: string, countryCode: string, events: list, filenameReference: string, fundingStatus: string, iban: string, individualIdentificationNumber: string, invertedRate: float, isPaymentCcyBaseCcy: bool, payeeAddressCountryCode: string, payeeId: string, paymentAmount: int, paymentChannelId: string, paymentChannelName: string, paymentCurrency: string, paymentId: string, paymentMemo: string, paymentMetadata: string, paymentScheme: string, paymentTrackingReference: string, payorId: string, payorName: string, payorPaymentId: string, payout: record, postInstructFxInfo: record, quoteId: string, railsBatchId: string, railsId: string, railsPaymentId: string, rate: float, rejectionReason: string, remoteId: string, remoteSystemId: string, remoteSystemPaymentId: string, returnCost: int, returnReason: string, routingNumber: string, schedule: record, sourceAccountId: string, sourceAccountName: string, sourceAmount: int, sourceCurrency: string, status: string, submittedDateTime: string, traceNumber: string, transmissionType: string, withdrawable: bool, withdrawnReason: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payeeId" $payee_id "scalar") (serialize-qp "payorId" $payor_id "scalar") (serialize-qp "payorName" $payor_name "scalar") (serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "remoteSystemId" $remote_system_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "transmissionType" $transmission_type "scalar") (serialize-qp "sourceAccountName" $source_account_name "scalar") (serialize-qp "sourceAmountFrom" $source_amount_from "scalar") (serialize-qp "sourceAmountTo" $source_amount_to "scalar") (serialize-qp "sourceCurrency" $source_currency "scalar") (serialize-qp "paymentAmountFrom" $payment_amount_from "scalar") (serialize-qp "paymentAmountTo" $payment_amount_to "scalar") (serialize-qp "paymentCurrency" $payment_currency "scalar") (serialize-qp "submittedDateFrom" $submitted_date_from "scalar") (serialize-qp "submittedDateTo" $submitted_date_to "scalar") (serialize-qp "paymentMemo" $payment_memo "scalar") (serialize-qp "railsId" $rails_id "scalar") (serialize-qp "scheduledForDateFrom" $scheduled_for_date_from "scalar") (serialize-qp "scheduledForDateTo" $scheduled_for_date_to "scalar") (serialize-qp "scheduleStatus" $schedule_status "scalar") (serialize-qp "postInstructFxStatus" $post_instruct_fx_status "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payeeId" $payee_id "scalar") (serialize-qp "payorId" $payor_id "scalar") (serialize-qp "payorName" $payor_name "scalar") (serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "remoteSystemId" $remote_system_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "transmissionType" $transmission_type "scalar") (serialize-qp "sourceAccountName" $source_account_name "scalar") (serialize-qp "sourceAmountFrom" $source_amount_from "scalar") (serialize-qp "sourceAmountTo" $source_amount_to "scalar") (serialize-qp "sourceCurrency" $source_currency "scalar") (serialize-qp "paymentAmountFrom" $payment_amount_from "scalar") (serialize-qp "paymentAmountTo" $payment_amount_to "scalar") (serialize-qp "paymentCurrency" $payment_currency "scalar") (serialize-qp "submittedDateFrom" $submitted_date_from "scalar") (serialize-qp "submittedDateTo" $submitted_date_to "scalar") (serialize-qp "paymentMemo" $payment_memo "scalar") (serialize-qp "railsId" $rails_id "scalar") (serialize-qp "scheduledForDateFrom" $scheduled_for_date_from "scalar") (serialize-qp "scheduledForDateTo" $scheduled_for_date_to "scalar") (serialize-qp "scheduleStatus" $schedule_status "scalar") (serialize-qp "postInstructFxStatus" $post_instruct_fx_status "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/paymentaudit/payments" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"payeeId": $payee_id, "payorId": $payor_id, "payorName": $payor_name, "remoteId": $remote_id, "remoteSystemId": $remote_system_id, "status": $status, "transmissionType": $transmission_type, "sourceAccountName": $source_account_name, "sourceAmountFrom": $source_amount_from, "sourceAmountTo": $source_amount_to, "sourceCurrency": $source_currency, "paymentAmountFrom": $payment_amount_from, "paymentAmountTo": $payment_amount_to, "paymentCurrency": $payment_currency, "submittedDateFrom": $submitted_date_from, "submittedDateTo": $submitted_date_to, "paymentMemo": $payment_memo, "railsId": $rails_id, "scheduledForDateFrom": $scheduled_for_date_from, "scheduledForDateTo": $scheduled_for_date_to, "scheduleStatus": $schedule_status, "postInstructFxStatus": $post_instruct_fx_status, "page": $page, "pageSize": $page_size, "sort": $qp_sort, "sensitive": $sensitive} | compact)
+    query: ({"payeeId": $payee_id, "payorId": $payor_id, "payorName": $payor_name, "remoteId": $remote_id, "remoteSystemId": $remote_system_id, "status": $status, "transmissionType": $transmission_type, "sourceAccountName": $source_account_name, "sourceAmountFrom": $source_amount_from, "sourceAmountTo": $source_amount_to, "sourceCurrency": $source_currency, "paymentAmountFrom": $payment_amount_from, "paymentAmountTo": $payment_amount_to, "paymentCurrency": $payment_currency, "submittedDateFrom": $submitted_date_from, "submittedDateTo": $submitted_date_to, "paymentMemo": $payment_memo, "railsId": $rails_id, "scheduledForDateFrom": $scheduled_for_date_from, "scheduledForDateTo": $scheduled_for_date_to, "scheduleStatus": $schedule_status, "postInstructFxStatus": $post_instruct_fx_status, "page": $page, "pageSize": $page_size, "sort": $sort, "sensitive": $sensitive} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4078,18 +4095,18 @@ export def "get-payouts-for-payor-v4" [
   --schedule-status: string@schedule-status-completer # Payout Schedule Status
   --page: int # Page number. Default is 1. (format: int32, default: 1)
   --page-size: int # The number of results to return in a page (format: int32, default: 25)
-  --qp-sort: string # List of sort fields (e.g. ?sort=submittedDateTime:asc,instructedDateTime:asc,status:asc) Default is submittedDateTime:asc The supported sort fields are: submittedDateTime, instructedDateTime, status, totalPayments, payoutId, scheduledFor
+  --sort: string # List of sort fields (e.g. ?sort=submittedDateTime:asc,instructedDateTime:asc,status:asc) Default is submittedDateTime:asc The supported sort fields are: submittedDateTime, instructedDateTime, status, totalPayments, payoutId, scheduledFor
 ]: nothing -> record<content: table<dateTime: string, fxSummaries: list, instructedDateTime: string, payorId: string, payorName: string, payoutId: string, payoutMemo: string, payoutType: string, schedule: record, sourceAccountSummary: list, status: string, submittedDateTime: string, totalIncompletePayments: int, totalPayments: int, totalReturnedPayments: int, totalWithdrawnPayments: int, withdrawnDateTime: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "payoutMemo" $payout_memo "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "submittedDateFrom" $submitted_date_from "scalar") (serialize-qp "submittedDateTo" $submitted_date_to "scalar") (serialize-qp "fromPayorName" $from_payor_name "scalar") (serialize-qp "scheduledForDateFrom" $scheduled_for_date_from "scalar") (serialize-qp "scheduledForDateTo" $scheduled_for_date_to "scalar") (serialize-qp "scheduleStatus" $schedule_status "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "payoutMemo" $payout_memo "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "submittedDateFrom" $submitted_date_from "scalar") (serialize-qp "submittedDateTo" $submitted_date_to "scalar") (serialize-qp "fromPayorName" $from_payor_name "scalar") (serialize-qp "scheduledForDateFrom" $scheduled_for_date_from "scalar") (serialize-qp "scheduledForDateTo" $scheduled_for_date_to "scalar") (serialize-qp "scheduleStatus" $schedule_status "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/paymentaudit/payouts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"payorId": $payor_id, "payoutMemo": $payout_memo, "status": $status, "submittedDateFrom": $submitted_date_from, "submittedDateTo": $submitted_date_to, "fromPayorName": $from_payor_name, "scheduledForDateFrom": $scheduled_for_date_from, "scheduledForDateTo": $scheduled_for_date_to, "scheduleStatus": $schedule_status, "page": $page, "pageSize": $page_size, "sort": $qp_sort} | compact)
+    query: ({"payorId": $payor_id, "payoutMemo": $payout_memo, "status": $status, "submittedDateFrom": $submitted_date_from, "submittedDateTo": $submitted_date_to, "fromPayorName": $from_payor_name, "scheduledForDateFrom": $scheduled_for_date_from, "scheduledForDateTo": $scheduled_for_date_to, "scheduleStatus": $schedule_status, "page": $page, "pageSize": $page_size, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4127,20 +4144,20 @@ export def "get-payments-for-payout-v4" [
   --transmission-type: string@transmission-type-completer-1 # Transmission Type * ACH * SAME_DAY_ACH * WIRE * GACHO
   --page: int # Page number. Default is 1. (format: int32, default: 1)
   --page-size: int # The number of results to return in a page (format: int32, default: 25)
-  --qp-sort: string # List of sort fields (e.g. ?sort=submittedDateTime:asc,status:asc). Default is sort by remoteId The supported sort fields are: sourceAmount, sourceCurrency, paymentAmount, paymentCurrency, routingNumber, accountNumber, remoteId, submittedDateTime and status
+  --sort: string # List of sort fields (e.g. ?sort=submittedDateTime:asc,status:asc). Default is sort by remoteId The supported sort fields are: sourceAmount, sourceCurrency, paymentAmount, paymentCurrency, routingNumber, accountNumber, remoteId, submittedDateTime and status
   --sensitive: oneof<nothing, bool> # Optional. If omitted or set to false, any Personal Identifiable Information (PII) values are returned masked. If set to true, and you have permission, the PII values will be returned as their original unmasked values.
 ]: nothing -> record<content: table<accountName: string, accountNumber: string, autoWithdrawnReasonCode: string, countryCode: string, events: list, filenameReference: string, fundingStatus: string, iban: string, individualIdentificationNumber: string, invertedRate: float, isPaymentCcyBaseCcy: bool, payeeAddressCountryCode: string, payeeId: string, paymentAmount: int, paymentChannelId: string, paymentChannelName: string, paymentCurrency: string, paymentId: string, paymentMemo: string, paymentMetadata: string, paymentScheme: string, paymentTrackingReference: string, payorId: string, payorName: string, payorPaymentId: string, payout: record, postInstructFxInfo: record, quoteId: string, railsBatchId: string, railsId: string, railsPaymentId: string, rate: float, rejectionReason: string, remoteId: string, remoteSystemId: string, remoteSystemPaymentId: string, returnCost: int, returnReason: string, routingNumber: string, schedule: record, sourceAccountId: string, sourceAccountName: string, sourceAmount: int, sourceCurrency: string, status: string, submittedDateTime: string, traceNumber: string, transmissionType: string, withdrawable: bool, withdrawnReason: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>, summary: record<confirmedPayments: int, incompletePayments: int, instructed: record<principal: string, principalId: string>, instructedDateTime: string, payoutFrom: record<dbaName: string, payorId: string, payorName: string, principal: string, principalId: string>, payoutMemo: string, payoutStatus: string, payoutTo: record<dbaName: string, payorId: string, payorName: string, principal: string, principalId: string>, payoutType: string, quoted: record<principal: string, principalId: string>, quotedDateTime: string, releasedPayments: int, returnedPayments: int, schedule: record<notificationsEnabled: bool, scheduleStatus: string, scheduledAt: string, scheduledBy: string, scheduledByPrincipalId: string, scheduledFor: string>, submittedDateTime: string, submitting: record<dbaName: string, payorId: string, payorName: string, principal: string, principalId: string>, totalPayments: int, withdrawn: record<principal: string, principalId: string>, withdrawnDateTime: string, withdrawnPayments: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payout_id | is-empty) { error make --unspanned { msg: "path parameter 'payoutId' must be non-empty" } }
-  let qp = [(serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "remoteSystemId" $remote_system_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sourceAmountFrom" $source_amount_from "scalar") (serialize-qp "sourceAmountTo" $source_amount_to "scalar") (serialize-qp "paymentAmountFrom" $payment_amount_from "scalar") (serialize-qp "paymentAmountTo" $payment_amount_to "scalar") (serialize-qp "submittedDateFrom" $submitted_date_from "scalar") (serialize-qp "submittedDateTo" $submitted_date_to "scalar") (serialize-qp "transmissionType" $transmission_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "remoteId" $remote_id "scalar") (serialize-qp "remoteSystemId" $remote_system_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sourceAmountFrom" $source_amount_from "scalar") (serialize-qp "sourceAmountTo" $source_amount_to "scalar") (serialize-qp "paymentAmountFrom" $payment_amount_from "scalar") (serialize-qp "paymentAmountTo" $payment_amount_to "scalar") (serialize-qp "submittedDateFrom" $submitted_date_from "scalar") (serialize-qp "submittedDateTo" $submitted_date_to "scalar") (serialize-qp "transmissionType" $transmission_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sensitive" $sensitive "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payout_id: (encode-path-segment $payout_id)} | format pattern "/v4/paymentaudit/payouts/{payout_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"remoteId": $remote_id, "remoteSystemId": $remote_system_id, "status": $status, "sourceAmountFrom": $source_amount_from, "sourceAmountTo": $source_amount_to, "paymentAmountFrom": $payment_amount_from, "paymentAmountTo": $payment_amount_to, "submittedDateFrom": $submitted_date_from, "submittedDateTo": $submitted_date_to, "transmissionType": $transmission_type, "page": $page, "pageSize": $page_size, "sort": $qp_sort, "sensitive": $sensitive} | compact)
+    query: ({"remoteId": $remote_id, "remoteSystemId": $remote_system_id, "status": $status, "sourceAmountFrom": $source_amount_from, "sourceAmountTo": $source_amount_to, "paymentAmountFrom": $payment_amount_from, "paymentAmountTo": $payment_amount_to, "submittedDateFrom": $submitted_date_from, "submittedDateTo": $submitted_date_to, "transmissionType": $transmission_type, "page": $page, "pageSize": $page_size, "sort": $sort, "sensitive": $sensitive} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4204,13 +4221,15 @@ export def "list-payment-changes-v4" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --payor-id: string # The Payor ID to find associated Payments (format: uuid)
-  --updated-since: string # The updatedSince filter in the format YYYY-MM-DDThh:mm:ss+hh:mm (format: date-time)
+  --payor-id: string # The Payor ID to find associated Payments (required, format: uuid)
+  --updated-since: string # The updatedSince filter in the format YYYY-MM-DDThh:mm:ss+hh:mm (required, format: date-time)
   --page: int # Page number. Default is 1. (format: int32, default: 1)
   --page-size: int # The number of results to return in a page (format: int32, default: 100)
 ]: nothing -> record<content: table<paymentAmount: int, paymentCurrency: string, paymentId: string, payorPaymentId: string, payoutId: string, sourceAmount: int, sourceCurrency: string, status: string>, links: table<href: string, rel: string>, page: record<numberOfElements: int, page: int, pageSize: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payor_id == null) { error make --unspanned { msg: "required query parameter 'payorId' missing: pass --payor-id" } }
+  if ($updated_since == null) { error make --unspanned { msg: "required query parameter 'updatedSince' missing: pass --updated-since" } }
   let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "updatedSince" $updated_since "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/payments/deltas" $qp $auth.query)
   let accept_val = "application/json"

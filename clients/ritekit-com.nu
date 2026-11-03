@@ -131,10 +131,11 @@ export def "auto-emojify" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --text: string # Text of the post (e.g. Why robots may soon steal all manufacturing jobs – but it’s not all bad news)
+  --text: string # Text of the post (required, e.g. Why robots may soon steal all manufacturing jobs – but it’s not all bad news)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/emoji/auto-emojify" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
@@ -167,10 +168,11 @@ export def "emoji-suggestions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --text: string # Text of the post (e.g. Why robots may soon steal all manufacturing jobs – but it’s not all bad news)
+  --text: string # Text of the post (required, e.g. Why robots may soon steal all manufacturing jobs – but it’s not all bad news)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/emoji/suggestions" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
@@ -203,11 +205,13 @@ export def "animate-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # URL of the company (e.g. https://jpeg.org/images/jpeg-home.jpg)
-  --type: string # URL of the company (e.g. glint)
+  --url: string # URL of the company (required, e.g. https://jpeg.org/images/jpeg-home.jpg)
+  --type: string # URL of the company (required, e.g. glint)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/images/animate" $qp $auth.query)
   let accept_val = "image/gif"
@@ -240,10 +244,11 @@ export def "company-logo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string # URL of the company (e.g. google.com)
+  --domain: string # URL of the company (required, e.g. google.com)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
   let qp = [(serialize-qp "domain" $domain "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/images/logo" $qp $auth.query)
   let accept_val = "image/png"
@@ -276,26 +281,42 @@ export def "text-to-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --quote: string # Text of the quote (e.g. If you love life, don't waste time, for time is what life is made up of)
-  --author: string # Name of the author/source (e.g. Bruce Lee)
-  --font-size: int # Font size for the quote (author font size is calculated automatically) (e.g. 60)
-  --quote-font: string # Font-family used for quote text (e.g. Lora)
-  --quote-font-color: string # Font color of the quote text (e.g. #4f4f4f)
-  --author-font: string # Font-family used for author name (e.g. Lato Black)
-  --author-font-color: string # Font color of the author (e.g. #e5e5e5)
-  --enable-highlight: int # Enable highlight on quote text (e.g. 1)
-  --highlight-color: string # Color used for highlight (e.g. #f0ea66)
-  --bg-type: string # Background type (gradient/solid) (e.g. gradient)
-  --background-color: string # Background color for solid background type (e.g. #000000)
-  --gradient-type: string # Type of gradient background (linear/radial) (e.g. linear)
-  --gradient-color1: string # First color for gradient background type (e.g. #1ee691)
-  --gradient-color2: string # Second color for gradient background type (e.g. #1ddad6)
-  --brand-logo: string # URL of the brand logo (e.g. https://cdn.ritekit.com/assets/img/common/made-with-ritekit-white.png)
-  --animation: string # Animation type: none, rays, glint, circle (e.g. glint)
+  --quote: string # Text of the quote (required, e.g. If you love life, don't waste time, for time is what life is made up of)
+  --author: string # Name of the author/source (required, e.g. Bruce Lee)
+  --font-size: int # Font size for the quote (author font size is calculated automatically) (required, e.g. 60)
+  --quote-font: string # Font-family used for quote text (required, e.g. Lora)
+  --quote-font-color: string # Font color of the quote text (required, e.g. #4f4f4f)
+  --author-font: string # Font-family used for author name (required, e.g. Lato Black)
+  --author-font-color: string # Font color of the author (required, e.g. #e5e5e5)
+  --enable-highlight: int # Enable highlight on quote text (required, e.g. 1)
+  --highlight-color: string # Color used for highlight (required, e.g. #f0ea66)
+  --bg-type: string # Background type (gradient/solid) (required, e.g. gradient)
+  --background-color: string # Background color for solid background type (required, e.g. #000000)
+  --gradient-type: string # Type of gradient background (linear/radial) (required, e.g. linear)
+  --gradient-color1: string # First color for gradient background type (required, e.g. #1ee691)
+  --gradient-color2: string # Second color for gradient background type (required, e.g. #1ddad6)
+  --brand-logo: string # URL of the brand logo (required, e.g. https://cdn.ritekit.com/assets/img/common/made-with-ritekit-white.png)
+  --animation: string # Animation type: none, rays, glint, circle (required, e.g. glint)
   --show-quote-mark: int # showing/hiding quote mark
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote == null) { error make --unspanned { msg: "required query parameter 'quote' missing: pass --quote" } }
+  if ($author == null) { error make --unspanned { msg: "required query parameter 'author' missing: pass --author" } }
+  if ($font_size == null) { error make --unspanned { msg: "required query parameter 'fontSize' missing: pass --font-size" } }
+  if ($quote_font == null) { error make --unspanned { msg: "required query parameter 'quoteFont' missing: pass --quote-font" } }
+  if ($quote_font_color == null) { error make --unspanned { msg: "required query parameter 'quoteFontColor' missing: pass --quote-font-color" } }
+  if ($author_font == null) { error make --unspanned { msg: "required query parameter 'authorFont' missing: pass --author-font" } }
+  if ($author_font_color == null) { error make --unspanned { msg: "required query parameter 'authorFontColor' missing: pass --author-font-color" } }
+  if ($enable_highlight == null) { error make --unspanned { msg: "required query parameter 'enableHighlight' missing: pass --enable-highlight" } }
+  if ($highlight_color == null) { error make --unspanned { msg: "required query parameter 'highlightColor' missing: pass --highlight-color" } }
+  if ($bg_type == null) { error make --unspanned { msg: "required query parameter 'bgType' missing: pass --bg-type" } }
+  if ($background_color == null) { error make --unspanned { msg: "required query parameter 'backgroundColor' missing: pass --background-color" } }
+  if ($gradient_type == null) { error make --unspanned { msg: "required query parameter 'gradientType' missing: pass --gradient-type" } }
+  if ($gradient_color1 == null) { error make --unspanned { msg: "required query parameter 'gradientColor1' missing: pass --gradient-color1" } }
+  if ($gradient_color2 == null) { error make --unspanned { msg: "required query parameter 'gradientColor2' missing: pass --gradient-color2" } }
+  if ($brand_logo == null) { error make --unspanned { msg: "required query parameter 'brandLogo' missing: pass --brand-logo" } }
+  if ($animation == null) { error make --unspanned { msg: "required query parameter 'animation' missing: pass --animation" } }
   let qp = [(serialize-qp "quote" $quote "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "fontSize" $font_size "scalar") (serialize-qp "quoteFont" $quote_font "scalar") (serialize-qp "quoteFontColor" $quote_font_color "scalar") (serialize-qp "authorFont" $author_font "scalar") (serialize-qp "authorFontColor" $author_font_color "scalar") (serialize-qp "enableHighlight" $enable_highlight "scalar") (serialize-qp "highlightColor" $highlight_color "scalar") (serialize-qp "bgType" $bg_type "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "gradientType" $gradient_type "scalar") (serialize-qp "gradientColor1" $gradient_color1 "scalar") (serialize-qp "gradientColor2" $gradient_color2 "scalar") (serialize-qp "brandLogo" $brand_logo "scalar") (serialize-qp "animation" $animation "scalar") (serialize-qp "showQuoteMark" $show_quote_mark "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/images/quote" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
@@ -362,11 +383,13 @@ export def "shorten-link" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # URL (e.g. https://ritekit.com)
-  --cta: int # cta id (e.g. 6530)
+  --url: string # URL (required, e.g. https://ritekit.com)
+  --cta: int # cta id (required, e.g. 6530)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
+  if ($cta == null) { error make --unspanned { msg: "required query parameter 'cta' missing: pass --cta" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "cta" $cta "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/link/short-link" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
@@ -436,12 +459,13 @@ export def "auto-hashtag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --post: string # Text of the post (e.g. Is artificial intelligence the future of customer service?)
+  --post: string # Text of the post (required, e.g. Is artificial intelligence the future of customer service?)
   --max-hashtags: int # Max number of hashtags. (default: 2)
   --hashtag-position: string # Position of hashtags: end => at the end, auto => anywhere (default: auto)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($post == null) { error make --unspanned { msg: "required query parameter 'post' missing: pass --post" } }
   let qp = [(serialize-qp "post" $post "scalar") (serialize-qp "maxHashtags" $max_hashtags "scalar") (serialize-qp "hashtagPosition" $hashtag_position "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/stats/auto-hashtag" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
@@ -474,10 +498,11 @@ export def "hashtag-suggestions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --text: string # Topic (e.g. seo)
+  --text: string # Topic (required, e.g. seo)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/stats/hashtag-suggestions" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
@@ -546,10 +571,11 @@ export def "hashtag-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tags: list # Hashtag(s) without # mark (e.g. jobs,hello)
+  --tags: list # Hashtag(s) without # mark (required, e.g. jobs,hello)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($tags == null) { error make --unspanned { msg: "required query parameter 'tags' missing: pass --tags" } }
   let qp = [(serialize-qp "tags" $tags "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/stats/multiple-hashtags" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
@@ -582,10 +608,11 @@ export def "hashtags-cleaner" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --post: string # post (e.g. #instaphotography #instabeauty #instagirls #instanature #instagirl #photography #beauty #girls #nature #girl #sky #water #lady #ladies #woman #women #photograph #photographs #beauties #sunlight #sitting #waters #skies #sit #photographies)
+  --post: string # post (required, e.g. #instaphotography #instabeauty #instagirls #instanature #instagirl #photography #beauty #girls #nature #girl #sky #water #lady #ladies #woman #women #photograph #photographs #beauties #sunlight #sitting #waters #skies #sit #photographies)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($post == null) { error make --unspanned { msg: "required query parameter 'post' missing: pass --post" } }
   let qp = [(serialize-qp "post" $post "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/instagram/hashtags-cleaner" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"

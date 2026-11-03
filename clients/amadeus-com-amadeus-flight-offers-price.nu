@@ -134,12 +134,13 @@ export def "quote-air-offers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: list<string> # Sub-resources to be included: * **credit-card-fees** to get the credit card fee applied on the booking * **bags** to get extra bag options * **other-services** to get services options * **detailed-fare-rules** to get detailed fare rules options
   --force-class: oneof<nothing, bool> # parameter to force the usage of booking class for pricing - **true**, to for pricing with the specified booking class - **false**, to get the best available price (default: false)
-  --x-http-method-override: string # the HTTP method to apply
+  --x-http-method-override: string # the HTTP method to apply (required, default: GET)
   --body: any
-]: any -> any {
+]: any -> record<data: record<bookingRequirements: record<emailAddressRequired: bool, invoiceAddressRequired: bool, mailingAddressRequired: bool, mobilePhoneNumberRequired: bool, phoneCountryCodeRequired: bool, phoneNumberRequired: bool, postalCodeRequired: bool, travelerRequirements: list>, flightOffers: list<record>, type: string>, dictionaries: record<aircraft: any, carriers: any, currencies: any, locations: any>, included: record<bags: any, credit_card_fees: any, detailed_fare_rules: any, other_services: any>, warnings: table<code: int, detail: string, source: record, status: int, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_http_method_override = ($x_http_method_override | default "GET")
   let qp = [(serialize-qp "include" $include "csv") (serialize-qp "forceClass" $force_class "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shopping/flight-offers/pricing" $qp $auth.query)
   let req_body = $body

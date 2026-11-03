@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -114,6 +114,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def package-type-completer [] { ["TXT-DICTIONARY"] }
+def instance-type-completer [] { ["c4.2xlarge.elasticsearch" "c4.4xlarge.elasticsearch" "c4.8xlarge.elasticsearch" "c4.large.elasticsearch" "c4.xlarge.elasticsearch" "c5.18xlarge.elasticsearch" "c5.2xlarge.elasticsearch" "c5.4xlarge.elasticsearch" "c5.9xlarge.elasticsearch" "c5.large.elasticsearch" "c5.xlarge.elasticsearch" "d2.2xlarge.elasticsearch" "d2.4xlarge.elasticsearch" "d2.8xlarge.elasticsearch" "d2.xlarge.elasticsearch" "i2.2xlarge.elasticsearch" "i2.xlarge.elasticsearch" "i3.16xlarge.elasticsearch" "i3.2xlarge.elasticsearch" "i3.4xlarge.elasticsearch" "i3.8xlarge.elasticsearch" "i3.large.elasticsearch" "i3.xlarge.elasticsearch" "m3.2xlarge.elasticsearch" "m3.large.elasticsearch" "m3.medium.elasticsearch" "m3.xlarge.elasticsearch" "m4.10xlarge.elasticsearch" "m4.2xlarge.elasticsearch" "m4.4xlarge.elasticsearch" "m4.large.elasticsearch" "m4.xlarge.elasticsearch" "m5.12xlarge.elasticsearch" "m5.2xlarge.elasticsearch" "m5.4xlarge.elasticsearch" "m5.large.elasticsearch" "m5.xlarge.elasticsearch" "r3.2xlarge.elasticsearch" "r3.4xlarge.elasticsearch" "r3.8xlarge.elasticsearch" "r3.large.elasticsearch" "r3.xlarge.elasticsearch" "r4.16xlarge.elasticsearch" "r4.2xlarge.elasticsearch" "r4.4xlarge.elasticsearch" "r4.8xlarge.elasticsearch" "r4.large.elasticsearch" "r4.xlarge.elasticsearch" "r5.12xlarge.elasticsearch" "r5.2xlarge.elasticsearch" "r5.4xlarge.elasticsearch" "r5.large.elasticsearch" "r5.xlarge.elasticsearch" "t2.medium.elasticsearch" "t2.micro.elasticsearch" "t2.small.elasticsearch" "ultrawarm1.large.elasticsearch" "ultrawarm1.medium.elasticsearch"] }
 def engine-type-completer [] { ["Elasticsearch" "OpenSearch"] }
 
 # List all available API commands with their parameters
@@ -161,7 +162,7 @@ export def "accept-inbound-cross-cluster-search-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CrossClusterSearchConnection: record<SourceDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, DestinationDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, CrossClusterSearchConnectionId: record, ConnectionStatus: record<StatusCode: record, Message: record>>> {
+]: nothing -> record<CrossClusterSearchConnection: record<SourceDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, DestinationDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, CrossClusterSearchConnectionId: string, ConnectionStatus: record<StatusCode: string, Message: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'ConnectionId' must be non-empty" } }
@@ -188,7 +189,7 @@ export def "accept-inbound-cross-cluster-search-connection" [
 #
 # POST /2015-01-01/tags
 # operationId: AddTags
-# --TagList item shape: {Key: any, Value: any}
+# --TagList item shape: {Key: string, Value: string}
 export def "add-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -207,7 +208,7 @@ export def "add-tags" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arn: string # The Amazon Resource Name (ARN) of the Elasticsearch domain. See Identifiers for IAM Entities (http://docs.aws.amazon.com/IAM/latest/UserGuide/index.html?Using_Identifiers.html) in Using AWS Identity and Access Management for more information.
-  tag_list: list # A list of Tag — item shape: {Key: any, Value: any}
+  tag_list: list # A list of Tag — item shape: {Key: string, Value: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -256,7 +257,7 @@ export def "associate-package" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainPackageDetails: record<PackageID: record, PackageName: record, PackageType: record, LastUpdated: record, DomainName: record, DomainPackageStatus: record, PackageVersion: string, ReferencePath: record, ErrorDetails: record<ErrorType: string, ErrorMessage: string>>> {
+]: nothing -> record<DomainPackageDetails: record<PackageID: string, PackageName: string, PackageType: string, LastUpdated: string, DomainName: string, DomainPackageStatus: string, PackageVersion: string, ReferencePath: string, ErrorDetails: record<ErrorType: string, ErrorMessage: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_id | is-empty) { error make --unspanned { msg: "path parameter 'PackageID' must be non-empty" } }
@@ -303,7 +304,7 @@ export def "authorize-vpc-endpoint-access" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   account: string # The account ID to grant access to.
-]: any -> record<AuthorizedPrincipal: record<PrincipalType: record, Principal: record>> {
+]: any -> record<AuthorizedPrincipal: record<PrincipalType: string, Principal: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -351,7 +352,7 @@ export def "cancel-elasticsearch-service-software-update" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   domain_name: string # The name of an Elasticsearch domain. Domain names are unique across the domains owned by an account within an AWS region. Domain names start with a letter or number and can contain the following characters: a-z (lowercase), 0-9, and - (hyphen).
-]: any -> record<ServiceSoftwareOptions: record<CurrentVersion: record, NewVersion: record, UpdateAvailable: record, Cancellable: record, UpdateStatus: record, Description: record, AutomatedUpdateDate: record, OptionalDeployment: record>> {
+]: any -> record<ServiceSoftwareOptions: record<CurrentVersion: string, NewVersion: string, UpdateAvailable: bool, Cancellable: bool, UpdateStatus: string, Description: string, AutomatedUpdateDate: string, OptionalDeployment: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -380,17 +381,17 @@ export def "cancel-elasticsearch-service-software-update" [
 #
 # POST /2015-01-01/es/domain
 # operationId: CreateElasticsearchDomain
-# --ElasticsearchClusterConfig shape: {InstanceType?: any, InstanceCount?: any, DedicatedMasterEnabled?: any, ZoneAwarenessEnabled?: any, ZoneAwarenessConfig?: any, DedicatedMasterType?: any, DedicatedMasterCount?: any, WarmEnabled?: any, WarmType?: any, WarmCount?: any, ColdStorageOptions?: any}
-# --EBSOptions shape: {EBSEnabled?: any, VolumeType?: any, VolumeSize?: any, Iops?: any, Throughput?: any}
-# --SnapshotOptions shape: {AutomatedSnapshotStartHour?: any}
-# --VPCOptions shape: {SubnetIds?: any, SecurityGroupIds?: any}
-# --CognitoOptions shape: {Enabled?: any, UserPoolId?: any, IdentityPoolId?: any, RoleArn?: any}
-# --EncryptionAtRestOptions shape: {Enabled?: any, KmsKeyId?: any}
-# --NodeToNodeEncryptionOptions shape: {Enabled?: any}
-# --DomainEndpointOptions shape: {EnforceHTTPS?: any, TLSSecurityPolicy?: any, CustomEndpointEnabled?: any, CustomEndpoint?: any, CustomEndpointCertificateArn?: any}
-# --AdvancedSecurityOptions shape: {Enabled?: any, InternalUserDatabaseEnabled?: any, MasterUserOptions?: any, SAMLOptions?: any, AnonymousAuthEnabled?: any}
-# --AutoTuneOptions shape: {DesiredState?: any, MaintenanceSchedules?: any}
-# --TagList item shape: {Key: any, Value: any}
+# --ElasticsearchClusterConfig shape: {InstanceType?: "m3.medium.elasticsearch"|"m3.large.elasticsearch"|"m3.xlarge.elasticsearch"|"m3.2xlarge.elasticsearch"|"m4.large.elasticsearch"|"m4.xlarge.elasticsearch"|"m4.2xlarge.elasticsearch"|"m4.4xlarge.elasticsearch"|"m4.10xlarge.elasticsearch"|"m5.large.elasticsearch"|"m5.xlarge.elasticsearch"|"m5.2xlarge.elasticsearch"|"m5.4xlarge.elasticsearch"|"m5.12xlarge.elasticsearch"|"r5.large.elasticsearch"|"r5.xlarge.elasticsearch"|"r5.2xlarge.elasticsearch"|"r5.4xlarge.elasticsearch"|"r5.12xlarge.elasticsearch"|"c5.large.elasticsearch"|"c5.xlarge.elasticsearch"|"c5.2xlarge.elasticsearch"|"c5.4xlarge.elasticsearch"|"c5.9xlarge.elasticsearch"|"c5.18xlarge.elasticsearch"|"ultrawarm1.medium.elasticsearch"|"ultrawarm1.large.elasticsearch"|"t2.micro.elasticsearch"|"t2.small.elasticsearch"|"t2.medium.elasticsearch"|"r3.large.elasticsearch"|"r3.xlarge.elasticsearch"|"r3.2xlarge.elasticsearch"|"r3.4xlarge.elasticsearch"|"r3.8xlarge.elasticsearch"|"i2.xlarge.elasticsearch"|"i2.2xlarge.elasticsearch"|"d2.xlarge.elasticsearch"|"d2.2xlarge.elasticsearch"|"d2.4xlarge.elasticsearch"|"d2.8xlarge.elasticsearch"|"c4.large.elasticsearch"|"c4.xlarge.elasticsearch"|"c4.2xlarge.elasticsearch"|"c4.4xlarge.elasticsearch"|"c4.8xlarge.elasticsearch"|"r4.large.elasticsearch"|"r4.xlarge.elasticsearch"|"r4.2xlarge.elasticsearch"|"r4.4xlarge.elasticsearch"|"r4.8xlarge.elasticsearch"|"r4.16xlarge.elasticsearch"|"i3.large.elasticsearch"|"i3.xlarge.elasticsearch"|"i3.2xlarge.elasticsearch"|"i3.4xlarge.elasticsearch"|"i3.8xlarge.elasticsearch"|"i3.16xlarge.elasticsearch", ... (10 more fields)}
+# --EBSOptions shape: {EBSEnabled?: bool, VolumeType?: "standard"|"gp2"|"io1"|"gp3", VolumeSize?: int, Iops?: int, Throughput?: int}
+# --SnapshotOptions shape: {AutomatedSnapshotStartHour?: int}
+# --VPCOptions shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
+# --CognitoOptions shape: {Enabled?: bool, UserPoolId?: string, IdentityPoolId?: string, RoleArn?: string}
+# --EncryptionAtRestOptions shape: {Enabled?: bool, KmsKeyId?: string}
+# --NodeToNodeEncryptionOptions shape: {Enabled?: bool}
+# --DomainEndpointOptions shape: {EnforceHTTPS?: bool, TLSSecurityPolicy?: "Policy-Min-TLS-1-0-2019-07"|"Policy-Min-TLS-1-2-2019-07", CustomEndpointEnabled?: bool, CustomEndpoint?: string, CustomEndpointCertificateArn?: string}
+# --AdvancedSecurityOptions shape: {Enabled?: bool, InternalUserDatabaseEnabled?: bool, MasterUserOptions?: record, SAMLOptions?: record, AnonymousAuthEnabled?: bool}
+# --AutoTuneOptions shape: {DesiredState?: "ENABLED"|"DISABLED", MaintenanceSchedules?: list}
+# --TagList item shape: {Key: string, Value: string}
 export def "create-elasticsearch-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,21 +411,21 @@ export def "create-elasticsearch-domain" [
   --x-amz-signed-headers: string
   domain_name: string # The name of an Elasticsearch domain. Domain names are unique across the domains owned by an account within an AWS region. Domain names start with a letter or number and can contain the following characters: a-z (lowercase), 0-9, and - (hyphen).
   --elasticsearch-version: string # String of format X.Y to specify version for the Elasticsearch domain eg. "1.5" or "2.3". For more information, see Creating Elasticsearch Domains (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomains) in the Amazon Elasticsearch Service Developer Guide.
-  --elasticsearch-cluster-config: record # Specifies the configuration for the domain cluster, such as the type and number of instances. — shape: {InstanceType?: any, InstanceCount?: any, DedicatedMasterEnabled?: any, ZoneAwarenessEnabled?: any, ZoneAwarenessConfig?: any, DedicatedMasterType?: any, DedicatedMasterCount?: any, WarmEnabled?: any, WarmType?: any, WarmCount?: any, ColdStorageOptions?: any}
-  --ebs-options: record # Options to enable, disable, and specify the properties of EBS storage volumes. For more information, see Configuring EBS-based Storage (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-ebs). — shape: {EBSEnabled?: any, VolumeType?: any, VolumeSize?: any, Iops?: any, Throughput?: any}
+  --elasticsearch-cluster-config: record # Specifies the configuration for the domain cluster, such as the type and number of instances. — shape: {InstanceType?: "m3.medium.elasticsearch"|"m3.large.elasticsearch"|"m3.xlarge.elasticsearch"|"m3.2xlarge.elasticsearch"|"m4.large.elasticsearch"|"m4.xlarge.elasticsearch"|"m4.2xlarge.elasticsearch"|"m4.4xlarge.elasticsearch"|"m4.10xlarge.elasticsearch"|"m5.large.elasticsearch"|"m5.xlarge.elasticsearch"|"m5.2xlarge.elasticsearch"|"m5.4xlarge.elasticsearch"|"m5.12xlarge.elasticsearch"|"r5.large.elasticsearch"|"r5.xlarge.elasticsearch"|"r5.2xlarge.elasticsearch"|"r5.4xlarge.elasticsearch"|"r5.12xlarge.elasticsearch"|"c5.large.elasticsearch"|"c5.xlarge.elasticsearch"|"c5.2xlarge.elasticsearch"|"c5.4xlarge.elasticsearch"|"c5.9xlarge.elasticsearch"|"c5.18xlarge.elasticsearch"|"ultrawarm1.medium.elasticsearch"|"ultrawarm1.large.elasticsearch"|"t2.micro.elasticsearch"|"t2.small.elasticsearch"|"t2.medium.elasticsearch"|"r3.large.elasticsearch"|"r3.xlarge.elasticsearch"|"r3.2xlarge.elasticsearch"|"r3.4xlarge.elasticsearch"|"r3.8xlarge.elasticsearch"|"i2.xlarge.elasticsearch"|"i2.2xlarge.elasticsearch"|"d2.xlarge.elasticsearch"|"d2.2xlarge.elasticsearch"|"d2.4xlarge.elasticsearch"|"d2.8xlarge.elasticsearch"|"c4.large.elasticsearch"|"c4.xlarge.elasticsearch"|"c4.2xlarge.elasticsearch"|"c4.4xlarge.elasticsearch"|"c4.8xlarge.elasticsearch"|"r4.large.elasticsearch"|"r4.xlarge.elasticsearch"|"r4.2xlarge.elasticsearch"|"r4.4xlarge.elasticsearch"|"r4.8xlarge.elasticsearch"|"r4.16xlarge.elasticsearch"|"i3.large.elasticsearch"|"i3.xlarge.elasticsearch"|"i3.2xlarge.elasticsearch"|"i3.4xlarge.elasticsearch"|"i3.8xlarge.elasticsearch"|"i3.16xlarge.elasticsearch", ... (10 more fields)}
+  --ebs-options: record # Options to enable, disable, and specify the properties of EBS storage volumes. For more information, see Configuring EBS-based Storage (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-ebs). — shape: {EBSEnabled?: bool, VolumeType?: "standard"|"gp2"|"io1"|"gp3", VolumeSize?: int, Iops?: int, Throughput?: int}
   --access-policies: string # Access policy rules for an Elasticsearch domain service endpoints. For more information, see Configuring Access Policies (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-access-policies) in the Amazon Elasticsearch Service Developer Guide. The maximum size of a policy document is 100 KB.
-  --snapshot-options: record # Specifies the time, in UTC format, when the service takes a daily automated snapshot of the specified Elasticsearch domain. Default value is 0 hours. — shape: {AutomatedSnapshotStartHour?: any}
-  --vpc-options: record # Options to specify the subnets and security groups for VPC endpoint. For more information, see VPC Endpoints for Amazon Elasticsearch Service Domains (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-vpc.html). — shape: {SubnetIds?: any, SecurityGroupIds?: any}
-  --cognito-options: record # Options to specify the Cognito user and identity pools for Kibana authentication. For more information, see Amazon Cognito Authentication for Kibana (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-cognito-auth.html). — shape: {Enabled?: any, UserPoolId?: any, IdentityPoolId?: any, RoleArn?: any}
-  --encryption-at-rest-options: record # Specifies the Encryption At Rest Options. — shape: {Enabled?: any, KmsKeyId?: any}
-  --node-to-node-encryption-options: record # Specifies the node-to-node encryption options. — shape: {Enabled?: any}
+  --snapshot-options: record # Specifies the time, in UTC format, when the service takes a daily automated snapshot of the specified Elasticsearch domain. Default value is 0 hours. — shape: {AutomatedSnapshotStartHour?: int}
+  --vpc-options: record # Options to specify the subnets and security groups for VPC endpoint. For more information, see VPC Endpoints for Amazon Elasticsearch Service Domains (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-vpc.html). — shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
+  --cognito-options: record # Options to specify the Cognito user and identity pools for Kibana authentication. For more information, see Amazon Cognito Authentication for Kibana (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-cognito-auth.html). — shape: {Enabled?: bool, UserPoolId?: string, IdentityPoolId?: string, RoleArn?: string}
+  --encryption-at-rest-options: record # Specifies the Encryption At Rest Options. — shape: {Enabled?: bool, KmsKeyId?: string}
+  --node-to-node-encryption-options: record # Specifies the node-to-node encryption options. — shape: {Enabled?: bool}
   --advanced-options: record # Exposes select native Elasticsearch configuration values from elasticsearch.yml. Currently, the following advanced options are available: Option to allow references to indices in an HTTP request body. Must be false when configuring access to individual sub-resources. By default, the value is true. See Configuration Advanced Options (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-advanced-options) for more information. Option to specify the percentage of heap space that is allocated to field data. By default, this setting is unbounded. For more information, see Configuring Advanced Options (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-advanced-options).
   --log-publishing-options: record # Map of LogType and LogPublishingOption, each containing options to publish a given type of Elasticsearch log.
-  --domain-endpoint-options: record # Options to configure endpoint for the Elasticsearch domain. — shape: {EnforceHTTPS?: any, TLSSecurityPolicy?: any, CustomEndpointEnabled?: any, CustomEndpoint?: any, CustomEndpointCertificateArn?: any}
-  --advanced-security-options: record # Specifies the advanced security configuration: whether advanced security is enabled, whether the internal database option is enabled, master username and password (if internal database is enabled), and master user ARN (if IAM is enabled). — shape: {Enabled?: any, InternalUserDatabaseEnabled?: any, MasterUserOptions?: any, SAMLOptions?: any, AnonymousAuthEnabled?: any}
-  --auto-tune-options: record # Specifies the Auto-Tune options: the Auto-Tune desired state for the domain and list of maintenance schedules. — shape: {DesiredState?: any, MaintenanceSchedules?: any}
-  --tag-list: list # A list of Tag — item shape: {Key: any, Value: any}
-]: any -> record<DomainStatus: record<DomainId: record, DomainName: record, ARN: record, Created: record, Deleted: record, Endpoint: record, Endpoints: record, Processing: record, UpgradeProcessing: record, ElasticsearchVersion: string, ElasticsearchClusterConfig: record<InstanceType: record, InstanceCount: record, DedicatedMasterEnabled: record, ZoneAwarenessEnabled: record, ZoneAwarenessConfig: record, DedicatedMasterType: record, DedicatedMasterCount: record, WarmEnabled: record, WarmType: record, WarmCount: record, ColdStorageOptions: record>, EBSOptions: record<EBSEnabled: record, VolumeType: record, VolumeSize: record, Iops: record, Throughput: record>, AccessPolicies: record, SnapshotOptions: record<AutomatedSnapshotStartHour: record>, VPCOptions: record<VPCId: record, SubnetIds: record, AvailabilityZones: record, SecurityGroupIds: record>, CognitoOptions: record<Enabled: record, UserPoolId: record, IdentityPoolId: record, RoleArn: record>, EncryptionAtRestOptions: record<Enabled: record, KmsKeyId: record>, NodeToNodeEncryptionOptions: record<Enabled: record>, AdvancedOptions: record, LogPublishingOptions: record, ServiceSoftwareOptions: record<CurrentVersion: record, NewVersion: record, UpdateAvailable: record, Cancellable: record, UpdateStatus: record, Description: record, AutomatedUpdateDate: record, OptionalDeployment: record>, DomainEndpointOptions: record<EnforceHTTPS: record, TLSSecurityPolicy: record, CustomEndpointEnabled: record, CustomEndpoint: record, CustomEndpointCertificateArn: record>, AdvancedSecurityOptions: record<Enabled: record, InternalUserDatabaseEnabled: record, SAMLOptions: record, AnonymousAuthDisableDate: record, AnonymousAuthEnabled: record>, AutoTuneOptions: record<State: record, ErrorMessage: record>, ChangeProgressDetails: record<ChangeId: record, Message: record>>> {
+  --domain-endpoint-options: record # Options to configure endpoint for the Elasticsearch domain. — shape: {EnforceHTTPS?: bool, TLSSecurityPolicy?: "Policy-Min-TLS-1-0-2019-07"|"Policy-Min-TLS-1-2-2019-07", CustomEndpointEnabled?: bool, CustomEndpoint?: string, CustomEndpointCertificateArn?: string}
+  --advanced-security-options: record # Specifies the advanced security configuration: whether advanced security is enabled, whether the internal database option is enabled, master username and password (if internal database is enabled), and master user ARN (if IAM is enabled). — shape: {Enabled?: bool, InternalUserDatabaseEnabled?: bool, MasterUserOptions?: record, SAMLOptions?: record, AnonymousAuthEnabled?: bool}
+  --auto-tune-options: record # Specifies the Auto-Tune options: the Auto-Tune desired state for the domain and list of maintenance schedules. — shape: {DesiredState?: "ENABLED"|"DISABLED", MaintenanceSchedules?: list}
+  --tag-list: list # A list of Tag — item shape: {Key: string, Value: string}
+]: any -> record<DomainStatus: record<DomainId: string, DomainName: string, ARN: string, Created: bool, Deleted: bool, Endpoint: string, Endpoints: record, Processing: bool, UpgradeProcessing: bool, ElasticsearchVersion: string, ElasticsearchClusterConfig: record<InstanceType: string, InstanceCount: int, DedicatedMasterEnabled: bool, ZoneAwarenessEnabled: bool, ZoneAwarenessConfig: record, DedicatedMasterType: string, DedicatedMasterCount: int, WarmEnabled: bool, WarmType: string, WarmCount: int, ColdStorageOptions: record>, EBSOptions: record<EBSEnabled: bool, VolumeType: string, VolumeSize: int, Iops: int, Throughput: int>, AccessPolicies: string, SnapshotOptions: record<AutomatedSnapshotStartHour: int>, VPCOptions: record<VPCId: string, SubnetIds: list, AvailabilityZones: list, SecurityGroupIds: list>, CognitoOptions: record<Enabled: bool, UserPoolId: string, IdentityPoolId: string, RoleArn: string>, EncryptionAtRestOptions: record<Enabled: bool, KmsKeyId: string>, NodeToNodeEncryptionOptions: record<Enabled: bool>, AdvancedOptions: record, LogPublishingOptions: record, ServiceSoftwareOptions: record<CurrentVersion: string, NewVersion: string, UpdateAvailable: bool, Cancellable: bool, UpdateStatus: string, Description: string, AutomatedUpdateDate: string, OptionalDeployment: bool>, DomainEndpointOptions: record<EnforceHTTPS: bool, TLSSecurityPolicy: string, CustomEndpointEnabled: bool, CustomEndpoint: string, CustomEndpointCertificateArn: string>, AdvancedSecurityOptions: record<Enabled: bool, InternalUserDatabaseEnabled: bool, SAMLOptions: record, AnonymousAuthDisableDate: string, AnonymousAuthEnabled: bool>, AutoTuneOptions: record<State: string, ErrorMessage: string>, ChangeProgressDetails: record<ChangeId: string, Message: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -475,7 +476,7 @@ export def "create-outbound-cross-cluster-search-connection" [
   source_domain_info: record # Specifies the DomainInformation for the source Elasticsearch domain. — shape: {OwnerId?: string, DomainName?: string, Region?: string}
   destination_domain_info: record # Specifies the DomainInformation for the destination Elasticsearch domain. — shape: {OwnerId?: string, DomainName?: string, Region?: string}
   connection_alias: string # Specifies the connection alias that will be used by the customer for this connection.
-]: any -> record<SourceDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, DestinationDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, ConnectionAlias: record, ConnectionStatus: record<StatusCode: record, Message: record>, CrossClusterSearchConnectionId: record> {
+]: any -> record<SourceDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, DestinationDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, ConnectionAlias: string, ConnectionStatus: record<StatusCode: string, Message: string>, CrossClusterSearchConnectionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -504,7 +505,7 @@ export def "create-outbound-cross-cluster-search-connection" [
 #
 # POST /2015-01-01/packages
 # operationId: CreatePackage
-# --PackageSource shape: {S3BucketName?: any, S3Key?: any}
+# --PackageSource shape: {S3BucketName?: string, S3Key?: string}
 export def "create-package" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -525,8 +526,8 @@ export def "create-package" [
   package_name: string # Unique identifier for the package.
   package_type: string@package-type-completer # Type of package. Currently supports only TXT-DICTIONARY.
   --package-description: string # Description of the package.
-  package_source: record # The S3 location for importing the package specified as S3BucketName and S3Key — shape: {S3BucketName?: any, S3Key?: any}
-]: any -> record<PackageDetails: record<PackageID: record, PackageName: record, PackageType: record, PackageDescription: record, PackageStatus: record, CreatedAt: record, LastUpdatedAt: string, AvailablePackageVersion: string, ErrorDetails: record<ErrorType: string, ErrorMessage: string>>> {
+  package_source: record # The S3 location for importing the package specified as S3BucketName and S3Key — shape: {S3BucketName?: string, S3Key?: string}
+]: any -> record<PackageDetails: record<PackageID: string, PackageName: string, PackageType: string, PackageDescription: string, PackageStatus: string, CreatedAt: string, LastUpdatedAt: string, AvailablePackageVersion: string, ErrorDetails: record<ErrorType: string, ErrorMessage: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -555,7 +556,7 @@ export def "create-package" [
 #
 # POST /2015-01-01/es/vpcEndpoints
 # operationId: CreateVpcEndpoint
-# --VpcOptions shape: {SubnetIds?: any, SecurityGroupIds?: any}
+# --VpcOptions shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
 export def "create-vpc-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -574,9 +575,9 @@ export def "create-vpc-endpoint" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   domain_arn: string # The Amazon Resource Name (ARN) of the domain to grant access to.
-  vpc_options: record # Options to specify the subnets and security groups for VPC endpoint. For more information, see VPC Endpoints for Amazon Elasticsearch Service Domains (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-vpc.html). — shape: {SubnetIds?: any, SecurityGroupIds?: any}
+  vpc_options: record # Options to specify the subnets and security groups for VPC endpoint. For more information, see VPC Endpoints for Amazon Elasticsearch Service Domains (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-vpc.html). — shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
   --client-token: string # Unique, case-sensitive identifier to ensure idempotency of the request.
-]: any -> record<VpcEndpoint: record<VpcEndpointId: record, VpcEndpointOwner: record, DomainArn: record, VpcOptions: record<VPCId: record, SubnetIds: record, AvailabilityZones: record, SecurityGroupIds: record>, Status: record, Endpoint: record>> {
+]: any -> record<VpcEndpoint: record<VpcEndpointId: string, VpcEndpointOwner: string, DomainArn: string, VpcOptions: record<VPCId: string, SubnetIds: list, AvailabilityZones: list, SecurityGroupIds: list>, Status: string, Endpoint: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -623,7 +624,7 @@ export def "list-vpc-endpoints" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<VpcEndpointSummaryList: record, NextToken: record> {
+]: nothing -> record<VpcEndpointSummaryList: table<VpcEndpointId: string, VpcEndpointOwner: string, DomainArn: string, Status: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -668,7 +669,7 @@ export def "delete-elasticsearch-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainStatus: record<DomainId: record, DomainName: record, ARN: record, Created: record, Deleted: record, Endpoint: record, Endpoints: record, Processing: record, UpgradeProcessing: record, ElasticsearchVersion: string, ElasticsearchClusterConfig: record<InstanceType: record, InstanceCount: record, DedicatedMasterEnabled: record, ZoneAwarenessEnabled: record, ZoneAwarenessConfig: record, DedicatedMasterType: record, DedicatedMasterCount: record, WarmEnabled: record, WarmType: record, WarmCount: record, ColdStorageOptions: record>, EBSOptions: record<EBSEnabled: record, VolumeType: record, VolumeSize: record, Iops: record, Throughput: record>, AccessPolicies: record, SnapshotOptions: record<AutomatedSnapshotStartHour: record>, VPCOptions: record<VPCId: record, SubnetIds: record, AvailabilityZones: record, SecurityGroupIds: record>, CognitoOptions: record<Enabled: record, UserPoolId: record, IdentityPoolId: record, RoleArn: record>, EncryptionAtRestOptions: record<Enabled: record, KmsKeyId: record>, NodeToNodeEncryptionOptions: record<Enabled: record>, AdvancedOptions: record, LogPublishingOptions: record, ServiceSoftwareOptions: record<CurrentVersion: record, NewVersion: record, UpdateAvailable: record, Cancellable: record, UpdateStatus: record, Description: record, AutomatedUpdateDate: record, OptionalDeployment: record>, DomainEndpointOptions: record<EnforceHTTPS: record, TLSSecurityPolicy: record, CustomEndpointEnabled: record, CustomEndpoint: record, CustomEndpointCertificateArn: record>, AdvancedSecurityOptions: record<Enabled: record, InternalUserDatabaseEnabled: record, SAMLOptions: record, AnonymousAuthDisableDate: record, AnonymousAuthEnabled: record>, AutoTuneOptions: record<State: record, ErrorMessage: record>, ChangeProgressDetails: record<ChangeId: record, Message: record>>> {
+]: nothing -> record<DomainStatus: record<DomainId: string, DomainName: string, ARN: string, Created: bool, Deleted: bool, Endpoint: string, Endpoints: record, Processing: bool, UpgradeProcessing: bool, ElasticsearchVersion: string, ElasticsearchClusterConfig: record<InstanceType: string, InstanceCount: int, DedicatedMasterEnabled: bool, ZoneAwarenessEnabled: bool, ZoneAwarenessConfig: record, DedicatedMasterType: string, DedicatedMasterCount: int, WarmEnabled: bool, WarmType: string, WarmCount: int, ColdStorageOptions: record>, EBSOptions: record<EBSEnabled: bool, VolumeType: string, VolumeSize: int, Iops: int, Throughput: int>, AccessPolicies: string, SnapshotOptions: record<AutomatedSnapshotStartHour: int>, VPCOptions: record<VPCId: string, SubnetIds: list, AvailabilityZones: list, SecurityGroupIds: list>, CognitoOptions: record<Enabled: bool, UserPoolId: string, IdentityPoolId: string, RoleArn: string>, EncryptionAtRestOptions: record<Enabled: bool, KmsKeyId: string>, NodeToNodeEncryptionOptions: record<Enabled: bool>, AdvancedOptions: record, LogPublishingOptions: record, ServiceSoftwareOptions: record<CurrentVersion: string, NewVersion: string, UpdateAvailable: bool, Cancellable: bool, UpdateStatus: string, Description: string, AutomatedUpdateDate: string, OptionalDeployment: bool>, DomainEndpointOptions: record<EnforceHTTPS: bool, TLSSecurityPolicy: string, CustomEndpointEnabled: bool, CustomEndpoint: string, CustomEndpointCertificateArn: string>, AdvancedSecurityOptions: record<Enabled: bool, InternalUserDatabaseEnabled: bool, SAMLOptions: record, AnonymousAuthDisableDate: string, AnonymousAuthEnabled: bool>, AutoTuneOptions: record<State: string, ErrorMessage: string>, ChangeProgressDetails: record<ChangeId: string, Message: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -713,7 +714,7 @@ export def "describe-elasticsearch-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainStatus: record<DomainId: record, DomainName: record, ARN: record, Created: record, Deleted: record, Endpoint: record, Endpoints: record, Processing: record, UpgradeProcessing: record, ElasticsearchVersion: string, ElasticsearchClusterConfig: record<InstanceType: record, InstanceCount: record, DedicatedMasterEnabled: record, ZoneAwarenessEnabled: record, ZoneAwarenessConfig: record, DedicatedMasterType: record, DedicatedMasterCount: record, WarmEnabled: record, WarmType: record, WarmCount: record, ColdStorageOptions: record>, EBSOptions: record<EBSEnabled: record, VolumeType: record, VolumeSize: record, Iops: record, Throughput: record>, AccessPolicies: record, SnapshotOptions: record<AutomatedSnapshotStartHour: record>, VPCOptions: record<VPCId: record, SubnetIds: record, AvailabilityZones: record, SecurityGroupIds: record>, CognitoOptions: record<Enabled: record, UserPoolId: record, IdentityPoolId: record, RoleArn: record>, EncryptionAtRestOptions: record<Enabled: record, KmsKeyId: record>, NodeToNodeEncryptionOptions: record<Enabled: record>, AdvancedOptions: record, LogPublishingOptions: record, ServiceSoftwareOptions: record<CurrentVersion: record, NewVersion: record, UpdateAvailable: record, Cancellable: record, UpdateStatus: record, Description: record, AutomatedUpdateDate: record, OptionalDeployment: record>, DomainEndpointOptions: record<EnforceHTTPS: record, TLSSecurityPolicy: record, CustomEndpointEnabled: record, CustomEndpoint: record, CustomEndpointCertificateArn: record>, AdvancedSecurityOptions: record<Enabled: record, InternalUserDatabaseEnabled: record, SAMLOptions: record, AnonymousAuthDisableDate: record, AnonymousAuthEnabled: record>, AutoTuneOptions: record<State: record, ErrorMessage: record>, ChangeProgressDetails: record<ChangeId: record, Message: record>>> {
+]: nothing -> record<DomainStatus: record<DomainId: string, DomainName: string, ARN: string, Created: bool, Deleted: bool, Endpoint: string, Endpoints: record, Processing: bool, UpgradeProcessing: bool, ElasticsearchVersion: string, ElasticsearchClusterConfig: record<InstanceType: string, InstanceCount: int, DedicatedMasterEnabled: bool, ZoneAwarenessEnabled: bool, ZoneAwarenessConfig: record, DedicatedMasterType: string, DedicatedMasterCount: int, WarmEnabled: bool, WarmType: string, WarmCount: int, ColdStorageOptions: record>, EBSOptions: record<EBSEnabled: bool, VolumeType: string, VolumeSize: int, Iops: int, Throughput: int>, AccessPolicies: string, SnapshotOptions: record<AutomatedSnapshotStartHour: int>, VPCOptions: record<VPCId: string, SubnetIds: list, AvailabilityZones: list, SecurityGroupIds: list>, CognitoOptions: record<Enabled: bool, UserPoolId: string, IdentityPoolId: string, RoleArn: string>, EncryptionAtRestOptions: record<Enabled: bool, KmsKeyId: string>, NodeToNodeEncryptionOptions: record<Enabled: bool>, AdvancedOptions: record, LogPublishingOptions: record, ServiceSoftwareOptions: record<CurrentVersion: string, NewVersion: string, UpdateAvailable: bool, Cancellable: bool, UpdateStatus: string, Description: string, AutomatedUpdateDate: string, OptionalDeployment: bool>, DomainEndpointOptions: record<EnforceHTTPS: bool, TLSSecurityPolicy: string, CustomEndpointEnabled: bool, CustomEndpoint: string, CustomEndpointCertificateArn: string>, AdvancedSecurityOptions: record<Enabled: bool, InternalUserDatabaseEnabled: bool, SAMLOptions: record, AnonymousAuthDisableDate: string, AnonymousAuthEnabled: bool>, AutoTuneOptions: record<State: string, ErrorMessage: string>, ChangeProgressDetails: record<ChangeId: string, Message: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -801,7 +802,7 @@ export def "delete-inbound-cross-cluster-search-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CrossClusterSearchConnection: record<SourceDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, DestinationDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, CrossClusterSearchConnectionId: record, ConnectionStatus: record<StatusCode: record, Message: record>>> {
+]: nothing -> record<CrossClusterSearchConnection: record<SourceDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, DestinationDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, CrossClusterSearchConnectionId: string, ConnectionStatus: record<StatusCode: string, Message: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'ConnectionId' must be non-empty" } }
@@ -846,7 +847,7 @@ export def "delete-outbound-cross-cluster-search-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CrossClusterSearchConnection: record<SourceDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, DestinationDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, CrossClusterSearchConnectionId: record, ConnectionAlias: record, ConnectionStatus: record<StatusCode: record, Message: record>>> {
+]: nothing -> record<CrossClusterSearchConnection: record<SourceDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, DestinationDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, CrossClusterSearchConnectionId: string, ConnectionAlias: string, ConnectionStatus: record<StatusCode: string, Message: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'ConnectionId' must be non-empty" } }
@@ -891,7 +892,7 @@ export def "delete-package" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PackageDetails: record<PackageID: record, PackageName: record, PackageType: record, PackageDescription: record, PackageStatus: record, CreatedAt: record, LastUpdatedAt: string, AvailablePackageVersion: string, ErrorDetails: record<ErrorType: string, ErrorMessage: string>>> {
+]: nothing -> record<PackageDetails: record<PackageID: string, PackageName: string, PackageType: string, PackageDescription: string, PackageStatus: string, CreatedAt: string, LastUpdatedAt: string, AvailablePackageVersion: string, ErrorDetails: record<ErrorType: string, ErrorMessage: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_id | is-empty) { error make --unspanned { msg: "path parameter 'PackageID' must be non-empty" } }
@@ -936,7 +937,7 @@ export def "delete-vpc-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<VpcEndpointSummary: record<VpcEndpointId: record, VpcEndpointOwner: record, DomainArn: record, Status: record>> {
+]: nothing -> record<VpcEndpointSummary: record<VpcEndpointId: string, VpcEndpointOwner: string, DomainArn: string, Status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vpc_endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'VpcEndpointId' must be non-empty" } }
@@ -983,7 +984,7 @@ export def "describe-domain-auto-tunes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AutoTunes: record, NextToken: record> {
+]: nothing -> record<AutoTunes: table<AutoTuneType: string, AutoTuneDetails: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1030,7 +1031,7 @@ export def "describe-domain-change-progress" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ChangeProgressStatus: record<ChangeId: record, StartTime: record, Status: record, PendingProperties: record, CompletedProperties: record, TotalNumberOfStages: record, ChangeProgressStages: record>> {
+]: nothing -> record<ChangeProgressStatus: record<ChangeId: string, StartTime: string, Status: string, PendingProperties: list<string>, CompletedProperties: list<string>, TotalNumberOfStages: int, ChangeProgressStages: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1076,7 +1077,7 @@ export def "describe-elasticsearch-domain-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainConfig: record<ElasticsearchVersion: record<Options: record, Status: record>, ElasticsearchClusterConfig: record<Options: record, Status: record>, EBSOptions: record<Options: record, Status: record>, AccessPolicies: record<Options: record, Status: record>, SnapshotOptions: record<Options: record, Status: record>, VPCOptions: record<Options: record, Status: record>, CognitoOptions: record<Options: record, Status: record>, EncryptionAtRestOptions: record<Options: record, Status: record>, NodeToNodeEncryptionOptions: record<Options: record, Status: record>, AdvancedOptions: record<Options: record, Status: record>, LogPublishingOptions: record<Options: record, Status: record>, DomainEndpointOptions: record<Options: record, Status: record>, AdvancedSecurityOptions: record<Options: record, Status: record>, AutoTuneOptions: record<Options: record, Status: record>, ChangeProgressDetails: record<ChangeId: record, Message: record>>> {
+]: nothing -> record<DomainConfig: record<ElasticsearchVersion: record<Options: string, Status: record>, ElasticsearchClusterConfig: record<Options: record, Status: record>, EBSOptions: record<Options: record, Status: record>, AccessPolicies: record<Options: string, Status: record>, SnapshotOptions: record<Options: record, Status: record>, VPCOptions: record<Options: record, Status: record>, CognitoOptions: record<Options: record, Status: record>, EncryptionAtRestOptions: record<Options: record, Status: record>, NodeToNodeEncryptionOptions: record<Options: record, Status: record>, AdvancedOptions: record<Options: record, Status: record>, LogPublishingOptions: record<Options: record, Status: record>, DomainEndpointOptions: record<Options: record, Status: record>, AdvancedSecurityOptions: record<Options: record, Status: record>, AutoTuneOptions: record<Options: record, Status: record>, ChangeProgressDetails: record<ChangeId: string, Message: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1103,16 +1104,16 @@ export def "describe-elasticsearch-domain-config" [
 #
 # POST /2015-01-01/es/domain/{DomainName}/config
 # operationId: UpdateElasticsearchDomainConfig
-# --ElasticsearchClusterConfig shape: {InstanceType?: any, InstanceCount?: any, DedicatedMasterEnabled?: any, ZoneAwarenessEnabled?: any, ZoneAwarenessConfig?: any, DedicatedMasterType?: any, DedicatedMasterCount?: any, WarmEnabled?: any, WarmType?: any, WarmCount?: any, ColdStorageOptions?: any}
-# --EBSOptions shape: {EBSEnabled?: any, VolumeType?: any, VolumeSize?: any, Iops?: any, Throughput?: any}
-# --SnapshotOptions shape: {AutomatedSnapshotStartHour?: any}
-# --VPCOptions shape: {SubnetIds?: any, SecurityGroupIds?: any}
-# --CognitoOptions shape: {Enabled?: any, UserPoolId?: any, IdentityPoolId?: any, RoleArn?: any}
-# --DomainEndpointOptions shape: {EnforceHTTPS?: any, TLSSecurityPolicy?: any, CustomEndpointEnabled?: any, CustomEndpoint?: any, CustomEndpointCertificateArn?: any}
-# --AdvancedSecurityOptions shape: {Enabled?: any, InternalUserDatabaseEnabled?: any, MasterUserOptions?: any, SAMLOptions?: any, AnonymousAuthEnabled?: any}
-# --NodeToNodeEncryptionOptions shape: {Enabled?: any}
-# --EncryptionAtRestOptions shape: {Enabled?: any, KmsKeyId?: any}
-# --AutoTuneOptions shape: {DesiredState?: any, RollbackOnDisable?: any, MaintenanceSchedules?: any}
+# --ElasticsearchClusterConfig shape: {InstanceType?: "m3.medium.elasticsearch"|"m3.large.elasticsearch"|"m3.xlarge.elasticsearch"|"m3.2xlarge.elasticsearch"|"m4.large.elasticsearch"|"m4.xlarge.elasticsearch"|"m4.2xlarge.elasticsearch"|"m4.4xlarge.elasticsearch"|"m4.10xlarge.elasticsearch"|"m5.large.elasticsearch"|"m5.xlarge.elasticsearch"|"m5.2xlarge.elasticsearch"|"m5.4xlarge.elasticsearch"|"m5.12xlarge.elasticsearch"|"r5.large.elasticsearch"|"r5.xlarge.elasticsearch"|"r5.2xlarge.elasticsearch"|"r5.4xlarge.elasticsearch"|"r5.12xlarge.elasticsearch"|"c5.large.elasticsearch"|"c5.xlarge.elasticsearch"|"c5.2xlarge.elasticsearch"|"c5.4xlarge.elasticsearch"|"c5.9xlarge.elasticsearch"|"c5.18xlarge.elasticsearch"|"ultrawarm1.medium.elasticsearch"|"ultrawarm1.large.elasticsearch"|"t2.micro.elasticsearch"|"t2.small.elasticsearch"|"t2.medium.elasticsearch"|"r3.large.elasticsearch"|"r3.xlarge.elasticsearch"|"r3.2xlarge.elasticsearch"|"r3.4xlarge.elasticsearch"|"r3.8xlarge.elasticsearch"|"i2.xlarge.elasticsearch"|"i2.2xlarge.elasticsearch"|"d2.xlarge.elasticsearch"|"d2.2xlarge.elasticsearch"|"d2.4xlarge.elasticsearch"|"d2.8xlarge.elasticsearch"|"c4.large.elasticsearch"|"c4.xlarge.elasticsearch"|"c4.2xlarge.elasticsearch"|"c4.4xlarge.elasticsearch"|"c4.8xlarge.elasticsearch"|"r4.large.elasticsearch"|"r4.xlarge.elasticsearch"|"r4.2xlarge.elasticsearch"|"r4.4xlarge.elasticsearch"|"r4.8xlarge.elasticsearch"|"r4.16xlarge.elasticsearch"|"i3.large.elasticsearch"|"i3.xlarge.elasticsearch"|"i3.2xlarge.elasticsearch"|"i3.4xlarge.elasticsearch"|"i3.8xlarge.elasticsearch"|"i3.16xlarge.elasticsearch", ... (10 more fields)}
+# --EBSOptions shape: {EBSEnabled?: bool, VolumeType?: "standard"|"gp2"|"io1"|"gp3", VolumeSize?: int, Iops?: int, Throughput?: int}
+# --SnapshotOptions shape: {AutomatedSnapshotStartHour?: int}
+# --VPCOptions shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
+# --CognitoOptions shape: {Enabled?: bool, UserPoolId?: string, IdentityPoolId?: string, RoleArn?: string}
+# --DomainEndpointOptions shape: {EnforceHTTPS?: bool, TLSSecurityPolicy?: "Policy-Min-TLS-1-0-2019-07"|"Policy-Min-TLS-1-2-2019-07", CustomEndpointEnabled?: bool, CustomEndpoint?: string, CustomEndpointCertificateArn?: string}
+# --AdvancedSecurityOptions shape: {Enabled?: bool, InternalUserDatabaseEnabled?: bool, MasterUserOptions?: record, SAMLOptions?: record, AnonymousAuthEnabled?: bool}
+# --NodeToNodeEncryptionOptions shape: {Enabled?: bool}
+# --EncryptionAtRestOptions shape: {Enabled?: bool, KmsKeyId?: string}
+# --AutoTuneOptions shape: {DesiredState?: "ENABLED"|"DISABLED", RollbackOnDisable?: "NO_ROLLBACK"|"DEFAULT_ROLLBACK", MaintenanceSchedules?: list}
 export def "update-elasticsearch-domain-config" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1131,21 +1132,21 @@ export def "update-elasticsearch-domain-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --elasticsearch-cluster-config: record # Specifies the configuration for the domain cluster, such as the type and number of instances. — shape: {InstanceType?: any, InstanceCount?: any, DedicatedMasterEnabled?: any, ZoneAwarenessEnabled?: any, ZoneAwarenessConfig?: any, DedicatedMasterType?: any, DedicatedMasterCount?: any, WarmEnabled?: any, WarmType?: any, WarmCount?: any, ColdStorageOptions?: any}
-  --ebs-options: record # Options to enable, disable, and specify the properties of EBS storage volumes. For more information, see Configuring EBS-based Storage (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-ebs). — shape: {EBSEnabled?: any, VolumeType?: any, VolumeSize?: any, Iops?: any, Throughput?: any}
-  --snapshot-options: record # Specifies the time, in UTC format, when the service takes a daily automated snapshot of the specified Elasticsearch domain. Default value is 0 hours. — shape: {AutomatedSnapshotStartHour?: any}
-  --vpc-options: record # Options to specify the subnets and security groups for VPC endpoint. For more information, see VPC Endpoints for Amazon Elasticsearch Service Domains (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-vpc.html). — shape: {SubnetIds?: any, SecurityGroupIds?: any}
-  --cognito-options: record # Options to specify the Cognito user and identity pools for Kibana authentication. For more information, see Amazon Cognito Authentication for Kibana (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-cognito-auth.html). — shape: {Enabled?: any, UserPoolId?: any, IdentityPoolId?: any, RoleArn?: any}
+  --elasticsearch-cluster-config: record # Specifies the configuration for the domain cluster, such as the type and number of instances. — shape: {InstanceType?: "m3.medium.elasticsearch"|"m3.large.elasticsearch"|"m3.xlarge.elasticsearch"|"m3.2xlarge.elasticsearch"|"m4.large.elasticsearch"|"m4.xlarge.elasticsearch"|"m4.2xlarge.elasticsearch"|"m4.4xlarge.elasticsearch"|"m4.10xlarge.elasticsearch"|"m5.large.elasticsearch"|"m5.xlarge.elasticsearch"|"m5.2xlarge.elasticsearch"|"m5.4xlarge.elasticsearch"|"m5.12xlarge.elasticsearch"|"r5.large.elasticsearch"|"r5.xlarge.elasticsearch"|"r5.2xlarge.elasticsearch"|"r5.4xlarge.elasticsearch"|"r5.12xlarge.elasticsearch"|"c5.large.elasticsearch"|"c5.xlarge.elasticsearch"|"c5.2xlarge.elasticsearch"|"c5.4xlarge.elasticsearch"|"c5.9xlarge.elasticsearch"|"c5.18xlarge.elasticsearch"|"ultrawarm1.medium.elasticsearch"|"ultrawarm1.large.elasticsearch"|"t2.micro.elasticsearch"|"t2.small.elasticsearch"|"t2.medium.elasticsearch"|"r3.large.elasticsearch"|"r3.xlarge.elasticsearch"|"r3.2xlarge.elasticsearch"|"r3.4xlarge.elasticsearch"|"r3.8xlarge.elasticsearch"|"i2.xlarge.elasticsearch"|"i2.2xlarge.elasticsearch"|"d2.xlarge.elasticsearch"|"d2.2xlarge.elasticsearch"|"d2.4xlarge.elasticsearch"|"d2.8xlarge.elasticsearch"|"c4.large.elasticsearch"|"c4.xlarge.elasticsearch"|"c4.2xlarge.elasticsearch"|"c4.4xlarge.elasticsearch"|"c4.8xlarge.elasticsearch"|"r4.large.elasticsearch"|"r4.xlarge.elasticsearch"|"r4.2xlarge.elasticsearch"|"r4.4xlarge.elasticsearch"|"r4.8xlarge.elasticsearch"|"r4.16xlarge.elasticsearch"|"i3.large.elasticsearch"|"i3.xlarge.elasticsearch"|"i3.2xlarge.elasticsearch"|"i3.4xlarge.elasticsearch"|"i3.8xlarge.elasticsearch"|"i3.16xlarge.elasticsearch", ... (10 more fields)}
+  --ebs-options: record # Options to enable, disable, and specify the properties of EBS storage volumes. For more information, see Configuring EBS-based Storage (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-ebs). — shape: {EBSEnabled?: bool, VolumeType?: "standard"|"gp2"|"io1"|"gp3", VolumeSize?: int, Iops?: int, Throughput?: int}
+  --snapshot-options: record # Specifies the time, in UTC format, when the service takes a daily automated snapshot of the specified Elasticsearch domain. Default value is 0 hours. — shape: {AutomatedSnapshotStartHour?: int}
+  --vpc-options: record # Options to specify the subnets and security groups for VPC endpoint. For more information, see VPC Endpoints for Amazon Elasticsearch Service Domains (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-vpc.html). — shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
+  --cognito-options: record # Options to specify the Cognito user and identity pools for Kibana authentication. For more information, see Amazon Cognito Authentication for Kibana (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-cognito-auth.html). — shape: {Enabled?: bool, UserPoolId?: string, IdentityPoolId?: string, RoleArn?: string}
   --advanced-options: record # Exposes select native Elasticsearch configuration values from elasticsearch.yml. Currently, the following advanced options are available: Option to allow references to indices in an HTTP request body. Must be false when configuring access to individual sub-resources. By default, the value is true. See Configuration Advanced Options (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-advanced-options) for more information. Option to specify the percentage of heap space that is allocated to field data. By default, this setting is unbounded. For more information, see Configuring Advanced Options (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-advanced-options).
   --access-policies: string # Access policy rules for an Elasticsearch domain service endpoints. For more information, see Configuring Access Policies (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-access-policies) in the Amazon Elasticsearch Service Developer Guide. The maximum size of a policy document is 100 KB.
   --log-publishing-options: record # Map of LogType and LogPublishingOption, each containing options to publish a given type of Elasticsearch log.
-  --domain-endpoint-options: record # Options to configure endpoint for the Elasticsearch domain. — shape: {EnforceHTTPS?: any, TLSSecurityPolicy?: any, CustomEndpointEnabled?: any, CustomEndpoint?: any, CustomEndpointCertificateArn?: any}
-  --advanced-security-options: record # Specifies the advanced security configuration: whether advanced security is enabled, whether the internal database option is enabled, master username and password (if internal database is enabled), and master user ARN (if IAM is enabled). — shape: {Enabled?: any, InternalUserDatabaseEnabled?: any, MasterUserOptions?: any, SAMLOptions?: any, AnonymousAuthEnabled?: any}
-  --node-to-node-encryption-options: record # Specifies the node-to-node encryption options. — shape: {Enabled?: any}
-  --encryption-at-rest-options: record # Specifies the Encryption At Rest Options. — shape: {Enabled?: any, KmsKeyId?: any}
-  --auto-tune-options: record # Specifies the Auto-Tune options: the Auto-Tune desired state for the domain, rollback state when disabling Auto-Tune options and list of maintenance schedules. — shape: {DesiredState?: any, RollbackOnDisable?: any, MaintenanceSchedules?: any}
+  --domain-endpoint-options: record # Options to configure endpoint for the Elasticsearch domain. — shape: {EnforceHTTPS?: bool, TLSSecurityPolicy?: "Policy-Min-TLS-1-0-2019-07"|"Policy-Min-TLS-1-2-2019-07", CustomEndpointEnabled?: bool, CustomEndpoint?: string, CustomEndpointCertificateArn?: string}
+  --advanced-security-options: record # Specifies the advanced security configuration: whether advanced security is enabled, whether the internal database option is enabled, master username and password (if internal database is enabled), and master user ARN (if IAM is enabled). — shape: {Enabled?: bool, InternalUserDatabaseEnabled?: bool, MasterUserOptions?: record, SAMLOptions?: record, AnonymousAuthEnabled?: bool}
+  --node-to-node-encryption-options: record # Specifies the node-to-node encryption options. — shape: {Enabled?: bool}
+  --encryption-at-rest-options: record # Specifies the Encryption At Rest Options. — shape: {Enabled?: bool, KmsKeyId?: string}
+  --auto-tune-options: record # Specifies the Auto-Tune options: the Auto-Tune desired state for the domain, rollback state when disabling Auto-Tune options and list of maintenance schedules. — shape: {DesiredState?: "ENABLED"|"DISABLED", RollbackOnDisable?: "NO_ROLLBACK"|"DEFAULT_ROLLBACK", MaintenanceSchedules?: list}
   --body-dry-run: oneof<nothing, bool> # This flag, when set to True, specifies whether the UpdateElasticsearchDomain request should return the results of validation checks without actually applying the change. This flag, when set to True, specifies the deployment mechanism through which the update shall be applied on the domain. This will not actually perform the Update.
-]: any -> record<DomainConfig: record<ElasticsearchVersion: record<Options: record, Status: record>, ElasticsearchClusterConfig: record<Options: record, Status: record>, EBSOptions: record<Options: record, Status: record>, AccessPolicies: record<Options: record, Status: record>, SnapshotOptions: record<Options: record, Status: record>, VPCOptions: record<Options: record, Status: record>, CognitoOptions: record<Options: record, Status: record>, EncryptionAtRestOptions: record<Options: record, Status: record>, NodeToNodeEncryptionOptions: record<Options: record, Status: record>, AdvancedOptions: record<Options: record, Status: record>, LogPublishingOptions: record<Options: record, Status: record>, DomainEndpointOptions: record<Options: record, Status: record>, AdvancedSecurityOptions: record<Options: record, Status: record>, AutoTuneOptions: record<Options: record, Status: record>, ChangeProgressDetails: record<ChangeId: record, Message: record>>, DryRunResults: record<DeploymentType: record, Message: record>> {
+]: any -> record<DomainConfig: record<ElasticsearchVersion: record<Options: string, Status: record>, ElasticsearchClusterConfig: record<Options: record, Status: record>, EBSOptions: record<Options: record, Status: record>, AccessPolicies: record<Options: string, Status: record>, SnapshotOptions: record<Options: record, Status: record>, VPCOptions: record<Options: record, Status: record>, CognitoOptions: record<Options: record, Status: record>, EncryptionAtRestOptions: record<Options: record, Status: record>, NodeToNodeEncryptionOptions: record<Options: record, Status: record>, AdvancedOptions: record<Options: record, Status: record>, LogPublishingOptions: record<Options: record, Status: record>, DomainEndpointOptions: record<Options: record, Status: record>, AdvancedSecurityOptions: record<Options: record, Status: record>, AutoTuneOptions: record<Options: record, Status: record>, ChangeProgressDetails: record<ChangeId: string, Message: string>>, DryRunResults: record<DeploymentType: string, Message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1193,7 +1194,7 @@ export def "describe-elasticsearch-domains" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   domain_names: list<string> # A list of Elasticsearch domain names.
-]: any -> record<DomainStatusList: record> {
+]: any -> record<DomainStatusList: table<DomainId: string, DomainName: string, ARN: string, Created: bool, Deleted: bool, Endpoint: string, Endpoints: record, Processing: bool, UpgradeProcessing: bool, ElasticsearchVersion: string, ElasticsearchClusterConfig: record, EBSOptions: record, AccessPolicies: string, SnapshotOptions: record, VPCOptions: record, CognitoOptions: record, EncryptionAtRestOptions: record, NodeToNodeEncryptionOptions: record, AdvancedOptions: record, LogPublishingOptions: record, ServiceSoftwareOptions: record, DomainEndpointOptions: record, AdvancedSecurityOptions: record, AutoTuneOptions: record, ChangeProgressDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1224,7 +1225,7 @@ export def "describe-elasticsearch-domains" [
 # operationId: DescribeElasticsearchInstanceTypeLimits
 export def "describe-elasticsearch-instance-type-limits" [
   elasticsearch_version: string
-  instance_type: string
+  instance_type: string@instance-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1271,7 +1272,7 @@ export def "describe-elasticsearch-instance-type-limits" [
 #
 # POST /2015-01-01/es/ccs/inboundConnection/search
 # operationId: DescribeInboundCrossClusterSearchConnections
-# --Filters item shape: {Name?: any, Values?: any}
+# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "describe-inbound-cross-cluster-search-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1291,10 +1292,10 @@ export def "describe-inbound-cross-cluster-search-connections" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filters: list # A list of filters used to match properties for inbound cross-cluster search connection. Available Filter names for this operation are: cross-cluster-search-connection-id source-domain-info.domain-name source-domain-info.owner-id source-domain-info.region destination-domain-info.domain-name — item shape: {Name?: any, Values?: any}
+  --filters: list # A list of filters used to match properties for inbound cross-cluster search connection. Available Filter names for this operation are: cross-cluster-search-connection-id source-domain-info.domain-name source-domain-info.owner-id source-domain-info.region destination-domain-info.domain-name — item shape: {Name?: string, Values?: list<string>}
   --max-results-body: int # Set this value to limit the number of results returned. (body field)
   --next-token-body: string # Paginated APIs accepts NextToken input to returns next page results and provides a NextToken output in the response which can be used by the client to retrieve more results. (body field)
-]: any -> record<CrossClusterSearchConnections: record, NextToken: record> {
+]: any -> record<CrossClusterSearchConnections: table<SourceDomainInfo: record, DestinationDomainInfo: record, CrossClusterSearchConnectionId: string, ConnectionStatus: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1324,7 +1325,7 @@ export def "describe-inbound-cross-cluster-search-connections" [
 #
 # POST /2015-01-01/es/ccs/outboundConnection/search
 # operationId: DescribeOutboundCrossClusterSearchConnections
-# --Filters item shape: {Name?: any, Values?: any}
+# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "describe-outbound-cross-cluster-search-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1344,10 +1345,10 @@ export def "describe-outbound-cross-cluster-search-connections" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filters: list # A list of filters used to match properties for outbound cross-cluster search connection. Available Filter names for this operation are: cross-cluster-search-connection-id destination-domain-info.domain-name destination-domain-info.owner-id destination-domain-info.region source-domain-info.domain-name — item shape: {Name?: any, Values?: any}
+  --filters: list # A list of filters used to match properties for outbound cross-cluster search connection. Available Filter names for this operation are: cross-cluster-search-connection-id destination-domain-info.domain-name destination-domain-info.owner-id destination-domain-info.region source-domain-info.domain-name — item shape: {Name?: string, Values?: list<string>}
   --max-results-body: int # Set this value to limit the number of results returned. (body field)
   --next-token-body: string # Paginated APIs accepts NextToken input to returns next page results and provides a NextToken output in the response which can be used by the client to retrieve more results. (body field)
-]: any -> record<CrossClusterSearchConnections: record, NextToken: record> {
+]: any -> record<CrossClusterSearchConnections: table<SourceDomainInfo: record, DestinationDomainInfo: record, CrossClusterSearchConnectionId: string, ConnectionAlias: string, ConnectionStatus: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1377,7 +1378,7 @@ export def "describe-outbound-cross-cluster-search-connections" [
 #
 # POST /2015-01-01/packages/describe
 # operationId: DescribePackages
-# --Filters item shape: {Name?: any, Value?: any}
+# --Filters item shape: {Name?: "PackageID"|"PackageName"|"PackageStatus", Value?: list<string>}
 export def "describe-packages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1397,10 +1398,10 @@ export def "describe-packages" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filters: list # A list of DescribePackagesFilter to filter the packages included in a DescribePackages response. — item shape: {Name?: any, Value?: any}
+  --filters: list # A list of DescribePackagesFilter to filter the packages included in a DescribePackages response. — item shape: {Name?: "PackageID"|"PackageName"|"PackageStatus", Value?: list<string>}
   --max-results-body: int # Set this value to limit the number of results returned. (body field)
   --next-token-body: string # Paginated APIs accepts NextToken input to returns next page results and provides a NextToken output in the response which can be used by the client to retrieve more results. (body field)
-]: any -> record<PackageDetailsList: record, NextToken: string> {
+]: any -> record<PackageDetailsList: table<PackageID: string, PackageName: string, PackageType: string, PackageDescription: string, PackageStatus: string, CreatedAt: string, LastUpdatedAt: string, AvailablePackageVersion: string, ErrorDetails: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1452,7 +1453,7 @@ export def "describe-reserved-elasticsearch-instance-offerings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, ReservedElasticsearchInstanceOfferings: record> {
+]: nothing -> record<NextToken: string, ReservedElasticsearchInstanceOfferings: table<ReservedElasticsearchInstanceOfferingId: string, ElasticsearchInstanceType: string, Duration: int, FixedPrice: float, UsagePrice: float, CurrencyCode: string, PaymentOption: string, RecurringCharges: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offeringId" $offering_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1501,7 +1502,7 @@ export def "describe-reserved-elasticsearch-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, ReservedElasticsearchInstances: record> {
+]: nothing -> record<NextToken: string, ReservedElasticsearchInstances: table<ReservationName: string, ReservedElasticsearchInstanceId: string, ReservedElasticsearchInstanceOfferingId: string, ElasticsearchInstanceType: string, StartTime: string, Duration: int, FixedPrice: float, UsagePrice: float, CurrencyCode: string, ElasticsearchInstanceCount: int, State: string, PaymentOption: string, RecurringCharges: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "reservationId" $reservation_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1546,7 +1547,7 @@ export def "describe-vpc-endpoints" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   vpc_endpoint_ids: list<string> # The unique identifiers of the endpoints to get information about.
-]: any -> record<VpcEndpoints: record, VpcEndpointErrors: record> {
+]: any -> record<VpcEndpoints: table<VpcEndpointId: string, VpcEndpointOwner: string, DomainArn: string, VpcOptions: record, Status: string, Endpoint: string>, VpcEndpointErrors: table<VpcEndpointId: string, ErrorCode: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1594,7 +1595,7 @@ export def "dissociate-package" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainPackageDetails: record<PackageID: record, PackageName: record, PackageType: record, LastUpdated: record, DomainName: record, DomainPackageStatus: record, PackageVersion: string, ReferencePath: record, ErrorDetails: record<ErrorType: string, ErrorMessage: string>>> {
+]: nothing -> record<DomainPackageDetails: record<PackageID: string, PackageName: string, PackageType: string, LastUpdated: string, DomainName: string, DomainPackageStatus: string, PackageVersion: string, ReferencePath: string, ErrorDetails: record<ErrorType: string, ErrorMessage: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_id | is-empty) { error make --unspanned { msg: "path parameter 'PackageID' must be non-empty" } }
@@ -1640,7 +1641,7 @@ export def "get-compatible-elasticsearch-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CompatibleElasticsearchVersions: record> {
+]: nothing -> record<CompatibleElasticsearchVersions: table<SourceVersion: string, TargetVersions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domainName" $domain_name "scalar")] | flatten | str join "&"
@@ -1689,7 +1690,7 @@ export def "get-package-version-history" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PackageID: string, PackageVersionHistoryList: record, NextToken: string> {
+]: nothing -> record<PackageID: string, PackageVersionHistoryList: table<PackageVersion: string, CommitMessage: string, CreatedAt: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_id | is-empty) { error make --unspanned { msg: "path parameter 'PackageID' must be non-empty" } }
@@ -1739,7 +1740,7 @@ export def "get-upgrade-history" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<UpgradeHistories: record, NextToken: record> {
+]: nothing -> record<UpgradeHistories: table<UpgradeName: string, StartTimestamp: string, UpgradeStatus: string, StepsList: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1785,7 +1786,7 @@ export def "get-upgrade-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<UpgradeStep: record, StepStatus: record, UpgradeName: record> {
+]: nothing -> record<UpgradeStep: string, StepStatus: string, UpgradeName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1830,7 +1831,7 @@ export def "list-domain-names" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainNames: record> {
+]: nothing -> record<DomainNames: table<DomainName: string, EngineType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "engineType" $engine_type "scalar")] | flatten | str join "&"
@@ -1879,7 +1880,7 @@ export def "list-domains-for-package" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainPackageDetailsList: record, NextToken: string> {
+]: nothing -> record<DomainPackageDetailsList: table<PackageID: string, PackageName: string, PackageType: string, LastUpdated: string, DomainName: string, DomainPackageStatus: string, PackageVersion: string, ReferencePath: string, ErrorDetails: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($package_id | is-empty) { error make --unspanned { msg: "path parameter 'PackageID' must be non-empty" } }
@@ -1930,7 +1931,7 @@ export def "list-elasticsearch-instance-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ElasticsearchInstanceTypes: record, NextToken: record> {
+]: nothing -> record<ElasticsearchInstanceTypes: list<string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($elasticsearch_version | is-empty) { error make --unspanned { msg: "path parameter 'ElasticsearchVersion' must be non-empty" } }
@@ -2028,7 +2029,7 @@ export def "list-packages-for-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainPackageDetailsList: record, NextToken: record> {
+]: nothing -> record<DomainPackageDetailsList: table<PackageID: string, PackageName: string, PackageType: string, LastUpdated: string, DomainName: string, DomainPackageStatus: string, PackageVersion: string, ReferencePath: string, ErrorDetails: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -2066,7 +2067,7 @@ export def "list-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --arn: string # Specify the ARN for the Elasticsearch domain to which the tags are attached that you want to view.
+  --arn: string # Specify the ARN for the Elasticsearch domain to which the tags are attached that you want to view. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2074,9 +2075,10 @@ export def "list-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TagList: record> {
+]: nothing -> record<TagList: table<Key: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($arn == null) { error make --unspanned { msg: "required query parameter 'arn' missing: pass --arn" } }
   let qp = [(serialize-qp "arn" $arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2015-01-01/tags/" $qp $auth.query)
   let accept_val = "application/json"
@@ -2120,7 +2122,7 @@ export def "list-vpc-endpoint-access" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AuthorizedPrincipalList: record, NextToken: record> {
+]: nothing -> record<AuthorizedPrincipalList: table<PrincipalType: string, Principal: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -2167,7 +2169,7 @@ export def "list-vpc-endpoints-for-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<VpcEndpointSummaryList: record, NextToken: record> {
+]: nothing -> record<VpcEndpointSummaryList: table<VpcEndpointId: string, VpcEndpointOwner: string, DomainArn: string, Status: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -2215,7 +2217,7 @@ export def "purchase-reserved-elasticsearch-instance-offering" [
   reserved_elasticsearch_instance_offering_id: string # The ID of the reserved Elasticsearch instance offering to purchase.
   reservation_name: string # A customer-specified identifier to track this reservation.
   --instance-count: int # Specifies the number of EC2 instances in the Elasticsearch domain.
-]: any -> record<ReservedElasticsearchInstanceId: record, ReservationName: record> {
+]: any -> record<ReservedElasticsearchInstanceId: string, ReservationName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2262,7 +2264,7 @@ export def "reject-inbound-cross-cluster-search-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CrossClusterSearchConnection: record<SourceDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, DestinationDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, CrossClusterSearchConnectionId: record, ConnectionStatus: record<StatusCode: record, Message: record>>> {
+]: nothing -> record<CrossClusterSearchConnection: record<SourceDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, DestinationDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, CrossClusterSearchConnectionId: string, ConnectionStatus: record<StatusCode: string, Message: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'ConnectionId' must be non-empty" } }
@@ -2404,7 +2406,7 @@ export def "start-elasticsearch-service-software-update" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   domain_name: string # The name of an Elasticsearch domain. Domain names are unique across the domains owned by an account within an AWS region. Domain names start with a letter or number and can contain the following characters: a-z (lowercase), 0-9, and - (hyphen).
-]: any -> record<ServiceSoftwareOptions: record<CurrentVersion: record, NewVersion: record, UpdateAvailable: record, Cancellable: record, UpdateStatus: record, Description: record, AutomatedUpdateDate: record, OptionalDeployment: record>> {
+]: any -> record<ServiceSoftwareOptions: record<CurrentVersion: string, NewVersion: string, UpdateAvailable: bool, Cancellable: bool, UpdateStatus: string, Description: string, AutomatedUpdateDate: string, OptionalDeployment: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2433,7 +2435,7 @@ export def "start-elasticsearch-service-software-update" [
 #
 # POST /2015-01-01/packages/update
 # operationId: UpdatePackage
-# --PackageSource shape: {S3BucketName?: any, S3Key?: any}
+# --PackageSource shape: {S3BucketName?: string, S3Key?: string}
 export def "update-package" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2452,10 +2454,10 @@ export def "update-package" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   package_id: string # Unique identifier for the package.
-  package_source: record # The S3 location for importing the package specified as S3BucketName and S3Key — shape: {S3BucketName?: any, S3Key?: any}
+  package_source: record # The S3 location for importing the package specified as S3BucketName and S3Key — shape: {S3BucketName?: string, S3Key?: string}
   --package-description: string # New description of the package.
   --commit-message: string # An info message for the new version which will be shown as part of GetPackageVersionHistoryResponse.
-]: any -> record<PackageDetails: record<PackageID: record, PackageName: record, PackageType: record, PackageDescription: record, PackageStatus: record, CreatedAt: record, LastUpdatedAt: string, AvailablePackageVersion: string, ErrorDetails: record<ErrorType: string, ErrorMessage: string>>> {
+]: any -> record<PackageDetails: record<PackageID: string, PackageName: string, PackageType: string, PackageDescription: string, PackageStatus: string, CreatedAt: string, LastUpdatedAt: string, AvailablePackageVersion: string, ErrorDetails: record<ErrorType: string, ErrorMessage: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2484,7 +2486,7 @@ export def "update-package" [
 #
 # POST /2015-01-01/es/vpcEndpoints/update
 # operationId: UpdateVpcEndpoint
-# --VpcOptions shape: {SubnetIds?: any, SecurityGroupIds?: any}
+# --VpcOptions shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
 export def "update-vpc-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2503,8 +2505,8 @@ export def "update-vpc-endpoint" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   vpc_endpoint_id: string # Unique identifier of the VPC endpoint to be updated.
-  vpc_options: record # Options to specify the subnets and security groups for VPC endpoint. For more information, see VPC Endpoints for Amazon Elasticsearch Service Domains (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-vpc.html). — shape: {SubnetIds?: any, SecurityGroupIds?: any}
-]: any -> record<VpcEndpoint: record<VpcEndpointId: record, VpcEndpointOwner: record, DomainArn: record, VpcOptions: record<VPCId: record, SubnetIds: record, AvailabilityZones: record, SecurityGroupIds: record>, Status: record, Endpoint: record>> {
+  vpc_options: record # Options to specify the subnets and security groups for VPC endpoint. For more information, see VPC Endpoints for Amazon Elasticsearch Service Domains (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-vpc.html). — shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
+]: any -> record<VpcEndpoint: record<VpcEndpointId: string, VpcEndpointOwner: string, DomainArn: string, VpcOptions: record<VPCId: string, SubnetIds: list, AvailabilityZones: list, SecurityGroupIds: list>, Status: string, Endpoint: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2553,7 +2555,7 @@ export def "upgrade-elasticsearch-domain" [
   domain_name: string # The name of an Elasticsearch domain. Domain names are unique across the domains owned by an account within an AWS region. Domain names start with a letter or number and can contain the following characters: a-z (lowercase), 0-9, and - (hyphen).
   target_version: string # The version of Elasticsearch that you intend to upgrade the domain to.
   --perform-check-only: oneof<nothing, bool> # This flag, when set to True, indicates that an Upgrade Eligibility Check needs to be performed. This will not actually perform the Upgrade.
-]: any -> record<DomainName: string, TargetVersion: record, PerformCheckOnly: record, ChangeProgressDetails: record<ChangeId: record, Message: record>> {
+]: any -> record<DomainName: string, TargetVersion: string, PerformCheckOnly: bool, ChangeProgressDetails: record<ChangeId: string, Message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

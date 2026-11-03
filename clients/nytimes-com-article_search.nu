@@ -137,7 +137,7 @@ export def "get-articlesearch-json" [
   --fq: string # "Filtered search query using standard Lucene syntax. The filter query can be specified with or without a limiting field: label. See Filtering Your Search for more information about filtering."
   --begin-date: string # "Format: YYYYMMDD Restricts responses to results with publication dates of the date specified or later."
   --end-date: string # "Format: YYYYMMDD Restricts responses to results with publication dates of the date specified or earlier."
-  --qp-sort: string@sort-completer # "By default, search results are sorted by their relevance to the query term (q). Use the sort parameter to sort by pub_date."
+  --sort: string@sort-completer # "By default, search results are sorted by their relevance to the query term (q). Use the sort parameter to sort by pub_date."
   --fl: string # "Comma-delimited list of fields (no limit) Limits the fields returned in your search results. By default (unless you include an fl list in your request), the following fields are returned: web_url snippet lead_paragraph abstract print_page blog source multimedia headline keywords pub_date document_type news_desk byline type_of_material _id word_count"
   --hl: oneof<nothing, bool> # Enables highlighting in search results. When set to true, the query term (q) is highlighted in the headline and lead_paragraph fields. Note: If highlighting is enabled, snippet will be returned even if it is not specified in your fl list." (default: false)
   --page: int # "The value of page corresponds to a set of 10 results (it does not indicate the starting number of the result set). For example, page=0 corresponds to records 0-9. To return records 10-19, set page to 1, not 10." (default: 0)
@@ -146,14 +146,14 @@ export def "get-articlesearch-json" [
 ]: nothing -> record<response: record<docs: list<record>, meta: record<hits: int, offset: int, time: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "fq" $fq "scalar") (serialize-qp "begin_date" $begin_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fl" $fl "scalar") (serialize-qp "hl" $hl "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "facet_field" $facet_field "scalar") (serialize-qp "facet_filter" $facet_filter "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "fq" $fq "scalar") (serialize-qp "begin_date" $begin_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fl" $fl "scalar") (serialize-qp "hl" $hl "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "facet_field" $facet_field "scalar") (serialize-qp "facet_filter" $facet_filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/articlesearch.json" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "fq": $fq, "begin_date": $begin_date, "end_date": $end_date, "sort": $qp_sort, "fl": $fl, "hl": $hl, "page": $page, "facet_field": $facet_field, "facet_filter": $facet_filter} | compact)
+    query: ({"q": $q, "fq": $fq, "begin_date": $begin_date, "end_date": $end_date, "sort": $sort, "fl": $fl, "hl": $hl, "page": $page, "facet_field": $facet_field, "facet_filter": $facet_filter} | compact)
     headers: $auth.headers
     body: null
     content_type: null

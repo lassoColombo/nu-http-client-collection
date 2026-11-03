@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "apikey" => { {scheme: $scheme, headers: {apiKey: $token_val}, query: "", location: "header"} }
+    "apikey" => { {scheme: $scheme, headers: {"apiKey": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -209,8 +209,8 @@ export def "upload-dictionary" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -284,8 +284,8 @@ export def "upload-doc" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -424,12 +424,13 @@ export def "get-search-results" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --matching-only: oneof<nothing, bool> # Only returning paragraphs containing a match
+  --matching-only: oneof<nothing, bool> # Only returning paragraphs containing a match (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($doc_id | is-empty) { error make --unspanned { msg: "path parameter 'docId' must be non-empty" } }
   if ($dictionary_id | is-empty) { error make --unspanned { msg: "path parameter 'dictionaryId' must be non-empty" } }
+  if ($matching_only == null) { error make --unspanned { msg: "required query parameter 'matchingOnly' missing: pass --matching-only" } }
   let qp = [(serialize-qp "matchingOnly" $matching_only "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({doc_id: (encode-path-segment $doc_id), dictionary_id: (encode-path-segment $dictionary_id)} | format pattern "/searches/{doc_id}/{dictionary_id}") $qp $auth.query)
   let accept_val = "application/json"

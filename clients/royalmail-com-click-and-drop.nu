@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -534,13 +534,14 @@ export def "get-orders-label-async" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --document-type: string@document-type-completer # Document generation mode. When documentType is set to "postageLabel" the additional parameters below must be used. These additional parameters will be ignored when documentType is not set to "postageLabel"
+  --document-type: string@document-type-completer # Document generation mode. When documentType is set to "postageLabel" the additional parameters below must be used. These additional parameters will be ignored when documentType is not set to "postageLabel" (required)
   --include-returns-label: oneof<nothing, bool> # Include returns label. Required when documentType is set to 'postageLabel'
   --include-cn: oneof<nothing, bool> # Include CN22/CN23 with label. Optional parameter. If this parameter is used the setting will override the default account behaviour specified in the "Label format" setting "Generate customs declarations with orders"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_identifiers | is-empty) { error make --unspanned { msg: "path parameter 'orderIdentifiers' must be non-empty" } }
+  if ($document_type == null) { error make --unspanned { msg: "required query parameter 'documentType' missing: pass --document-type" } }
   let qp = [(serialize-qp "documentType" $document_type "scalar") (serialize-qp "includeReturnsLabel" $include_returns_label "scalar") (serialize-qp "includeCN" $include_cn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({order_identifiers: (encode-path-segment $order_identifiers)} | format pattern "/orders/{order_identifiers}/label") $qp $auth.query)
   let accept_val = ($accept | default "application/pdf")

@@ -1,4 +1,4 @@
-# Auto-generated client for Betriebsstellen vv1
+# Auto-generated client for Betriebsstellen v1
 # Source: https://api.apis.guru/v2/specs/deutschebahn.com/betriebsstellen/v1/swagger.json
 # Auth: --token flag or $env.BETRIEBSSTELLEN_TOKEN
 

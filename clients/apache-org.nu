@@ -12,9 +12,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "negotiate" => { {scheme: $scheme, headers: {Authorization: $"Negotiate ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "negotiate" => { {scheme: $scheme, headers: {"Authorization": $"Negotiate ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -197,7 +197,7 @@ export def "get-connections" [
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record {
+]: nothing -> record<connections: table<conn_type: string, connection_id: string, description: string, host: string, login: string, port: int, schema: string>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -387,7 +387,7 @@ export def "get-connection" [
 # PATCH /connections/{connection_id}
 # operationId: patch_connection
 export def "patch-connection" [
-  connection_id: any
+  connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -488,7 +488,7 @@ export def "get-dag-warnings" [
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record {
+]: nothing -> record<import_errors: table<dag_id: string, message: string, timestamp: string, warning_type: string>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dag_id" $dag_id "scalar") (serialize-qp "warning_type" $warning_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -529,7 +529,7 @@ export def "get-dags" [
   --tags: list<string> # List of tags to filter results. *New in version 2.2.0*
   --only-active: oneof<nothing, bool> # Only filter active DAGs. *New in version 2.1.1* (default: true)
   --dag-id-pattern: string # If set, only return DAGs with dag_ids matching this pattern.
-]: nothing -> record {
+]: nothing -> record<dags: table<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: list, timetable_description: string>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "only_active" $only_active "scalar") (serialize-qp "dag_id_pattern" $dag_id_pattern "scalar")] | flatten | str join "&"
@@ -567,15 +567,16 @@ export def "patch-dags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
-  --tags: list<string> # List of tags to filter results. *New in version 2.2.0* — item shape: {name?: string}
+  --tags: list<string> # List of tags to filter results. *New in version 2.2.0*
   --update-mask: list<string> # The fields to update on the resource. If absent or empty, all modifiable fields are updated. A comma-separated list of fully qualified names of fields.
   --only-active: oneof<nothing, bool> # Only filter active DAGs. *New in version 2.1.1* (default: true)
-  --dag-id-pattern: string # If set, only update DAGs with dag_ids matching this pattern.
+  --dag-id-pattern: string # If set, only update DAGs with dag_ids matching this pattern. (required)
   --is-paused: oneof<nothing, bool> # Whether the DAG is paused. (nullable)
-]: any -> record {
+]: any -> record<dags: table<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: list, timetable_description: string>, total_entries: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id_pattern == null) { error make --unspanned { msg: "required query parameter 'dag_id_pattern' missing: pass --dag-id-pattern" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "update_mask" $update_mask "csv") (serialize-qp "only_active" $only_active "scalar") (serialize-qp "dag_id_pattern" $dag_id_pattern "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dags" $qp $auth.query)
   let req_body = {"is_paused": $is_paused} | compact
@@ -674,7 +675,7 @@ export def "get-dag" [
 # operationId: patch_dag
 # --tags item shape: {name?: string}
 export def "patch-dag" [
-  dag_id: any
+  dag_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -769,7 +770,7 @@ export def "post-clear-task-instances" [
 # GET /dags/{dag_id}/dagRuns
 # operationId: get_dag_runs
 export def "get-dag-runs" [
-  dag_id: any
+  dag_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -789,7 +790,7 @@ export def "get-dag-runs" [
   --end-date-lte: string # Returns objects less than or equal to the specified date. This can be combined with start_date_gte parameter to receive only the selected period. (format: date-time)
   --state: list<string> # The value can be repeated to retrieve multiple matching values (OR condition).
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record {
+]: nothing -> record<dag_runs: table<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -1064,8 +1065,8 @@ export def "set-dag-run-note" [
 # GET /dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances
 # operationId: get_task_instances
 export def "get-task-instances" [
-  dag_id: any
-  dag_run_id: any
+  dag_id: string
+  dag_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1075,21 +1076,32 @@ export def "get-task-instances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --execution-date-gte: string # Returns objects greater or equal to the specified date. This can be combined with execution_date_lte parameter to receive only the selected period. (format: date-time)
+  --execution-date-lte: string # Returns objects less than or equal to the specified date. This can be combined with execution_date_gte parameter to receive only the selected period. (format: date-time)
+  --start-date-gte: string # Returns objects greater or equal the specified date. This can be combined with start_date_lte parameter to receive only the selected period. (format: date-time)
+  --start-date-lte: string # Returns objects less or equal the specified date. This can be combined with start_date_gte parameter to receive only the selected period. (format: date-time)
+  --end-date-gte: string # Returns objects greater or equal the specified date. This can be combined with start_date_lte parameter to receive only the selected period. (format: date-time)
+  --end-date-lte: string # Returns objects less than or equal to the specified date. This can be combined with start_date_gte parameter to receive only the selected period. (format: date-time)
+  --duration-gte: float # Returns objects greater than or equal to the specified values. This can be combined with duration_lte parameter to receive only the selected period.
+  --duration-lte: float # Returns objects less than or equal to the specified values. This can be combined with duration_gte parameter to receive only the selected range.
+  --state: list<string> # The value can be repeated to retrieve multiple matching values (OR condition).
+  --pool: list<string> # The value can be repeated to retrieve multiple matching values (OR condition).
+  --queue: list<string> # The value can be repeated to retrieve multiple matching values (OR condition).
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
-]: nothing -> record {
+]: nothing -> record<task_instances: table<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record, start_date: string, state: string, task_id: string, trigger: record, triggerer_job: record, try_number: int, unixname: string>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
   if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "execution_date_gte" $execution_date_gte "scalar") (serialize-qp "execution_date_lte" $execution_date_lte "scalar") (serialize-qp "start_date_gte" $start_date_gte "scalar") (serialize-qp "start_date_lte" $start_date_lte "scalar") (serialize-qp "end_date_gte" $end_date_gte "scalar") (serialize-qp "end_date_lte" $end_date_lte "scalar") (serialize-qp "duration_gte" $duration_gte "scalar") (serialize-qp "duration_lte" $duration_lte "scalar") (serialize-qp "state" $state "multi") (serialize-qp "pool" $pool "multi") (serialize-qp "queue" $queue "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset} | compact)
+    query: ({"execution_date_gte": $execution_date_gte, "execution_date_lte": $execution_date_lte, "start_date_gte": $start_date_gte, "start_date_lte": $start_date_lte, "end_date_gte": $end_date_gte, "end_date_lte": $end_date_lte, "duration_gte": $duration_gte, "duration_lte": $duration_lte, "state": $state, "pool": $pool, "queue": $queue, "limit": $limit, "offset": $offset} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1230,9 +1242,9 @@ export def "get-extra-links" [
 # GET /dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/listMapped
 # operationId: get_mapped_task_instances
 export def "get-mapped-task-instances" [
-  dag_id: any
-  dag_run_id: any
-  task_id: any
+  dag_id: string
+  dag_run_id: string
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1256,7 +1268,7 @@ export def "get-mapped-task-instances" [
   --pool: list<string> # The value can be repeated to retrieve multiple matching values (OR condition).
   --queue: list<string> # The value can be repeated to retrieve multiple matching values (OR condition).
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record {
+]: nothing -> record<task_instances: table<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record, start_date: string, state: string, task_id: string, trigger: record, triggerer_job: record, try_number: int, unixname: string>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -1376,9 +1388,9 @@ export def "set-task-instance-note" [
 # GET /dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/xcomEntries
 # operationId: get_xcom_entries
 export def "get-xcom-entries" [
-  dag_id: any
-  dag_run_id: any
-  task_id: any
+  dag_id: string
+  dag_run_id: string
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1390,7 +1402,7 @@ export def "get-xcom-entries" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
-]: nothing -> record {
+]: nothing -> record<xcom_entries: table<dag_id: string, execution_date: string, key: string, task_id: string, timestamp: string>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -1609,7 +1621,7 @@ export def "get-upstream-dataset-events" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<dataset_events: table<created_dagruns: list, dataset_id: int, dataset_uri: string, extra: record, source_dag_id: string, source_map_index: int, source_run_id: string, source_task_id: string, timestamp: string>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
@@ -1816,7 +1828,7 @@ export def "get-dag-runs-batch" [
   --start-date-gte: string # Returns objects greater or equal the specified date. This can be combined with start_date_lte key to receive only the selected period. (format: date-time)
   --start-date-lte: string # Returns objects less or equal the specified date. This can be combined with start_date_gte parameter to receive only the selected period (format: date-time)
   --states: list<string> # Return objects with specific states. The value can be repeated to retrieve multiple matching values (OR condition).
-]: any -> record {
+]: any -> record<dag_runs: table<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string>, total_entries: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1865,7 +1877,7 @@ export def "get-task-instances-batch" [
   --start-date-gte: string # Returns objects greater or equal the specified date. This can be combined with start_date_lte parameter to receive only the selected period. (format: date-time)
   --start-date-lte: string # Returns objects less or equal the specified date. This can be combined with start_date_gte parameter to receive only the selected period. (format: date-time)
   --state: list<string> # The value can be repeated to retrieve multiple matching values (OR condition).
-]: any -> record {
+]: any -> record<task_instances: table<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record, start_date: string, state: string, task_id: string, trigger: record, triggerer_job: record, try_number: int, unixname: string>, total_entries: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1906,7 +1918,7 @@ export def "get-datasets" [
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
   --uri-pattern: string # If set, only return datasets with uris matching this pattern.
-]: nothing -> record {
+]: nothing -> record<datasets: table<consuming_dags: list, created_at: string, extra: record, id: int, producing_tasks: list, updated_at: string, uri: string>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "uri_pattern" $uri_pattern "scalar")] | flatten | str join "&"
@@ -1949,7 +1961,7 @@ export def "get-dataset-events" [
   --source-task-id: string # The task ID that updated the dataset.
   --source-run-id: string # The DAG run ID that updated the dataset.
   --source-map-index: int # The map index that updated the dataset.
-]: nothing -> record {
+]: nothing -> record<dataset_events: table<created_dagruns: list, dataset_id: int, dataset_uri: string, extra: record, source_dag_id: string, source_map_index: int, source_run_id: string, source_task_id: string, timestamp: string>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "dataset_id" $dataset_id "scalar") (serialize-qp "source_dag_id" $source_dag_id "scalar") (serialize-qp "source_task_id" $source_task_id "scalar") (serialize-qp "source_run_id" $source_run_id "scalar") (serialize-qp "source_map_index" $source_map_index "scalar")] | flatten | str join "&"
@@ -2023,7 +2035,7 @@ export def "get-event-logs" [
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record {
+]: nothing -> record<event_logs: table<dag_id: string, event: string, event_log_id: int, execution_date: string, extra: string, owner: string, task_id: string, when: string>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -2131,7 +2143,7 @@ export def "get-import-errors" [
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record {
+]: nothing -> record<import_errors: table<filename: string, import_error_id: int, stack_trace: string, timestamp: string>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -2204,7 +2216,7 @@ export def "get-permissions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
-]: nothing -> record {
+]: nothing -> record<actions: table<name: string>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -2241,7 +2253,7 @@ export def "get-plugins" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
-]: nothing -> record {
+]: nothing -> record<plugins: table<appbuilder_menu_items: list, appbuilder_views: list, executors: list, flask_blueprints: list, global_operator_extra_links: list, hooks: list, macros: list, name: string, operator_extra_links: list, source: string>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -2279,7 +2291,7 @@ export def "get-pools" [
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record {
+]: nothing -> record<pools: table<description: string, name: string, occupied_slots: int, open_slots: int, queued_slots: int, slots: int, used_slots: int>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -2417,7 +2429,7 @@ export def "get-pool" [
 # PATCH /pools/{pool_name}
 # operationId: patch_pool
 export def "patch-pool" [
-  pool_name: any
+  pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2507,7 +2519,7 @@ export def "get-roles" [
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record {
+]: nothing -> record<roles: table<actions: list, name: string>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -2646,7 +2658,7 @@ export def "get-role" [
 # operationId: patch_role
 # --actions item shape: {action?: record, resource?: record}
 export def "patch-role" [
-  role_name: any
+  role_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2701,7 +2713,7 @@ export def "get-users" [
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record {
+]: nothing -> record<users: table<active: bool, changed_on: string, created_on: string, email: string, failed_login_count: int, first_name: string, last_login: string, last_name: string, login_count: int, roles: list, username: string>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -2743,7 +2755,7 @@ export def "post-user" [
   --roles: list # User roles. *Changed in version 2.2.0*&#58; Field is no longer read-only. — item shape: {name?: string}
   --username: string # The username. *Changed in version 2.2.0*&#58; A minimum character length requirement ('minLength') is added.
   --password: string
-]: any -> record {
+]: any -> record<active: bool, changed_on: string, created_on: string, email: string, failed_login_count: int, first_name: string, last_login: string, last_name: string, login_count: int, roles: table<name: string>, username: string, password: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2844,7 +2856,7 @@ export def "get-user" [
 # operationId: patch_user
 # --roles item shape: {name?: string}
 export def "patch-user" [
-  username: any
+  username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2903,7 +2915,7 @@ export def "get-variables" [
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order. *New in version 2.1.0*
-]: nothing -> record {
+]: nothing -> record<variables: table<description: string, key: string>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
@@ -3041,7 +3053,7 @@ export def "get-variable" [
 # PATCH /variables/{variable_key}
 # operationId: patch_variable
 export def "patch-variable" [
-  variable_key: any
+  variable_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

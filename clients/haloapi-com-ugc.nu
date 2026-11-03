@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     "query-subscription-key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "subscription-key")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -136,20 +136,20 @@ export def "58acde292109180bdcacc40d" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # When specified, this indicates the starting index (0-based) for which the list of results will begin at.
   --count: float # When specified, this indicates the maximum quantity of items the caller would like returned in the response.
-  --qp-sort: float # When specified, this indicates what field should be used to sort the results as the primary sort order. When omitted, "modified" (descending) is the assumed primary sort order. Allowed sort fields are: name, description, accessibility, created, modified, bookmarkCount.
+  --sort: float # When specified, this indicates what field should be used to sort the results as the primary sort order. When omitted, "modified" (descending) is the assumed primary sort order. Allowed sort fields are: name, description, accessibility, created, modified, bookmarkCount.
   --order: float # When specified, this indicates the ordering that will be applied. When omitted, "desc" is assumed. Allowed order values are: asc, desc.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($player | is-empty) { error make --unspanned { msg: "path parameter 'player' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({player: (encode-path-segment $player)} | format pattern "/h5/players/{player}/gamevariants") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"start": $start, "count": $count, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -215,20 +215,20 @@ export def "58acde292109180bdcacc40f" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # When specified, this indicates the starting index (0-based) for which the list of results will begin at.
   --count: float # When specified, this indicates the maximum quantity of items the caller would like returned in the response.
-  --qp-sort: float # When specified, this indicates what field should be used to sort the results as the primary sort order. When omitted, "modified" (descending) is the assumed primary sort order. Allowed sort fields are: name, description, accessibility, created, modified, bookmarkCount.
+  --sort: float # When specified, this indicates what field should be used to sort the results as the primary sort order. When omitted, "modified" (descending) is the assumed primary sort order. Allowed sort fields are: name, description, accessibility, created, modified, bookmarkCount.
   --order: float # When specified, this indicates the ordering that will be applied. When omitted, "desc" is assumed. Allowed order values are: asc, desc.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($player | is-empty) { error make --unspanned { msg: "path parameter 'player' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({player: (encode-path-segment $player)} | format pattern "/h5/players/{player}/mapvariants") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"start": $start, "count": $count, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null

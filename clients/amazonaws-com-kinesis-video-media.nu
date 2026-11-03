@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # POST /getMedia
 # operationId: GetMedia
-# --StartSelector shape: {StartSelectorType?: any, AfterFragmentNumber?: any, StartTimestamp?: any, ContinuationToken?: any}
+# --StartSelector shape: {StartSelectorType?: "FRAGMENT_NUMBER"|"SERVER_TIMESTAMP"|"PRODUCER_TIMESTAMP"|"NOW"|"EARLIEST"|"CONTINUATION_TOKEN", AfterFragmentNumber?: string, StartTimestamp?: string, ContinuationToken?: string}
 export def "get-media" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -143,8 +143,8 @@ export def "get-media" [
   --x-amz-signed-headers: string
   --stream-name: string # The Kinesis video stream name from where you want to get the media content. If you don't specify the streamName, you must specify the streamARN.
   --stream-arn: string # The ARN of the stream from where you want to get the media content. If you don't specify the streamARN, you must specify the streamName.
-  start_selector: record # Identifies the chunk on the Kinesis video stream where you want the GetMedia API to start returning media data. You have the following options to identify the starting chunk: Choose the latest (or oldest) chunk. Identify a specific chunk. You can identify a specific chunk either by providing a fragment number or timestamp (server or producer). Each chunk's metadata includes a continuation token as a Matroska (MKV) tag (AWS_KINESISVIDEO_CONTINUATION_TOKEN). If your previous GetMedia request terminated, you can use this tag value in your next GetMedia request. The API then starts returning chunks starting where the last API ended. — shape: {StartSelectorType?: any, AfterFragmentNumber?: any, StartTimestamp?: any, ContinuationToken?: any}
-]: any -> record<Payload: record> {
+  start_selector: record # Identifies the chunk on the Kinesis video stream where you want the GetMedia API to start returning media data. You have the following options to identify the starting chunk: Choose the latest (or oldest) chunk. Identify a specific chunk. You can identify a specific chunk either by providing a fragment number or timestamp (server or producer). Each chunk's metadata includes a continuation token as a Matroska (MKV) tag (AWS_KINESISVIDEO_CONTINUATION_TOKEN). If your previous GetMedia request terminated, you can use this tag value in your next GetMedia request. The API then starts returning chunks starting where the last API ended. — shape: {StartSelectorType?: "FRAGMENT_NUMBER"|"SERVER_TIMESTAMP"|"PRODUCER_TIMESTAMP"|"NOW"|"EARLIEST"|"CONTINUATION_TOKEN", AfterFragmentNumber?: string, StartTimestamp?: string, ContinuationToken?: string}
+]: any -> record<Payload: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

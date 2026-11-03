@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -143,13 +143,14 @@ export def "adaptive-application-controls-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
+  --api-version: string # API version for the operation (required)
   --include-path-recommendations: oneof<nothing, bool> # Include the policy rules
   --summary: oneof<nothing, bool> # Return output in a summarized form
-]: nothing -> record<value: table<properties: record>> {
+]: nothing -> record<value: table<properties: record, id: string, name: string, type: string, location: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "includePathRecommendations" $include_path_recommendations "scalar") (serialize-qp "summary" $summary "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/applicationWhitelistings") $qp $auth.query)
   let accept_val = "application/json"
@@ -185,13 +186,14 @@ export def "adaptive-application-controls-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<properties: record<configurationStatus: string, enforcementMode: string, issues: list<record>, pathRecommendations: list<record>, protectionMode: record<exe: string, executable: string, msi: string, script: string>, recommendationStatus: string, sourceSystem: string, vmRecommendations: list<record>>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> record<properties: record<configurationStatus: string, enforcementMode: string, issues: list<record>, pathRecommendations: list<record>, protectionMode: record<exe: string, executable: string, msi: string, script: string>, recommendationStatus: string, sourceSystem: string, vmRecommendations: list<record>>, id: string, name: string, type: string, location: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($asc_location | is-empty) { error make --unspanned { msg: "path parameter 'ascLocation' must be non-empty" } }
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), asc_location: (encode-path-segment $asc_location), group_name: (encode-path-segment $group_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/locations/{asc_location}/applicationWhitelistings/{group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -230,18 +232,19 @@ export def "adaptive-application-controls-put" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
+  --api-version: string # API version for the operation (required)
   --enforcement-mode: string@enforcement-mode-completer # The application control policy enforcement/protection mode of the VM/server group
   --path-recommendations: list # item shape: {action?: "Recommended"|"Add"|"Remove", common?: bool, configurationStatus?: "Configured"|"NotConfigured"|"InProgress"|"Failed"|"NoStatus", fileType?: "Exe"|"Dll"|"Msi"|"Script"|"Executable"|"Unknown", path?: string, publisherInfo?: record, type?: "File"|"FileHash"|"PublisherSignature"|"ProductSignature"|"BinarySignature"|"VersionAndAboveSignature", userSids?: list<string>, usernames?: list}
   --protection-mode: record # The protection mode of the collection/file types. Exe/Msi/Script are used for Windows, Executable is used for Linux. — shape: {exe?: "Audit"|"Enforce"|"None", executable?: "Audit"|"Enforce"|"None", msi?: "Audit"|"Enforce"|"None", script?: "Audit"|"Enforce"|"None"}
   --vm-recommendations: list # item shape: {configurationStatus?: "Configured"|"NotConfigured"|"InProgress"|"Failed"|"NoStatus", recommendationAction?: "Recommended"|"Add"|"Remove", resourceId?: string}
-]: any -> record<properties: record<configurationStatus: string, enforcementMode: string, issues: list<record>, pathRecommendations: list<record>, protectionMode: record<exe: string, executable: string, msi: string, script: string>, recommendationStatus: string, sourceSystem: string, vmRecommendations: list<record>>> {
+]: any -> record<properties: record<configurationStatus: string, enforcementMode: string, issues: list<record>, pathRecommendations: list<record>, protectionMode: record<exe: string, executable: string, msi: string, script: string>, recommendationStatus: string, sourceSystem: string, vmRecommendations: list<record>>, id: string, name: string, type: string, location: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($asc_location | is-empty) { error make --unspanned { msg: "path parameter 'ascLocation' must be non-empty" } }
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), asc_location: (encode-path-segment $asc_location), group_name: (encode-path-segment $group_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/locations/{asc_location}/applicationWhitelistings/{group_name}") $qp $auth.query)
   let req_body = {"enforcementMode": $enforcement_mode, "pathRecommendations": $path_recommendations, "protectionMode": $protection_mode, "vmRecommendations": $vm_recommendations} | compact

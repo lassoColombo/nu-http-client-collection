@@ -1,4 +1,4 @@
-# Auto-generated client for Google Vault API vv1
+# Auto-generated client for Google Vault API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/vault/v1/openapi.json
 # Auth: --token flag or $env.GOOGLE_VAULT_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -161,8 +151,8 @@ export def commands []: nothing -> table {
 # operationId: vault.matters.list
 export def "vault-matters-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -185,7 +175,7 @@ export def "vault-matters-list" [
   --state: string@state-completer # If set, lists only matters with the specified state. The default lists matters of all states.
   --view: string@view-completer # Specifies how much information about the matter to return in response.
 ]: nothing -> record<matters: table<description: string, matterId: string, matterPermissions: list, name: string, state: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/matters" $qp $auth.query)
@@ -212,8 +202,8 @@ export def "vault-matters-list" [
 # --matterPermissions item shape: {accountId?: string, role?: "ROLE_UNSPECIFIED"|"COLLABORATOR"|"OWNER"}
 export def "vault-matters-create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -238,7 +228,7 @@ export def "vault-matters-create" [
   --state: string@state-completer # The state of the matter.
 ]: any -> record<description: string, matterId: string, matterPermissions: table<accountId: string, role: string>, name: string, state: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/matters" $qp $auth.query)
@@ -267,8 +257,8 @@ export def "vault-matters-create" [
 export def "vault-matters-delete" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -287,7 +277,7 @@ export def "vault-matters-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<description: string, matterId: string, matterPermissions: table<accountId: string, role: string>, name: string, state: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -315,8 +305,8 @@ export def "vault-matters-delete" [
 export def "vault-matters-get" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -336,7 +326,7 @@ export def "vault-matters-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --view: string@view-completer # Specifies how much information about the matter to return in the response.
 ]: nothing -> record<description: string, matterId: string, matterPermissions: table<accountId: string, role: string>, name: string, state: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
@@ -365,8 +355,8 @@ export def "vault-matters-get" [
 export def "vault-matters-update" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -391,7 +381,7 @@ export def "vault-matters-update" [
   --state: string@state-completer # The state of the matter.
 ]: any -> record<description: string, matterId: string, matterPermissions: table<accountId: string, role: string>, name: string, state: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -421,8 +411,8 @@ export def "vault-matters-update" [
 export def "vault-matters-exports-list" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -443,7 +433,7 @@ export def "vault-matters-exports-list" [
   --page-size: int # The number of exports to return in the response.
   --page-token: string # The pagination token as returned in the response.
 ]: nothing -> record<exports: table<cloudStorageSink: record, createTime: string, exportOptions: record, id: string, matterId: string, name: string, query: record, requester: record, stats: record, status: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -476,8 +466,8 @@ export def "vault-matters-exports-list" [
 export def "vault-matters-exports-create" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -507,7 +497,7 @@ export def "vault-matters-exports-create" [
   --status: string@status-completer # Output only. The status of the export.
 ]: any -> record<cloudStorageSink: record<files: list<record>>, createTime: string, exportOptions: record<driveOptions: record<includeAccessInfo: bool>, groupsOptions: record<exportFormat: string>, hangoutsChatOptions: record<exportFormat: string>, mailOptions: record<exportFormat: string, showConfidentialModeContent: bool, useNewExport: bool>, region: string, voiceOptions: record<exportFormat: string>>, id: string, matterId: string, name: string, query: record<accountInfo: record<emails: list>, corpus: string, dataScope: string, driveOptions: record<clientSideEncryptedOption: string, includeSharedDrives: bool, includeTeamDrives: bool, versionDate: string>, endTime: string, hangoutsChatInfo: record<roomId: list>, hangoutsChatOptions: record<includeRooms: bool>, mailOptions: record<clientSideEncryptedOption: string, excludeDrafts: bool>, method: string, orgUnitInfo: record<orgUnitId: string>, searchMethod: string, sharedDriveInfo: record<sharedDriveIds: list>, sitesUrlInfo: record<urls: list>, startTime: string, teamDriveInfo: record<teamDriveIds: list>, terms: string, timeZone: string, voiceOptions: record<coveredData: list>>, requester: record<displayName: string, email: string>, stats: record<exportedArtifactCount: string, sizeInBytes: string, totalArtifactCount: string>, status: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -538,8 +528,8 @@ export def "vault-matters-exports-delete" [
   matter_id: string
   export_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -558,7 +548,7 @@ export def "vault-matters-exports-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   if ($export_id | is-empty) { error make --unspanned { msg: "path parameter 'exportId' must be non-empty" } }
@@ -588,8 +578,8 @@ export def "vault-matters-exports-get" [
   matter_id: string
   export_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -608,7 +598,7 @@ export def "vault-matters-exports-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<cloudStorageSink: record<files: list<record>>, createTime: string, exportOptions: record<driveOptions: record<includeAccessInfo: bool>, groupsOptions: record<exportFormat: string>, hangoutsChatOptions: record<exportFormat: string>, mailOptions: record<exportFormat: string, showConfidentialModeContent: bool, useNewExport: bool>, region: string, voiceOptions: record<exportFormat: string>>, id: string, matterId: string, name: string, query: record<accountInfo: record<emails: list>, corpus: string, dataScope: string, driveOptions: record<clientSideEncryptedOption: string, includeSharedDrives: bool, includeTeamDrives: bool, versionDate: string>, endTime: string, hangoutsChatInfo: record<roomId: list>, hangoutsChatOptions: record<includeRooms: bool>, mailOptions: record<clientSideEncryptedOption: string, excludeDrafts: bool>, method: string, orgUnitInfo: record<orgUnitId: string>, searchMethod: string, sharedDriveInfo: record<sharedDriveIds: list>, sitesUrlInfo: record<urls: list>, startTime: string, teamDriveInfo: record<teamDriveIds: list>, terms: string, timeZone: string, voiceOptions: record<coveredData: list>>, requester: record<displayName: string, email: string>, stats: record<exportedArtifactCount: string, sizeInBytes: string, totalArtifactCount: string>, status: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   if ($export_id | is-empty) { error make --unspanned { msg: "path parameter 'exportId' must be non-empty" } }
@@ -637,8 +627,8 @@ export def "vault-matters-exports-get" [
 export def "vault-matters-holds-list" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -660,7 +650,7 @@ export def "vault-matters-holds-list" [
   --page-token: string # The pagination token as returned in the response. An empty token means start from the beginning.
   --view: string@view-completer-1 # The amount of detail to return for a hold.
 ]: nothing -> record<holds: table<accounts: list, corpus: string, holdId: string, name: string, orgUnit: record, query: record, updateTime: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
@@ -691,8 +681,8 @@ export def "vault-matters-holds-list" [
 export def "vault-matters-holds-create" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -719,7 +709,7 @@ export def "vault-matters-holds-create" [
   --update-time: string # The last time this hold was modified. (format: google-datetime)
 ]: any -> record<accounts: table<accountId: string, email: string, firstName: string, holdTime: string, lastName: string>, corpus: string, holdId: string, name: string, orgUnit: record<holdTime: string, orgUnitId: string>, query: record<driveQuery: record<includeSharedDriveFiles: bool, includeTeamDriveFiles: bool>, groupsQuery: record<endTime: string, startTime: string, terms: string>, hangoutsChatQuery: record<includeRooms: bool>, mailQuery: record<endTime: string, startTime: string, terms: string>, voiceQuery: record<coveredData: list>>, updateTime: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -750,8 +740,8 @@ export def "vault-matters-holds-delete" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -770,7 +760,7 @@ export def "vault-matters-holds-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   if ($hold_id | is-empty) { error make --unspanned { msg: "path parameter 'holdId' must be non-empty" } }
@@ -800,8 +790,8 @@ export def "vault-matters-holds-get" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -821,7 +811,7 @@ export def "vault-matters-holds-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --view: string@view-completer-1 # The amount of detail to return for a hold.
 ]: nothing -> record<accounts: table<accountId: string, email: string, firstName: string, holdTime: string, lastName: string>, corpus: string, holdId: string, name: string, orgUnit: record<holdTime: string, orgUnitId: string>, query: record<driveQuery: record<includeSharedDriveFiles: bool, includeTeamDriveFiles: bool>, groupsQuery: record<endTime: string, startTime: string, terms: string>, hangoutsChatQuery: record<includeRooms: bool>, mailQuery: record<endTime: string, startTime: string, terms: string>, voiceQuery: record<coveredData: list>>, updateTime: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   if ($hold_id | is-empty) { error make --unspanned { msg: "path parameter 'holdId' must be non-empty" } }
@@ -854,8 +844,8 @@ export def "vault-matters-holds-update" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -882,7 +872,7 @@ export def "vault-matters-holds-update" [
   --update-time: string # The last time this hold was modified. (format: google-datetime)
 ]: any -> record<accounts: table<accountId: string, email: string, firstName: string, holdTime: string, lastName: string>, corpus: string, holdId: string, name: string, orgUnit: record<holdTime: string, orgUnitId: string>, query: record<driveQuery: record<includeSharedDriveFiles: bool, includeTeamDriveFiles: bool>, groupsQuery: record<endTime: string, startTime: string, terms: string>, hangoutsChatQuery: record<includeRooms: bool>, mailQuery: record<endTime: string, startTime: string, terms: string>, voiceQuery: record<coveredData: list>>, updateTime: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   if ($hold_id | is-empty) { error make --unspanned { msg: "path parameter 'holdId' must be non-empty" } }
@@ -914,8 +904,8 @@ export def "vault-matters-holds-accounts-list" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -934,7 +924,7 @@ export def "vault-matters-holds-accounts-list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accounts: table<accountId: string, email: string, firstName: string, holdTime: string, lastName: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   if ($hold_id | is-empty) { error make --unspanned { msg: "path parameter 'holdId' must be non-empty" } }
@@ -964,8 +954,8 @@ export def "vault-matters-holds-accounts-create" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -990,7 +980,7 @@ export def "vault-matters-holds-accounts-create" [
   --last-name: string # Output only. The last name of the account holder.
 ]: any -> record<accountId: string, email: string, firstName: string, holdTime: string, lastName: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   if ($hold_id | is-empty) { error make --unspanned { msg: "path parameter 'holdId' must be non-empty" } }
@@ -1023,8 +1013,8 @@ export def "vault-matters-holds-accounts-delete" [
   hold_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1043,7 +1033,7 @@ export def "vault-matters-holds-accounts-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   if ($hold_id | is-empty) { error make --unspanned { msg: "path parameter 'holdId' must be non-empty" } }
@@ -1074,8 +1064,8 @@ export def "vault-matters-holds-add-held-accounts" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1097,7 +1087,7 @@ export def "vault-matters-holds-add-held-accounts" [
   --emails: list<string> # A comma-separated list of the emails of the accounts to add to the hold. Specify either **emails** or **account_ids**, but not both.
 ]: any -> record<responses: table<account: record, status: record>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   if ($hold_id | is-empty) { error make --unspanned { msg: "path parameter 'holdId' must be non-empty" } }
@@ -1129,8 +1119,8 @@ export def "vault-matters-holds-remove-held-accounts" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1151,7 +1141,7 @@ export def "vault-matters-holds-remove-held-accounts" [
   --account-ids: list<string> # The account IDs of the accounts to remove from the hold.
 ]: any -> record<statuses: table<code: int, details: list, message: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   if ($hold_id | is-empty) { error make --unspanned { msg: "path parameter 'holdId' must be non-empty" } }
@@ -1182,8 +1172,8 @@ export def "vault-matters-holds-remove-held-accounts" [
 export def "vault-matters-saved-queries-list" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1204,7 +1194,7 @@ export def "vault-matters-saved-queries-list" [
   --page-size: int # The maximum number of saved queries to return.
   --page-token: string # The pagination token as returned in the previous response. An empty token means start from the beginning.
 ]: nothing -> record<nextPageToken: string, savedQueries: table<createTime: string, displayName: string, matterId: string, query: record, savedQueryId: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1233,8 +1223,8 @@ export def "vault-matters-saved-queries-list" [
 export def "vault-matters-saved-queries-create" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1259,7 +1249,7 @@ export def "vault-matters-saved-queries-create" [
   --saved-query-id: string # A unique identifier for the saved query.
 ]: any -> record<createTime: string, displayName: string, matterId: string, query: record<accountInfo: record<emails: list>, corpus: string, dataScope: string, driveOptions: record<clientSideEncryptedOption: string, includeSharedDrives: bool, includeTeamDrives: bool, versionDate: string>, endTime: string, hangoutsChatInfo: record<roomId: list>, hangoutsChatOptions: record<includeRooms: bool>, mailOptions: record<clientSideEncryptedOption: string, excludeDrafts: bool>, method: string, orgUnitInfo: record<orgUnitId: string>, searchMethod: string, sharedDriveInfo: record<sharedDriveIds: list>, sitesUrlInfo: record<urls: list>, startTime: string, teamDriveInfo: record<teamDriveIds: list>, terms: string, timeZone: string, voiceOptions: record<coveredData: list>>, savedQueryId: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1290,8 +1280,8 @@ export def "vault-matters-saved-queries-delete" [
   matter_id: string
   saved_query_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1310,7 +1300,7 @@ export def "vault-matters-saved-queries-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   if ($saved_query_id | is-empty) { error make --unspanned { msg: "path parameter 'savedQueryId' must be non-empty" } }
@@ -1340,8 +1330,8 @@ export def "vault-matters-saved-queries-get" [
   matter_id: string
   saved_query_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1360,7 +1350,7 @@ export def "vault-matters-saved-queries-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<createTime: string, displayName: string, matterId: string, query: record<accountInfo: record<emails: list>, corpus: string, dataScope: string, driveOptions: record<clientSideEncryptedOption: string, includeSharedDrives: bool, includeTeamDrives: bool, versionDate: string>, endTime: string, hangoutsChatInfo: record<roomId: list>, hangoutsChatOptions: record<includeRooms: bool>, mailOptions: record<clientSideEncryptedOption: string, excludeDrafts: bool>, method: string, orgUnitInfo: record<orgUnitId: string>, searchMethod: string, sharedDriveInfo: record<sharedDriveIds: list>, sitesUrlInfo: record<urls: list>, startTime: string, teamDriveInfo: record<teamDriveIds: list>, terms: string, timeZone: string, voiceOptions: record<coveredData: list>>, savedQueryId: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   if ($saved_query_id | is-empty) { error make --unspanned { msg: "path parameter 'savedQueryId' must be non-empty" } }
@@ -1390,8 +1380,8 @@ export def "vault-matters-saved-queries-get" [
 export def "vault-matters-add-permissions" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1414,7 +1404,7 @@ export def "vault-matters-add-permissions" [
   --send-emails: oneof<nothing, bool> # To send a notification email to the added account, set to **true**. To not send a notification email, set to **false**.
 ]: any -> record<accountId: string, role: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1444,8 +1434,8 @@ export def "vault-matters-add-permissions" [
 export def "vault-matters-close" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1466,7 +1456,7 @@ export def "vault-matters-close" [
   --body: record
 ]: any -> record<matter: record<description: string, matterId: string, matterPermissions: list<record>, name: string, state: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1497,8 +1487,8 @@ export def "vault-matters-close" [
 export def "vault-matters-count" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1520,7 +1510,7 @@ export def "vault-matters-count" [
   --view: string@view-completer-2 # Sets the granularity of the count results.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1550,8 +1540,8 @@ export def "vault-matters-count" [
 export def "vault-matters-remove-permissions" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1572,7 +1562,7 @@ export def "vault-matters-remove-permissions" [
   --account-id: string # The account ID.
 ]: any -> record {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1602,8 +1592,8 @@ export def "vault-matters-remove-permissions" [
 export def "vault-matters-reopen" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1624,7 +1614,7 @@ export def "vault-matters-reopen" [
   --body: record
 ]: any -> record<matter: record<description: string, matterId: string, matterPermissions: list<record>, name: string, state: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1654,8 +1644,8 @@ export def "vault-matters-reopen" [
 export def "vault-matters-undelete" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1676,7 +1666,7 @@ export def "vault-matters-undelete" [
   --body: record
 ]: any -> record<description: string, matterId: string, matterPermissions: table<accountId: string, role: string>, name: string, state: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_VAULT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_VAULT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"

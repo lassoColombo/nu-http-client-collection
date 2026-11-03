@@ -1,4 +1,4 @@
-# Auto-generated client for Up API vv1
+# Auto-generated client for Up API v1
 # Source: https://api.apis.guru/v2/specs/up.com.au/v1/openapi.json
 # Auth: --token flag or $env.UP_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -437,6 +437,7 @@ export def "get-transactions-id" [
 # Categorize transaction
 #
 # PATCH /transactions/{transactionId}/relationships/category
+# --data shape: {id: string, type: string}
 export def "patch-transactions-transaction-id-relationships-category" [
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -448,7 +449,7 @@ export def "patch-transactions-transaction-id-relationships-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --data: any # The category to set on the transaction. Set this entire key to `null` de-categorize a transaction. (nullable)
+  --data: record # The category to set on the transaction. Set this entire key to `null` de-categorize a transaction. (nullable) — shape: {id: string, type: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -624,6 +625,7 @@ export def "get-webhooks" [
 # Create webhook
 #
 # POST /webhooks
+# --data shape: {attributes: record}
 export def "post-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -634,7 +636,7 @@ export def "post-webhooks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  data: any # The webhook resource to create.
+  data: record # The webhook resource to create. — shape: {attributes: record}
 ]: any -> record<data: record<attributes: record<createdAt: string, description: string, secretKey: string, url: string>, id: string, links: record<self: string>, relationships: record<logs: record>, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

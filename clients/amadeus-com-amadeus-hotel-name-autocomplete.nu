@@ -131,14 +131,16 @@ export def "gethotels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --keyword: string # Location query keyword (e.g. PARI)
-  --sub-type: list<string> # Category of search - To enter several values, repeat the query parameter Use HOTEL_LEISURE to target aggregators or HOTEL_GDS to target directly the chains
+  --keyword: string # Location query keyword (required, e.g. PARI)
+  --sub-type: list<string> # Category of search - To enter several values, repeat the query parameter Use HOTEL_LEISURE to target aggregators or HOTEL_GDS to target directly the chains (required)
   --country-code: string # The country in which you search the subType. Country Code in [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) format (e.g. FR)
   --lang: string # The language in which you want the results in following [ISO 639-1](https://fr.wikipedia.org/wiki/Liste_des_codes_ISO_639-1). If the language entered is not available then the results will be shown in the default language, English. (default: EN)
   --max: int # The number of results requested from 1 to 20 (default: 20)
 ]: nothing -> record<data: table<address: record, geoCode: record, hotelIds: list, iataCode: string, id: float, name: string, relevance: int, subType: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($keyword == null) { error make --unspanned { msg: "required query parameter 'keyword' missing: pass --keyword" } }
+  if ($sub_type == null) { error make --unspanned { msg: "required query parameter 'subType' missing: pass --sub-type" } }
   let qp = [(serialize-qp "keyword" $keyword "scalar") (serialize-qp "subType" $sub_type "multi") (serialize-qp "countryCode" $country_code "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reference-data/locations/hotel" $qp $auth.query)
   let accept_val = "application/vnd.amadeus+json"

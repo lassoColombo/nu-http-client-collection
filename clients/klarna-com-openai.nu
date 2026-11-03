@@ -1,4 +1,4 @@
-# Auto-generated client for Open AI Klarna product Api vv0
+# Auto-generated client for Open AI Klarna product Api v0
 # Source: https://api.apis.guru/v2/specs/klarna.com/openai/v0/openapi.json
 # Auth: --token flag or $env.OPEN_AI_KLARNA_PRODUCT_API_TOKEN
 
@@ -131,12 +131,13 @@ export def "products-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # A precise query that matches one very small category or product that needs to be searched for to find the products the user is looking for. If the user explicitly stated what they want, use that as a query. The query is as specific as possible to the product name or category mentioned by the user in its singular form, and don't contain any clarifiers like latest, newest, cheapest, budget, premium, expensive or similar. The query is always taken from the latest topic, if there is a new topic a new query is started.
+  --q: string # A precise query that matches one very small category or product that needs to be searched for to find the products the user is looking for. If the user explicitly stated what they want, use that as a query. The query is as specific as possible to the product name or category mentioned by the user in its singular form, and don't contain any clarifiers like latest, newest, cheapest, budget, premium, expensive or similar. The query is always taken from the latest topic, if there is a new topic a new query is started. (required)
   --size: int # number of products returned
   --budget: int # maximum price of the matching product in local currency, filters results
 ]: nothing -> record<products: table<attributes: list, name: string, price: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "budget" $budget "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/public/openai/v0/products" $qp $auth.query)
   let accept_val = "application/json"

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -147,6 +147,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateIdentityPool
+# --CognitoIdentityProviders item shape: {ProviderName?: string, ClientId?: string, ServerSideTokenCheck?: bool}
 export def "create-identity-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -164,23 +165,25 @@ export def "create-identity-pool" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  identity_pool_name: any
-  allow_unauthenticated_identities: any
-  --allow-classic-flow: any
-  --supported-login-providers: any
-  --developer-provider-name: any
-  --open-id-connect-provider-ar-ns: any
-  --cognito-identity-providers: any
-  --saml-provider-ar-ns: any
-  --identity-pool-tags: any
-]: any -> record<IdentityPoolId: record, IdentityPoolName: record, AllowUnauthenticatedIdentities: record, AllowClassicFlow: record, SupportedLoginProviders: record, DeveloperProviderName: record, OpenIdConnectProviderARNs: record, CognitoIdentityProviders: record, SamlProviderARNs: record, IdentityPoolTags: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  identity_pool_name: string # A string that you provide.
+  --allow-unauthenticated-identities: oneof<nothing, bool> # TRUE if the identity pool supports unauthenticated logins.
+  --allow-classic-flow: oneof<nothing, bool> # Enables or disables the Basic (Classic) authentication flow. For more information, see Identity Pools (Federated Identities) Authentication Flow (https://docs.aws.amazon.com/cognito/latest/developerguide/authentication-flow.html) in the Amazon Cognito Developer Guide.
+  --supported-login-providers: record # Optional key:value pairs mapping provider names to provider app IDs.
+  --developer-provider-name: string # The "domain" by which Cognito will refer to your users. This name acts as a placeholder that allows your backend and the Cognito service to communicate about the developer provider. For the DeveloperProviderName, you can use letters as well as period (.), underscore (_), and dash (-). Once you have set a developer provider name, you cannot change it. Please take care in setting this parameter.
+  --open-id-connect-provider-ar-ns: list<string> # The Amazon Resource Names (ARN) of the OpenID Connect providers.
+  --cognito-identity-providers: list # An array of Amazon Cognito user pools and their client IDs. — item shape: {ProviderName?: string, ClientId?: string, ServerSideTokenCheck?: bool}
+  --saml-provider-ar-ns: list<string> # An array of Amazon Resource Names (ARNs) of the SAML provider for your identity pool.
+  --identity-pool-tags: record # Tags to assign to the identity pool. A tag is a label that you can apply to identity pools to categorize and manage them in different ways, such as by purpose, owner, environment, or other criteria.
+]: any -> record<IdentityPoolId: string, IdentityPoolName: string, AllowUnauthenticatedIdentities: bool, AllowClassicFlow: bool, SupportedLoginProviders: record, DeveloperProviderName: string, OpenIdConnectProviderARNs: list<string>, CognitoIdentityProviders: table<ProviderName: string, ClientId: string, ServerSideTokenCheck: bool>, SamlProviderARNs: list<string>, IdentityPoolTags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.CreateIdentityPool")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityPoolName": $identity_pool_name, "AllowUnauthenticatedIdentities": $allow_unauthenticated_identities, "AllowClassicFlow": $allow_classic_flow, "SupportedLoginProviders": $supported_login_providers, "DeveloperProviderName": $developer_provider_name, "OpenIdConnectProviderARNs": $open_id_connect_provider_ar_ns, "CognitoIdentityProviders": $cognito_identity_providers, "SamlProviderARNs": $saml_provider_ar_ns, "IdentityPoolTags": $identity_pool_tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "AllowUnauthenticatedIdentities") == null) { error make --unspanned { msg: "required body field 'AllowUnauthenticatedIdentities' missing: pass --allow-unauthenticated-identities or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -220,12 +223,13 @@ export def "delete-identities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  identity_ids_to_delete: any
-]: any -> record<UnprocessedIdentityIds: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  identity_ids_to_delete: list<string> # A list of 1-60 identities that you want to delete.
+]: any -> record<UnprocessedIdentityIds: table<IdentityId: string, ErrorCode: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.DeleteIdentities")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityIdsToDelete": $identity_ids_to_delete} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -268,12 +272,13 @@ export def "delete-identity-pool" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  identity_pool_id: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  identity_pool_id: string # An identity pool ID in the format REGION:GUID.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.DeleteIdentityPool")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityPoolId": $identity_pool_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -316,12 +321,13 @@ export def "describe-identity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  identity_id: any
-]: any -> record<IdentityId: record, Logins: record, CreationDate: record, LastModifiedDate: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  identity_id: string # A unique identifier in the format REGION:GUID.
+]: any -> record<IdentityId: string, Logins: list<string>, CreationDate: string, LastModifiedDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.DescribeIdentity")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityId": $identity_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -364,12 +370,13 @@ export def "describe-identity-pool" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  identity_pool_id: any
-]: any -> record<IdentityPoolId: record, IdentityPoolName: record, AllowUnauthenticatedIdentities: record, AllowClassicFlow: record, SupportedLoginProviders: record, DeveloperProviderName: record, OpenIdConnectProviderARNs: record, CognitoIdentityProviders: record, SamlProviderARNs: record, IdentityPoolTags: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  identity_pool_id: string # An identity pool ID in the format REGION:GUID.
+]: any -> record<IdentityPoolId: string, IdentityPoolName: string, AllowUnauthenticatedIdentities: bool, AllowClassicFlow: bool, SupportedLoginProviders: record, DeveloperProviderName: string, OpenIdConnectProviderARNs: list<string>, CognitoIdentityProviders: table<ProviderName: string, ClientId: string, ServerSideTokenCheck: bool>, SamlProviderARNs: list<string>, IdentityPoolTags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.DescribeIdentityPool")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityPoolId": $identity_pool_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -412,14 +419,15 @@ export def "get-credentials-for-identity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  identity_id: any
-  --logins: any
-  --custom-role-arn: any
-]: any -> record<IdentityId: record, Credentials: record<AccessKeyId: record, SecretKey: record, SessionToken: record, Expiration: record>> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  identity_id: string # A unique identifier in the format REGION:GUID.
+  --logins: record # A set of optional name-value pairs that map provider names to provider tokens. The name-value pair will follow the syntax "provider_name": "provider_user_identifier". Logins should not be specified when trying to get credentials for an unauthenticated identity. The Logins parameter is required when using identities associated with external identity providers such as Facebook. For examples of Logins maps, see the code examples in the External Identity Providers (https://docs.aws.amazon.com/cognito/latest/developerguide/external-identity-providers.html) section of the Amazon Cognito Developer Guide.
+  --custom-role-arn: string # The Amazon Resource Name (ARN) of the role to be assumed when multiple roles were received in the token from the identity provider. For example, a SAML-based identity provider. This parameter is optional for identity providers that do not support role customization.
+]: any -> record<IdentityId: string, Credentials: record<AccessKeyId: string, SecretKey: string, SessionToken: string, Expiration: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.GetCredentialsForIdentity")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityId": $identity_id, "Logins": $logins, "CustomRoleArn": $custom_role_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -462,14 +470,15 @@ export def "get-id" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  --account-id: any
-  identity_pool_id: any
-  --logins: any
-]: any -> record<IdentityId: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  --account-id: string # A standard AWS account ID (9+ digits).
+  identity_pool_id: string # An identity pool ID in the format REGION:GUID.
+  --logins: record # A set of optional name-value pairs that map provider names to provider tokens. The available provider names for Logins are as follows: Facebook: graph.facebook.com Amazon Cognito user pool: cognito-idp.<region>.amazonaws.com/<YOUR_USER_POOL_ID>, for example, cognito-idp.us-east-1.amazonaws.com/us-east-1_123456789. Google: accounts.google.com Amazon: www.amazon.com Twitter: api.twitter.com Digits: www.digits.com
+]: any -> record<IdentityId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.GetId")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "IdentityPoolId": $identity_pool_id, "Logins": $logins} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -512,12 +521,13 @@ export def "get-identity-pool-roles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  identity_pool_id: any
-]: any -> record<IdentityPoolId: record, Roles: record, RoleMappings: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  identity_pool_id: string # An identity pool ID in the format REGION:GUID.
+]: any -> record<IdentityPoolId: string, Roles: record, RoleMappings: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.GetIdentityPoolRoles")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityPoolId": $identity_pool_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -560,13 +570,14 @@ export def "get-open-id-token" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  identity_id: any
-  --logins: any
-]: any -> record<IdentityId: record, Token: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  identity_id: string # A unique identifier in the format REGION:GUID.
+  --logins: record # A set of optional name-value pairs that map provider names to provider tokens. When using graph.facebook.com and www.amazon.com, supply the access_token returned from the provider's authflow. For accounts.google.com, an Amazon Cognito user pool provider, or any other OpenID Connect provider, always include the id_token.
+]: any -> record<IdentityId: string, Token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.GetOpenIdToken")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityId": $identity_id, "Logins": $logins} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -609,16 +620,17 @@ export def "get-open-id-token-for-developer-identity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  identity_pool_id: any
-  --identity-id: any
-  logins: any
-  --principal-tags: any
-  --token-duration: any
-]: any -> record<IdentityId: record, Token: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  identity_pool_id: string # An identity pool ID in the format REGION:GUID.
+  --identity-id: string # A unique identifier in the format REGION:GUID.
+  logins: record # A set of optional name-value pairs that map provider names to provider tokens. Each name-value pair represents a user from a public provider or developer provider. If the user is from a developer provider, the name-value pair will follow the syntax "developer_provider_name": "developer_user_identifier". The developer provider is the "domain" by which Cognito will refer to your users; you provided this domain while creating/updating the identity pool. The developer user identifier is an identifier from your backend that uniquely identifies a user. When you create an identity pool, you can specify the supported logins.
+  --principal-tags: record # Use this operation to configure attribute mappings for custom providers.
+  --token-duration: int # The expiration time of the token, in seconds. You can specify a custom expiration time for the token so that you can cache it. If you don't provide an expiration time, the token is valid for 15 minutes. You can exchange the token with Amazon STS for temporary AWS credentials, which are valid for a maximum of one hour. The maximum token duration you can set is 24 hours. You should take care in setting the expiration time for a token, as there are significant security implications: an attacker could use a leaked token to access your AWS resources for the token's duration. Please provide for a small grace period, usually no more than 5 minutes, to account for clock skew.
+]: any -> record<IdentityId: string, Token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.GetOpenIdTokenForDeveloperIdentity")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityPoolId": $identity_pool_id, "IdentityId": $identity_id, "Logins": $logins, "PrincipalTags": $principal_tags, "TokenDuration": $token_duration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -661,13 +673,14 @@ export def "get-principal-tag-attribute-map" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  identity_pool_id: any
-  identity_provider_name: any
-]: any -> record<IdentityPoolId: record, IdentityProviderName: record, UseDefaults: record, PrincipalTags: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  identity_pool_id: string # You can use this operation to get the ID of the Identity Pool you setup attribute mappings for.
+  identity_provider_name: string # You can use this operation to get the provider name.
+]: any -> record<IdentityPoolId: string, IdentityProviderName: string, UseDefaults: bool, PrincipalTags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.GetPrincipalTagAttributeMap")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityPoolId": $identity_pool_id, "IdentityProviderName": $identity_provider_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -710,15 +723,16 @@ export def "list-identities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  identity_pool_id: any
-  max_results: any
-  --next-token: any
-  --hide-disabled: any
-]: any -> record<IdentityPoolId: record, Identities: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  identity_pool_id: string # An identity pool ID in the format REGION:GUID.
+  max_results: int # The maximum number of identities to return.
+  --next-token: string # A pagination token.
+  --hide-disabled: oneof<nothing, bool> # An optional boolean parameter that allows you to hide disabled identities. If omitted, the ListIdentities API will include disabled identities in the response.
+]: any -> record<IdentityPoolId: string, Identities: table<IdentityId: string, Logins: list, CreationDate: string, LastModifiedDate: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.ListIdentities")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityPoolId": $identity_pool_id, "MaxResults": $max_results, "NextToken": $next_token, "HideDisabled": $hide_disabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -763,17 +777,19 @@ export def "list-identity-pools" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<IdentityPools: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  --max-results-body: int # The maximum number of identities to return. (body field)
+  --next-token-body: string # A pagination token. (body field)
+]: any -> record<IdentityPools: table<IdentityPoolId: string, IdentityPoolName: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.ListIdentityPools")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "MaxResults") == null) { error make --unspanned { msg: "required body field 'MaxResults' missing: pass --max-results-body or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -813,12 +829,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  resource_arn: any
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the identity pool that the tags are assigned to.
 ]: any -> record<Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -861,16 +878,17 @@ export def "lookup-developer-identity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  identity_pool_id: any
-  --identity-id: any
-  --developer-user-identifier: any
-  --max-results: any
-  --next-token: any
-]: any -> record<IdentityId: record, DeveloperUserIdentifierList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  identity_pool_id: string # An identity pool ID in the format REGION:GUID.
+  --identity-id: string # A unique identifier in the format REGION:GUID.
+  --developer-user-identifier: string # A unique ID used by your backend authentication process to identify a user. Typically, a developer identity provider would issue many developer user identifiers, in keeping with the number of users.
+  --max-results: int # The maximum number of identities to return.
+  --next-token: string # A pagination token. The first call you make will have NextToken set to null. After that the service will return NextToken values as needed. For example, let's say you make a request with MaxResults set to 10, and there are 20 matches in the database. The service will return a pagination token as a part of the response. This token can be used to call the API again and get results starting from the 11th match.
+]: any -> record<IdentityId: string, DeveloperUserIdentifierList: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.LookupDeveloperIdentity")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityPoolId": $identity_pool_id, "IdentityId": $identity_id, "DeveloperUserIdentifier": $developer_user_identifier, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -913,15 +931,16 @@ export def "merge-developer-identities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  source_user_identifier: any
-  destination_user_identifier: any
-  developer_provider_name: any
-  identity_pool_id: any
-]: any -> record<IdentityId: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  source_user_identifier: string # User identifier for the source user. The value should be a DeveloperUserIdentifier.
+  destination_user_identifier: string # User identifier for the destination user. The value should be a DeveloperUserIdentifier.
+  developer_provider_name: string # The "domain" by which Cognito will refer to your users. This is a (pseudo) domain name that you provide while creating an identity pool. This name acts as a placeholder that allows your backend and the Cognito service to communicate about the developer provider. For the DeveloperProviderName, you can use letters as well as period (.), underscore (_), and dash (-).
+  identity_pool_id: string # An identity pool ID in the format REGION:GUID.
+]: any -> record<IdentityId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.MergeDeveloperIdentities")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SourceUserIdentifier": $source_user_identifier, "DestinationUserIdentifier": $destination_user_identifier, "DeveloperProviderName": $developer_provider_name, "IdentityPoolId": $identity_pool_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -964,14 +983,15 @@ export def "set-identity-pool-roles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  identity_pool_id: any
-  roles: any
-  --role-mappings: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  identity_pool_id: string # An identity pool ID in the format REGION:GUID.
+  roles: record # The map of roles associated with this pool. For a given role, the key will be either "authenticated" or "unauthenticated" and the value will be the Role ARN.
+  --role-mappings: record # How users for a specific identity provider are to mapped to roles. This is a string to RoleMapping object map. The string identifies the identity provider, for example, "graph.facebook.com" or "cognito-idp.us-east-1.amazonaws.com/us-east-1_abcdefghi:app_client_id". Up to 25 rules can be specified per identity provider.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.SetIdentityPoolRoles")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityPoolId": $identity_pool_id, "Roles": $roles, "RoleMappings": $role_mappings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1014,15 +1034,16 @@ export def "set-principal-tag-attribute-map" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  identity_pool_id: any
-  identity_provider_name: any
-  --use-defaults: any
-  --principal-tags: any
-]: any -> record<IdentityPoolId: record, IdentityProviderName: record, UseDefaults: record, PrincipalTags: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  identity_pool_id: string # The ID of the Identity Pool you want to set attribute mappings for.
+  identity_provider_name: string # The provider name you want to use for attribute mappings.
+  --use-defaults: oneof<nothing, bool> # You can use this operation to use default (username and clientID) attribute mappings.
+  --principal-tags: record # You can use this operation to add principal tags.
+]: any -> record<IdentityPoolId: string, IdentityProviderName: string, UseDefaults: bool, PrincipalTags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.SetPrincipalTagAttributeMap")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityPoolId": $identity_pool_id, "IdentityProviderName": $identity_provider_name, "UseDefaults": $use_defaults, "PrincipalTags": $principal_tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1065,13 +1086,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the identity pool.
+  tags: record # The tags to assign to the identity pool.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1114,15 +1136,16 @@ export def "unlink-developer-identity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  identity_id: any
-  identity_pool_id: any
-  developer_provider_name: any
-  developer_user_identifier: any
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  identity_id: string # A unique identifier in the format REGION:GUID.
+  identity_pool_id: string # An identity pool ID in the format REGION:GUID.
+  developer_provider_name: string # The "domain" by which Cognito will refer to your users.
+  developer_user_identifier: string # A unique ID used by your backend authentication process to identify a user.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.UnlinkDeveloperIdentity")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityId": $identity_id, "IdentityPoolId": $identity_pool_id, "DeveloperProviderName": $developer_provider_name, "DeveloperUserIdentifier": $developer_user_identifier} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1165,14 +1188,15 @@ export def "unlink-identity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  identity_id: any
-  logins: any
-  logins_to_remove: any
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  identity_id: string # A unique identifier in the format REGION:GUID.
+  logins: record # A set of optional name-value pairs that map provider names to provider tokens.
+  logins_to_remove: list<string> # Provider names to unlink from this identity.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.UnlinkIdentity")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityId": $identity_id, "Logins": $logins, "LoginsToRemove": $logins_to_remove} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1215,13 +1239,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the identity pool.
+  tag_keys: list<string> # The keys of the tags to remove from the user pool.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1247,6 +1272,7 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateIdentityPool
+# --CognitoIdentityProviders item shape: {ProviderName?: string, ClientId?: string, ServerSideTokenCheck?: bool}
 export def "update-identity-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1264,24 +1290,26 @@ export def "update-identity-pool" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  identity_pool_id: any
-  identity_pool_name: any
-  allow_unauthenticated_identities: any
-  --allow-classic-flow: any
-  --supported-login-providers: any
-  --developer-provider-name: any
-  --open-id-connect-provider-ar-ns: any
-  --cognito-identity-providers: any
-  --saml-provider-ar-ns: any
-  --identity-pool-tags: any
-]: any -> record<IdentityPoolId: record, IdentityPoolName: record, AllowUnauthenticatedIdentities: record, AllowClassicFlow: record, SupportedLoginProviders: record, DeveloperProviderName: record, OpenIdConnectProviderARNs: record, CognitoIdentityProviders: record, SamlProviderARNs: record, IdentityPoolTags: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  identity_pool_id: string # An identity pool ID in the format REGION:GUID.
+  identity_pool_name: string # A string that you provide.
+  --allow-unauthenticated-identities: oneof<nothing, bool> # TRUE if the identity pool supports unauthenticated logins.
+  --allow-classic-flow: oneof<nothing, bool> # Enables or disables the Basic (Classic) authentication flow. For more information, see Identity Pools (Federated Identities) Authentication Flow (https://docs.aws.amazon.com/cognito/latest/developerguide/authentication-flow.html) in the Amazon Cognito Developer Guide.
+  --supported-login-providers: record # Optional key:value pairs mapping provider names to provider app IDs.
+  --developer-provider-name: string # The "domain" by which Cognito will refer to your users.
+  --open-id-connect-provider-ar-ns: list<string> # The ARNs of the OpenID Connect providers.
+  --cognito-identity-providers: list # A list representing an Amazon Cognito user pool and its client ID. — item shape: {ProviderName?: string, ClientId?: string, ServerSideTokenCheck?: bool}
+  --saml-provider-ar-ns: list<string> # An array of Amazon Resource Names (ARNs) of the SAML provider for your identity pool.
+  --identity-pool-tags: record # The tags that are assigned to the identity pool. A tag is a label that you can apply to identity pools to categorize and manage them in different ways, such as by purpose, owner, environment, or other criteria.
+]: any -> record<IdentityPoolId: string, IdentityPoolName: string, AllowUnauthenticatedIdentities: bool, AllowClassicFlow: bool, SupportedLoginProviders: record, DeveloperProviderName: string, OpenIdConnectProviderARNs: list<string>, CognitoIdentityProviders: table<ProviderName: string, ClientId: string, ServerSideTokenCheck: bool>, SamlProviderARNs: list<string>, IdentityPoolTags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSCognitoIdentityService.UpdateIdentityPool")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IdentityPoolId": $identity_pool_id, "IdentityPoolName": $identity_pool_name, "AllowUnauthenticatedIdentities": $allow_unauthenticated_identities, "AllowClassicFlow": $allow_classic_flow, "SupportedLoginProviders": $supported_login_providers, "DeveloperProviderName": $developer_provider_name, "OpenIdConnectProviderARNs": $open_id_connect_provider_ar_ns, "CognitoIdentityProviders": $cognito_identity_providers, "SamlProviderARNs": $saml_provider_ar_ns, "IdentityPoolTags": $identity_pool_tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "AllowUnauthenticatedIdentities") == null) { error make --unspanned { msg: "required body field 'AllowUnauthenticatedIdentities' missing: pass --allow-unauthenticated-identities or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact

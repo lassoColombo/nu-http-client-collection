@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "advicement api key" => { {scheme: $scheme, headers: {ADVICEment API Key: $token_val}, query: "", location: "header"} }
-    "rapidapi.com api key" => { {scheme: $scheme, headers: {RapidAPI.com API Key: $token_val}, query: "", location: "header"} }
+    "advicement api key" => { {scheme: $scheme, headers: {"ADVICEment API Key": $token_val}, query: "", location: "header"} }
+    "rapidapi.com api key" => { {scheme: $scheme, headers: {"RapidAPI.com API Key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -142,13 +142,14 @@ export def "compile" [
   --latex-runs: int # The latex-runs is a numerical parameter and can take values of 1, 2 and 3.
   --main-file-name: string # The main-file-name is a string parameter which identifies the main file to compile. (e.g. inputFile.tex)
   --doc-file-name: string # The doc-file-name is a string parameter which determines the name of the file. Note that the extension of the file is not required. (e.g. brilliantDocument)
-  --content-type: string # Should be set to "application/json" (e.g. application/json)
+  --content-type: string # Should be set to "application/json" (required, default: application/json, e.g. application/json)
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "advicement api key"))
   let base = ($base_url | default $BASE_URL)
   if ($template_token | is-empty) { error make --unspanned { msg: "path parameter 'template-token' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "doc-url-expires-in" $doc_url_expires_in "scalar") (serialize-qp "latex-compiler" $latex_compiler "scalar") (serialize-qp "latex-runs " $latex_runs "scalar") (serialize-qp "main-file-name" $main_file_name "scalar") (serialize-qp "doc-file-name" $doc_file_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({template_token: (encode-path-segment $template_token)} | format pattern "/templates/{template_token}/compile") $qp $auth.query)
   let req_body = $body

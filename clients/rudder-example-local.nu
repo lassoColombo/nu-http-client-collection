@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-token" => { {scheme: $scheme, headers: {X-API-Token: $token_val}, query: "", location: "header"} }
+    "x-api-token" => { {scheme: $scheme, headers: {"X-API-Token": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -148,6 +148,8 @@ def status-completer-1 [] { ["accepted" "refused"] }
 def mode-completer [] { ["erase" "move"] }
 def policy-mode-completer-1 [] { ["audit" "default" "enforce"] }
 def state-completer [] { ["empty-policies" "enabled" "ignored" "initializing" "preparing-eol"] }
+def archive-kind-completer [] { ["directives" "full" "groups" "parameters" "rules"] }
+def archive-restore-kind-completer [] { ["archive ID" "latestArchive" "latestCommit"] }
 def is-pre-hahed-completer [] { ["false" "true"] }
 
 # List all available API commands with their parameters
@@ -271,8 +273,8 @@ export def "import" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["archive"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["archive"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -356,6 +358,10 @@ export def "update-b-randing-conf" [
   let full_url = (build-url $base "/branding" $auth.query)
   let req_body = {"barColor": $bar_color, "displayBar": $display_bar, "displayBarLogin": $display_bar_login, "displayLabel": $display_label, "displayMotd": $display_motd, "labelColor": $label_color, "labelText": $label_text, "motd": $motd, "smallLogo": $small_logo, "wideLogo": $wide_logo} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "displayBar") == null) { error make --unspanned { msg: "required body field 'displayBar' missing: pass --display-bar or pipe a record" } }
+  if (($req_body | get -o "displayBarLogin") == null) { error make --unspanned { msg: "required body field 'displayBarLogin' missing: pass --display-bar-login or pipe a record" } }
+  if (($req_body | get -o "displayLabel") == null) { error make --unspanned { msg: "required body field 'displayLabel' missing: pass --display-label or pipe a record" } }
+  if (($req_body | get -o "displayMotd") == null) { error make --unspanned { msg: "required body field 'displayMotd' missing: pass --display-motd or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1359,7 +1365,7 @@ export def "create-directive" [
   --parameters: record # Directive parameters (depends on the source technique) (e.g. {name: sections, sections: [{section: {name: File to manage, sections: [{section: {name: File, vars: [{var: {name: FILE_AND_FOLDER_MANAGEMENT_PATH, value: /root/test}}]}}, {section: {name: File cleaning options, vars: [{var: {name: FILE_AND_FOLDER_DELETION_DAYS, value: 0}}, {var: {name: FILE_AND_FOLDER_DELETION_OPTION, value: none}}, {var: {name: FILE_AND_FOLDER_DELETION_PATTERN, value: .*}}]}}, {section: {name: Permissions, vars: [{var: {name: FILE_AND_FOLDER_MANAGEMENT_CHECK_PERMISSIONS, value: false}}, {var: {name: FILE_AND_FOLDER_MANAGEMENT_GROUP, value: }}, {var: {name: FILE_AND_FOLDER_MANAGEMENT_OWNER, value: }}, {var: {name: FILE_AND_FOLDER_MANAGEMENT_PERM, value: 000}}, {var: {name: FILE_AND_FOLDER_MANAGEMENT_RECURSIVE, value: 1}}]}}, {section: {name: Post-modification hook, vars: [{var: {name: FILE_AND_FOLDER_MANAGEMENT_POST_HOOK_COMMAND, value: }}, {var: {name: FILE_AND_FOLDER_MANAGEMENT_POST_HOOK_RUN, value: false}}]}}], vars: [{var: {name: FILE_AND_FOLDER_MANAGEMENT_ACTION, value: copy}}, {var: {name: FILE_AND_FOLDER_MANAGEMENT_SOURCE, value: /vagrant/node.sh}}, {var: {name: FILE_AND_FOLDER_MANAGEMENT_SYMLINK_ENFORCE, value: false}}]}}]})
   --priority: int # Directive priority. `0` has highest priority. (e.g. 5)
   --short-description: string # One line directive description (e.g. 91252ea2-feb2-412d-8599-c6945fee02c4)
-  --body-source: string # The id of the directive the clone will be based onto. If this parameter if provided, the new directive will be a clone of this source. Other value will override values from the source. (format: uuid, e.g. b9f6d98a-28bc-4d80-90f7-d2f14269e215)
+  --source: string # The id of the directive the clone will be based onto. If this parameter if provided, the new directive will be a clone of this source. Other value will override values from the source. (format: uuid, e.g. b9f6d98a-28bc-4d80-90f7-d2f14269e215)
   --system: oneof<nothing, bool> # If true it is an internal Rudder directive (e.g. false)
   --tags: list # item shape: {name?: string}
   --technique-name: string # Directive id (e.g. userManagement)
@@ -1369,7 +1375,7 @@ export def "create-directive" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/directives" $auth.query)
-  let req_body = {"displayName": $display_name, "enabled": $enabled, "id": $id, "longDescription": $long_description, "parameters": $parameters, "priority": $priority, "shortDescription": $short_description, "source": $body_source, "system": $system, "tags": $tags, "techniqueName": $technique_name, "techniqueVersion": $technique_version} | compact
+  let req_body = {"displayName": $display_name, "enabled": $enabled, "id": $id, "longDescription": $long_description, "parameters": $parameters, "priority": $priority, "shortDescription": $short_description, "source": $source, "system": $system, "tags": $tags, "techniqueName": $technique_name, "techniqueVersion": $technique_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1621,13 +1627,13 @@ export def "create-group" [
   --id: string # Group id, only provide it when needed. (format: uuid, default: {autogenerated}, e.g. 32d013f7-b6d8-46c8-99d3-016307fa66c0)
   --properties: list # Group properties — item shape: {name: string, value: any}
   --query: record # The criteria defining the group. If not provided, the group will be empty. — shape: {composition?: "and"|"or", select?: string, where?: list}
-  --body-source: string # The id of the group the clone will be based onto. If this parameter if provided, the new group will be a clone of this source. Other value will override values from the source. (format: uuid, e.g. b9f6d98a-28bc-4d80-90f7-d2f14269e215)
+  --source: string # The id of the group the clone will be based onto. If this parameter if provided, the new group will be a clone of this source. Other value will override values from the source. (format: uuid, e.g. b9f6d98a-28bc-4d80-90f7-d2f14269e215)
 ]: any -> record<action: string, data: record<groups: list<record>>, result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/groups" $auth.query)
-  let req_body = {"category": $category, "description": $description, "displayName": $display_name, "dynamic": $dynamic, "enabled": $enabled, "id": $id, "properties": $properties, "query": $query, "source": $body_source} | compact
+  let req_body = {"category": $category, "description": $description, "displayName": $display_name, "dynamic": $dynamic, "enabled": $enabled, "id": $id, "properties": $properties, "query": $query, "source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2153,8 +2159,8 @@ export def "upload-inventory" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file" "signature"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file" "signature"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2355,20 +2361,20 @@ export def "list-accepted-nodes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Level of information to include from the node inventory. Some base levels are defined (**minimal**, **default**, **full**). You can add fields you want to a base level by adding them to the list, possible values are keys from json answer. If you don't provide a base level, they will be added to `default` level, so if you only want os details, use `minimal,os` as the value for this parameter. * **minimal** includes: `id`, `hostname` and `status` * **default** includes **minimal** plus `architectureDescription`, `description`, `ipAddresses`, `lastRunDate`, `lastInventoryDate`, `machine`, `os`, `managementTechnology`, `policyServerId`, `properties` (be careful! Only node own properties, if you also need inherited properties, look at the dedicated `/nodes/{id}/inheritedProperties` endpoint), `policyMode `, `ram` and `timezone` * **full** includes: **default** plus `accounts`, `bios`, `controllers`, `environmentVariables`, `fileSystems`, `managementTechnologyDetails`, `memories`, `networkInterfaces`, `ports`, `processes`, `processors`, `slots`, `software`, `sound`, `storage`, `videos` and `virtualMachines` (format: comma-separated list, default: default, e.g. minimal)
   --query: string # The criterion you want to find for your nodes. Replaces the `where`, `composition` and `select` parameters in a single parameter.
-  --qp-where: string # The criterion you want to find for your nodes
+  --where: string # The criterion you want to find for your nodes
   --composition: string@composition-completer # Boolean operator to use between each `where` criteria. (default: and, e.g. and)
   --select: string # What kind of data we want to include. Here we can get policy servers/relay by setting `nodeAndPolicyServer`. Only used if `where` is defined. (default: node)
 ]: nothing -> record<action: string, data: record<nodes: list<record>>, result: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "where" $qp_where "scalar") (serialize-qp "composition" $composition "scalar") (serialize-qp "select" $select "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "where" $where "scalar") (serialize-qp "composition" $composition "scalar") (serialize-qp "select" $select "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nodes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"include": $include, "query": $query, "where": $qp_where, "composition": $composition, "select": $select} | compact)
+    query: ({"include": $include, "query": $query, "where": $where, "composition": $composition, "select": $select} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2467,20 +2473,20 @@ export def "list-pending-nodes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Level of information to include from the node inventory. Some base levels are defined (**minimal**, **default**, **full**). You can add fields you want to a base level by adding them to the list, possible values are keys from json answer. If you don't provide a base level, they will be added to `default` level, so if you only want os details, use `minimal,os` as the value for this parameter. * **minimal** includes: `id`, `hostname` and `status` * **default** includes **minimal** plus `architectureDescription`, `description`, `ipAddresses`, `lastRunDate`, `lastInventoryDate`, `machine`, `os`, `managementTechnology`, `policyServerId`, `properties` (be careful! Only node own properties, if you also need inherited properties, look at the dedicated `/nodes/{id}/inheritedProperties` endpoint), `policyMode `, `ram` and `timezone` * **full** includes: **default** plus `accounts`, `bios`, `controllers`, `environmentVariables`, `fileSystems`, `managementTechnologyDetails`, `memories`, `networkInterfaces`, `ports`, `processes`, `processors`, `slots`, `software`, `sound`, `storage`, `videos` and `virtualMachines` (format: comma-separated list, default: default, e.g. minimal)
   --query: string # The criterion you want to find for your nodes. Replaces the `where`, `composition` and `select` parameters in a single parameter.
-  --qp-where: string # The criterion you want to find for your nodes
+  --where: string # The criterion you want to find for your nodes
   --composition: string@composition-completer # Boolean operator to use between each `where` criteria. (default: and, e.g. and)
   --select: string # What kind of data we want to include. Here we can get policy servers/relay by setting `nodeAndPolicyServer`. Only used if `where` is defined. (default: node)
 ]: nothing -> record<action: string, data: record<nodes: list<record>>, result: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "where" $qp_where "scalar") (serialize-qp "composition" $composition "scalar") (serialize-qp "select" $select "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "where" $where "scalar") (serialize-qp "composition" $composition "scalar") (serialize-qp "select" $select "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nodes/pending" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"include": $include, "query": $query, "where": $qp_where, "composition": $composition, "select": $select} | compact)
+    query: ({"include": $include, "query": $query, "where": $where, "composition": $composition, "select": $select} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2545,10 +2551,11 @@ export def "get-nodes-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # Comma separated list of node Ids (format: comma-separated list, default: default, e.g. 8403353b-42c4-46f5-a08d-bc77a1a0bad9,root)
+  --ids: string # Comma separated list of node Ids (required, format: comma-separated list, default: default, e.g. 8403353b-42c4-46f5-a08d-bc77a1a0bad9,root)
 ]: nothing -> record<action: string, data: record<nodes: list<record>>, result: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
+  let ids = ($ids | default "default")
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nodes/status" $qp $auth.query)
   let accept_val = "application/json"
@@ -2703,12 +2710,12 @@ export def "apply-node" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/nodes/{node_id}/applyPolicy") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -3074,7 +3081,7 @@ export def "create-rule" [
   --id: string # Rule id (format: uuid, e.g. 0c1713ae-cb9d-4f7b-abda-ca38c5d643ea)
   --long-description: string # Rule documentation (e.g. This rules should be applied to all Linux nodes required basic hardening)
   --short-description: string # One line rule description (e.g. Baseline applying CIS guidelines)
-  --body-source: string # The id of the rule the clone will be based onto. If this parameter if provided, the new rule will be a clone of this source. Other value will override values from the source. (format: uuid, e.g. b9f6d98a-28bc-4d80-90f7-d2f14269e215)
+  --source: string # The id of the rule the clone will be based onto. If this parameter if provided, the new rule will be a clone of this source. Other value will override values from the source. (format: uuid, e.g. b9f6d98a-28bc-4d80-90f7-d2f14269e215)
   --system: oneof<nothing, bool> # If true it is an internal Rudder rule (e.g. false)
   --tags: list # item shape: {name?: string}
   --targets: list # Node and special groups targeted by that rule — item shape: {exclude: record, include: record}
@@ -3083,7 +3090,7 @@ export def "create-rule" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rules" $auth.query)
-  let req_body = {"category": $category, "directives": $directives, "displayName": $display_name, "enabled": $enabled, "id": $id, "longDescription": $long_description, "shortDescription": $short_description, "source": $body_source, "system": $system, "tags": $tags, "targets": $targets} | compact
+  let req_body = {"category": $category, "directives": $directives, "displayName": $display_name, "enabled": $enabled, "id": $id, "longDescription": $long_description, "shortDescription": $short_description, "source": $source, "system": $system, "tags": $tags, "targets": $targets} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3937,7 +3944,7 @@ export def "none" [
 # GET /system/archives/{archiveKind}
 # operationId: listArchives
 export def "list-archives" [
-  archive_kind: string
+  archive_kind: string@archive-kind-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3973,7 +3980,7 @@ export def "list-archives" [
 # POST /system/archives/{archiveKind}
 # operationId: createArchive
 export def "create-archive" [
-  archive_kind: string
+  archive_kind: string@archive-kind-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4009,8 +4016,8 @@ export def "create-archive" [
 # POST /system/archives/{archiveKind}/restore/{archiveRestoreKind}
 # operationId: restoreArchive
 export def "restore-archive" [
-  archive_kind: string
-  archive_restore_kind: string
+  archive_kind: string@archive-kind-completer
+  archive_restore_kind: string@archive-restore-kind-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4047,7 +4054,7 @@ export def "restore-archive" [
 # GET /system/archives/{archiveKind}/zip/{commitId}
 # operationId: getZipArchive
 export def "get-zip-archive" [
-  archive_kind: string
+  archive_kind: string@archive-kind-completer
   commit_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

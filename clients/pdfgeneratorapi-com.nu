@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -154,7 +154,7 @@ export def "get-templates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<response: table<id: int, modified: string, name: string, owner: bool, tags: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates" $auth.query)
@@ -195,7 +195,7 @@ export def "create-template" [
   name: string # Template name (e.g. Invoice template)
   --pages: list # Defines page or label size, margins and components on page or label — item shape: {components?: list, height?: float, margins?: record, width?: float}
   --tags: list<string> # A list of tags assigned to a template (e.g. [invoice, orders])
-]: any -> any {
+]: any -> record<response: record<dataSettings: record<filterBy: list, sortBy: list>, editor: record<heightMultiplier: float>, id: int, isDraft: bool, layout: record<emptyLabels: int, format: string, height: float, margins: record, orientation: string, repeatLayout: record, rotation: int, unit: string, width: float>, name: string, pages: list<record>, tags: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -236,7 +236,7 @@ export def "merge-templates" [
   --format: string@format-completer # Document format. The zip option will return a ZIP file with PDF files. (default: pdf, e.g. pdf)
   --output: string@output-completer # Response format. With the url option, the document is stored for 30 days and automatically deleted. (default: base64, e.g. base64)
   --body: list
-]: any -> any {
+]: any -> record<meta: record<content_type: string, display_name: string, encoding: string, name: string>, response: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -274,10 +274,11 @@ export def "delete-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --template-id: int # Template unique identifier (e.g. 19375)
-]: nothing -> any {
+  --template-id: int # Template unique identifier (required, e.g. 19375)
+]: nothing -> record<response: record<success: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_id == null) { error make --unspanned { msg: "required query parameter 'templateId' missing: pass --template-id" } }
   let qp = [(serialize-qp "templateId" $template_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates/templateId" $qp $auth.query)
   let accept_val = "application/json"
@@ -310,10 +311,11 @@ export def "get-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --template-id: int # Template unique identifier (e.g. 19375)
-]: nothing -> any {
+  --template-id: int # Template unique identifier (required, e.g. 19375)
+]: nothing -> record<response: record<dataSettings: record<filterBy: list, sortBy: list>, editor: record<heightMultiplier: float>, id: int, isDraft: bool, layout: record<emptyLabels: int, format: string, height: float, margins: record, orientation: string, repeatLayout: record, rotation: int, unit: string, width: float>, name: string, pages: list<record>, tags: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_id == null) { error make --unspanned { msg: "required query parameter 'templateId' missing: pass --template-id" } }
   let qp = [(serialize-qp "templateId" $template_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates/templateId" $qp $auth.query)
   let accept_val = "application/json"
@@ -348,16 +350,17 @@ export def "update-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --template-id: int # Template unique identifier (e.g. 19375)
+  --template-id: int # Template unique identifier (required, e.g. 19375)
   --is-draft: oneof<nothing, bool> # Indicates if the template is a draft or published. (e.g. true)
   --layout: record # Defines template layout (e.g page format, margins). — shape: {emptyLabels?: int, format?: "A4"|"letter"|"custom", height?: float, margins?: record, orientation?: "portrait"|"landscape", repeatLayout?: record, rotaion?: "0"|"90"|"180"|"270", unit?: "cm"|"in", width?: float}
   name: string # Template name (e.g. Invoice template)
   --pages: list # Defines page or label size, margins and components on page or label — item shape: {components?: list, height?: float, margins?: record, width?: float}
   --tags: list<string> # A list of tags assigned to a template (e.g. [invoice, orders])
-]: any -> any {
+]: any -> record<response: record<dataSettings: record<filterBy: list, sortBy: list>, editor: record<heightMultiplier: float>, id: int, isDraft: bool, layout: record<emptyLabels: int, format: string, height: float, margins: record, orientation: string, repeatLayout: record, rotation: int, unit: string, width: float>, name: string, pages: list<record>, tags: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_id == null) { error make --unspanned { msg: "required query parameter 'templateId' missing: pass --template-id" } }
   let qp = [(serialize-qp "templateId" $template_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates/templateId" $qp $auth.query)
   let req_body = {"isDraft": $is_draft, "layout": $layout, "name": $name, "pages": $pages, "tags": $tags} | compact
@@ -392,11 +395,12 @@ export def "copy-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --template-id: int # Template unique identifier (e.g. 19375)
+  --template-id: int # Template unique identifier (required, e.g. 19375)
   --name: string # Name for the copied template. If name is not specified then the original name is used. (e.g. My copied template)
-]: nothing -> any {
+]: nothing -> record<response: record<dataSettings: record<filterBy: list, sortBy: list>, editor: record<heightMultiplier: float>, id: int, isDraft: bool, layout: record<emptyLabels: int, format: string, height: float, margins: record, orientation: string, repeatLayout: record, rotation: int, unit: string, width: float>, name: string, pages: list<record>, tags: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_id == null) { error make --unspanned { msg: "required query parameter 'templateId' missing: pass --template-id" } }
   let qp = [(serialize-qp "templateId" $template_id "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates/templateId/copy" $qp $auth.query)
   let accept_val = "application/json"
@@ -429,13 +433,14 @@ export def "get-editor-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --template-id: int # Template unique identifier (e.g. 19375)
+  --template-id: int # Template unique identifier (required, e.g. 19375)
   --language: string@language-completer # Specify the editor UI language. Defaults to organization editor language. (e.g. en)
   --body: record
-]: any -> any {
+]: any -> record<response: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_id == null) { error make --unspanned { msg: "required query parameter 'templateId' missing: pass --template-id" } }
   let qp = [(serialize-qp "templateId" $template_id "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates/templateId/editor" $qp $auth.query)
   let req_body = $body
@@ -470,16 +475,17 @@ export def "merge-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --template-id: int # Template unique identifier (e.g. 19375)
+  --template-id: int # Template unique identifier (required, e.g. 19375)
   --name: string # Document name, returned in the meta data. (e.g. My document)
   --format: string@format-completer # Document format. The zip option will return a ZIP file with PDF files. (default: pdf, e.g. pdf)
   --output: string@output-completer # Response format. With the url option, the document is stored for 30 days and automatically deleted. (default: base64, e.g. base64)
   --id: int # e.g. 12312
   --name-body: string # e.g. Sample Data (body field)
-]: any -> any {
+]: any -> record<meta: record<content_type: string, display_name: string, encoding: string, name: string>, response: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_id == null) { error make --unspanned { msg: "required query parameter 'templateId' missing: pass --template-id" } }
   let qp = [(serialize-qp "templateId" $template_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "output" $output "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates/templateId/output" $qp $auth.query)
   let req_body = {"id": $id, "name": $name_body} | compact
@@ -514,10 +520,11 @@ export def "delete-workspace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workspace-id: string # Workspace identifier (e.g. demo.example@actualreports.com)
-]: nothing -> any {
+  --workspace-id: string # Workspace identifier (required, e.g. demo.example@actualreports.com)
+]: nothing -> record<response: record<success: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_id == null) { error make --unspanned { msg: "required query parameter 'workspaceId' missing: pass --workspace-id" } }
   let qp = [(serialize-qp "workspaceId" $workspace_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/workspaces/workspaceId" $qp $auth.query)
   let accept_val = "application/json"
@@ -550,10 +557,11 @@ export def "get-workspace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workspace-id: string # Workspace identifier (e.g. demo.example@actualreports.com)
-]: nothing -> any {
+  --workspace-id: string # Workspace identifier (required, e.g. demo.example@actualreports.com)
+]: nothing -> record<response: record<created_at: string, id: int, identifier: string, is_master_workspace: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_id == null) { error make --unspanned { msg: "required query parameter 'workspaceId' missing: pass --workspace-id" } }
   let qp = [(serialize-qp "workspaceId" $workspace_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/workspaces/workspaceId" $qp $auth.query)
   let accept_val = "application/json"

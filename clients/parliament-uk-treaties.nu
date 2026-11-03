@@ -1,4 +1,4 @@
-# Auto-generated client for Treaties API vv1
+# Auto-generated client for Treaties API v1
 # Source: https://api.apis.guru/v2/specs/parliament.uk/treaties/v1/openapi.json
 # Auth: --token flag or $env.TREATIES_API_TOKEN
 

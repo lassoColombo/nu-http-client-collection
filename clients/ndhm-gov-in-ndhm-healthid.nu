@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "x-hip-id" => { {scheme: $scheme, headers: {X-HIP-ID: $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "x-hip-id" => { {scheme: $scheme, headers: {"X-HIP-ID": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -150,11 +150,12 @@ export def "generatere-kyc-aadhar-otp-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
-  --x-token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string # default: en-US
+  --x-token: string # Auth Token (required, e.g. Bearer X-Token)
 ]: nothing -> record<txnId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/aadhaar/generateOTP" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -188,8 +189,8 @@ export def "verify-aadhar-otp-only-using-post-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
-  --x-token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string # default: en-US
+  --x-token: string # Auth Token (required, e.g. Bearer X-Token)
   --otp: string
   --restrictions: string
   --txn-id: string
@@ -197,6 +198,7 @@ export def "verify-aadhar-otp-only-using-post-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/aadhaar/verifyOTP" $auth.query)
   let req_body = {"otp": $otp, "restrictions": $restrictions, "txnId": $txn_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -232,11 +234,12 @@ export def "get-benefits-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
-  --x-token: string # Auth Token (e.g. Bearer XToken)
+  --accept-language: string # default: en-US
+  --x-token: string # Auth Token (required, e.g. Bearer XToken)
 ]: nothing -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/benefits" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -270,8 +273,8 @@ export def "change-password-via-aadhar-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
-  --x-token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string # default: en-US
+  --x-token: string # Auth Token (required, e.g. Bearer X-Token)
   --new-password: string
   --otp: string
   --txn-id: string
@@ -279,6 +282,7 @@ export def "change-password-via-aadhar-using-post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/change/passwd/byAadhaar" $auth.query)
   let req_body = {"newPassword": $new_password, "otp": $otp, "txnId": $txn_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -314,8 +318,8 @@ export def "change-password-via-mobile-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
-  --x-token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string # default: en-US
+  --x-token: string # Auth Token (required, e.g. Bearer X-Token)
   --new-password: string
   --otp: string
   --txn-id: string
@@ -323,6 +327,7 @@ export def "change-password-via-mobile-using-post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/change/passwd/byMobile" $auth.query)
   let req_body = {"newPassword": $new_password, "otp": $otp, "txnId": $txn_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -358,11 +363,12 @@ export def "generate-aadhar-otp-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
-  --x-token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string # default: en-US
+  --x-token: string # Auth Token (required, e.g. Bearer X-Token)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/change/passwd/generateAadhaarOTP" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -396,11 +402,12 @@ export def "generate-mobile-otp-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
-  --x-token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string # default: en-US
+  --x-token: string # Auth Token (required, e.g. Bearer X-Token)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/change/passwd/generateMobileOTP" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -434,14 +441,15 @@ export def "change-password-via-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
-  --x-token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string # default: en-US
+  --x-token: string # Auth Token (required, e.g. Bearer X-Token)
   --new-password: string
   --old-password: string
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/change/password" $auth.query)
   let req_body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -477,11 +485,12 @@ export def "generate-card-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
-  --x-token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string # default: en-US
+  --x-token: string # Auth Token (required, e.g. Bearer X-Token)
 ]: nothing -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/getCard" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -515,11 +524,12 @@ export def "generate-png-card-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
-  --x-token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string # default: en-US
+  --x-token: string # Auth Token (required, e.g. Bearer X-Token)
 ]: nothing -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/getPngCard" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -553,11 +563,12 @@ export def "generate-svg-card-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
-  --x-token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string # default: en-US
+  --x-token: string # Auth Token (required, e.g. Bearer X-Token)
 ]: nothing -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/getSvgCard" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -591,11 +602,12 @@ export def "delete-account-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
-  --x-token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string # default: en-US
+  --x-token: string # Auth Token (required, e.g. Bearer X-Token)
 ]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/profile" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -629,11 +641,12 @@ export def "get-account-information-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
-  --x-token: string # Auth Token (e.g. Bearer XToken)
+  --accept-language: string # default: en-US
+  --x-token: string # Auth Token (required, e.g. Bearer XToken)
 ]: nothing -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/profile" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -667,8 +680,8 @@ export def "update-account-information-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
-  --x-token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string # default: en-US
+  --x-token: string # Auth Token (required, e.g. Bearer X-Token)
   --address: string
   --day-of-birth: string
   --district-code: string
@@ -691,6 +704,7 @@ export def "update-account-information-using-post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/profile" $auth.query)
   let req_body = {"address": $address, "dayOfBirth": $day_of_birth, "districtCode": $district_code, "email": $email, "firstName": $first_name, "healthId": $health_id, "lastName": $last_name, "middleName": $middle_name, "monthOfBirth": $month_of_birth, "password": $password, "pincode": $pincode, "profilePhoto": $profile_photo, "stateCode": $state_code, "subdistrictCode": $subdistrict_code, "townCode": $town_code, "villageCode": $village_code, "wardCode": $ward_code, "yearOfBirth": $year_of_birth} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -727,11 +741,12 @@ export def "get-qr-code-using-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --accept-language: string
-  --x-token: string # Auth Token (e.g. Bearer XToken)
+  --accept-language: string # default: en-US
+  --x-token: string # Auth Token (required, e.g. Bearer XToken)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/qrCode" $auth.query)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -765,7 +780,7 @@ export def "validate-token-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --auth-token: string
 ]: any -> oneof<bool, string, record, nothing> {
   let input = $in
@@ -806,7 +821,7 @@ export def "authenticate-with-password-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --health-id: string
   --password: string
 ]: any -> record<token: string> {
@@ -848,7 +863,7 @@ export def "authenticate-user-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --healthid: string
 ]: any -> record<txnId: string> {
   let input = $in
@@ -889,7 +904,7 @@ export def "auth-with-mobile-token-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --gender: string
   --health-id: string
   --name: string
@@ -935,7 +950,7 @@ export def "cert-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -972,7 +987,7 @@ export def "confirm-with-aadhaar-bio-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --auth-type: string@auth-type-completer
   --bio-type: string
   --pid: string
@@ -1016,7 +1031,7 @@ export def "confirm-with-aadhaar-otp-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   otp: string
   txn_id: string # format: uuid
 ]: any -> record<token: string> {
@@ -1058,7 +1073,7 @@ export def "confirm-with-demographics-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --gender: string
   --name: string
   txn_id: string # format: uuid
@@ -1102,7 +1117,7 @@ export def "confirm-with-mobile-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --otp: string
   --txn-id: string
 ]: any -> record<token: string> {
@@ -1144,7 +1159,7 @@ export def "auth-account-password-request-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   password: string
   txn_id: string # format: uuid
 ]: any -> record<token: string> {
@@ -1186,7 +1201,7 @@ export def "initiate-auth-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   auth_method: string@auth-method-completer
   --healthid: string
 ]: any -> record<txnId: string> {
@@ -1228,7 +1243,7 @@ export def "resend-auth-mobile-otp-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   txn_id: string
 ]: any -> oneof<bool, string, record, nothing> {
   let input = $in
@@ -1269,7 +1284,7 @@ export def "retrieval-health-id-by-aadhar-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   otp: string
   txn_id: string # format: uuid
 ]: any -> record<healthId: string, healthIdNumber: string> {
@@ -1311,7 +1326,7 @@ export def "generate-aadhar-otp-using-post-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --aadhaar: string
 ]: any -> record<txnId: string> {
   let input = $in
@@ -1352,7 +1367,7 @@ export def "retrieval-health-id-by-mobile-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --day-of-birth: string
   --first-name: string
   --gender: string
@@ -1402,7 +1417,7 @@ export def "generate-mobile-otp-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --mobile: string
 ]: any -> record<txnId: string> {
   let input = $in
@@ -1443,11 +1458,12 @@ export def "get-districts-in-state-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --state-code: string # stateCode
-  --accept-language: string
+  --state-code: string # stateCode (required)
+  --accept-language: string # default: en-US
 ]: nothing -> table<code: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($state_code == null) { error make --unspanned { msg: "required query parameter 'stateCode' missing: pass --state-code" } }
   let qp = [(serialize-qp "stateCode" $state_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/ha/lgd/districts" $qp $auth.query)
   let accept_val = "*/*"
@@ -1482,7 +1498,7 @@ export def "get-states-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
 ]: nothing -> table<code: string, districts: list<record>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1519,15 +1535,16 @@ export def "delete-tag-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
-  --body: any
+  --accept-language: string # default: en-US
+  --health-id: string
+  --tags: record
 ]: any -> table<healthId: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/ha/tags" $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"healthId": $health_id, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
@@ -1538,7 +1555,7 @@ export def "delete-tag-using-delete" [
     query: {}
     headers: $auth.headers
     body: $req_body
-    content_type: "*/*"
+    content_type: "application/json"
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
@@ -1560,11 +1577,12 @@ export def "get-tags-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
-  --x-token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string # default: en-US
+  --x-token: string # Auth Token (required, e.g. Bearer X-Token)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/ha/tags" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1598,7 +1616,7 @@ export def "add-tag-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --health-id: string
   --tags: record
 ]: any -> table<healthId: string, tags: record> {
@@ -1640,7 +1658,7 @@ export def "authenticate-health-facility-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --hfr-uid: string
   --password: string
 ]: any -> oneof<string, record, nothing> {
@@ -1682,7 +1700,7 @@ export def "change-password-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --hfr-uid: string
   --new-password: string
   --old-password: string
@@ -1725,7 +1743,7 @@ export def "create-aadhaar-account-using-post-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --email: string
   --first-name: string
   --health-id: string
@@ -1773,7 +1791,7 @@ export def "generate-password-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --hfr-uid: string
 ]: any -> oneof<string, record, nothing> {
   let input = $in
@@ -1814,13 +1832,14 @@ export def "generate-facility-otp-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
-  --x-token: string # Auth Token (e.g. Bearer XToken)
+  --accept-language: string # default: en-US
+  --x-token: string # Auth Token (required, e.g. Bearer XToken)
   --aadhaar: string
 ]: any -> record<txnId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/health/facility/generateOtp" $auth.query)
   let req_body = {"aadhaar": $aadhaar} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1856,12 +1875,14 @@ export def "generate-svg-card-using-get-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
-  --health-id: string # Your health id (e.g. demo@ndhm)
-  --x-token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string # default: en-US
+  --health-id: string # Your health id (required, e.g. demo@ndhm)
+  --x-token: string # Auth Token (required, e.g. Bearer X-Token)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($health_id == null) { error make --unspanned { msg: "required header parameter 'Health-ID' missing: pass --health-id" } }
+  if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/health/facility/getSvgCard" $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1895,7 +1916,7 @@ export def "reset-password-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --hfr-uid: string
 ]: any -> oneof<string, record, nothing> {
   let input = $in
@@ -1936,7 +1957,7 @@ export def "generate-aadhar-otp-using-post-2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --aadhaar: string
 ]: any -> record<txnId: string> {
   let input = $in
@@ -1977,7 +1998,7 @@ export def "verify-aadhar-otp-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --auto-generated-benefit-id: oneof<nothing, bool>
   --benefit-id: string
   --benefit-name: string
@@ -2025,7 +2046,7 @@ export def "verify-bio-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --aadhaar: string
   --auto-generated-benefit-id: oneof<nothing, bool>
   --benefit-id: string
@@ -2074,7 +2095,7 @@ export def "create-health-id-by-demo-auth-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --aadhar-number: string
   --auto-generated-benefit-id: oneof<nothing, bool>
   --benefit-id: string
@@ -2124,7 +2145,7 @@ export def "delink-hid-benefit-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --benefit-name: string
   --uid-token: string
 ]: any -> record<benefitName: string, healthId: string, status: string> {
@@ -2166,7 +2187,7 @@ export def "link-hid-benefit-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --benefit-id: string
   --benefit-name: string
   --state-code: string
@@ -2211,7 +2232,7 @@ export def "create-health-id-by-mobile-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --auto-generated-benefit-id: oneof<nothing, bool>
   --benefit-doc-type: string@benefit-doc-type-completer
   --benefit-id: string
@@ -2265,7 +2286,7 @@ export def "generate-mobile-otp-using-post-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --mobile: string
 ]: any -> record<txnId: string> {
   let input = $in
@@ -2306,7 +2327,7 @@ export def "notify-benefit-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --aadhar-number-or-uid-token: string
   --auto-generated-benefit-id: oneof<nothing, bool>
   --benefit-id: string
@@ -2357,7 +2378,7 @@ export def "find-by-aadhar-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --aadhaar: string
 ]: any -> list<record> {
   let input = $in
@@ -2398,7 +2419,7 @@ export def "find-by-health-id-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --benefit-id: string
   --health-id: string
 ]: any -> table<benefitId: string, benefitName: string, healthIdNumber: string, stateCode: string> {
@@ -2440,7 +2461,7 @@ export def "update-mobile-information-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --health-id-number: string
   --mobile: string
 ]: any -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
@@ -2482,7 +2503,7 @@ export def "update-account-information-using-post-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --address: string
   --day-of-birth: string
   --district-code: string
@@ -2541,7 +2562,7 @@ export def "update-status-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --health-id-number: string
 ]: any -> oneof<bool, string, record, nothing> {
   let input = $in
@@ -2582,7 +2603,7 @@ export def "verify-aadhar-otp-using-post-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --email: string
   --first-name: string
   --last-name: string
@@ -2633,7 +2654,7 @@ export def "create-aadhaar-account-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --email: string
   --first-name: string
   --health-id: string
@@ -2681,7 +2702,7 @@ export def "generate-mobile-otp-for-txn-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --mobile: string
   --txn-id: string
 ]: any -> record<txnId: string> {
@@ -2723,7 +2744,7 @@ export def "generate-aadhar-otp-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --aadhaar: string
 ]: any -> record<txnId: string> {
   let input = $in
@@ -2764,7 +2785,7 @@ export def "resend-aadhar-otp-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   txn_id: string
 ]: any -> record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string> {
   let input = $in
@@ -2805,7 +2826,7 @@ export def "get-health-id-numbers-by-aadhar-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --aadhaar: string
 ]: any -> list<record> {
   let input = $in
@@ -2846,7 +2867,7 @@ export def "verify-aadhar-bio-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --aadhaar: string
   --bio-type: string
   --pid: string
@@ -2890,7 +2911,7 @@ export def "verify-mobile-otp-for-txn-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --otp: string
   --txn-id: string
 ]: any -> record<txnId: string> {
@@ -2932,7 +2953,7 @@ export def "verify-aadhar-otp-only-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --otp: string
   --restrictions: string
   --txn-id: string
@@ -2975,7 +2996,7 @@ export def "verify-user-via-mobile-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --address: string
   --day-of-birth: string
   --district-code: string
@@ -3038,7 +3059,7 @@ export def "generate-mobile-otp-using-post-1-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --mobile: string
 ]: any -> record<txnId: string> {
   let input = $in
@@ -3079,7 +3100,7 @@ export def "resent-otp-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   txn_id: string
 ]: any -> oneof<bool, string, record, nothing> {
   let input = $in
@@ -3120,7 +3141,7 @@ export def "verify-mobile-otp-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --otp: string
   --txn-id: string
 ]: any -> record<token: string> {
@@ -3162,7 +3183,7 @@ export def "search-user-by-userid-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --health-id: string
 ]: any -> record {
   let input = $in
@@ -3203,7 +3224,7 @@ export def "search-user-by-account-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --health-id: string
 ]: any -> record<authMethods: list<string>, healthId: string, healthIdNumber: string, name: string, tags: record> {
   let input = $in
@@ -3244,7 +3265,7 @@ export def "search-user-by-mobile-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string
+  --accept-language: string # default: en-US
   --gender: string
   --mobile: string
   --name: string

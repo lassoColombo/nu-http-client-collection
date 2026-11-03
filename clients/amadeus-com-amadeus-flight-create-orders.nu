@@ -133,7 +133,7 @@ export def "create-fligt-orders" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<associatedRecords: list<record>, automatedProcess: list<record>, contacts: list<record>, flightOffers: list<record>, formOfIdentifications: list<record>, formOfPayments: list<record>, id: string, ownerOfficeId: string, queuingOfficeId: string, remarks: record<airline: list, general: list>, ticketingAgreement: record<dateTime: string, delay: string, option: string, segmentIds: list>, tickets: list<record>, travelers: list<record>, type: string>, dictionaries: record<aircraft: any, carriers: any, currencies: any, locations: any>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>, warnings: table<code: int, detail: string, source: record, status: int, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

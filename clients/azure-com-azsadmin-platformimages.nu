@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -146,12 +146,13 @@ export def "platform-images-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2015-12-01-preview)
-]: nothing -> table<properties: record<dataDisks: list, details: record, osDisk: record, provisioningState: string>> {
+  --api-version: string # Client API Version. (required, default: 2015-12-01-preview)
+]: nothing -> table<properties: record<dataDisks: list, details: record, osDisk: record, provisioningState: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  let api_version = ($api_version | default "2015-12-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/platformImage") $qp $auth.query)
   let accept_val = "application/json"
@@ -190,7 +191,7 @@ export def "platform-images-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2015-12-01-preview)
+  --api-version: string # Client API Version. (required, default: 2015-12-01-preview)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -200,6 +201,7 @@ export def "platform-images-delete" [
   if ($offer | is-empty) { error make --unspanned { msg: "path parameter 'offer' must be non-empty" } }
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
+  let api_version = ($api_version | default "2015-12-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location), publisher: (encode-path-segment $publisher), offer: (encode-path-segment $offer), sku: (encode-path-segment $sku), version: (encode-path-segment $version)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/platformImage/publishers/{publisher}/offers/{offer}/skus/{sku}/versions/{version}") $qp $auth.query)
   let accept_val = "application/json"
@@ -238,8 +240,8 @@ export def "platform-images-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2015-12-01-preview)
-]: nothing -> record<properties: record<dataDisks: list<record>, details: record<billingPartNumber: string>, osDisk: record<osType: string, uri: string>, provisioningState: string>> {
+  --api-version: string # Client API Version. (required, default: 2015-12-01-preview)
+]: nothing -> record<properties: record<dataDisks: list<record>, details: record<billingPartNumber: string>, osDisk: record<osType: string, uri: string>, provisioningState: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -248,6 +250,7 @@ export def "platform-images-get" [
   if ($offer | is-empty) { error make --unspanned { msg: "path parameter 'offer' must be non-empty" } }
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
+  let api_version = ($api_version | default "2015-12-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location), publisher: (encode-path-segment $publisher), offer: (encode-path-segment $offer), sku: (encode-path-segment $sku), version: (encode-path-segment $version)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/platformImage/publishers/{publisher}/offers/{offer}/skus/{sku}/versions/{version}") $qp $auth.query)
   let accept_val = "application/json"
@@ -287,9 +290,9 @@ export def "platform-images-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2015-12-01-preview)
+  --api-version: string # Client API Version. (required, default: 2015-12-01-preview)
   --properties: record # Properties of platform image. — shape: {dataDisks?: list, details?: record, osDisk?: record, provisioningState?: "Creating"|"Failed"|"Succeeded"|"Canceled"}
-]: any -> record<properties: record<dataDisks: list<record>, details: record<billingPartNumber: string>, osDisk: record<osType: string, uri: string>, provisioningState: string>> {
+]: any -> record<properties: record<dataDisks: list<record>, details: record<billingPartNumber: string>, osDisk: record<osType: string, uri: string>, provisioningState: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -299,6 +302,7 @@ export def "platform-images-create" [
   if ($offer | is-empty) { error make --unspanned { msg: "path parameter 'offer' must be non-empty" } }
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
+  let api_version = ($api_version | default "2015-12-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location), publisher: (encode-path-segment $publisher), offer: (encode-path-segment $offer), sku: (encode-path-segment $sku), version: (encode-path-segment $version)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/platformImage/publishers/{publisher}/offers/{offer}/skus/{sku}/versions/{version}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

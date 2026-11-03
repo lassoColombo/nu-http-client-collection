@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -159,7 +159,7 @@ export def "get-root" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<next: record<href: string, type: string>, self: record<href: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/" $auth.query)
@@ -304,7 +304,7 @@ export def "get-relay-proxy-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<_creator: record<_id: string, _lastSeen: int, _lastSeenMetadata: record<tokenId: string>, _links: record<next: record, self: record>, _pendingInvite: bool, _verified: bool, customRoles: list<string>, email: string, firstName: string, isBeta: bool, lastName: string, role: string>, _id: string, creationDate: int, displayKey: string, fullKey: string, lastModified: int, name: string, policy: table<actions: list, effect: string, notActions: list, notResources: list, resources: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -341,7 +341,7 @@ export def "patch-relay-proxy-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<_creator: record<_id: string, _lastSeen: int, _lastSeenMetadata: record<tokenId: string>, _links: record<next: record, self: record>, _pendingInvite: bool, _verified: bool, customRoles: list<string>, email: string, firstName: string, isBeta: bool, lastName: string, role: string>, _id: string, creationDate: int, displayKey: string, fullKey: string, lastModified: int, name: string, policy: table<actions: list, effect: string, notActions: list, notResources: list, resources: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -381,7 +381,7 @@ export def "reset-relay-proxy-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expiry: int # An expiration time for the old relay proxy configuration key, expressed as a Unix epoch time in milliseconds. By default, the relay proxy configuration will expire immediately (format: int64)
-]: nothing -> any {
+]: nothing -> record<_creator: record<_id: string, _lastSeen: int, _lastSeenMetadata: record<tokenId: string>, _links: record<next: record, self: record>, _pendingInvite: bool, _verified: bool, customRoles: list<string>, email: string, firstName: string, isBeta: bool, lastName: string, role: string>, _id: string, creationDate: int, displayKey: string, fullKey: string, lastModified: int, name: string, policy: table<actions: list, effect: string, notActions: list, notResources: list, resources: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -533,7 +533,7 @@ export def "post-destination" [
   kind: string@kind-completer # The data export destination type. Available choices are kinesis, google-pubsub, mparticle, or segment. (e.g. google-pubsub)
   name: string # A human-readable name for your data export destination. (e.g. Example Google Pub/Sub Destination)
   --on: oneof<nothing, bool> # Whether the data export destination is on or not. (e.g. true)
-]: any -> any {
+]: any -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, config: record, kind: string, name: string, on: bool, version: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -615,7 +615,7 @@ export def "get-destination" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, config: record, kind: string, name: string, on: bool, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'projectKey' must be non-empty" } }
@@ -656,7 +656,7 @@ export def "patch-destination" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, config: record, kind: string, name: string, on: bool, version: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -819,20 +819,20 @@ export def "get-feature-flags" [
   --limit: float # The number of objects to return. Defaults to -1, which returns everything.
   --offset: float # Where to start in the list. This is for use with pagination. For example, an offset of 10 would skip the first 10 items and then return the next limit items.
   --filter: string # A comma-separated list of filters. Each filter is of the form field:value.
-  --qp-sort: string # A comma-separated list of fields to sort by. A field prefixed by a - will be sorted in descending order.
+  --sort: string # A comma-separated list of fields to sort by. A field prefixed by a - will be sorted in descending order.
   --tag: string # Filter by tag. A tag can be used to group flags across projects.
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, items: table<_links: record, _maintainer: record, _version: int, archived: bool, archivedDate: int, clientSideAvailability: record, creationDate: int, customProperties: record, defaults: record, description: string, environments: record, goalIds: list, includeInSnippet: bool, key: string, kind: string, maintainerId: string, name: string, tags: list, temporary: bool, variations: list>, totalCount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'projectKey' must be non-empty" } }
-  let qp = [(serialize-qp "env" $qp_env "multi") (serialize-qp "summary" $summary "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "env" $qp_env "multi") (serialize-qp "summary" $summary "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_key: (encode-path-segment $project_key)} | format pattern "/flags/{project_key}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"env": $qp_env, "summary": $summary, "archived": $archived, "limit": $limit, "offset": $offset, "filter": $filter, "sort": $qp_sort, "tag": $tag} | compact)
+    query: ({"env": $qp_env, "summary": $summary, "archived": $archived, "limit": $limit, "offset": $offset, "filter": $filter, "sort": $sort, "tag": $tag} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1078,7 +1078,7 @@ export def "copy-feature-flag" [
   --comment: string # comment will be included in audit log item for change. (e.g. This is a comment string)
   --excluded-actions: list<string> # Define the parts of the flag configuration that will not be copied.
   --included-actions: list<string> # Define the parts of the flag configuration that will be copied.
-  --body-source: record # shape: {currentVersion?: int, key: string}
+  --source: record # shape: {currentVersion?: int, key: string}
   --target: record # shape: {currentVersion?: int, key: string}
 ]: any -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, _maintainer: record<_id: string, _lastSeen: int, _lastSeenMetadata: record<tokenId: string>, _links: record<next: record, self: record>, _pendingInvite: bool, _verified: bool, customRoles: list<string>, email: string, firstName: string, isBeta: bool, lastName: string, role: string>, _version: int, archived: bool, archivedDate: int, clientSideAvailability: record<usingEnvironmentId: bool, usingMobileKey: bool>, creationDate: int, customProperties: record, defaults: record<offVariation: int, onVariation: int>, description: string, environments: record, goalIds: list<string>, includeInSnippet: bool, key: string, kind: string, maintainerId: string, name: string, tags: list<string>, temporary: bool, variations: table<_id: string, description: string, name: string, value: record>> {
   let input = $in
@@ -1087,7 +1087,7 @@ export def "copy-feature-flag" [
   if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'projectKey' must be non-empty" } }
   if ($feature_flag_key | is-empty) { error make --unspanned { msg: "path parameter 'featureFlagKey' must be non-empty" } }
   let full_url = (build-url $base ({project_key: (encode-path-segment $project_key), feature_flag_key: (encode-path-segment $feature_flag_key)} | format pattern "/flags/{project_key}/{feature_flag_key}/copy") $auth.query)
-  let req_body = {"comment": $comment, "excludedActions": $excluded_actions, "includedActions": $included_actions, "source": $body_source, "target": $target} | compact
+  let req_body = {"comment": $comment, "excludedActions": $excluded_actions, "includedActions": $included_actions, "source": $source, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1476,18 +1476,18 @@ export def "get-members" [
   --limit: float # The number of objects to return. Defaults to -1, which returns everything.
   --offset: float # Where to start in the list. This is for use with pagination. For example, an offset of 10 would skip the first 10 items and then return the next limit items.
   --filter: string # A comma-separated list of filters. Each filter is of the form field:value.
-  --qp-sort: string # A comma-separated list of fields to sort by. A field prefixed by a - will be sorted in descending order.
+  --sort: string # A comma-separated list of fields to sort by. A field prefixed by a - will be sorted in descending order.
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, items: table<_id: string, _lastSeen: int, _lastSeenMetadata: record, _links: record, _pendingInvite: bool, _verified: bool, customRoles: list, email: string, firstName: string, isBeta: bool, lastName: string, role: string>, totalCount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/members" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $qp_sort} | compact)
+    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1550,7 +1550,7 @@ export def "get-me" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<_id: string, _lastSeen: int, _lastSeenMetadata: record<tokenId: string>, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, _pendingInvite: bool, _verified: bool, customRoles: list<string>, email: string, firstName: string, isBeta: bool, lastName: string, role: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/members/me" $auth.query)
@@ -1621,7 +1621,7 @@ export def "get-member" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<_id: string, _lastSeen: int, _lastSeenMetadata: record<tokenId: string>, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, _pendingInvite: bool, _verified: bool, customRoles: list<string>, email: string, firstName: string, isBeta: bool, lastName: string, role: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'memberId' must be non-empty" } }
@@ -1658,7 +1658,7 @@ export def "patch-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<_id: string, _lastSeen: int, _lastSeenMetadata: record<tokenId: string>, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, _pendingInvite: bool, _verified: bool, customRoles: list<string>, email: string, firstName: string, isBeta: bool, lastName: string, role: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1738,7 +1738,7 @@ export def "post-project" [
   key: string # e.g. new-project
   name: string # e.g. New Project
   --tags: list<string> # e.g. [ops, dev]
-]: any -> any {
+]: any -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, defaultClientSideAvailability: record<usingEnvironmentId: bool, usingMobileKey: bool>, environments: table<_id: string, _links: record, apiKey: string, approvalSettings: record, color: string, confirmChanges: bool, defaultTrackEvents: bool, defaultTtl: float, key: string, mobileKey: string, name: string, requireComments: bool, secureMode: bool, tags: list>, includeInSnippetByDefault: bool, key: string, name: string, tags: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1812,7 +1812,7 @@ export def "get-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, defaultClientSideAvailability: record<usingEnvironmentId: bool, usingMobileKey: bool>, environments: table<_id: string, _links: record, apiKey: string, approvalSettings: record, color: string, confirmChanges: bool, defaultTrackEvents: bool, defaultTtl: float, key: string, mobileKey: string, name: string, requireComments: bool, secureMode: bool, tags: list>, includeInSnippetByDefault: bool, key: string, name: string, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'projectKey' must be non-empty" } }
@@ -1849,7 +1849,7 @@ export def "patch-project" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, defaultClientSideAvailability: record<usingEnvironmentId: bool, usingMobileKey: bool>, environments: table<_id: string, _links: record, apiKey: string, approvalSettings: record, color: string, confirmChanges: bool, defaultTrackEvents: bool, defaultTtl: float, key: string, mobileKey: string, name: string, requireComments: bool, secureMode: bool, tags: list>, includeInSnippetByDefault: bool, key: string, name: string, tags: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1897,7 +1897,7 @@ export def "post-environment" [
   --require-comments: oneof<nothing, bool> # Determines if this environment requires comments for flag and segment changes. (e.g. false)
   --secure-mode: oneof<nothing, bool> # Determines whether the environment is in secure mode. (e.g. false)
   --tags: list<string> # An array of tags for this environment. (e.g. [tag1, tag2])
-]: any -> any {
+]: any -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, apiKey: string, approvalSettings: record<canApplyDeclinedChanges: bool, canReviewOwnRequest: bool, minNumApprovals: int, required: bool, requiredApprovalTags: list<string>, serviceKind: string>, color: string, confirmChanges: bool, defaultTrackEvents: bool, defaultTtl: float, key: string, mobileKey: string, name: string, requireComments: bool, secureMode: bool, tags: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1975,7 +1975,7 @@ export def "get-environment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, apiKey: string, approvalSettings: record<canApplyDeclinedChanges: bool, canReviewOwnRequest: bool, minNumApprovals: int, required: bool, requiredApprovalTags: list<string>, serviceKind: string>, color: string, confirmChanges: bool, defaultTrackEvents: bool, defaultTtl: float, key: string, mobileKey: string, name: string, requireComments: bool, secureMode: bool, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'projectKey' must be non-empty" } }
@@ -2014,7 +2014,7 @@ export def "patch-environment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, apiKey: string, approvalSettings: record<canApplyDeclinedChanges: bool, canReviewOwnRequest: bool, minNumApprovals: int, required: bool, requiredApprovalTags: list<string>, serviceKind: string>, color: string, confirmChanges: bool, defaultTrackEvents: bool, defaultTtl: float, key: string, mobileKey: string, name: string, requireComments: bool, secureMode: bool, tags: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2056,7 +2056,7 @@ export def "reset-environment-sdk-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expiry: int # An expiration time for the old environment SDK key, expressed as a Unix epoch time in milliseconds. By default, the key will expire immediately. (format: int64)
-]: nothing -> any {
+]: nothing -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, apiKey: string, approvalSettings: record<canApplyDeclinedChanges: bool, canReviewOwnRequest: bool, minNumApprovals: int, required: bool, requiredApprovalTags: list<string>, serviceKind: string>, color: string, confirmChanges: bool, defaultTrackEvents: bool, defaultTtl: float, key: string, mobileKey: string, name: string, requireComments: bool, secureMode: bool, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'projectKey' must be non-empty" } }
@@ -2096,7 +2096,7 @@ export def "reset-environment-mobile-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expiry: int # The expiry parameter is deprecated for this endpoint, so the old mobile key will always expire immediately. This parameter will be removed in an upcoming major API client version. (format: int64)
-]: nothing -> any {
+]: nothing -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, apiKey: string, approvalSettings: record<canApplyDeclinedChanges: bool, canReviewOwnRequest: bool, minNumApprovals: int, required: bool, requiredApprovalTags: list<string>, serviceKind: string>, color: string, confirmChanges: bool, defaultTrackEvents: bool, defaultTtl: float, key: string, mobileKey: string, name: string, requireComments: bool, secureMode: bool, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'projectKey' must be non-empty" } }
@@ -2716,7 +2716,7 @@ export def "post-custom-role" [
   key: string # The 20-hexdigit id or the key for a custom role. (e.g. revenue-team)
   name: string # Name of the custom role. (e.g. revenue team)
   policy: list # item shape: {actions?: list<string>, effect?: string, notActions?: list<string>, notResources?: list<string>, resources?: list<string>}
-]: any -> any {
+]: any -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, description: string, key: string, name: string, policy: table<actions: list, effect: string, notActions: list, notResources: list, resources: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2790,7 +2790,7 @@ export def "get-custom-role" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, description: string, key: string, name: string, policy: table<actions: list, effect: string, notActions: list, notResources: list, resources: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($custom_role_key | is-empty) { error make --unspanned { msg: "path parameter 'customRoleKey' must be non-empty" } }
@@ -2827,7 +2827,7 @@ export def "patch-custom-role" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, description: string, key: string, name: string, policy: table<actions: list, effect: string, notActions: list, notResources: list, resources: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2912,7 +2912,7 @@ export def "post-user-segment" [
   name: string # A human-friendly name for the user segment. (e.g. new segment)
   --tags: list<string> # Tags for the user segment.
   --unbounded: oneof<nothing, bool> # Controls whether this is considered a "big segment" which can support an unlimited numbers of users. Include/exclude lists sent with this payload are not used in big segments. Contact your account manager for early access to this feature. (e.g. false)
-]: any -> any {
+]: any -> record<_flags: table<_links: record, _site: record, key: string, name: string>, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, creationDate: int, description: string, excluded: list<string>, included: list<string>, key: string, name: string, rules: table<bucketBy: string, clauses: list, weight: int>, tags: list<string>, unbounded: bool, version: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2994,7 +2994,7 @@ export def "get-user-segment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<_flags: table<_links: record, _site: record, key: string, name: string>, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, creationDate: int, description: string, excluded: list<string>, included: list<string>, key: string, name: string, rules: table<bucketBy: string, clauses: list, weight: int>, tags: list<string>, unbounded: bool, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'projectKey' must be non-empty" } }
@@ -3035,7 +3035,7 @@ export def "patch-user-segment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<_flags: table<_links: record, _site: record, key: string, name: string>, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, creationDate: int, description: string, excluded: list<string>, included: list<string>, key: string, name: string, rules: table<bucketBy: string, clauses: list, weight: int>, tags: list<string>, unbounded: bool, version: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3323,7 +3323,7 @@ export def "get-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, _member: record<_id: string, _lastSeen: int, _lastSeenMetadata: record<tokenId: string>, _links: record<next: record, self: record>, _pendingInvite: bool, _verified: bool, customRoles: list<string>, email: string, firstName: string, isBeta: bool, lastName: string, role: string>, creationDate: int, customRoleIds: list<string>, defaultApiVersion: int, inlineRole: table<actions: list, effect: string, notActions: list, notResources: list, resources: list>, lastModified: int, lastUsed: int, memberId: string, name: string, ownerId: string, role: string, serviceToken: bool, token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_id | is-empty) { error make --unspanned { msg: "path parameter 'tokenId' must be non-empty" } }
@@ -3360,7 +3360,7 @@ export def "patch-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, _member: record<_id: string, _lastSeen: int, _lastSeenMetadata: record<tokenId: string>, _links: record<next: record, self: record>, _pendingInvite: bool, _verified: bool, customRoles: list<string>, email: string, firstName: string, isBeta: bool, lastName: string, role: string>, creationDate: int, customRoleIds: list<string>, defaultApiVersion: int, inlineRole: table<actions: list, effect: string, notActions: list, notResources: list, resources: list>, lastModified: int, lastUsed: int, memberId: string, name: string, ownerId: string, role: string, serviceToken: bool, token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3400,7 +3400,7 @@ export def "reset-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expiry: int # An expiration time for the old token key, expressed as a Unix epoch time in milliseconds. By default, the token will expire immediately. (format: int64)
-]: nothing -> any {
+]: nothing -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, _member: record<_id: string, _lastSeen: int, _lastSeenMetadata: record<tokenId: string>, _links: record<next: record, self: record>, _pendingInvite: bool, _verified: bool, customRoles: list<string>, email: string, firstName: string, isBeta: bool, lastName: string, role: string>, creationDate: int, customRoleIds: list<string>, defaultApiVersion: int, inlineRole: table<actions: list, effect: string, notActions: list, notResources: list, resources: list>, lastModified: int, lastUsed: int, memberId: string, name: string, ownerId: string, role: string, serviceToken: bool, token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_id | is-empty) { error make --unspanned { msg: "path parameter 'tokenId' must be non-empty" } }
@@ -4207,13 +4207,15 @@ export def "post-webhook" [
   --statements: list # item shape: {actions?: list<string>, effect?: "allow"|"deny", notActions?: list<string>, notResources?: list<string>, resources?: list<string>}
   --tags: list<string> # Tags for the webhook. (e.g. [])
   url: string # The URL of the remote webhook. (e.g. https://example.com/example)
-]: any -> any {
+]: any -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, name: string, on: bool, secret: string, statements: table<actions: list, effect: string, notActions: list, notResources: list, resources: list>, tags: list<string>, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks" $auth.query)
   let req_body = {"name": $name, "on": $on, "secret": $secret, "sign": $sign, "statements": $statements, "tags": $tags, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "on") == null) { error make --unspanned { msg: "required body field 'on' missing: pass --on or pipe a record" } }
+  if (($req_body | get -o "sign") == null) { error make --unspanned { msg: "required body field 'sign' missing: pass --sign or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -4281,7 +4283,7 @@ export def "get-webhook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, name: string, on: bool, secret: string, statements: table<actions: list, effect: string, notActions: list, notResources: list, resources: list>, tags: list<string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
@@ -4318,7 +4320,7 @@ export def "patch-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, name: string, on: bool, secret: string, statements: table<actions: list, effect: string, notActions: list, notResources: list, resources: list>, tags: list<string>, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

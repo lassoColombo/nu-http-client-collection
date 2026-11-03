@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -94,6 +94,8 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["https://adminmanagement.local.azurestack.external"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def service-type-completer [] { ["default"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -126,7 +128,7 @@ export def "table-services-get" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
-  service_type: string
+  service_type: string@service-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,14 +138,15 @@ export def "table-services-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # REST Api Version.
-]: nothing -> record<properties: record<settings: record<frontEndHttpListenPort: int, frontEndHttpsListenPort: int>>> {
+  --api-version: string # REST Api Version. (required)
+]: nothing -> record<properties: record<settings: record<frontEndHttpListenPort: int, frontEndHttpsListenPort: int, frontEndCallbackThreadsCount: int, frontEndCpuBasedKeepAliveThrottlingCpuMonitorIntervalInSeconds: int, frontEndCpuBasedKeepAliveThrottlingEnabled: bool, frontEndCpuBasedKeepAliveThrottlingPercentCpuThreshold: float, frontEndCpuBasedKeepAliveThrottlingPercentRequestsToThrottle: float, frontEndMaxMillisecondsBetweenMemorySamples: int, frontEndMemoryThrottleThresholdSettings: string, frontEndMemoryThrottlingEnabled: bool, frontEndMinThreadPoolThreads: int, frontEndThreadPoolBasedKeepAliveIOCompletionThreshold: int, frontEndThreadPoolBasedKeepAliveMonitorIntervalInSeconds: int, frontEndThreadPoolBasedKeepAlivePercentage: float, frontEndThreadPoolBasedKeepAliveWorkerThreadThreshold: int, frontEndUseSlaTimeInAvailability: bool>, healthStatus: string, version: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($farm_id | is-empty) { error make --unspanned { msg: "path parameter 'farmId' must be non-empty" } }
   if ($service_type | is-empty) { error make --unspanned { msg: "path parameter 'serviceType' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), farm_id: (encode-path-segment $farm_id), service_type: (encode-path-segment $service_type)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}/tableservices/{service_type}") $qp $auth.query)
   let accept_val = "application/json"
@@ -170,7 +173,7 @@ export def "table-services-list-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
-  service_type: string
+  service_type: string@service-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +183,7 @@ export def "table-services-list-metric-definitions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # REST Api Version.
+  --api-version: string # REST Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<metricAvailabilities: list, name: record, primaryAggregationType: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -188,6 +191,7 @@ export def "table-services-list-metric-definitions" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($farm_id | is-empty) { error make --unspanned { msg: "path parameter 'farmId' must be non-empty" } }
   if ($service_type | is-empty) { error make --unspanned { msg: "path parameter 'serviceType' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), farm_id: (encode-path-segment $farm_id), service_type: (encode-path-segment $service_type)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}/tableservices/{service_type}/metricdefinitions") $qp $auth.query)
   let accept_val = "application/json"
@@ -214,7 +218,7 @@ export def "table-services-list-metrics" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
-  service_type: string
+  service_type: string@service-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,7 +228,7 @@ export def "table-services-list-metrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # REST Api Version.
+  --api-version: string # REST Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<endTime: string, metricUnit: string, metricValues: list, name: record, startTime: string, timeGrain: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -232,6 +236,7 @@ export def "table-services-list-metrics" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($farm_id | is-empty) { error make --unspanned { msg: "path parameter 'farmId' must be non-empty" } }
   if ($service_type | is-empty) { error make --unspanned { msg: "path parameter 'serviceType' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), farm_id: (encode-path-segment $farm_id), service_type: (encode-path-segment $service_type)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}/tableservices/{service_type}/metrics") $qp $auth.query)
   let accept_val = "application/json"

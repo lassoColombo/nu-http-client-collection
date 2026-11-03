@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -146,10 +146,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Marketplace/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -182,10 +183,11 @@ export def "private-store-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> record<nextLink: string, value: table<availability: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Marketplace/privateStores" $qp $auth.query)
   let accept_val = "application/json"
@@ -219,11 +221,12 @@ export def "private-store-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($private_store_id | is-empty) { error make --unspanned { msg: "path parameter 'PrivateStoreId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({private_store_id: (encode-path-segment $private_store_id)} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -257,11 +260,12 @@ export def "private-store-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> record<availability: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($private_store_id | is-empty) { error make --unspanned { msg: "path parameter 'PrivateStoreId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({private_store_id: (encode-path-segment $private_store_id)} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -295,7 +299,7 @@ export def "private-store-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --availability: string@availability-completer # Indicates private store availability
   --name: string # Private Store name
 ]: any -> record<availability: string, name: string> {
@@ -303,6 +307,7 @@ export def "private-store-create-or-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($private_store_id | is-empty) { error make --unspanned { msg: "path parameter 'PrivateStoreId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({private_store_id: (encode-path-segment $private_store_id)} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}") $qp $auth.query)
   let req_body = {"availability": $availability, "name": $name} | compact
@@ -338,11 +343,12 @@ export def "private-store-offers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> record<nextLink: string, value: table<description: string, displayName: string, eTag: string, id: string, longSummary: string, plans: list, publisherDisplayName: string, summary: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($private_store_id | is-empty) { error make --unspanned { msg: "path parameter 'PrivateStoreId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({private_store_id: (encode-path-segment $private_store_id)} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}/offers") $qp $auth.query)
   let accept_val = "application/json"
@@ -377,12 +383,13 @@ export def "private-store-offer-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($private_store_id | is-empty) { error make --unspanned { msg: "path parameter 'PrivateStoreId' must be non-empty" } }
   if ($offer_id | is-empty) { error make --unspanned { msg: "path parameter 'OfferId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({private_store_id: (encode-path-segment $private_store_id), offer_id: (encode-path-segment $offer_id)} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}/offers/{offer_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -417,12 +424,13 @@ export def "private-store-offer-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> record<description: string, displayName: string, eTag: string, id: string, longSummary: string, plans: table<displayName: string, planId: string>, publisherDisplayName: string, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($private_store_id | is-empty) { error make --unspanned { msg: "path parameter 'PrivateStoreId' must be non-empty" } }
   if ($offer_id | is-empty) { error make --unspanned { msg: "path parameter 'OfferId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({private_store_id: (encode-path-segment $private_store_id), offer_id: (encode-path-segment $offer_id)} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}/offers/{offer_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -457,7 +465,7 @@ export def "private-store-offer-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --e-tag: string # Identifier for purposes of race condition
 ]: any -> record<description: string, displayName: string, eTag: string, id: string, longSummary: string, plans: table<displayName: string, planId: string>, publisherDisplayName: string, summary: string> {
   let input = $in
@@ -465,6 +473,7 @@ export def "private-store-offer-create-or-update" [
   let base = ($base_url | default $BASE_URL)
   if ($private_store_id | is-empty) { error make --unspanned { msg: "path parameter 'PrivateStoreId' must be non-empty" } }
   if ($offer_id | is-empty) { error make --unspanned { msg: "path parameter 'OfferId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({private_store_id: (encode-path-segment $private_store_id), offer_id: (encode-path-segment $offer_id)} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}/offers/{offer_id}") $qp $auth.query)
   let req_body = {"eTag": $e_tag} | compact

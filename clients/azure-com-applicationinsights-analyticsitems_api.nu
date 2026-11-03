@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -107,6 +107,7 @@ def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def scope-path-completer [] { ["analyticsItems" "myanalyticsItems"] }
 def scope-completer [] { ["shared" "user"] }
 def type-completer [] { ["folder" "function" "none" "query" "recent"] }
 def type-completer-1 [] { ["folder" "function" "query" "recent"] }
@@ -142,7 +143,7 @@ export def "analytics-items-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
-  scope_path: string
+  scope_path: string@scope-path-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -152,7 +153,7 @@ export def "analytics-items-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --scope: string@scope-completer # Enum indicating if this item definition is owned by a specific user or is shared between all users with access to the Application Insights component. (default: shared)
   --type: string@type-completer # Enum indicating the type of the Analytics item. (default: none)
   --include-content: oneof<nothing, bool> # Flag indicating whether or not to return the content of each applicable item. If false, only return the item information.
@@ -163,6 +164,7 @@ export def "analytics-items-list" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($scope_path | is-empty) { error make --unspanned { msg: "path parameter 'scopePath' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "includeContent" $include_content "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), scope_path: (encode-path-segment $scope_path)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/components/{resource_name}/{scope_path}") $qp $auth.query)
   let accept_val = "application/json"
@@ -189,7 +191,7 @@ export def "analytics-items-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
-  scope_path: string
+  scope_path: string@scope-path-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +201,7 @@ export def "analytics-items-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --id: string # The Id of a specific item defined in the Application Insights component
   --name: string # The name of a specific item defined in the Application Insights component
 ]: nothing -> any {
@@ -209,6 +211,7 @@ export def "analytics-items-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($scope_path | is-empty) { error make --unspanned { msg: "path parameter 'scopePath' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), scope_path: (encode-path-segment $scope_path)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/components/{resource_name}/{scope_path}/item") $qp $auth.query)
   let accept_val = "application/json"
@@ -235,7 +238,7 @@ export def "analytics-items-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
-  scope_path: string
+  scope_path: string@scope-path-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +248,7 @@ export def "analytics-items-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --id: string # The Id of a specific item defined in the Application Insights component
   --name: string # The name of a specific item defined in the Application Insights component
 ]: nothing -> record<Content: string, Id: string, Name: string, Properties: record<functionAlias: string>, Scope: string, TimeCreated: string, TimeModified: string, Type: string, Version: string> {
@@ -255,6 +258,7 @@ export def "analytics-items-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($scope_path | is-empty) { error make --unspanned { msg: "path parameter 'scopePath' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), scope_path: (encode-path-segment $scope_path)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/components/{resource_name}/{scope_path}/item") $qp $auth.query)
   let accept_val = "application/json"
@@ -282,7 +286,7 @@ export def "analytics-items-put" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
-  scope_path: string
+  scope_path: string@scope-path-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +296,7 @@ export def "analytics-items-put" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --override-item: oneof<nothing, bool> # Flag indicating whether or not to force save an item. This allows overriding an item if it already exists.
   --content: string # The content of this item
   --id: string # Internally assigned unique id of the item definition.
@@ -308,6 +312,7 @@ export def "analytics-items-put" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($scope_path | is-empty) { error make --unspanned { msg: "path parameter 'scopePath' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "overrideItem" $override_item "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), scope_path: (encode-path-segment $scope_path)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/components/{resource_name}/{scope_path}/item") $qp $auth.query)
   let req_body = {"Content": $content, "Id": $id, "Name": $name, "Properties": $properties, "Scope": $scope, "Type": $type} | compact

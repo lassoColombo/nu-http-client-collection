@@ -230,7 +230,7 @@ export def "execute-action" [
   --osdb-body-data-src-url: string # URL of a resource containing input data for the action (e.g. CSV data). Clients can instead use osdb:body_data_raw to supply the input data directly. (format: uri)
   --osdb-output-type: string@osdb-output-type-completer # An OSDB-specific parameter controlling the action output type. If omitted, the native action output is returned.
   --osdb-response-format: string # Preferred response MIME type. This must be an output MIME type supported natively by the action or, if 'osdb:output_type' is set to 'generate_rdf', a Virtuoso Sponger output format. i.e. 'application/ld+json', 'text/turtle' or 'application/rdf+xml'.
-]: any -> record<api: string, method: string, response: string, status: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

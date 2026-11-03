@@ -1,6 +1,8 @@
 # Auto-generated client for Azure Container Registry v2019-08-15-preview
 # Source: https://api.apis.guru/v2/specs/azure.com/containerregistry/2019-08-15-preview/swagger.json
 # Auth: --token flag or $env.AZURE_CONTAINER_REGISTRY_TOKEN
+# Auth (registry_auth): --token-registryauth flag or $env.AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN
+# Auth (registry_oauth2): --token-registryoauth2 flag or $env.AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN
 
 const BASE_URL = "{url}"
 
@@ -12,8 +14,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -143,7 +145,7 @@ def grant-type-completer-1 [] { ["refresh_token"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-registryauth" "token-registryoauth2"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "repository-get-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -292,7 +294,7 @@ export def "repository-update-attributes" [
   --list-enabled: oneof<nothing, bool> # List enabled
   --read-enabled: oneof<nothing, bool> # Read enabled
   --write-enabled: oneof<nothing, bool> # Write enabled
-]: any -> record<errors: table<code: string, detail: record, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
@@ -414,7 +416,7 @@ export def "manifests-update-attributes" [
   --list-enabled: oneof<nothing, bool> # List enabled
   --read-enabled: oneof<nothing, bool> # Read enabled
   --write-enabled: oneof<nothing, bool> # Write enabled
-]: any -> record<errors: table<code: string, detail: record, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
@@ -496,7 +498,7 @@ export def "tag-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<errors: table<code: string, detail: record, message: string>> {
+]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -576,7 +578,7 @@ export def "tag-update-attributes" [
   --list-enabled: oneof<nothing, bool> # List enabled
   --read-enabled: oneof<nothing, bool> # Read enabled
   --write-enabled: oneof<nothing, bool> # Write enabled
-]: any -> record<errors: table<code: string, detail: record, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
@@ -658,11 +660,13 @@ export def "access-tokens-get-from-login" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --service: string # Indicates the name of your Azure container registry.
-  --scope: string # Expected to be a valid scope, and can be specified more than once for multiple scope requests. You can obtain this from the Www-Authenticate response header from the challenge.
+  --service: string # Indicates the name of your Azure container registry. (required)
+  --scope: string # Expected to be a valid scope, and can be specified more than once for multiple scope requests. You can obtain this from the Www-Authenticate response header from the challenge. (required)
 ]: nothing -> record<access_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($service == null) { error make --unspanned { msg: "required query parameter 'service' missing: pass --service" } }
+  if ($scope == null) { error make --unspanned { msg: "required query parameter 'scope' missing: pass --scope" } }
   let qp = [(serialize-qp "service" $service "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/oauth2/token" $qp $auth.query)
   let accept_val = "application/json"
@@ -737,7 +741,7 @@ export def "v2-support-check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<errors: table<code: string, detail: record, message: string>> {
+]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/" $auth.query)
@@ -772,20 +776,22 @@ export def "blob-mount" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # Name of the source repository.
-  --mount: string # Digest of blob to mount from the source repository.
-]: nothing -> record<errors: table<code: string, detail: record, message: string>> {
+  --from: string # Name of the source repository. (required)
+  --mount: string # Digest of blob to mount from the source repository. (required)
+]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "mount" $mount "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($mount == null) { error make --unspanned { msg: "required query parameter 'mount' missing: pass --mount" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "mount" $mount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}/blobs/uploads/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"from": $qp_from, "mount": $mount} | compact)
+    query: ({"from": $from, "mount": $mount} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -926,7 +932,7 @@ export def "manifests-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<errors: table<code: string, detail: record, message: string>> {
+]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1006,7 +1012,7 @@ export def "manifests-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> record<errors: table<code: string, detail: record, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
@@ -1046,7 +1052,7 @@ export def "blob-cancel-upload" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<errors: table<code: string, detail: record, message: string>> {
+]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($next_blob_uuid_link | is-empty) { error make --unspanned { msg: "path parameter 'nextBlobUuidLink' must be non-empty" } }
@@ -1082,7 +1088,7 @@ export def "blob-get-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<errors: table<code: string, detail: record, message: string>> {
+]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($next_blob_uuid_link | is-empty) { error make --unspanned { msg: "path parameter 'nextBlobUuidLink' must be non-empty" } }
@@ -1119,7 +1125,7 @@ export def "blob-upload" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> record<errors: table<code: string, detail: record, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
@@ -1158,13 +1164,14 @@ export def "blob-end-upload" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --digest: string # Digest of a BLOB
+  --digest: string # Digest of a BLOB (required)
   --body: any
-]: any -> record<errors: table<code: string, detail: record, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_registryauth | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYAUTH_TOKEN | default "")) "basic") (build-auth ($token_registryoauth2 | default ($env | get -o AZURE_CONTAINER_REGISTRY_REGISTRYOAUTH2_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($next_blob_uuid_link | is-empty) { error make --unspanned { msg: "path parameter 'nextBlobUuidLink' must be non-empty" } }
+  if ($digest == null) { error make --unspanned { msg: "required query parameter 'digest' missing: pass --digest" } }
   let qp = [(serialize-qp "digest" $digest "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({next_blob_uuid_link: (encode-path-segment $next_blob_uuid_link)} | format pattern "/{next_blob_uuid_link}") $qp $auth.query)
   let req_body = $body

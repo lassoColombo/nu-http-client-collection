@@ -1,4 +1,4 @@
-# Auto-generated client for ACME DNS API vv1
+# Auto-generated client for ACME DNS API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/acmedns/v1/openapi.json
 # Auth: --token flag or $env.ACME_DNS_API_TOKEN
 

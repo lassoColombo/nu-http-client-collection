@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -210,7 +210,7 @@ export def "get-lexicon" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Lexicon: record<Content: record, Name: record>, LexiconAttributes: record<Alphabet: record, LanguageCode: record, LastModified: record, LexiconArn: record, LexemesCount: record, Size: record>> {
+]: nothing -> record<Lexicon: record<Content: string, Name: string>, LexiconAttributes: record<Alphabet: string, LanguageCode: string, LastModified: string, LexiconArn: string, LexemesCount: int, Size: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lexicon_name | is-empty) { error make --unspanned { msg: "path parameter 'LexiconName' must be non-empty" } }
@@ -307,7 +307,7 @@ export def "describe-voices" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Voices: record, NextToken: record> {
+]: nothing -> record<Voices: table<Gender: string, Id: string, LanguageCode: string, LanguageName: string, Name: string, AdditionalLanguageCodes: list, SupportedEngines: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Engine" $engine "scalar") (serialize-qp "LanguageCode" $language_code "scalar") (serialize-qp "IncludeAdditionalLanguageCodes" $include_additional_language_codes "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -352,7 +352,7 @@ export def "get-speech-synthesis-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SynthesisTask: record<Engine: record, TaskId: record, TaskStatus: record, TaskStatusReason: record, OutputUri: record, CreationTime: record, RequestCharacters: record, SnsTopicArn: record, LexiconNames: record, OutputFormat: record, SampleRate: record, SpeechMarkTypes: record, TextType: record, VoiceId: record, LanguageCode: record>> {
+]: nothing -> record<SynthesisTask: record<Engine: string, TaskId: string, TaskStatus: string, TaskStatusReason: string, OutputUri: string, CreationTime: string, RequestCharacters: int, SnsTopicArn: string, LexiconNames: list<string>, OutputFormat: string, SampleRate: string, SpeechMarkTypes: list<string>, TextType: string, VoiceId: string, LanguageCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'TaskId' must be non-empty" } }
@@ -397,7 +397,7 @@ export def "list-lexicons" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Lexicons: record, NextToken: record> {
+]: nothing -> record<Lexicons: table<Name: string, Attributes: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -444,7 +444,7 @@ export def "list-speech-synthesis-tasks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, SynthesisTasks: record> {
+]: nothing -> record<NextToken: string, SynthesisTasks: table<Engine: string, TaskId: string, TaskStatus: string, TaskStatusReason: string, OutputUri: string, CreationTime: string, RequestCharacters: int, SnsTopicArn: string, LexiconNames: list, OutputFormat: string, SampleRate: string, SpeechMarkTypes: list, TextType: string, VoiceId: string, LanguageCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Status" $status "scalar")] | flatten | str join "&"
@@ -500,7 +500,7 @@ export def "start-speech-synthesis-task" [
   text: string # The input text to synthesize. If you specify ssml as the TextType, follow the SSML format for the input text.
   --text-type: string@text-type-completer # Specifies whether the input text is plain text or SSML. The default value is plain text.
   voice_id: string@voice-id-completer # Voice ID to use for the synthesis.
-]: any -> record<SynthesisTask: record<Engine: record, TaskId: record, TaskStatus: record, TaskStatusReason: record, OutputUri: record, CreationTime: record, RequestCharacters: record, SnsTopicArn: record, LexiconNames: record, OutputFormat: record, SampleRate: record, SpeechMarkTypes: record, TextType: record, VoiceId: record, LanguageCode: record>> {
+]: any -> record<SynthesisTask: record<Engine: string, TaskId: string, TaskStatus: string, TaskStatusReason: string, OutputUri: string, CreationTime: string, RequestCharacters: int, SnsTopicArn: string, LexiconNames: list<string>, OutputFormat: string, SampleRate: string, SpeechMarkTypes: list<string>, TextType: string, VoiceId: string, LanguageCode: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -555,7 +555,7 @@ export def "synthesize-speech" [
   text: string # Input text to synthesize. If you specify ssml as the TextType, follow the SSML format for the input text.
   --text-type: string@text-type-completer # Specifies whether the input text is plain text or SSML. The default value is plain text. For more information, see Using SSML (https://docs.aws.amazon.com/polly/latest/dg/ssml.html).
   voice_id: string@voice-id-completer # Voice ID to use for the synthesis. You can get a list of available voice IDs by calling the DescribeVoices (https://docs.aws.amazon.com/polly/latest/dg/API_DescribeVoices.html) operation.
-]: any -> record<AudioStream: record> {
+]: any -> record<AudioStream: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

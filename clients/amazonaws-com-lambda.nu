@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -180,7 +180,7 @@ export def "add-layer-version-permission" [
   action: string # The API action that grants access to the layer. For example, lambda:GetLayerVersion.
   principal: string # An account ID, or * to grant layer usage permission to all accounts in an organization, or all Amazon Web Services accounts (if organizationId is not specified). For the last case, make sure that you really do want all Amazon Web Services accounts to have usage permission to this layer.
   --organization-id: string # With the principal set to *, grant permission to all accounts in the specified organization.
-]: any -> record<Statement: record, RevisionId: record> {
+]: any -> record<Statement: string, RevisionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -231,7 +231,7 @@ export def "get-layer-version-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Policy: record, RevisionId: record> {
+]: nothing -> record<Policy: string, RevisionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($layer_name | is-empty) { error make --unspanned { msg: "path parameter 'LayerName' must be non-empty" } }
@@ -287,7 +287,7 @@ export def "add-permission" [
   --revision-id: string # Update the policy only if the revision ID matches the ID that's specified. Use this option to avoid modifying a policy that has changed since you last read it.
   --principal-org-id: string # The identifier for your organization in Organizations. Use this to grant permissions to all the Amazon Web Services accounts under this organization.
   --function-url-auth-type: string@function-url-auth-type-completer # The type of authentication that your function URL uses. Set to AWS_IAM if you want to restrict access to authenticated users only. Set to NONE if you want to bypass IAM authentication to create a public endpoint. For more information, see Security and auth model for Lambda function URLs (https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html).
-]: any -> record<Statement: record> {
+]: any -> record<Statement: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -337,7 +337,7 @@ export def "get-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Policy: record, RevisionId: record> {
+]: nothing -> record<Policy: string, RevisionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -365,7 +365,7 @@ export def "get-policy" [
 #
 # POST /2015-03-31/functions/{FunctionName}/aliases
 # operationId: CreateAlias
-# --RoutingConfig shape: {AdditionalVersionWeights?: any}
+# --RoutingConfig shape: {AdditionalVersionWeights?: record}
 export def "create-alias" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -387,8 +387,8 @@ export def "create-alias" [
   name: string # The name of the alias.
   function_version: string # The function version that the alias invokes.
   --description: string # A description of the alias.
-  --routing-config: record # The traffic-shifting (https://docs.aws.amazon.com/lambda/latest/dg/lambda-traffic-shifting-using-aliases.html) configuration of a Lambda function alias. — shape: {AdditionalVersionWeights?: any}
-]: any -> record<AliasArn: record, Name: record, FunctionVersion: record, Description: record, RoutingConfig: record<AdditionalVersionWeights: record>, RevisionId: record> {
+  --routing-config: record # The traffic-shifting (https://docs.aws.amazon.com/lambda/latest/dg/lambda-traffic-shifting-using-aliases.html) configuration of a Lambda function alias. — shape: {AdditionalVersionWeights?: record}
+]: any -> record<AliasArn: string, Name: string, FunctionVersion: string, Description: string, RoutingConfig: record<AdditionalVersionWeights: record>, RevisionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -439,7 +439,7 @@ export def "list-aliases" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextMarker: record, Aliases: record> {
+]: nothing -> record<NextMarker: string, Aliases: table<AliasArn: string, Name: string, FunctionVersion: string, Description: string, RoutingConfig: record, RevisionId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -467,8 +467,8 @@ export def "list-aliases" [
 #
 # POST /2020-04-22/code-signing-configs/
 # operationId: CreateCodeSigningConfig
-# --AllowedPublishers shape: {SigningProfileVersionArns?: any}
-# --CodeSigningPolicies shape: {UntrustedArtifactOnDeployment?: any}
+# --AllowedPublishers shape: {SigningProfileVersionArns?: list<string>}
+# --CodeSigningPolicies shape: {UntrustedArtifactOnDeployment?: "Warn"|"Enforce"}
 export def "create-code-signing-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -487,9 +487,9 @@ export def "create-code-signing-config" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # Descriptive name for this code signing configuration.
-  allowed_publishers: record # List of signing profiles that can sign a code package. — shape: {SigningProfileVersionArns?: any}
-  --code-signing-policies: record # Code signing configuration policies (https://docs.aws.amazon.com/lambda/latest/dg/configuration-codesigning.html#config-codesigning-policies) specify the validation failure action for signature mismatch or expiry. — shape: {UntrustedArtifactOnDeployment?: any}
-]: any -> record<CodeSigningConfig: record<CodeSigningConfigId: record, CodeSigningConfigArn: record, Description: record, AllowedPublishers: record<SigningProfileVersionArns: record>, CodeSigningPolicies: record<UntrustedArtifactOnDeployment: record>, LastModified: record>> {
+  allowed_publishers: record # List of signing profiles that can sign a code package. — shape: {SigningProfileVersionArns?: list<string>}
+  --code-signing-policies: record # Code signing configuration policies (https://docs.aws.amazon.com/lambda/latest/dg/configuration-codesigning.html#config-codesigning-policies) specify the validation failure action for signature mismatch or expiry. — shape: {UntrustedArtifactOnDeployment?: "Warn"|"Enforce"}
+]: any -> record<CodeSigningConfig: record<CodeSigningConfigId: string, CodeSigningConfigArn: string, Description: string, AllowedPublishers: record<SigningProfileVersionArns: list>, CodeSigningPolicies: record<UntrustedArtifactOnDeployment: string>, LastModified: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -537,7 +537,7 @@ export def "list-code-signing-configs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextMarker: record, CodeSigningConfigs: record> {
+]: nothing -> record<NextMarker: string, CodeSigningConfigs: table<CodeSigningConfigId: string, CodeSigningConfigArn: string, Description: string, AllowedPublishers: record, CodeSigningPolicies: record, LastModified: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
@@ -564,14 +564,14 @@ export def "list-code-signing-configs" [
 #
 # POST /2015-03-31/event-source-mappings/
 # operationId: CreateEventSourceMapping
-# --FilterCriteria shape: {Filters?: any}
-# --DestinationConfig shape: {OnSuccess?: any, OnFailure?: any}
-# --SourceAccessConfigurations item shape: {Type?: any, URI?: any}
-# --SelfManagedEventSource shape: {Endpoints?: any}
-# --AmazonManagedKafkaEventSourceConfig shape: {ConsumerGroupId?: any}
-# --SelfManagedKafkaEventSourceConfig shape: {ConsumerGroupId?: any}
-# --ScalingConfig shape: {MaximumConcurrency?: any}
-# --DocumentDBEventSourceConfig shape: {DatabaseName?: any, CollectionName?: any, FullDocument?: any}
+# --FilterCriteria shape: {Filters?: list}
+# --DestinationConfig shape: {OnSuccess?: record, OnFailure?: record}
+# --SourceAccessConfigurations item shape: {Type?: "BASIC_AUTH"|"VPC_SUBNET"|"VPC_SECURITY_GROUP"|"SASL_SCRAM_512_AUTH"|"SASL_SCRAM_256_AUTH"|"VIRTUAL_HOST"|"CLIENT_CERTIFICATE_TLS_AUTH"|"SERVER_ROOT_CA_CERTIFICATE", URI?: string}
+# --SelfManagedEventSource shape: {Endpoints?: record}
+# --AmazonManagedKafkaEventSourceConfig shape: {ConsumerGroupId?: string}
+# --SelfManagedKafkaEventSourceConfig shape: {ConsumerGroupId?: string}
+# --ScalingConfig shape: {MaximumConcurrency?: int}
+# --DocumentDBEventSourceConfig shape: {DatabaseName?: string, CollectionName?: string, FullDocument?: "UpdateLookup"|"Default"}
 export def "create-event-source-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -593,26 +593,26 @@ export def "create-event-source-mapping" [
   function_name: string # The name of the Lambda function. Name formats Function name – MyFunction. Function ARN – arn:aws:lambda:us-west-2:123456789012:function:MyFunction. Version or Alias ARN – arn:aws:lambda:us-west-2:123456789012:function:MyFunction:PROD. Partial ARN – 123456789012:function:MyFunction. The length constraint applies only to the full ARN. If you specify only the function name, it's limited to 64 characters in length.
   --enabled: oneof<nothing, bool> # When true, the event source mapping is active. When false, Lambda pauses polling and invocation. Default: True
   --batch-size: int # The maximum number of records in each batch that Lambda pulls from your stream or queue and sends to your function. Lambda passes all of the records in the batch to the function in a single call, up to the payload limit for synchronous invocation (6 MB). Amazon Kinesis – Default 100. Max 10,000. Amazon DynamoDB Streams – Default 100. Max 10,000. Amazon Simple Queue Service – Default 10. For standard queues the max is 10,000. For FIFO queues the max is 10. Amazon Managed Streaming for Apache Kafka – Default 100. Max 10,000. Self-managed Apache Kafka – Default 100. Max 10,000. Amazon MQ (ActiveMQ and RabbitMQ) – Default 100. Max 10,000. DocumentDB – Default 100. Max 10,000.
-  --filter-criteria: record # An object that contains the filters for an event source. — shape: {Filters?: any}
+  --filter-criteria: record # An object that contains the filters for an event source. — shape: {Filters?: list}
   --maximum-batching-window-in-seconds: int # The maximum amount of time, in seconds, that Lambda spends gathering records before invoking the function. You can configure MaximumBatchingWindowInSeconds to any value from 0 seconds to 300 seconds in increments of seconds. For streams and Amazon SQS event sources, the default batching window is 0 seconds. For Amazon MSK, Self-managed Apache Kafka, Amazon MQ, and DocumentDB event sources, the default batching window is 500 ms. Note that because you can only change MaximumBatchingWindowInSeconds in increments of seconds, you cannot revert back to the 500 ms default batching window after you have changed it. To restore the default batching window, you must create a new event source mapping. Related setting: For streams and Amazon SQS event sources, when you set BatchSize to a value greater than 10, you must set MaximumBatchingWindowInSeconds to at least 1.
   --parallelization-factor: int # (Kinesis and DynamoDB Streams only) The number of batches to process from each shard concurrently.
   --starting-position: string@starting-position-completer # The position in a stream from which to start reading. Required for Amazon Kinesis, Amazon DynamoDB, and Amazon MSK Streams sources. AT_TIMESTAMP is supported only for Amazon Kinesis streams and Amazon DocumentDB.
   --starting-position-timestamp: string # With StartingPosition set to AT_TIMESTAMP, the time from which to start reading. (format: date-time)
-  --destination-config: record # A configuration object that specifies the destination of an event after Lambda processes it. — shape: {OnSuccess?: any, OnFailure?: any}
+  --destination-config: record # A configuration object that specifies the destination of an event after Lambda processes it. — shape: {OnSuccess?: record, OnFailure?: record}
   --maximum-record-age-in-seconds: int # (Kinesis and DynamoDB Streams only) Discard records older than the specified age. The default value is infinite (-1).
   --bisect-batch-on-function-error: oneof<nothing, bool> # (Kinesis and DynamoDB Streams only) If the function returns an error, split the batch in two and retry.
   --maximum-retry-attempts: int # (Kinesis and DynamoDB Streams only) Discard records after the specified number of retries. The default value is infinite (-1). When set to infinite (-1), failed records are retried until the record expires.
   --tumbling-window-in-seconds: int # (Kinesis and DynamoDB Streams only) The duration in seconds of a processing window for DynamoDB and Kinesis Streams event sources. A value of 0 seconds indicates no tumbling window.
   --topics: list<string> # The name of the Kafka topic.
   --queues: list<string> # (MQ) The name of the Amazon MQ broker destination queue to consume.
-  --source-access-configurations: list # An array of authentication protocols or VPC components required to secure your event source. — item shape: {Type?: any, URI?: any}
-  --self-managed-event-source: record # The self-managed Apache Kafka cluster for your event source. — shape: {Endpoints?: any}
+  --source-access-configurations: list # An array of authentication protocols or VPC components required to secure your event source. — item shape: {Type?: "BASIC_AUTH"|"VPC_SUBNET"|"VPC_SECURITY_GROUP"|"SASL_SCRAM_512_AUTH"|"SASL_SCRAM_256_AUTH"|"VIRTUAL_HOST"|"CLIENT_CERTIFICATE_TLS_AUTH"|"SERVER_ROOT_CA_CERTIFICATE", URI?: string}
+  --self-managed-event-source: record # The self-managed Apache Kafka cluster for your event source. — shape: {Endpoints?: record}
   --function-response-types: list<string> # (Kinesis, DynamoDB Streams, and Amazon SQS) A list of current response type enums applied to the event source mapping.
-  --amazon-managed-kafka-event-source-config: record # Specific configuration settings for an Amazon Managed Streaming for Apache Kafka (Amazon MSK) event source. — shape: {ConsumerGroupId?: any}
-  --self-managed-kafka-event-source-config: record # Specific configuration settings for a self-managed Apache Kafka event source. — shape: {ConsumerGroupId?: any}
-  --scaling-config: record # (Amazon SQS only) The scaling configuration for the event source. To remove the configuration, pass an empty value. — shape: {MaximumConcurrency?: any}
-  --document-db-event-source-config: record # Specific configuration settings for a DocumentDB event source. — shape: {DatabaseName?: any, CollectionName?: any, FullDocument?: any}
-]: any -> record<UUID: record, StartingPosition: record, StartingPositionTimestamp: record, BatchSize: record, MaximumBatchingWindowInSeconds: record, ParallelizationFactor: record, EventSourceArn: record, FilterCriteria: record<Filters: record>, FunctionArn: record, LastModified: record, LastProcessingResult: record, State: record, StateTransitionReason: record, DestinationConfig: record<OnSuccess: record<Destination: record>, OnFailure: record<Destination: record>>, Topics: record, Queues: record, SourceAccessConfigurations: record, SelfManagedEventSource: record<Endpoints: record>, MaximumRecordAgeInSeconds: record, BisectBatchOnFunctionError: record, MaximumRetryAttempts: record, TumblingWindowInSeconds: record, FunctionResponseTypes: record, AmazonManagedKafkaEventSourceConfig: record<ConsumerGroupId: record>, SelfManagedKafkaEventSourceConfig: record<ConsumerGroupId: record>, ScalingConfig: record<MaximumConcurrency: record>, DocumentDBEventSourceConfig: record<DatabaseName: record, CollectionName: record, FullDocument: record>> {
+  --amazon-managed-kafka-event-source-config: record # Specific configuration settings for an Amazon Managed Streaming for Apache Kafka (Amazon MSK) event source. — shape: {ConsumerGroupId?: string}
+  --self-managed-kafka-event-source-config: record # Specific configuration settings for a self-managed Apache Kafka event source. — shape: {ConsumerGroupId?: string}
+  --scaling-config: record # (Amazon SQS only) The scaling configuration for the event source. To remove the configuration, pass an empty value. — shape: {MaximumConcurrency?: int}
+  --document-db-event-source-config: record # Specific configuration settings for a DocumentDB event source. — shape: {DatabaseName?: string, CollectionName?: string, FullDocument?: "UpdateLookup"|"Default"}
+]: any -> record<UUID: string, StartingPosition: string, StartingPositionTimestamp: string, BatchSize: int, MaximumBatchingWindowInSeconds: int, ParallelizationFactor: int, EventSourceArn: string, FilterCriteria: record<Filters: list<record>>, FunctionArn: string, LastModified: string, LastProcessingResult: string, State: string, StateTransitionReason: string, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>, Topics: list<string>, Queues: list<string>, SourceAccessConfigurations: table<Type: string, URI: string>, SelfManagedEventSource: record<Endpoints: record>, MaximumRecordAgeInSeconds: int, BisectBatchOnFunctionError: bool, MaximumRetryAttempts: int, TumblingWindowInSeconds: int, FunctionResponseTypes: list<string>, AmazonManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, SelfManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, ScalingConfig: record<MaximumConcurrency: int>, DocumentDBEventSourceConfig: record<DatabaseName: string, CollectionName: string, FullDocument: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -662,7 +662,7 @@ export def "list-event-source-mappings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextMarker: record, EventSourceMappings: record> {
+]: nothing -> record<NextMarker: string, EventSourceMappings: table<UUID: string, StartingPosition: string, StartingPositionTimestamp: string, BatchSize: int, MaximumBatchingWindowInSeconds: int, ParallelizationFactor: int, EventSourceArn: string, FilterCriteria: record, FunctionArn: string, LastModified: string, LastProcessingResult: string, State: string, StateTransitionReason: string, DestinationConfig: record, Topics: list, Queues: list, SourceAccessConfigurations: list, SelfManagedEventSource: record, MaximumRecordAgeInSeconds: int, BisectBatchOnFunctionError: bool, MaximumRetryAttempts: int, TumblingWindowInSeconds: int, FunctionResponseTypes: list, AmazonManagedKafkaEventSourceConfig: record, SelfManagedKafkaEventSourceConfig: record, ScalingConfig: record, DocumentDBEventSourceConfig: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EventSourceArn" $event_source_arn "scalar") (serialize-qp "FunctionName" $function_name "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
@@ -689,15 +689,15 @@ export def "list-event-source-mappings" [
 #
 # POST /2015-03-31/functions
 # operationId: CreateFunction
-# --Code shape: {ZipFile?: any, S3Bucket?: any, S3Key?: any, S3ObjectVersion?: any, ImageUri?: any}
-# --VpcConfig shape: {SubnetIds?: any, SecurityGroupIds?: any}
-# --DeadLetterConfig shape: {TargetArn?: any}
-# --Environment shape: {Variables?: any}
-# --TracingConfig shape: {Mode?: any}
-# --FileSystemConfigs item shape: {Arn: any, LocalMountPath: any}
-# --ImageConfig shape: {EntryPoint?: any, Command?: any, WorkingDirectory?: any}
-# --EphemeralStorage shape: {Size?: any}
-# --SnapStart shape: {ApplyOn?: any}
+# --Code shape: {ZipFile?: string, S3Bucket?: string, S3Key?: string, S3ObjectVersion?: string, ImageUri?: string}
+# --VpcConfig shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
+# --DeadLetterConfig shape: {TargetArn?: string}
+# --Environment shape: {Variables?: record}
+# --TracingConfig shape: {Mode?: "Active"|"PassThrough"}
+# --FileSystemConfigs item shape: {Arn: string, LocalMountPath: string}
+# --ImageConfig shape: {EntryPoint?: list<string>, Command?: list<string>, WorkingDirectory?: string}
+# --EphemeralStorage shape: {Size?: int}
+# --SnapStart shape: {ApplyOn?: "PublishedVersions"|"None"}
 export def "create-function" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -719,26 +719,26 @@ export def "create-function" [
   --runtime: string@runtime-completer # The identifier of the function's runtime (https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html). Runtime is required if the deployment package is a .zip file archive. The following list includes deprecated runtimes. For more information, see Runtime deprecation policy (https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html#runtime-support-policy).
   role: string # The Amazon Resource Name (ARN) of the function's execution role.
   --handler: string # The name of the method within your code that Lambda calls to run your function. Handler is required if the deployment package is a .zip file archive. The format includes the file name. It can also include namespaces and other qualifiers, depending on the runtime. For more information, see Lambda programming model (https://docs.aws.amazon.com/lambda/latest/dg/foundation-progmodel.html).
-  code: record # The code for the Lambda function. You can either specify an object in Amazon S3, upload a .zip file archive deployment package directly, or specify the URI of a container image. — shape: {ZipFile?: any, S3Bucket?: any, S3Key?: any, S3ObjectVersion?: any, ImageUri?: any}
+  code: record # The code for the Lambda function. You can either specify an object in Amazon S3, upload a .zip file archive deployment package directly, or specify the URI of a container image. — shape: {ZipFile?: string, S3Bucket?: string, S3Key?: string, S3ObjectVersion?: string, ImageUri?: string}
   --description: string # A description of the function.
   --timeout: int # The amount of time (in seconds) that Lambda allows a function to run before stopping it. The default is 3 seconds. The maximum allowed value is 900 seconds. For more information, see Lambda execution environment (https://docs.aws.amazon.com/lambda/latest/dg/runtimes-context.html).
   --memory-size: int # The amount of memory available to the function (https://docs.aws.amazon.com/lambda/latest/dg/configuration-function-common.html#configuration-memory-console) at runtime. Increasing the function memory also increases its CPU allocation. The default value is 128 MB. The value can be any multiple of 1 MB.
   --publish: oneof<nothing, bool> # Set to true to publish the first version of the function during creation.
-  --vpc-config: record # The VPC security groups and subnets that are attached to a Lambda function. For more information, see Configuring a Lambda function to access resources in a VPC (https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html). — shape: {SubnetIds?: any, SecurityGroupIds?: any}
+  --vpc-config: record # The VPC security groups and subnets that are attached to a Lambda function. For more information, see Configuring a Lambda function to access resources in a VPC (https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html). — shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
   --package-type: string@package-type-completer # The type of deployment package. Set to Image for container image and set to Zip for .zip file archive.
-  --dead-letter-config: record # The dead-letter queue (https://docs.aws.amazon.com/lambda/latest/dg/invocation-async.html#dlq) for failed asynchronous invocations. — shape: {TargetArn?: any}
-  --environment: record # A function's environment variable settings. You can use environment variables to adjust your function's behavior without updating code. An environment variable is a pair of strings that are stored in a function's version-specific configuration. — shape: {Variables?: any}
+  --dead-letter-config: record # The dead-letter queue (https://docs.aws.amazon.com/lambda/latest/dg/invocation-async.html#dlq) for failed asynchronous invocations. — shape: {TargetArn?: string}
+  --environment: record # A function's environment variable settings. You can use environment variables to adjust your function's behavior without updating code. An environment variable is a pair of strings that are stored in a function's version-specific configuration. — shape: {Variables?: record}
   --kms-key-arn: string # The ARN of the Key Management Service (KMS) customer managed key that's used to encrypt your function's environment variables (https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html#configuration-envvars-encryption). When Lambda SnapStart (https://docs.aws.amazon.com/lambda/latest/dg/snapstart-security.html) is activated, this key is also used to encrypt your function's snapshot. If you don't provide a customer managed key, Lambda uses a default service key.
-  --tracing-config: record # The function's X-Ray (https://docs.aws.amazon.com/lambda/latest/dg/services-xray.html) tracing configuration. To sample and record incoming requests, set Mode to Active. — shape: {Mode?: any}
+  --tracing-config: record # The function's X-Ray (https://docs.aws.amazon.com/lambda/latest/dg/services-xray.html) tracing configuration. To sample and record incoming requests, set Mode to Active. — shape: {Mode?: "Active"|"PassThrough"}
   --tags: record # A list of tags (https://docs.aws.amazon.com/lambda/latest/dg/tagging.html) to apply to the function.
   --layers: list<string> # A list of function layers (https://docs.aws.amazon.com/lambda/latest/dg/configuration-layers.html) to add to the function's execution environment. Specify each layer by its ARN, including the version.
-  --file-system-configs: list # Connection settings for an Amazon EFS file system. — item shape: {Arn: any, LocalMountPath: any}
-  --image-config: record # Configuration values that override the container image Dockerfile settings. For more information, see Container image settings (https://docs.aws.amazon.com/lambda/latest/dg/images-create.html#images-parms). — shape: {EntryPoint?: any, Command?: any, WorkingDirectory?: any}
+  --file-system-configs: list # Connection settings for an Amazon EFS file system. — item shape: {Arn: string, LocalMountPath: string}
+  --image-config: record # Configuration values that override the container image Dockerfile settings. For more information, see Container image settings (https://docs.aws.amazon.com/lambda/latest/dg/images-create.html#images-parms). — shape: {EntryPoint?: list<string>, Command?: list<string>, WorkingDirectory?: string}
   --code-signing-config-arn: string # To enable code signing for this function, specify the ARN of a code-signing configuration. A code-signing configuration includes a set of signing profiles, which define the trusted publishers for this function.
   --architectures: list<string> # The instruction set architecture that the function supports. Enter a string array with one of the valid values (arm64 or x86_64). The default value is x86_64.
-  --ephemeral-storage: record # The size of the function's /tmp directory in MB. The default value is 512, but it can be any whole number between 512 and 10,240 MB. — shape: {Size?: any}
-  --snap-start: record # The function's Lambda SnapStart setting. Set ApplyOn to PublishedVersions to create a snapshot of the initialized execution environment when you publish a function version. SnapStart is supported with the java11 runtime. For more information, see Improving startup performance with Lambda SnapStart (https://docs.aws.amazon.com/lambda/latest/dg/snapstart.html). — shape: {ApplyOn?: any}
-]: any -> record<FunctionName: record, FunctionArn: record, Runtime: record, Role: record, Handler: record, CodeSize: record, Description: record, Timeout: record, MemorySize: record, LastModified: record, CodeSha256: record, Version: record, VpcConfig: record<SubnetIds: record, SecurityGroupIds: record, VpcId: record>, DeadLetterConfig: record<TargetArn: record>, Environment: record<Variables: record, Error: record<ErrorCode: record, Message: record>>, KMSKeyArn: record, TracingConfig: record<Mode: record>, MasterArn: record, RevisionId: record, Layers: record, State: record, StateReason: record, StateReasonCode: record, LastUpdateStatus: record, LastUpdateStatusReason: record, LastUpdateStatusReasonCode: record, FileSystemConfigs: record, PackageType: record, ImageConfigResponse: record<ImageConfig: record<EntryPoint: record, Command: record, WorkingDirectory: record>, Error: record<ErrorCode: record, Message: record>>, SigningProfileVersionArn: record, SigningJobArn: record, Architectures: record, EphemeralStorage: record<Size: record>, SnapStart: record<ApplyOn: record, OptimizationStatus: record>, RuntimeVersionConfig: record<RuntimeVersionArn: record, Error: record<ErrorCode: record, Message: record>>> {
+  --ephemeral-storage: record # The size of the function's /tmp directory in MB. The default value is 512, but it can be any whole number between 512 and 10,240 MB. — shape: {Size?: int}
+  --snap-start: record # The function's Lambda SnapStart setting. Set ApplyOn to PublishedVersions to create a snapshot of the initialized execution environment when you publish a function version. SnapStart is supported with the java11 runtime. For more information, see Improving startup performance with Lambda SnapStart (https://docs.aws.amazon.com/lambda/latest/dg/snapstart.html). — shape: {ApplyOn?: "PublishedVersions"|"None"}
+]: any -> record<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record<SubnetIds: list<string>, SecurityGroupIds: list<string>, VpcId: string>, DeadLetterConfig: record<TargetArn: string>, Environment: record<Variables: record, Error: record<ErrorCode: string, Message: string>>, KMSKeyArn: string, TracingConfig: record<Mode: string>, MasterArn: string, RevisionId: string, Layers: table<Arn: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: table<Arn: string, LocalMountPath: string>, PackageType: string, ImageConfigResponse: record<ImageConfig: record<EntryPoint: list, Command: list, WorkingDirectory: string>, Error: record<ErrorCode: string, Message: string>>, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list<string>, EphemeralStorage: record<Size: int>, SnapStart: record<ApplyOn: string, OptimizationStatus: string>, RuntimeVersionConfig: record<RuntimeVersionArn: string, Error: record<ErrorCode: string, Message: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -767,7 +767,7 @@ export def "create-function" [
 #
 # POST /2021-10-31/functions/{FunctionName}/url
 # operationId: CreateFunctionUrlConfig
-# --Cors shape: {AllowCredentials?: any, AllowHeaders?: any, AllowMethods?: any, AllowOrigins?: any, ExposeHeaders?: any, MaxAge?: any}
+# --Cors shape: {AllowCredentials?: bool, AllowHeaders?: list<string>, AllowMethods?: list<string>, AllowOrigins?: list<string>, ExposeHeaders?: list<string>, MaxAge?: int}
 export def "create-function-url-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -788,9 +788,9 @@ export def "create-function-url-config" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   auth_type: string@auth-type-completer # The type of authentication that your function URL uses. Set to AWS_IAM if you want to restrict access to authenticated users only. Set to NONE if you want to bypass IAM authentication to create a public endpoint. For more information, see Security and auth model for Lambda function URLs (https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html).
-  --cors: record # The cross-origin resource sharing (CORS) (https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) settings for your Lambda function URL. Use CORS to grant access to your function URL from any origin. You can also use CORS to control access for specific HTTP headers and methods in requests to your function URL. — shape: {AllowCredentials?: any, AllowHeaders?: any, AllowMethods?: any, AllowOrigins?: any, ExposeHeaders?: any, MaxAge?: any}
+  --cors: record # The cross-origin resource sharing (CORS) (https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) settings for your Lambda function URL. Use CORS to grant access to your function URL from any origin. You can also use CORS to control access for specific HTTP headers and methods in requests to your function URL. — shape: {AllowCredentials?: bool, AllowHeaders?: list<string>, AllowMethods?: list<string>, AllowOrigins?: list<string>, ExposeHeaders?: list<string>, MaxAge?: int}
   --invoke-mode: string@invoke-mode-completer # Use one of the following options: BUFFERED – This is the default option. Lambda invokes your function using the Invoke API operation. Invocation results are available when the payload is complete. The maximum payload size is 6 MB. RESPONSE_STREAM – Your function streams payload results as they become available. Lambda invokes your function using the InvokeWithResponseStream API operation. The maximum response payload size is 20 MB, however, you can request a quota increase (https://docs.aws.amazon.com/servicequotas/latest/userguide/request-quota-increase.html).
-]: any -> record<FunctionUrl: record, FunctionArn: record, AuthType: record, Cors: record<AllowCredentials: record, AllowHeaders: record, AllowMethods: record, AllowOrigins: record, ExposeHeaders: record, MaxAge: record>, CreationTime: record, InvokeMode: record> {
+]: any -> record<FunctionUrl: string, FunctionArn: string, AuthType: string, Cors: record<AllowCredentials: bool, AllowHeaders: list<string>, AllowMethods: list<string>, AllowOrigins: list<string>, ExposeHeaders: list<string>, MaxAge: int>, CreationTime: string, InvokeMode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -887,7 +887,7 @@ export def "get-function-url-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FunctionUrl: record, FunctionArn: record, AuthType: record, Cors: record<AllowCredentials: record, AllowHeaders: record, AllowMethods: record, AllowOrigins: record, ExposeHeaders: record, MaxAge: record>, CreationTime: record, LastModifiedTime: record, InvokeMode: record> {
+]: nothing -> record<FunctionUrl: string, FunctionArn: string, AuthType: string, Cors: record<AllowCredentials: bool, AllowHeaders: list<string>, AllowMethods: list<string>, AllowOrigins: list<string>, ExposeHeaders: list<string>, MaxAge: int>, CreationTime: string, LastModifiedTime: string, InvokeMode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -915,7 +915,7 @@ export def "get-function-url-config" [
 #
 # PUT /2021-10-31/functions/{FunctionName}/url
 # operationId: UpdateFunctionUrlConfig
-# --Cors shape: {AllowCredentials?: any, AllowHeaders?: any, AllowMethods?: any, AllowOrigins?: any, ExposeHeaders?: any, MaxAge?: any}
+# --Cors shape: {AllowCredentials?: bool, AllowHeaders?: list<string>, AllowMethods?: list<string>, AllowOrigins?: list<string>, ExposeHeaders?: list<string>, MaxAge?: int}
 export def "update-function-url-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -936,9 +936,9 @@ export def "update-function-url-config" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --auth-type: string@auth-type-completer # The type of authentication that your function URL uses. Set to AWS_IAM if you want to restrict access to authenticated users only. Set to NONE if you want to bypass IAM authentication to create a public endpoint. For more information, see Security and auth model for Lambda function URLs (https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html).
-  --cors: record # The cross-origin resource sharing (CORS) (https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) settings for your Lambda function URL. Use CORS to grant access to your function URL from any origin. You can also use CORS to control access for specific HTTP headers and methods in requests to your function URL. — shape: {AllowCredentials?: any, AllowHeaders?: any, AllowMethods?: any, AllowOrigins?: any, ExposeHeaders?: any, MaxAge?: any}
+  --cors: record # The cross-origin resource sharing (CORS) (https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) settings for your Lambda function URL. Use CORS to grant access to your function URL from any origin. You can also use CORS to control access for specific HTTP headers and methods in requests to your function URL. — shape: {AllowCredentials?: bool, AllowHeaders?: list<string>, AllowMethods?: list<string>, AllowOrigins?: list<string>, ExposeHeaders?: list<string>, MaxAge?: int}
   --invoke-mode: string@invoke-mode-completer # Use one of the following options: BUFFERED – This is the default option. Lambda invokes your function using the Invoke API operation. Invocation results are available when the payload is complete. The maximum payload size is 6 MB. RESPONSE_STREAM – Your function streams payload results as they become available. Lambda invokes your function using the InvokeWithResponseStream API operation. The maximum response payload size is 20 MB, however, you can request a quota increase (https://docs.aws.amazon.com/servicequotas/latest/userguide/request-quota-increase.html).
-]: any -> record<FunctionUrl: record, FunctionArn: record, AuthType: record, Cors: record<AllowCredentials: record, AllowHeaders: record, AllowMethods: record, AllowOrigins: record, ExposeHeaders: record, MaxAge: record>, CreationTime: record, LastModifiedTime: record, InvokeMode: record> {
+]: any -> record<FunctionUrl: string, FunctionArn: string, AuthType: string, Cors: record<AllowCredentials: bool, AllowHeaders: list<string>, AllowMethods: list<string>, AllowOrigins: list<string>, ExposeHeaders: list<string>, MaxAge: int>, CreationTime: string, LastModifiedTime: string, InvokeMode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1035,7 +1035,7 @@ export def "get-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AliasArn: record, Name: record, FunctionVersion: record, Description: record, RoutingConfig: record<AdditionalVersionWeights: record>, RevisionId: record> {
+]: nothing -> record<AliasArn: string, Name: string, FunctionVersion: string, Description: string, RoutingConfig: record<AdditionalVersionWeights: record>, RevisionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -1063,7 +1063,7 @@ export def "get-alias" [
 #
 # PUT /2015-03-31/functions/{FunctionName}/aliases/{Name}
 # operationId: UpdateAlias
-# --RoutingConfig shape: {AdditionalVersionWeights?: any}
+# --RoutingConfig shape: {AdditionalVersionWeights?: record}
 export def "update-alias" [
   function_name: string
   name: string
@@ -1085,9 +1085,9 @@ export def "update-alias" [
   --x-amz-signed-headers: string
   --function-version: string # The function version that the alias invokes.
   --description: string # A description of the alias.
-  --routing-config: record # The traffic-shifting (https://docs.aws.amazon.com/lambda/latest/dg/lambda-traffic-shifting-using-aliases.html) configuration of a Lambda function alias. — shape: {AdditionalVersionWeights?: any}
+  --routing-config: record # The traffic-shifting (https://docs.aws.amazon.com/lambda/latest/dg/lambda-traffic-shifting-using-aliases.html) configuration of a Lambda function alias. — shape: {AdditionalVersionWeights?: record}
   --revision-id: string # Only update the alias if the revision ID matches the ID that's specified. Use this option to avoid modifying an alias that has changed since you last read it.
-]: any -> record<AliasArn: record, Name: record, FunctionVersion: record, Description: record, RoutingConfig: record<AdditionalVersionWeights: record>, RevisionId: record> {
+]: any -> record<AliasArn: string, Name: string, FunctionVersion: string, Description: string, RoutingConfig: record<AdditionalVersionWeights: record>, RevisionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1181,7 +1181,7 @@ export def "get-code-signing-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CodeSigningConfig: record<CodeSigningConfigId: record, CodeSigningConfigArn: record, Description: record, AllowedPublishers: record<SigningProfileVersionArns: record>, CodeSigningPolicies: record<UntrustedArtifactOnDeployment: record>, LastModified: record>> {
+]: nothing -> record<CodeSigningConfig: record<CodeSigningConfigId: string, CodeSigningConfigArn: string, Description: string, AllowedPublishers: record<SigningProfileVersionArns: list>, CodeSigningPolicies: record<UntrustedArtifactOnDeployment: string>, LastModified: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code_signing_config_arn | is-empty) { error make --unspanned { msg: "path parameter 'CodeSigningConfigArn' must be non-empty" } }
@@ -1208,8 +1208,8 @@ export def "get-code-signing-config" [
 #
 # PUT /2020-04-22/code-signing-configs/{CodeSigningConfigArn}
 # operationId: UpdateCodeSigningConfig
-# --AllowedPublishers shape: {SigningProfileVersionArns?: any}
-# --CodeSigningPolicies shape: {UntrustedArtifactOnDeployment?: any}
+# --AllowedPublishers shape: {SigningProfileVersionArns?: list<string>}
+# --CodeSigningPolicies shape: {UntrustedArtifactOnDeployment?: "Warn"|"Enforce"}
 export def "update-code-signing-config" [
   code_signing_config_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1229,9 +1229,9 @@ export def "update-code-signing-config" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # Descriptive name for this code signing configuration.
-  --allowed-publishers: record # List of signing profiles that can sign a code package. — shape: {SigningProfileVersionArns?: any}
-  --code-signing-policies: record # Code signing configuration policies (https://docs.aws.amazon.com/lambda/latest/dg/configuration-codesigning.html#config-codesigning-policies) specify the validation failure action for signature mismatch or expiry. — shape: {UntrustedArtifactOnDeployment?: any}
-]: any -> record<CodeSigningConfig: record<CodeSigningConfigId: record, CodeSigningConfigArn: record, Description: record, AllowedPublishers: record<SigningProfileVersionArns: record>, CodeSigningPolicies: record<UntrustedArtifactOnDeployment: record>, LastModified: record>> {
+  --allowed-publishers: record # List of signing profiles that can sign a code package. — shape: {SigningProfileVersionArns?: list<string>}
+  --code-signing-policies: record # Code signing configuration policies (https://docs.aws.amazon.com/lambda/latest/dg/configuration-codesigning.html#config-codesigning-policies) specify the validation failure action for signature mismatch or expiry. — shape: {UntrustedArtifactOnDeployment?: "Warn"|"Enforce"}
+]: any -> record<CodeSigningConfig: record<CodeSigningConfigId: string, CodeSigningConfigArn: string, Description: string, AllowedPublishers: record<SigningProfileVersionArns: list>, CodeSigningPolicies: record<UntrustedArtifactOnDeployment: string>, LastModified: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1279,7 +1279,7 @@ export def "delete-event-source-mapping" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<UUID: record, StartingPosition: record, StartingPositionTimestamp: record, BatchSize: record, MaximumBatchingWindowInSeconds: record, ParallelizationFactor: record, EventSourceArn: record, FilterCriteria: record<Filters: record>, FunctionArn: record, LastModified: record, LastProcessingResult: record, State: record, StateTransitionReason: record, DestinationConfig: record<OnSuccess: record<Destination: record>, OnFailure: record<Destination: record>>, Topics: record, Queues: record, SourceAccessConfigurations: record, SelfManagedEventSource: record<Endpoints: record>, MaximumRecordAgeInSeconds: record, BisectBatchOnFunctionError: record, MaximumRetryAttempts: record, TumblingWindowInSeconds: record, FunctionResponseTypes: record, AmazonManagedKafkaEventSourceConfig: record<ConsumerGroupId: record>, SelfManagedKafkaEventSourceConfig: record<ConsumerGroupId: record>, ScalingConfig: record<MaximumConcurrency: record>, DocumentDBEventSourceConfig: record<DatabaseName: record, CollectionName: record, FullDocument: record>> {
+]: nothing -> record<UUID: string, StartingPosition: string, StartingPositionTimestamp: string, BatchSize: int, MaximumBatchingWindowInSeconds: int, ParallelizationFactor: int, EventSourceArn: string, FilterCriteria: record<Filters: list<record>>, FunctionArn: string, LastModified: string, LastProcessingResult: string, State: string, StateTransitionReason: string, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>, Topics: list<string>, Queues: list<string>, SourceAccessConfigurations: table<Type: string, URI: string>, SelfManagedEventSource: record<Endpoints: record>, MaximumRecordAgeInSeconds: int, BisectBatchOnFunctionError: bool, MaximumRetryAttempts: int, TumblingWindowInSeconds: int, FunctionResponseTypes: list<string>, AmazonManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, SelfManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, ScalingConfig: record<MaximumConcurrency: int>, DocumentDBEventSourceConfig: record<DatabaseName: string, CollectionName: string, FullDocument: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'UUID' must be non-empty" } }
@@ -1324,7 +1324,7 @@ export def "get-event-source-mapping" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<UUID: record, StartingPosition: record, StartingPositionTimestamp: record, BatchSize: record, MaximumBatchingWindowInSeconds: record, ParallelizationFactor: record, EventSourceArn: record, FilterCriteria: record<Filters: record>, FunctionArn: record, LastModified: record, LastProcessingResult: record, State: record, StateTransitionReason: record, DestinationConfig: record<OnSuccess: record<Destination: record>, OnFailure: record<Destination: record>>, Topics: record, Queues: record, SourceAccessConfigurations: record, SelfManagedEventSource: record<Endpoints: record>, MaximumRecordAgeInSeconds: record, BisectBatchOnFunctionError: record, MaximumRetryAttempts: record, TumblingWindowInSeconds: record, FunctionResponseTypes: record, AmazonManagedKafkaEventSourceConfig: record<ConsumerGroupId: record>, SelfManagedKafkaEventSourceConfig: record<ConsumerGroupId: record>, ScalingConfig: record<MaximumConcurrency: record>, DocumentDBEventSourceConfig: record<DatabaseName: record, CollectionName: record, FullDocument: record>> {
+]: nothing -> record<UUID: string, StartingPosition: string, StartingPositionTimestamp: string, BatchSize: int, MaximumBatchingWindowInSeconds: int, ParallelizationFactor: int, EventSourceArn: string, FilterCriteria: record<Filters: list<record>>, FunctionArn: string, LastModified: string, LastProcessingResult: string, State: string, StateTransitionReason: string, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>, Topics: list<string>, Queues: list<string>, SourceAccessConfigurations: table<Type: string, URI: string>, SelfManagedEventSource: record<Endpoints: record>, MaximumRecordAgeInSeconds: int, BisectBatchOnFunctionError: bool, MaximumRetryAttempts: int, TumblingWindowInSeconds: int, FunctionResponseTypes: list<string>, AmazonManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, SelfManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, ScalingConfig: record<MaximumConcurrency: int>, DocumentDBEventSourceConfig: record<DatabaseName: string, CollectionName: string, FullDocument: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'UUID' must be non-empty" } }
@@ -1351,11 +1351,11 @@ export def "get-event-source-mapping" [
 #
 # PUT /2015-03-31/event-source-mappings/{UUID}
 # operationId: UpdateEventSourceMapping
-# --FilterCriteria shape: {Filters?: any}
-# --DestinationConfig shape: {OnSuccess?: any, OnFailure?: any}
-# --SourceAccessConfigurations item shape: {Type?: any, URI?: any}
-# --ScalingConfig shape: {MaximumConcurrency?: any}
-# --DocumentDBEventSourceConfig shape: {DatabaseName?: any, CollectionName?: any, FullDocument?: any}
+# --FilterCriteria shape: {Filters?: list}
+# --DestinationConfig shape: {OnSuccess?: record, OnFailure?: record}
+# --SourceAccessConfigurations item shape: {Type?: "BASIC_AUTH"|"VPC_SUBNET"|"VPC_SECURITY_GROUP"|"SASL_SCRAM_512_AUTH"|"SASL_SCRAM_256_AUTH"|"VIRTUAL_HOST"|"CLIENT_CERTIFICATE_TLS_AUTH"|"SERVER_ROOT_CA_CERTIFICATE", URI?: string}
+# --ScalingConfig shape: {MaximumConcurrency?: int}
+# --DocumentDBEventSourceConfig shape: {DatabaseName?: string, CollectionName?: string, FullDocument?: "UpdateLookup"|"Default"}
 export def "update-event-source-mapping" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1377,19 +1377,19 @@ export def "update-event-source-mapping" [
   --function-name: string # The name of the Lambda function. Name formats Function name – MyFunction. Function ARN – arn:aws:lambda:us-west-2:123456789012:function:MyFunction. Version or Alias ARN – arn:aws:lambda:us-west-2:123456789012:function:MyFunction:PROD. Partial ARN – 123456789012:function:MyFunction. The length constraint applies only to the full ARN. If you specify only the function name, it's limited to 64 characters in length.
   --enabled: oneof<nothing, bool> # When true, the event source mapping is active. When false, Lambda pauses polling and invocation. Default: True
   --batch-size: int # The maximum number of records in each batch that Lambda pulls from your stream or queue and sends to your function. Lambda passes all of the records in the batch to the function in a single call, up to the payload limit for synchronous invocation (6 MB). Amazon Kinesis – Default 100. Max 10,000. Amazon DynamoDB Streams – Default 100. Max 10,000. Amazon Simple Queue Service – Default 10. For standard queues the max is 10,000. For FIFO queues the max is 10. Amazon Managed Streaming for Apache Kafka – Default 100. Max 10,000. Self-managed Apache Kafka – Default 100. Max 10,000. Amazon MQ (ActiveMQ and RabbitMQ) – Default 100. Max 10,000. DocumentDB – Default 100. Max 10,000.
-  --filter-criteria: record # An object that contains the filters for an event source. — shape: {Filters?: any}
+  --filter-criteria: record # An object that contains the filters for an event source. — shape: {Filters?: list}
   --maximum-batching-window-in-seconds: int # The maximum amount of time, in seconds, that Lambda spends gathering records before invoking the function. You can configure MaximumBatchingWindowInSeconds to any value from 0 seconds to 300 seconds in increments of seconds. For streams and Amazon SQS event sources, the default batching window is 0 seconds. For Amazon MSK, Self-managed Apache Kafka, Amazon MQ, and DocumentDB event sources, the default batching window is 500 ms. Note that because you can only change MaximumBatchingWindowInSeconds in increments of seconds, you cannot revert back to the 500 ms default batching window after you have changed it. To restore the default batching window, you must create a new event source mapping. Related setting: For streams and Amazon SQS event sources, when you set BatchSize to a value greater than 10, you must set MaximumBatchingWindowInSeconds to at least 1.
-  --destination-config: record # A configuration object that specifies the destination of an event after Lambda processes it. — shape: {OnSuccess?: any, OnFailure?: any}
+  --destination-config: record # A configuration object that specifies the destination of an event after Lambda processes it. — shape: {OnSuccess?: record, OnFailure?: record}
   --maximum-record-age-in-seconds: int # (Kinesis and DynamoDB Streams only) Discard records older than the specified age. The default value is infinite (-1).
   --bisect-batch-on-function-error: oneof<nothing, bool> # (Kinesis and DynamoDB Streams only) If the function returns an error, split the batch in two and retry.
   --maximum-retry-attempts: int # (Kinesis and DynamoDB Streams only) Discard records after the specified number of retries. The default value is infinite (-1). When set to infinite (-1), failed records are retried until the record expires.
   --parallelization-factor: int # (Kinesis and DynamoDB Streams only) The number of batches to process from each shard concurrently.
-  --source-access-configurations: list # An array of authentication protocols or VPC components required to secure your event source. — item shape: {Type?: any, URI?: any}
+  --source-access-configurations: list # An array of authentication protocols or VPC components required to secure your event source. — item shape: {Type?: "BASIC_AUTH"|"VPC_SUBNET"|"VPC_SECURITY_GROUP"|"SASL_SCRAM_512_AUTH"|"SASL_SCRAM_256_AUTH"|"VIRTUAL_HOST"|"CLIENT_CERTIFICATE_TLS_AUTH"|"SERVER_ROOT_CA_CERTIFICATE", URI?: string}
   --tumbling-window-in-seconds: int # (Kinesis and DynamoDB Streams only) The duration in seconds of a processing window for DynamoDB and Kinesis Streams event sources. A value of 0 seconds indicates no tumbling window.
   --function-response-types: list<string> # (Kinesis, DynamoDB Streams, and Amazon SQS) A list of current response type enums applied to the event source mapping.
-  --scaling-config: record # (Amazon SQS only) The scaling configuration for the event source. To remove the configuration, pass an empty value. — shape: {MaximumConcurrency?: any}
-  --document-db-event-source-config: record # Specific configuration settings for a DocumentDB event source. — shape: {DatabaseName?: any, CollectionName?: any, FullDocument?: any}
-]: any -> record<UUID: record, StartingPosition: record, StartingPositionTimestamp: record, BatchSize: record, MaximumBatchingWindowInSeconds: record, ParallelizationFactor: record, EventSourceArn: record, FilterCriteria: record<Filters: record>, FunctionArn: record, LastModified: record, LastProcessingResult: record, State: record, StateTransitionReason: record, DestinationConfig: record<OnSuccess: record<Destination: record>, OnFailure: record<Destination: record>>, Topics: record, Queues: record, SourceAccessConfigurations: record, SelfManagedEventSource: record<Endpoints: record>, MaximumRecordAgeInSeconds: record, BisectBatchOnFunctionError: record, MaximumRetryAttempts: record, TumblingWindowInSeconds: record, FunctionResponseTypes: record, AmazonManagedKafkaEventSourceConfig: record<ConsumerGroupId: record>, SelfManagedKafkaEventSourceConfig: record<ConsumerGroupId: record>, ScalingConfig: record<MaximumConcurrency: record>, DocumentDBEventSourceConfig: record<DatabaseName: record, CollectionName: record, FullDocument: record>> {
+  --scaling-config: record # (Amazon SQS only) The scaling configuration for the event source. To remove the configuration, pass an empty value. — shape: {MaximumConcurrency?: int}
+  --document-db-event-source-config: record # Specific configuration settings for a DocumentDB event source. — shape: {DatabaseName?: string, CollectionName?: string, FullDocument?: "UpdateLookup"|"Default"}
+]: any -> record<UUID: string, StartingPosition: string, StartingPositionTimestamp: string, BatchSize: int, MaximumBatchingWindowInSeconds: int, ParallelizationFactor: int, EventSourceArn: string, FilterCriteria: record<Filters: list<record>>, FunctionArn: string, LastModified: string, LastProcessingResult: string, State: string, StateTransitionReason: string, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>, Topics: list<string>, Queues: list<string>, SourceAccessConfigurations: table<Type: string, URI: string>, SelfManagedEventSource: record<Endpoints: record>, MaximumRecordAgeInSeconds: int, BisectBatchOnFunctionError: bool, MaximumRetryAttempts: int, TumblingWindowInSeconds: int, FunctionResponseTypes: list<string>, AmazonManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, SelfManagedKafkaEventSourceConfig: record<ConsumerGroupId: string>, ScalingConfig: record<MaximumConcurrency: int>, DocumentDBEventSourceConfig: record<DatabaseName: string, CollectionName: string, FullDocument: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1485,7 +1485,7 @@ export def "get-function" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Configuration: record<FunctionName: record, FunctionArn: record, Runtime: record, Role: record, Handler: record, CodeSize: record, Description: record, Timeout: record, MemorySize: record, LastModified: record, CodeSha256: record, Version: record, VpcConfig: record<SubnetIds: record, SecurityGroupIds: record, VpcId: record>, DeadLetterConfig: record<TargetArn: record>, Environment: record<Variables: record, Error: record>, KMSKeyArn: record, TracingConfig: record<Mode: record>, MasterArn: record, RevisionId: record, Layers: record, State: record, StateReason: record, StateReasonCode: record, LastUpdateStatus: record, LastUpdateStatusReason: record, LastUpdateStatusReasonCode: record, FileSystemConfigs: record, PackageType: record, ImageConfigResponse: record<ImageConfig: record, Error: record>, SigningProfileVersionArn: record, SigningJobArn: record, Architectures: record, EphemeralStorage: record<Size: record>, SnapStart: record<ApplyOn: record, OptimizationStatus: record>, RuntimeVersionConfig: record<RuntimeVersionArn: record, Error: record>>, Code: record<RepositoryType: record, Location: record, ImageUri: record, ResolvedImageUri: record>, Tags: record, Concurrency: record<ReservedConcurrentExecutions: record>> {
+]: nothing -> record<Configuration: record<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record<SubnetIds: list, SecurityGroupIds: list, VpcId: string>, DeadLetterConfig: record<TargetArn: string>, Environment: record<Variables: record, Error: record>, KMSKeyArn: string, TracingConfig: record<Mode: string>, MasterArn: string, RevisionId: string, Layers: list<record>, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: list<record>, PackageType: string, ImageConfigResponse: record<ImageConfig: record, Error: record>, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list<string>, EphemeralStorage: record<Size: int>, SnapStart: record<ApplyOn: string, OptimizationStatus: string>, RuntimeVersionConfig: record<RuntimeVersionArn: string, Error: record>>, Code: record<RepositoryType: string, Location: string, ImageUri: string, ResolvedImageUri: string>, Tags: record, Concurrency: record<ReservedConcurrentExecutions: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -1576,7 +1576,7 @@ export def "get-function-code-signing-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CodeSigningConfigArn: record, FunctionName: record> {
+]: nothing -> record<CodeSigningConfigArn: string, FunctionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -1622,7 +1622,7 @@ export def "put-function-code-signing-config" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   code_signing_config_arn: string # The The Amazon Resource Name (ARN) of the code signing configuration.
-]: any -> record<CodeSigningConfigArn: record, FunctionName: record> {
+]: any -> record<CodeSigningConfigArn: string, FunctionName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1716,7 +1716,7 @@ export def "put-function-concurrency" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   reserved_concurrent_executions: int # The number of simultaneous executions to reserve for the function.
-]: any -> record<ReservedConcurrentExecutions: record> {
+]: any -> record<ReservedConcurrentExecutions: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1812,7 +1812,7 @@ export def "get-function-event-invoke-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LastModified: record, FunctionArn: record, MaximumRetryAttempts: record, MaximumEventAgeInSeconds: record, DestinationConfig: record<OnSuccess: record<Destination: record>, OnFailure: record<Destination: record>>> {
+]: nothing -> record<LastModified: string, FunctionArn: string, MaximumRetryAttempts: int, MaximumEventAgeInSeconds: int, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -1840,7 +1840,7 @@ export def "get-function-event-invoke-config" [
 #
 # PUT /2019-09-25/functions/{FunctionName}/event-invoke-config
 # operationId: PutFunctionEventInvokeConfig
-# --DestinationConfig shape: {OnSuccess?: any, OnFailure?: any}
+# --DestinationConfig shape: {OnSuccess?: record, OnFailure?: record}
 export def "put-function-event-invoke-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1862,8 +1862,8 @@ export def "put-function-event-invoke-config" [
   --x-amz-signed-headers: string
   --maximum-retry-attempts: int # The maximum number of times to retry when the function returns an error.
   --maximum-event-age-in-seconds: int # The maximum age of a request that Lambda sends to a function for processing.
-  --destination-config: record # A configuration object that specifies the destination of an event after Lambda processes it. — shape: {OnSuccess?: any, OnFailure?: any}
-]: any -> record<LastModified: record, FunctionArn: record, MaximumRetryAttempts: record, MaximumEventAgeInSeconds: record, DestinationConfig: record<OnSuccess: record<Destination: record>, OnFailure: record<Destination: record>>> {
+  --destination-config: record # A configuration object that specifies the destination of an event after Lambda processes it. — shape: {OnSuccess?: record, OnFailure?: record}
+]: any -> record<LastModified: string, FunctionArn: string, MaximumRetryAttempts: int, MaximumEventAgeInSeconds: int, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1894,7 +1894,7 @@ export def "put-function-event-invoke-config" [
 #
 # POST /2019-09-25/functions/{FunctionName}/event-invoke-config
 # operationId: UpdateFunctionEventInvokeConfig
-# --DestinationConfig shape: {OnSuccess?: any, OnFailure?: any}
+# --DestinationConfig shape: {OnSuccess?: record, OnFailure?: record}
 export def "update-function-event-invoke-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1916,8 +1916,8 @@ export def "update-function-event-invoke-config" [
   --x-amz-signed-headers: string
   --maximum-retry-attempts: int # The maximum number of times to retry when the function returns an error.
   --maximum-event-age-in-seconds: int # The maximum age of a request that Lambda sends to a function for processing.
-  --destination-config: record # A configuration object that specifies the destination of an event after Lambda processes it. — shape: {OnSuccess?: any, OnFailure?: any}
-]: any -> record<LastModified: record, FunctionArn: record, MaximumRetryAttempts: record, MaximumEventAgeInSeconds: record, DestinationConfig: record<OnSuccess: record<Destination: record>, OnFailure: record<Destination: record>>> {
+  --destination-config: record # A configuration object that specifies the destination of an event after Lambda processes it. — shape: {OnSuccess?: record, OnFailure?: record}
+]: any -> record<LastModified: string, FunctionArn: string, MaximumRetryAttempts: int, MaximumEventAgeInSeconds: int, DestinationConfig: record<OnSuccess: record<Destination: string>, OnFailure: record<Destination: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2014,7 +2014,7 @@ export def "get-layer-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Content: record<Location: record, CodeSha256: record, CodeSize: record, SigningProfileVersionArn: record, SigningJobArn: record>, LayerArn: record, LayerVersionArn: record, Description: record, CreatedDate: record, Version: record, CompatibleRuntimes: record, LicenseInfo: record, CompatibleArchitectures: record> {
+]: nothing -> record<Content: record<Location: string, CodeSha256: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, LayerArn: string, LayerVersionArn: string, Description: string, CreatedDate: string, Version: int, CompatibleRuntimes: list<string>, LicenseInfo: string, CompatibleArchitectures: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($layer_name | is-empty) { error make --unspanned { msg: "path parameter 'LayerName' must be non-empty" } }
@@ -2053,7 +2053,7 @@ export def "delete-provisioned-concurrency-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qualifier: string # The version number or alias name.
+  --qualifier: string # The version number or alias name. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2065,6 +2065,7 @@ export def "delete-provisioned-concurrency-config" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
+  if ($qualifier == null) { error make --unspanned { msg: "required query parameter 'Qualifier' missing: pass --qualifier" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-30/functions/{function_name}/provisioned-concurrency") $qp $auth.query)
   let accept_val = "application/json"
@@ -2100,7 +2101,7 @@ export def "get-provisioned-concurrency-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qualifier: string # The version number or alias name.
+  --qualifier: string # The version number or alias name. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2108,10 +2109,11 @@ export def "get-provisioned-concurrency-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RequestedProvisionedConcurrentExecutions: record, AvailableProvisionedConcurrentExecutions: record, AllocatedProvisionedConcurrentExecutions: record, Status: record, StatusReason: record, LastModified: record> {
+]: nothing -> record<RequestedProvisionedConcurrentExecutions: int, AvailableProvisionedConcurrentExecutions: int, AllocatedProvisionedConcurrentExecutions: int, Status: string, StatusReason: string, LastModified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
+  if ($qualifier == null) { error make --unspanned { msg: "required query parameter 'Qualifier' missing: pass --qualifier" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-30/functions/{function_name}/provisioned-concurrency") $qp $auth.query)
   let accept_val = "application/json"
@@ -2147,7 +2149,7 @@ export def "put-provisioned-concurrency-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qualifier: string # The version number or alias name.
+  --qualifier: string # The version number or alias name. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2156,11 +2158,12 @@ export def "put-provisioned-concurrency-config" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   provisioned_concurrent_executions: int # The amount of provisioned concurrency to allocate for the version or alias.
-]: any -> record<RequestedProvisionedConcurrentExecutions: record, AvailableProvisionedConcurrentExecutions: record, AllocatedProvisionedConcurrentExecutions: record, Status: record, StatusReason: record, LastModified: record> {
+]: any -> record<RequestedProvisionedConcurrentExecutions: int, AvailableProvisionedConcurrentExecutions: int, AllocatedProvisionedConcurrentExecutions: int, Status: string, StatusReason: string, LastModified: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
+  if ($qualifier == null) { error make --unspanned { msg: "required query parameter 'Qualifier' missing: pass --qualifier" } }
   let qp = [(serialize-qp "Qualifier" $qualifier "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-30/functions/{function_name}/provisioned-concurrency") $qp $auth.query)
   let req_body = {"ProvisionedConcurrentExecutions": $provisioned_concurrent_executions} | compact
@@ -2204,7 +2207,7 @@ export def "get-account-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AccountLimit: record<TotalCodeSize: record, CodeSizeUnzipped: record, CodeSizeZipped: record, ConcurrentExecutions: record, UnreservedConcurrentExecutions: record>, AccountUsage: record<TotalCodeSize: record, FunctionCount: record>> {
+]: nothing -> record<AccountLimit: record<TotalCodeSize: int, CodeSizeUnzipped: int, CodeSizeZipped: int, ConcurrentExecutions: int, UnreservedConcurrentExecutions: int>, AccountUsage: record<TotalCodeSize: int, FunctionCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2016-08-19/account-settings/" $auth.query)
@@ -2248,7 +2251,7 @@ export def "get-function-concurrency" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ReservedConcurrentExecutions: record> {
+]: nothing -> record<ReservedConcurrentExecutions: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -2294,7 +2297,7 @@ export def "get-function-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FunctionName: record, FunctionArn: record, Runtime: record, Role: record, Handler: record, CodeSize: record, Description: record, Timeout: record, MemorySize: record, LastModified: record, CodeSha256: record, Version: record, VpcConfig: record<SubnetIds: record, SecurityGroupIds: record, VpcId: record>, DeadLetterConfig: record<TargetArn: record>, Environment: record<Variables: record, Error: record<ErrorCode: record, Message: record>>, KMSKeyArn: record, TracingConfig: record<Mode: record>, MasterArn: record, RevisionId: record, Layers: record, State: record, StateReason: record, StateReasonCode: record, LastUpdateStatus: record, LastUpdateStatusReason: record, LastUpdateStatusReasonCode: record, FileSystemConfigs: record, PackageType: record, ImageConfigResponse: record<ImageConfig: record<EntryPoint: record, Command: record, WorkingDirectory: record>, Error: record<ErrorCode: record, Message: record>>, SigningProfileVersionArn: record, SigningJobArn: record, Architectures: record, EphemeralStorage: record<Size: record>, SnapStart: record<ApplyOn: record, OptimizationStatus: record>, RuntimeVersionConfig: record<RuntimeVersionArn: record, Error: record<ErrorCode: record, Message: record>>> {
+]: nothing -> record<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record<SubnetIds: list<string>, SecurityGroupIds: list<string>, VpcId: string>, DeadLetterConfig: record<TargetArn: string>, Environment: record<Variables: record, Error: record<ErrorCode: string, Message: string>>, KMSKeyArn: string, TracingConfig: record<Mode: string>, MasterArn: string, RevisionId: string, Layers: table<Arn: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: table<Arn: string, LocalMountPath: string>, PackageType: string, ImageConfigResponse: record<ImageConfig: record<EntryPoint: list, Command: list, WorkingDirectory: string>, Error: record<ErrorCode: string, Message: string>>, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list<string>, EphemeralStorage: record<Size: int>, SnapStart: record<ApplyOn: string, OptimizationStatus: string>, RuntimeVersionConfig: record<RuntimeVersionArn: string, Error: record<ErrorCode: string, Message: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -2322,14 +2325,14 @@ export def "get-function-configuration" [
 #
 # PUT /2015-03-31/functions/{FunctionName}/configuration
 # operationId: UpdateFunctionConfiguration
-# --VpcConfig shape: {SubnetIds?: any, SecurityGroupIds?: any}
-# --Environment shape: {Variables?: any}
-# --DeadLetterConfig shape: {TargetArn?: any}
-# --TracingConfig shape: {Mode?: any}
-# --FileSystemConfigs item shape: {Arn: any, LocalMountPath: any}
-# --ImageConfig shape: {EntryPoint?: any, Command?: any, WorkingDirectory?: any}
-# --EphemeralStorage shape: {Size?: any}
-# --SnapStart shape: {ApplyOn?: any}
+# --VpcConfig shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
+# --Environment shape: {Variables?: record}
+# --DeadLetterConfig shape: {TargetArn?: string}
+# --TracingConfig shape: {Mode?: "Active"|"PassThrough"}
+# --FileSystemConfigs item shape: {Arn: string, LocalMountPath: string}
+# --ImageConfig shape: {EntryPoint?: list<string>, Command?: list<string>, WorkingDirectory?: string}
+# --EphemeralStorage shape: {Size?: int}
+# --SnapStart shape: {ApplyOn?: "PublishedVersions"|"None"}
 export def "update-function-configuration" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2353,19 +2356,19 @@ export def "update-function-configuration" [
   --description: string # A description of the function.
   --timeout: int # The amount of time (in seconds) that Lambda allows a function to run before stopping it. The default is 3 seconds. The maximum allowed value is 900 seconds. For more information, see Lambda execution environment (https://docs.aws.amazon.com/lambda/latest/dg/runtimes-context.html).
   --memory-size: int # The amount of memory available to the function (https://docs.aws.amazon.com/lambda/latest/dg/configuration-function-common.html#configuration-memory-console) at runtime. Increasing the function memory also increases its CPU allocation. The default value is 128 MB. The value can be any multiple of 1 MB.
-  --vpc-config: record # The VPC security groups and subnets that are attached to a Lambda function. For more information, see Configuring a Lambda function to access resources in a VPC (https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html). — shape: {SubnetIds?: any, SecurityGroupIds?: any}
-  --environment: record # A function's environment variable settings. You can use environment variables to adjust your function's behavior without updating code. An environment variable is a pair of strings that are stored in a function's version-specific configuration. — shape: {Variables?: any}
+  --vpc-config: record # The VPC security groups and subnets that are attached to a Lambda function. For more information, see Configuring a Lambda function to access resources in a VPC (https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html). — shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
+  --environment: record # A function's environment variable settings. You can use environment variables to adjust your function's behavior without updating code. An environment variable is a pair of strings that are stored in a function's version-specific configuration. — shape: {Variables?: record}
   --runtime: string@runtime-completer # The identifier of the function's runtime (https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html). Runtime is required if the deployment package is a .zip file archive. The following list includes deprecated runtimes. For more information, see Runtime deprecation policy (https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html#runtime-support-policy).
-  --dead-letter-config: record # The dead-letter queue (https://docs.aws.amazon.com/lambda/latest/dg/invocation-async.html#dlq) for failed asynchronous invocations. — shape: {TargetArn?: any}
+  --dead-letter-config: record # The dead-letter queue (https://docs.aws.amazon.com/lambda/latest/dg/invocation-async.html#dlq) for failed asynchronous invocations. — shape: {TargetArn?: string}
   --kms-key-arn: string # The ARN of the Key Management Service (KMS) customer managed key that's used to encrypt your function's environment variables (https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html#configuration-envvars-encryption). When Lambda SnapStart (https://docs.aws.amazon.com/lambda/latest/dg/snapstart-security.html) is activated, this key is also used to encrypt your function's snapshot. If you don't provide a customer managed key, Lambda uses a default service key.
-  --tracing-config: record # The function's X-Ray (https://docs.aws.amazon.com/lambda/latest/dg/services-xray.html) tracing configuration. To sample and record incoming requests, set Mode to Active. — shape: {Mode?: any}
+  --tracing-config: record # The function's X-Ray (https://docs.aws.amazon.com/lambda/latest/dg/services-xray.html) tracing configuration. To sample and record incoming requests, set Mode to Active. — shape: {Mode?: "Active"|"PassThrough"}
   --revision-id: string # Update the function only if the revision ID matches the ID that's specified. Use this option to avoid modifying a function that has changed since you last read it.
   --layers: list<string> # A list of function layers (https://docs.aws.amazon.com/lambda/latest/dg/configuration-layers.html) to add to the function's execution environment. Specify each layer by its ARN, including the version.
-  --file-system-configs: list # Connection settings for an Amazon EFS file system. — item shape: {Arn: any, LocalMountPath: any}
-  --image-config: record # Configuration values that override the container image Dockerfile settings. For more information, see Container image settings (https://docs.aws.amazon.com/lambda/latest/dg/images-create.html#images-parms). — shape: {EntryPoint?: any, Command?: any, WorkingDirectory?: any}
-  --ephemeral-storage: record # The size of the function's /tmp directory in MB. The default value is 512, but it can be any whole number between 512 and 10,240 MB. — shape: {Size?: any}
-  --snap-start: record # The function's Lambda SnapStart setting. Set ApplyOn to PublishedVersions to create a snapshot of the initialized execution environment when you publish a function version. SnapStart is supported with the java11 runtime. For more information, see Improving startup performance with Lambda SnapStart (https://docs.aws.amazon.com/lambda/latest/dg/snapstart.html). — shape: {ApplyOn?: any}
-]: any -> record<FunctionName: record, FunctionArn: record, Runtime: record, Role: record, Handler: record, CodeSize: record, Description: record, Timeout: record, MemorySize: record, LastModified: record, CodeSha256: record, Version: record, VpcConfig: record<SubnetIds: record, SecurityGroupIds: record, VpcId: record>, DeadLetterConfig: record<TargetArn: record>, Environment: record<Variables: record, Error: record<ErrorCode: record, Message: record>>, KMSKeyArn: record, TracingConfig: record<Mode: record>, MasterArn: record, RevisionId: record, Layers: record, State: record, StateReason: record, StateReasonCode: record, LastUpdateStatus: record, LastUpdateStatusReason: record, LastUpdateStatusReasonCode: record, FileSystemConfigs: record, PackageType: record, ImageConfigResponse: record<ImageConfig: record<EntryPoint: record, Command: record, WorkingDirectory: record>, Error: record<ErrorCode: record, Message: record>>, SigningProfileVersionArn: record, SigningJobArn: record, Architectures: record, EphemeralStorage: record<Size: record>, SnapStart: record<ApplyOn: record, OptimizationStatus: record>, RuntimeVersionConfig: record<RuntimeVersionArn: record, Error: record<ErrorCode: record, Message: record>>> {
+  --file-system-configs: list # Connection settings for an Amazon EFS file system. — item shape: {Arn: string, LocalMountPath: string}
+  --image-config: record # Configuration values that override the container image Dockerfile settings. For more information, see Container image settings (https://docs.aws.amazon.com/lambda/latest/dg/images-create.html#images-parms). — shape: {EntryPoint?: list<string>, Command?: list<string>, WorkingDirectory?: string}
+  --ephemeral-storage: record # The size of the function's /tmp directory in MB. The default value is 512, but it can be any whole number between 512 and 10,240 MB. — shape: {Size?: int}
+  --snap-start: record # The function's Lambda SnapStart setting. Set ApplyOn to PublishedVersions to create a snapshot of the initialized execution environment when you publish a function version. SnapStart is supported with the java11 runtime. For more information, see Improving startup performance with Lambda SnapStart (https://docs.aws.amazon.com/lambda/latest/dg/snapstart.html). — shape: {ApplyOn?: "PublishedVersions"|"None"}
+]: any -> record<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record<SubnetIds: list<string>, SecurityGroupIds: list<string>, VpcId: string>, DeadLetterConfig: record<TargetArn: string>, Environment: record<Variables: record, Error: record<ErrorCode: string, Message: string>>, KMSKeyArn: string, TracingConfig: record<Mode: string>, MasterArn: string, RevisionId: string, Layers: table<Arn: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: table<Arn: string, LocalMountPath: string>, PackageType: string, ImageConfigResponse: record<ImageConfig: record<EntryPoint: list, Command: list, WorkingDirectory: string>, Error: record<ErrorCode: string, Message: string>>, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list<string>, EphemeralStorage: record<Size: int>, SnapStart: record<ApplyOn: string, OptimizationStatus: string>, RuntimeVersionConfig: record<RuntimeVersionArn: string, Error: record<ErrorCode: string, Message: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2405,8 +2408,8 @@ export def "get-layer-version-by-arn" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --arn: string # The ARN of the layer version.
-  --find: string@find-completer
+  --arn: string # The ARN of the layer version. (required)
+  --find: string@find-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2414,9 +2417,11 @@ export def "get-layer-version-by-arn" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Content: record<Location: record, CodeSha256: record, CodeSize: record, SigningProfileVersionArn: record, SigningJobArn: record>, LayerArn: record, LayerVersionArn: record, Description: record, CreatedDate: record, Version: record, CompatibleRuntimes: record, LicenseInfo: record, CompatibleArchitectures: record> {
+]: nothing -> record<Content: record<Location: string, CodeSha256: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, LayerArn: string, LayerVersionArn: string, Description: string, CreatedDate: string, Version: int, CompatibleRuntimes: list<string>, LicenseInfo: string, CompatibleArchitectures: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($arn == null) { error make --unspanned { msg: "required query parameter 'Arn' missing: pass --arn" } }
+  let find = ($find | default "LayerVersion")
   let qp = [(serialize-qp "Arn" $arn "scalar") (serialize-qp "find" $find "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2018-10-31/layers" $qp $auth.query)
   let accept_val = "application/json"
@@ -2460,7 +2465,7 @@ export def "get-runtime-management-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<UpdateRuntimeOn: record, RuntimeVersionArn: record, FunctionArn: record> {
+]: nothing -> record<UpdateRuntimeOn: string, RuntimeVersionArn: string, FunctionArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -2509,7 +2514,7 @@ export def "put-runtime-management-config" [
   --x-amz-signed-headers: string
   update_runtime_on: string@update-runtime-on-completer # Specify the runtime update mode. Auto (default) - Automatically update to the most recent and secure runtime version using a Two-phase runtime version rollout (https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html#runtime-management-two-phase). This is the best choice for most customers to ensure they always benefit from runtime updates. Function update - Lambda updates the runtime of your function to the most recent and secure runtime version when you update your function. This approach synchronizes runtime updates with function deployments, giving you control over when runtime updates are applied and allowing you to detect and mitigate rare runtime update incompatibilities early. When using this setting, you need to regularly update your functions to keep their runtime up-to-date. Manual - You specify a runtime version in your function configuration. The function will use this runtime version indefinitely. In the rare case where a new runtime version is incompatible with an existing function, this allows you to roll back your function to an earlier runtime version. For more information, see Roll back a runtime version (https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html#runtime-management-rollback).
   --runtime-version-arn: string # The ARN of the runtime version you want the function to use. This is only required if you're using the Manual runtime update mode.
-]: any -> record<UpdateRuntimeOn: record, FunctionArn: record, RuntimeVersionArn: record> {
+]: any -> record<UpdateRuntimeOn: string, FunctionArn: string, RuntimeVersionArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2563,7 +2568,7 @@ export def "invoke" [
   --x-amz-log-type: string@x-amz-log-type-completer # Set to Tail to include the execution log in the response. Applies to synchronously invoked functions only.
   --x-amz-client-context: string # Up to 3,583 bytes of base64-encoded data about the invoking client to pass to the function in the context object.
   --payload: string # The JSON that you want to provide to your Lambda function as input. You can enter the JSON directly. For example, --payload '{ "key": "value" }'. You can also specify a file path. For example, --payload file://payload.json. (format: password)
-]: any -> record<StatusCode: record, Payload: record> {
+]: any -> record<StatusCode: int, Payload: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2615,7 +2620,7 @@ export def "invoke-async" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   invoke_args: string # The JSON that you want to provide to your Lambda function as input.
-]: any -> record<Status: record> {
+]: any -> record<Status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2668,7 +2673,7 @@ export def "invoke-with-response-stream" [
   --x-amz-log-type: string@x-amz-log-type-completer # Set to Tail to include the execution log in the response. Applies to synchronously invoked functions only.
   --x-amz-client-context: string # Up to 3,583 bytes of base64-encoded data about the invoking client to pass to the function in the context object.
   --payload: string # The JSON that you want to provide to your Lambda function as input. You can enter the JSON directly. For example, --payload '{ "key": "value" }'. You can also specify a file path. For example, --payload file://payload.json. (format: password)
-]: any -> record<StatusCode: record, EventStream: record<PayloadChunk: record<Payload: record>, InvokeComplete: record<ErrorCode: record, ErrorDetails: record, LogResult: record>>> {
+]: any -> record<StatusCode: int, EventStream: record<PayloadChunk: record<Payload: string>, InvokeComplete: record<ErrorCode: string, ErrorDetails: string, LogResult: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2719,7 +2724,7 @@ export def "list-function-event-invoke-configs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FunctionEventInvokeConfigs: record, NextMarker: record> {
+]: nothing -> record<FunctionEventInvokeConfigs: table<LastModified: string, FunctionArn: string, MaximumRetryAttempts: int, MaximumEventAgeInSeconds: int, DestinationConfig: record>, NextMarker: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -2767,7 +2772,7 @@ export def "list-function-url-configs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FunctionUrlConfigs: record, NextMarker: record> {
+]: nothing -> record<FunctionUrlConfigs: table<FunctionUrl: string, FunctionArn: string, CreationTime: string, LastModifiedTime: string, Cors: record, AuthType: string, InvokeMode: string>, NextMarker: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -2816,7 +2821,7 @@ export def "list-functions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextMarker: record, Functions: record> {
+]: nothing -> record<NextMarker: string, Functions: table<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record, DeadLetterConfig: record, Environment: record, KMSKeyArn: string, TracingConfig: record, MasterArn: string, RevisionId: string, Layers: list, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: list, PackageType: string, ImageConfigResponse: record, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list, EphemeralStorage: record, SnapStart: record, RuntimeVersionConfig: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MasterRegion" $master_region "scalar") (serialize-qp "FunctionVersion" $function_version "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar")] | flatten | str join "&"
@@ -2863,7 +2868,7 @@ export def "list-functions-by-code-signing-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextMarker: record, FunctionArns: record> {
+]: nothing -> record<NextMarker: string, FunctionArns: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code_signing_config_arn | is-empty) { error make --unspanned { msg: "path parameter 'CodeSigningConfigArn' must be non-empty" } }
@@ -2913,7 +2918,7 @@ export def "list-layer-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextMarker: record, LayerVersions: record> {
+]: nothing -> record<NextMarker: string, LayerVersions: table<LayerVersionArn: string, Version: int, Description: string, CreatedDate: string, CompatibleRuntimes: list, LicenseInfo: string, CompatibleArchitectures: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($layer_name | is-empty) { error make --unspanned { msg: "path parameter 'LayerName' must be non-empty" } }
@@ -2941,7 +2946,7 @@ export def "list-layer-versions" [
 #
 # POST /2018-10-31/layers/{LayerName}/versions
 # operationId: PublishLayerVersion
-# --Content shape: {S3Bucket?: any, S3Key?: any, S3ObjectVersion?: any, ZipFile?: any}
+# --Content shape: {S3Bucket?: string, S3Key?: string, S3ObjectVersion?: string, ZipFile?: string}
 export def "publish-layer-version" [
   layer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2961,11 +2966,11 @@ export def "publish-layer-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # The description of the version.
-  content: record # A ZIP archive that contains the contents of an Lambda layer (https://docs.aws.amazon.com/lambda/latest/dg/configuration-layers.html). You can specify either an Amazon S3 location, or upload a layer archive directly. — shape: {S3Bucket?: any, S3Key?: any, S3ObjectVersion?: any, ZipFile?: any}
+  content: record # A ZIP archive that contains the contents of an Lambda layer (https://docs.aws.amazon.com/lambda/latest/dg/configuration-layers.html). You can specify either an Amazon S3 location, or upload a layer archive directly. — shape: {S3Bucket?: string, S3Key?: string, S3ObjectVersion?: string, ZipFile?: string}
   --compatible-runtimes: list<string> # A list of compatible function runtimes (https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html). Used for filtering with ListLayers and ListLayerVersions.
   --license-info: string # The layer's software license. It can be any of the following: An SPDX license identifier (https://spdx.org/licenses/). For example, MIT. The URL of a license hosted on the internet. For example, https://opensource.org/licenses/MIT. The full text of the license.
   --compatible-architectures: list<string> # A list of compatible instruction set architectures (https://docs.aws.amazon.com/lambda/latest/dg/foundation-arch.html).
-]: any -> record<Content: record<Location: record, CodeSha256: record, CodeSize: record, SigningProfileVersionArn: record, SigningJobArn: record>, LayerArn: record, LayerVersionArn: record, Description: record, CreatedDate: record, Version: record, CompatibleRuntimes: record, LicenseInfo: record, CompatibleArchitectures: record> {
+]: any -> record<Content: record<Location: string, CodeSha256: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, LayerArn: string, LayerVersionArn: string, Description: string, CreatedDate: string, Version: int, CompatibleRuntimes: list<string>, LicenseInfo: string, CompatibleArchitectures: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3016,7 +3021,7 @@ export def "list-layers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextMarker: record, Layers: record> {
+]: nothing -> record<NextMarker: string, Layers: table<LayerName: string, LayerArn: string, LatestMatchingVersion: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CompatibleRuntime" $compatible_runtime "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "CompatibleArchitecture" $compatible_architecture "scalar")] | flatten | str join "&"
@@ -3056,7 +3061,7 @@ export def "list-provisioned-concurrency-configs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Specify the pagination token that's returned by a previous request to retrieve the next page of results.
   --max-items: int # Specify a number to limit the number of configurations returned.
-  --list: string@list-completer
+  --list: string@list-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3064,10 +3069,11 @@ export def "list-provisioned-concurrency-configs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ProvisionedConcurrencyConfigs: record, NextMarker: record> {
+]: nothing -> record<ProvisionedConcurrencyConfigs: table<FunctionArn: string, RequestedProvisionedConcurrentExecutions: int, AvailableProvisionedConcurrentExecutions: int, AllocatedProvisionedConcurrentExecutions: int, Status: string, StatusReason: string, LastModified: string>, NextMarker: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
+  let list = ($list | default "ALL")
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "List" $list "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({function_name: (encode-path-segment $function_name)} | format pattern "/2019-09-30/functions/{function_name}/provisioned-concurrency") $qp $auth.query)
   let accept_val = "application/json"
@@ -3206,7 +3212,7 @@ export def "list-versions-by-function" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextMarker: record, Versions: record> {
+]: nothing -> record<NextMarker: string, Versions: table<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record, DeadLetterConfig: record, Environment: record, KMSKeyArn: string, TracingConfig: record, MasterArn: string, RevisionId: string, Layers: list, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: list, PackageType: string, ImageConfigResponse: record, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list, EphemeralStorage: record, SnapStart: record, RuntimeVersionConfig: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'FunctionName' must be non-empty" } }
@@ -3255,7 +3261,7 @@ export def "publish-version" [
   --code-sha256: string # Only publish a version if the hash value matches the value that's specified. Use this option to avoid publishing a version if the function code has changed since you last updated it. You can get the hash for the version that you uploaded from the output of UpdateFunctionCode.
   --description: string # A description for the version to override the description in the function configuration.
   --revision-id: string # Only update the function if the revision ID matches the ID that's specified. Use this option to avoid publishing a version if the function configuration has changed since you last updated it.
-]: any -> record<FunctionName: record, FunctionArn: record, Runtime: record, Role: record, Handler: record, CodeSize: record, Description: record, Timeout: record, MemorySize: record, LastModified: record, CodeSha256: record, Version: record, VpcConfig: record<SubnetIds: record, SecurityGroupIds: record, VpcId: record>, DeadLetterConfig: record<TargetArn: record>, Environment: record<Variables: record, Error: record<ErrorCode: record, Message: record>>, KMSKeyArn: record, TracingConfig: record<Mode: record>, MasterArn: record, RevisionId: record, Layers: record, State: record, StateReason: record, StateReasonCode: record, LastUpdateStatus: record, LastUpdateStatusReason: record, LastUpdateStatusReasonCode: record, FileSystemConfigs: record, PackageType: record, ImageConfigResponse: record<ImageConfig: record<EntryPoint: record, Command: record, WorkingDirectory: record>, Error: record<ErrorCode: record, Message: record>>, SigningProfileVersionArn: record, SigningJobArn: record, Architectures: record, EphemeralStorage: record<Size: record>, SnapStart: record<ApplyOn: record, OptimizationStatus: record>, RuntimeVersionConfig: record<RuntimeVersionArn: record, Error: record<ErrorCode: record, Message: record>>> {
+]: any -> record<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record<SubnetIds: list<string>, SecurityGroupIds: list<string>, VpcId: string>, DeadLetterConfig: record<TargetArn: string>, Environment: record<Variables: record, Error: record<ErrorCode: string, Message: string>>, KMSKeyArn: string, TracingConfig: record<Mode: string>, MasterArn: string, RevisionId: string, Layers: table<Arn: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: table<Arn: string, LocalMountPath: string>, PackageType: string, ImageConfigResponse: record<ImageConfig: record<EntryPoint: list, Command: list, WorkingDirectory: string>, Error: record<ErrorCode: string, Message: string>>, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list<string>, EphemeralStorage: record<Size: int>, SnapStart: record<ApplyOn: string, OptimizationStatus: string>, RuntimeVersionConfig: record<RuntimeVersionArn: string, Error: record<ErrorCode: string, Message: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3397,7 +3403,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # A list of tag keys to remove from the function.
+  --tag-keys: list # A list of tag keys to remove from the function. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3409,6 +3415,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'ARN' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({arn: (encode-path-segment $arn)} | format pattern "/2017-03-31/tags/{arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3460,7 +3467,7 @@ export def "update-function-code" [
   --body-dry-run: oneof<nothing, bool> # Set to true to validate the request parameters and access permissions without modifying the function code.
   --revision-id: string # Update the function only if the revision ID matches the ID that's specified. Use this option to avoid modifying a function that has changed since you last read it.
   --architectures: list<string> # The instruction set architecture that the function supports. Enter a string array with one of the valid values (arm64 or x86_64). The default value is x86_64.
-]: any -> record<FunctionName: record, FunctionArn: record, Runtime: record, Role: record, Handler: record, CodeSize: record, Description: record, Timeout: record, MemorySize: record, LastModified: record, CodeSha256: record, Version: record, VpcConfig: record<SubnetIds: record, SecurityGroupIds: record, VpcId: record>, DeadLetterConfig: record<TargetArn: record>, Environment: record<Variables: record, Error: record<ErrorCode: record, Message: record>>, KMSKeyArn: record, TracingConfig: record<Mode: record>, MasterArn: record, RevisionId: record, Layers: record, State: record, StateReason: record, StateReasonCode: record, LastUpdateStatus: record, LastUpdateStatusReason: record, LastUpdateStatusReasonCode: record, FileSystemConfigs: record, PackageType: record, ImageConfigResponse: record<ImageConfig: record<EntryPoint: record, Command: record, WorkingDirectory: record>, Error: record<ErrorCode: record, Message: record>>, SigningProfileVersionArn: record, SigningJobArn: record, Architectures: record, EphemeralStorage: record<Size: record>, SnapStart: record<ApplyOn: record, OptimizationStatus: record>, RuntimeVersionConfig: record<RuntimeVersionArn: record, Error: record<ErrorCode: record, Message: record>>> {
+]: any -> record<FunctionName: string, FunctionArn: string, Runtime: string, Role: string, Handler: string, CodeSize: int, Description: string, Timeout: int, MemorySize: int, LastModified: string, CodeSha256: string, Version: string, VpcConfig: record<SubnetIds: list<string>, SecurityGroupIds: list<string>, VpcId: string>, DeadLetterConfig: record<TargetArn: string>, Environment: record<Variables: record, Error: record<ErrorCode: string, Message: string>>, KMSKeyArn: string, TracingConfig: record<Mode: string>, MasterArn: string, RevisionId: string, Layers: table<Arn: string, CodeSize: int, SigningProfileVersionArn: string, SigningJobArn: string>, State: string, StateReason: string, StateReasonCode: string, LastUpdateStatus: string, LastUpdateStatusReason: string, LastUpdateStatusReasonCode: string, FileSystemConfigs: table<Arn: string, LocalMountPath: string>, PackageType: string, ImageConfigResponse: record<ImageConfig: record<EntryPoint: list, Command: list, WorkingDirectory: string>, Error: record<ErrorCode: string, Message: string>>, SigningProfileVersionArn: string, SigningJobArn: string, Architectures: list<string>, EphemeralStorage: record<Size: int>, SnapStart: record<ApplyOn: string, OptimizationStatus: string>, RuntimeVersionConfig: record<RuntimeVersionArn: string, Error: record<ErrorCode: string, Message: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

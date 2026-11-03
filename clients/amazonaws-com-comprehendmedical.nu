@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -112,6 +112,7 @@ def x-amz-target-completer-12 [] { ["ComprehendMedical_20181030.ListICD10CMInfer
 def x-amz-target-completer-13 [] { ["ComprehendMedical_20181030.ListPHIDetectionJobs"] }
 def x-amz-target-completer-14 [] { ["ComprehendMedical_20181030.ListRxNormInferenceJobs"] }
 def x-amz-target-completer-15 [] { ["ComprehendMedical_20181030.ListSNOMEDCTInferenceJobs"] }
+def language-code-completer [] { ["en"] }
 def x-amz-target-completer-16 [] { ["ComprehendMedical_20181030.StartEntitiesDetectionV2Job"] }
 def x-amz-target-completer-17 [] { ["ComprehendMedical_20181030.StartICD10CMInferenceJob"] }
 def x-amz-target-completer-18 [] { ["ComprehendMedical_20181030.StartPHIDetectionJob"] }
@@ -167,12 +168,13 @@ export def "describe-entities-detection-v2-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  job_id: any
-]: any -> record<ComprehendMedicalAsyncJobProperties: record<JobId: record, JobName: record, JobStatus: record, Message: record, SubmitTime: record, EndTime: record, ExpirationTime: record, InputDataConfig: record<S3Bucket: record, S3Key: record>, OutputDataConfig: record<S3Bucket: record, S3Key: record>, LanguageCode: record, DataAccessRoleArn: record, ManifestFilePath: record, KMSKey: record, ModelVersion: record>> {
+  --x-amz-target: string@x-amz-target-completer # required
+  job_id: string # The identifier that Comprehend Medical; generated for the job. The StartEntitiesDetectionV2Job operation returns this identifier in its response.
+]: any -> record<ComprehendMedicalAsyncJobProperties: record<JobId: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, ExpirationTime: string, InputDataConfig: record<S3Bucket: string, S3Key: string>, OutputDataConfig: record<S3Bucket: string, S3Key: string>, LanguageCode: string, DataAccessRoleArn: string, ManifestFilePath: string, KMSKey: string, ModelVersion: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.DescribeEntitiesDetectionV2Job")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -215,12 +217,13 @@ export def "describe-icd10cm-inference-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  job_id: any
-]: any -> record<ComprehendMedicalAsyncJobProperties: record<JobId: record, JobName: record, JobStatus: record, Message: record, SubmitTime: record, EndTime: record, ExpirationTime: record, InputDataConfig: record<S3Bucket: record, S3Key: record>, OutputDataConfig: record<S3Bucket: record, S3Key: record>, LanguageCode: record, DataAccessRoleArn: record, ManifestFilePath: record, KMSKey: record, ModelVersion: record>> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  job_id: string # The identifier that Amazon Comprehend Medical generated for the job. The StartICD10CMInferenceJob operation returns this identifier in its response.
+]: any -> record<ComprehendMedicalAsyncJobProperties: record<JobId: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, ExpirationTime: string, InputDataConfig: record<S3Bucket: string, S3Key: string>, OutputDataConfig: record<S3Bucket: string, S3Key: string>, LanguageCode: string, DataAccessRoleArn: string, ManifestFilePath: string, KMSKey: string, ModelVersion: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.DescribeICD10CMInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -263,12 +266,13 @@ export def "describe-phi-detection-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  job_id: any
-]: any -> record<ComprehendMedicalAsyncJobProperties: record<JobId: record, JobName: record, JobStatus: record, Message: record, SubmitTime: record, EndTime: record, ExpirationTime: record, InputDataConfig: record<S3Bucket: record, S3Key: record>, OutputDataConfig: record<S3Bucket: record, S3Key: record>, LanguageCode: record, DataAccessRoleArn: record, ManifestFilePath: record, KMSKey: record, ModelVersion: record>> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  job_id: string # The identifier that Comprehend Medical; generated for the job. The StartPHIDetectionJob operation returns this identifier in its response.
+]: any -> record<ComprehendMedicalAsyncJobProperties: record<JobId: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, ExpirationTime: string, InputDataConfig: record<S3Bucket: string, S3Key: string>, OutputDataConfig: record<S3Bucket: string, S3Key: string>, LanguageCode: string, DataAccessRoleArn: string, ManifestFilePath: string, KMSKey: string, ModelVersion: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.DescribePHIDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -311,12 +315,13 @@ export def "describe-rx-norm-inference-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  job_id: any
-]: any -> record<ComprehendMedicalAsyncJobProperties: record<JobId: record, JobName: record, JobStatus: record, Message: record, SubmitTime: record, EndTime: record, ExpirationTime: record, InputDataConfig: record<S3Bucket: record, S3Key: record>, OutputDataConfig: record<S3Bucket: record, S3Key: record>, LanguageCode: record, DataAccessRoleArn: record, ManifestFilePath: record, KMSKey: record, ModelVersion: record>> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  job_id: string # The identifier that Amazon Comprehend Medical generated for the job. The StartRxNormInferenceJob operation returns this identifier in its response.
+]: any -> record<ComprehendMedicalAsyncJobProperties: record<JobId: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, ExpirationTime: string, InputDataConfig: record<S3Bucket: string, S3Key: string>, OutputDataConfig: record<S3Bucket: string, S3Key: string>, LanguageCode: string, DataAccessRoleArn: string, ManifestFilePath: string, KMSKey: string, ModelVersion: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.DescribeRxNormInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -359,12 +364,13 @@ export def "describe-snomedct-inference-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  job_id: any
-]: any -> record<ComprehendMedicalAsyncJobProperties: record<JobId: record, JobName: record, JobStatus: record, Message: record, SubmitTime: record, EndTime: record, ExpirationTime: record, InputDataConfig: record<S3Bucket: record, S3Key: record>, OutputDataConfig: record<S3Bucket: record, S3Key: record>, LanguageCode: record, DataAccessRoleArn: record, ManifestFilePath: record, KMSKey: record, ModelVersion: record>> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  job_id: string # The identifier that Amazon Comprehend Medical generated for the job. The StartSNOMEDCTInferenceJob operation returns this identifier in its response.
+]: any -> record<ComprehendMedicalAsyncJobProperties: record<JobId: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, ExpirationTime: string, InputDataConfig: record<S3Bucket: string, S3Key: string>, OutputDataConfig: record<S3Bucket: string, S3Key: string>, LanguageCode: string, DataAccessRoleArn: string, ManifestFilePath: string, KMSKey: string, ModelVersion: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.DescribeSNOMEDCTInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -409,12 +415,13 @@ export def "detect-entities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  text: any
-]: any -> record<Entities: record, UnmappedAttributes: record, PaginationToken: record, ModelVersion: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  text: string # A UTF-8 text string containing the clinical content being examined for entities. Each string must contain fewer than 20,000 bytes of characters.
+]: any -> record<Entities: table<Id: int, BeginOffset: int, EndOffset: int, Score: float, Text: string, Category: string, Type: string, Traits: list, Attributes: list>, UnmappedAttributes: table<Type: string, Attribute: record>, PaginationToken: string, ModelVersion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.DetectEntities")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -457,12 +464,13 @@ export def "detect-entities-v2" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  text: any
-]: any -> record<Entities: record, UnmappedAttributes: record, PaginationToken: record, ModelVersion: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  text: string # A UTF-8 string containing the clinical content being examined for entities. Each string must contain fewer than 20,000 bytes of characters.
+]: any -> record<Entities: table<Id: int, BeginOffset: int, EndOffset: int, Score: float, Text: string, Category: string, Type: string, Traits: list, Attributes: list>, UnmappedAttributes: table<Type: string, Attribute: record>, PaginationToken: string, ModelVersion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.DetectEntitiesV2")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -505,12 +513,13 @@ export def "detect-phi" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  text: any
-]: any -> record<Entities: record, PaginationToken: record, ModelVersion: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  text: string # A UTF-8 text string containing the clinical content being examined for PHI entities. Each string must contain fewer than 20,000 bytes of characters.
+]: any -> record<Entities: table<Id: int, BeginOffset: int, EndOffset: int, Score: float, Text: string, Category: string, Type: string, Traits: list, Attributes: list>, PaginationToken: string, ModelVersion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.DetectPHI")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -553,12 +562,13 @@ export def "infer-icd10cm" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  text: any
-]: any -> record<Entities: record, PaginationToken: record, ModelVersion: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  text: string # The input text used for analysis. The input for InferICD10CM is a string from 1 to 10000 characters.
+]: any -> record<Entities: table<Id: int, Text: string, Category: string, Type: string, Score: float, BeginOffset: int, EndOffset: int, Attributes: list, Traits: list, ICD10CMConcepts: list>, PaginationToken: string, ModelVersion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.InferICD10CM")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -601,12 +611,13 @@ export def "infer-rx-norm" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  text: any
-]: any -> record<Entities: record, PaginationToken: record, ModelVersion: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  text: string # The input text used for analysis. The input for InferRxNorm is a string from 1 to 10000 characters.
+]: any -> record<Entities: table<Id: int, Text: string, Category: string, Type: string, Score: float, BeginOffset: int, EndOffset: int, Attributes: list, Traits: list, RxNormConcepts: list>, PaginationToken: string, ModelVersion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.InferRxNorm")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -649,12 +660,13 @@ export def "infer-snomedct" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  text: any
-]: any -> record<Entities: record, PaginationToken: record, ModelVersion: record, SNOMEDCTDetails: record<Edition: record, Language: record, VersionDate: record>, Characters: record<OriginalTextCharacters: record>> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  text: string # The input text to be analyzed using InferSNOMEDCT. The text should be a string with 1 to 10000 characters.
+]: any -> record<Entities: table<Id: int, Text: string, Category: string, Type: string, Score: float, BeginOffset: int, EndOffset: int, Attributes: list, Traits: list, SNOMEDCTConcepts: list>, PaginationToken: string, ModelVersion: string, SNOMEDCTDetails: record<Edition: string, Language: string, VersionDate: string>, Characters: record<OriginalTextCharacters: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.InferSNOMEDCT")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -680,6 +692,7 @@ export def "infer-snomedct" [
 #
 # POST /
 # operationId: ListEntitiesDetectionV2Jobs
+# --Filter shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"PARTIAL_SUCCESS"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
 export def "list-entities-detection-v2-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -697,14 +710,15 @@ export def "list-entities-detection-v2-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  --filter: any
-  --next-token: any
-  --max-results: any
-]: any -> record<ComprehendMedicalAsyncJobPropertiesList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  --filter: record # Provides information for filtering a list of detection jobs. — shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"PARTIAL_SUCCESS"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
+  --next-token: string # Identifies the next page of results to return.
+  --max-results: int # The maximum number of results to return in each page. The default is 100.
+]: any -> record<ComprehendMedicalAsyncJobPropertiesList: table<JobId: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, ExpirationTime: string, InputDataConfig: record, OutputDataConfig: record, LanguageCode: string, DataAccessRoleArn: string, ManifestFilePath: string, KMSKey: string, ModelVersion: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.ListEntitiesDetectionV2Jobs")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Filter": $filter, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -730,6 +744,7 @@ export def "list-entities-detection-v2-jobs" [
 #
 # POST /
 # operationId: ListICD10CMInferenceJobs
+# --Filter shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"PARTIAL_SUCCESS"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
 export def "list-icd10cm-inference-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -747,14 +762,15 @@ export def "list-icd10cm-inference-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  --filter: any
-  --next-token: any
-  --max-results: any
-]: any -> record<ComprehendMedicalAsyncJobPropertiesList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  --filter: record # Provides information for filtering a list of detection jobs. — shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"PARTIAL_SUCCESS"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
+  --next-token: string # Identifies the next page of results to return.
+  --max-results: int # The maximum number of results to return in each page. The default is 100.
+]: any -> record<ComprehendMedicalAsyncJobPropertiesList: table<JobId: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, ExpirationTime: string, InputDataConfig: record, OutputDataConfig: record, LanguageCode: string, DataAccessRoleArn: string, ManifestFilePath: string, KMSKey: string, ModelVersion: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.ListICD10CMInferenceJobs")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Filter": $filter, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -780,6 +796,7 @@ export def "list-icd10cm-inference-jobs" [
 #
 # POST /
 # operationId: ListPHIDetectionJobs
+# --Filter shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"PARTIAL_SUCCESS"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
 export def "list-phi-detection-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -797,14 +814,15 @@ export def "list-phi-detection-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  --filter: any
-  --next-token: any
-  --max-results: any
-]: any -> record<ComprehendMedicalAsyncJobPropertiesList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  --filter: record # Provides information for filtering a list of detection jobs. — shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"PARTIAL_SUCCESS"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
+  --next-token: string # Identifies the next page of results to return.
+  --max-results: int # The maximum number of results to return in each page. The default is 100.
+]: any -> record<ComprehendMedicalAsyncJobPropertiesList: table<JobId: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, ExpirationTime: string, InputDataConfig: record, OutputDataConfig: record, LanguageCode: string, DataAccessRoleArn: string, ManifestFilePath: string, KMSKey: string, ModelVersion: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.ListPHIDetectionJobs")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Filter": $filter, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -830,6 +848,7 @@ export def "list-phi-detection-jobs" [
 #
 # POST /
 # operationId: ListRxNormInferenceJobs
+# --Filter shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"PARTIAL_SUCCESS"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
 export def "list-rx-norm-inference-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -847,14 +866,15 @@ export def "list-rx-norm-inference-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  --filter: any
-  --next-token: any
-  --max-results: any
-]: any -> record<ComprehendMedicalAsyncJobPropertiesList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  --filter: record # Provides information for filtering a list of detection jobs. — shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"PARTIAL_SUCCESS"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
+  --next-token: string # Identifies the next page of results to return.
+  --max-results: int # Identifies the next page of results to return.
+]: any -> record<ComprehendMedicalAsyncJobPropertiesList: table<JobId: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, ExpirationTime: string, InputDataConfig: record, OutputDataConfig: record, LanguageCode: string, DataAccessRoleArn: string, ManifestFilePath: string, KMSKey: string, ModelVersion: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.ListRxNormInferenceJobs")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Filter": $filter, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -880,7 +900,7 @@ export def "list-rx-norm-inference-jobs" [
 #
 # POST /
 # operationId: ListSNOMEDCTInferenceJobs
-# --Filter shape: {JobName?: any, JobStatus?: any, SubmitTimeBefore?: any, SubmitTimeAfter?: any}
+# --Filter shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"PARTIAL_SUCCESS"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
 export def "list-snomedct-inference-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -898,14 +918,15 @@ export def "list-snomedct-inference-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  --filter: record # Provides information for filtering a list of detection jobs. — shape: {JobName?: any, JobStatus?: any, SubmitTimeBefore?: any, SubmitTimeAfter?: any}
-  --next-token: any
-  --max-results: any
-]: any -> record<ComprehendMedicalAsyncJobPropertiesList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  --filter: record # Provides information for filtering a list of detection jobs. — shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"PARTIAL_SUCCESS"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
+  --next-token: string # Identifies the next page of InferSNOMEDCT results to return.
+  --max-results: int # The maximum number of results to return in each page. The default is 100.
+]: any -> record<ComprehendMedicalAsyncJobPropertiesList: table<JobId: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, ExpirationTime: string, InputDataConfig: record, OutputDataConfig: record, LanguageCode: string, DataAccessRoleArn: string, ManifestFilePath: string, KMSKey: string, ModelVersion: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.ListSNOMEDCTInferenceJobs")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Filter": $filter, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -931,6 +952,8 @@ export def "list-snomedct-inference-jobs" [
 #
 # POST /
 # operationId: StartEntitiesDetectionV2Job
+# --InputDataConfig shape: {S3Bucket: string, S3Key?: string}
+# --OutputDataConfig shape: {S3Bucket: string, S3Key?: string}
 export def "start-entities-detection-v2-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -948,18 +971,19 @@ export def "start-entities-detection-v2-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  input_data_config: any
-  output_data_config: any
-  data_access_role_arn: any
-  --job-name: any
-  --client-request-token: any
-  --kms-key: any
-  language_code: any
-]: any -> record<JobId: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  input_data_config: record # The input properties for an entities detection job. This includes the name of the S3 bucket and the path to the files to be analyzed. — shape: {S3Bucket: string, S3Key?: string}
+  output_data_config: record # The output properties for a detection job. — shape: {S3Bucket: string, S3Key?: string}
+  data_access_role_arn: string # The Amazon Resource Name (ARN) of the AWS Identity and Access Management (IAM) role that grants Comprehend Medical; read access to your input data. For more information, see Role-Based Permissions Required for Asynchronous Operations (https://docs.aws.amazon.com/comprehend/latest/dg/access-control-managing-permissions-med.html#auth-role-permissions-med).
+  --job-name: string # The identifier of the job.
+  --client-request-token: string # A unique identifier for the request. If you don't set the client request token, Comprehend Medical; generates one for you.
+  --kms-key: string # An AWS Key Management Service key to encrypt your output files. If you do not specify a key, the files are written in plain text.
+  language_code: string@language-code-completer # The language of the input documents. All documents must be in the same language. Comprehend Medical; processes files in US English (en).
+]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StartEntitiesDetectionV2Job")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "JobName": $job_name, "ClientRequestToken": $client_request_token, "KMSKey": $kms_key, "LanguageCode": $language_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -985,6 +1009,8 @@ export def "start-entities-detection-v2-job" [
 #
 # POST /
 # operationId: StartICD10CMInferenceJob
+# --InputDataConfig shape: {S3Bucket: string, S3Key?: string}
+# --OutputDataConfig shape: {S3Bucket: string, S3Key?: string}
 export def "start-icd10cm-inference-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1002,18 +1028,19 @@ export def "start-icd10cm-inference-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  input_data_config: any
-  output_data_config: any
-  data_access_role_arn: any
-  --job-name: any
-  --client-request-token: any
-  --kms-key: any
-  language_code: any
-]: any -> record<JobId: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  input_data_config: record # The input properties for an entities detection job. This includes the name of the S3 bucket and the path to the files to be analyzed. — shape: {S3Bucket: string, S3Key?: string}
+  output_data_config: record # The output properties for a detection job. — shape: {S3Bucket: string, S3Key?: string}
+  data_access_role_arn: string # The Amazon Resource Name (ARN) of the AWS Identity and Access Management (IAM) role that grants Comprehend Medical; read access to your input data. For more information, see Role-Based Permissions Required for Asynchronous Operations (https://docs.aws.amazon.com/comprehend/latest/dg/access-control-managing-permissions-med.html#auth-role-permissions-med).
+  --job-name: string # The identifier of the job.
+  --client-request-token: string # A unique identifier for the request. If you don't set the client request token, Comprehend Medical; generates one.
+  --kms-key: string # An AWS Key Management Service key to encrypt your output files. If you do not specify a key, the files are written in plain text.
+  language_code: string@language-code-completer # The language of the input documents. All documents must be in the same language.
+]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StartICD10CMInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "JobName": $job_name, "ClientRequestToken": $client_request_token, "KMSKey": $kms_key, "LanguageCode": $language_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1039,6 +1066,8 @@ export def "start-icd10cm-inference-job" [
 #
 # POST /
 # operationId: StartPHIDetectionJob
+# --InputDataConfig shape: {S3Bucket: string, S3Key?: string}
+# --OutputDataConfig shape: {S3Bucket: string, S3Key?: string}
 export def "start-phi-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1056,18 +1085,19 @@ export def "start-phi-detection-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  input_data_config: any
-  output_data_config: any
-  data_access_role_arn: any
-  --job-name: any
-  --client-request-token: any
-  --kms-key: any
-  language_code: any
-]: any -> record<JobId: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  input_data_config: record # The input properties for an entities detection job. This includes the name of the S3 bucket and the path to the files to be analyzed. — shape: {S3Bucket: string, S3Key?: string}
+  output_data_config: record # The output properties for a detection job. — shape: {S3Bucket: string, S3Key?: string}
+  data_access_role_arn: string # The Amazon Resource Name (ARN) of the AWS Identity and Access Management (IAM) role that grants Comprehend Medical; read access to your input data. For more information, see Role-Based Permissions Required for Asynchronous Operations (https://docs.aws.amazon.com/comprehend/latest/dg/access-control-managing-permissions-med.html#auth-role-permissions-med).
+  --job-name: string # The identifier of the job.
+  --client-request-token: string # A unique identifier for the request. If you don't set the client request token, Comprehend Medical; generates one.
+  --kms-key: string # An AWS Key Management Service key to encrypt your output files. If you do not specify a key, the files are written in plain text.
+  language_code: string@language-code-completer # The language of the input documents. All documents must be in the same language.
+]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StartPHIDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "JobName": $job_name, "ClientRequestToken": $client_request_token, "KMSKey": $kms_key, "LanguageCode": $language_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1093,6 +1123,8 @@ export def "start-phi-detection-job" [
 #
 # POST /
 # operationId: StartRxNormInferenceJob
+# --InputDataConfig shape: {S3Bucket: string, S3Key?: string}
+# --OutputDataConfig shape: {S3Bucket: string, S3Key?: string}
 export def "start-rx-norm-inference-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1110,18 +1142,19 @@ export def "start-rx-norm-inference-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  input_data_config: any
-  output_data_config: any
-  data_access_role_arn: any
-  --job-name: any
-  --client-request-token: any
-  --kms-key: any
-  language_code: any
-]: any -> record<JobId: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  input_data_config: record # The input properties for an entities detection job. This includes the name of the S3 bucket and the path to the files to be analyzed. — shape: {S3Bucket: string, S3Key?: string}
+  output_data_config: record # The output properties for a detection job. — shape: {S3Bucket: string, S3Key?: string}
+  data_access_role_arn: string # The Amazon Resource Name (ARN) of the AWS Identity and Access Management (IAM) role that grants Comprehend Medical; read access to your input data. For more information, see Role-Based Permissions Required for Asynchronous Operations (https://docs.aws.amazon.com/comprehend/latest/dg/access-control-managing-permissions-med.html#auth-role-permissions-med).
+  --job-name: string # The identifier of the job.
+  --client-request-token: string # A unique identifier for the request. If you don't set the client request token, Comprehend Medical; generates one.
+  --kms-key: string # An AWS Key Management Service key to encrypt your output files. If you do not specify a key, the files are written in plain text.
+  language_code: string@language-code-completer # The language of the input documents. All documents must be in the same language.
+]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StartRxNormInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "JobName": $job_name, "ClientRequestToken": $client_request_token, "KMSKey": $kms_key, "LanguageCode": $language_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1147,8 +1180,8 @@ export def "start-rx-norm-inference-job" [
 #
 # POST /
 # operationId: StartSNOMEDCTInferenceJob
-# --InputDataConfig shape: {S3Bucket: any, S3Key?: any}
-# --OutputDataConfig shape: {S3Bucket: any, S3Key?: any}
+# --InputDataConfig shape: {S3Bucket: string, S3Key?: string}
+# --OutputDataConfig shape: {S3Bucket: string, S3Key?: string}
 export def "start-snomedct-inference-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1166,18 +1199,19 @@ export def "start-snomedct-inference-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  input_data_config: record # The input properties for an entities detection job. This includes the name of the S3 bucket and the path to the files to be analyzed. — shape: {S3Bucket: any, S3Key?: any}
-  output_data_config: record # The output properties for a detection job. — shape: {S3Bucket: any, S3Key?: any}
-  data_access_role_arn: any
-  --job-name: any
-  --client-request-token: any
-  --kms-key: any
-  language_code: any
-]: any -> record<JobId: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  input_data_config: record # The input properties for an entities detection job. This includes the name of the S3 bucket and the path to the files to be analyzed. — shape: {S3Bucket: string, S3Key?: string}
+  output_data_config: record # The output properties for a detection job. — shape: {S3Bucket: string, S3Key?: string}
+  data_access_role_arn: string # The Amazon Resource Name (ARN) of the AWS Identity and Access Management (IAM) role that grants Amazon Comprehend Medical read access to your input data.
+  --job-name: string # The user generated name the asynchronous InferSNOMEDCT job.
+  --client-request-token: string # A unique identifier for the request. If you don't set the client request token, Amazon Comprehend Medical generates one.
+  --kms-key: string # An AWS Key Management Service key used to encrypt your output files. If you do not specify a key, the files are written in plain text.
+  language_code: string@language-code-completer # The language of the input documents. All documents must be in the same language.
+]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StartSNOMEDCTInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "JobName": $job_name, "ClientRequestToken": $client_request_token, "KMSKey": $kms_key, "LanguageCode": $language_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1220,12 +1254,13 @@ export def "stop-entities-detection-v2-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  job_id: any
-]: any -> record<JobId: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  job_id: string # The identifier of the medical entities job to stop.
+]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StopEntitiesDetectionV2Job")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1268,12 +1303,13 @@ export def "stop-icd10cm-inference-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  job_id: any
-]: any -> record<JobId: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  job_id: string # The identifier of the job.
+]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StopICD10CMInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1316,12 +1352,13 @@ export def "stop-phi-detection-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  job_id: any
-]: any -> record<JobId: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  job_id: string # The identifier of the PHI detection job to stop.
+]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StopPHIDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1364,12 +1401,13 @@ export def "stop-rx-norm-inference-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  job_id: any
-]: any -> record<JobId: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  job_id: string # The identifier of the job.
+]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StopRxNormInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1412,12 +1450,13 @@ export def "stop-snomedct-inference-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  job_id: any
-]: any -> record<JobId: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  job_id: string # The job id of the asynchronous InferSNOMEDCT job to be stopped.
+]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StopSNOMEDCTInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

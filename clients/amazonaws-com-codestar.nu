@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -159,16 +159,17 @@ export def "associate-team-member" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  project_id: any
-  --client-request-token: any
-  user_arn: any
-  project_role: any
-  --remote-access-allowed: any
-]: any -> record<clientRequestToken: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  project_id: string # The ID of the project to which you will add the IAM user.
+  --client-request-token: string # A user- or system-generated token that identifies the entity that requested the team member association to the project. This token can be used to repeat the request.
+  user_arn: string # The Amazon Resource Name (ARN) for the IAM user you want to add to the AWS CodeStar project.
+  project_role: string # The AWS CodeStar project role that will apply to this user. This role determines what actions a user can take in an AWS CodeStar project.
+  --remote-access-allowed: oneof<nothing, bool> # Whether the team member is allowed to use an SSH public/private key pair to remotely access project resources, for example Amazon EC2 instances.
+]: any -> record<clientRequestToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeStar_20170419.AssociateTeamMember")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"projectId": $project_id, "clientRequestToken": $client_request_token, "userArn": $user_arn, "projectRole": $project_role, "remoteAccessAllowed": $remote_access_allowed} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -194,6 +195,8 @@ export def "associate-team-member" [
 #
 # POST /
 # operationId: CreateProject
+# --sourceCode item shape: {source: record, destination: record}
+# --toolchain shape: {source: record, roleArn?: string, stackParameters?: record}
 export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -211,18 +214,19 @@ export def "create-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  name: any
-  id: any
-  --description: any
-  --client-request-token: any
-  --source-code: any
-  --toolchain: any
-  --tags: any
-]: any -> record<id: record, arn: record, clientRequestToken: record, projectTemplateId: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  name: string # The display name for the project to be created in AWS CodeStar. (format: password)
+  id: string # The ID of the project to be created in AWS CodeStar.
+  --description: string # The description of the project, if any. (format: password)
+  --client-request-token: string # A user- or system-generated token that identifies the entity that requested project creation. This token can be used to repeat the request.
+  --source-code: list # A list of the Code objects submitted with the project request. If this parameter is specified, the request must also include the toolchain parameter. — item shape: {source: record, destination: record}
+  --toolchain: record # The toolchain template file provided with the project request. AWS CodeStar uses the template to provision the toolchain stack in AWS CloudFormation. — shape: {source: record, roleArn?: string, stackParameters?: record}
+  --tags: record # The tags created for the project.
+]: any -> record<id: string, arn: string, clientRequestToken: string, projectTemplateId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeStar_20170419.CreateProject")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "id": $id, "description": $description, "clientRequestToken": $client_request_token, "sourceCode": $source_code, "toolchain": $toolchain, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -265,15 +269,16 @@ export def "create-user-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  user_arn: any
-  display_name: any
-  email_address: any
-  --ssh-public-key: any
-]: any -> record<userArn: record, displayName: record, emailAddress: record, sshPublicKey: record, createdTimestamp: record, lastModifiedTimestamp: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  user_arn: string # The Amazon Resource Name (ARN) of the user in IAM.
+  display_name: string # The name that will be displayed as the friendly name for the user in AWS CodeStar. (format: password)
+  email_address: string # The email address that will be displayed as part of the user's profile in AWS CodeStar. (format: password)
+  --ssh-public-key: string # The SSH public key associated with the user in AWS CodeStar. If a project owner allows the user remote access to project resources, this public key will be used along with the user's private key for SSH access.
+]: any -> record<userArn: string, displayName: string, emailAddress: string, sshPublicKey: string, createdTimestamp: string, lastModifiedTimestamp: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeStar_20170419.CreateUserProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"userArn": $user_arn, "displayName": $display_name, "emailAddress": $email_address, "sshPublicKey": $ssh_public_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -316,14 +321,15 @@ export def "delete-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  id: any
-  --client-request-token: any
-  --delete-stack: any
-]: any -> record<stackId: record, projectArn: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  id: string # The ID of the project to be deleted in AWS CodeStar.
+  --client-request-token: string # A user- or system-generated token that identifies the entity that requested project deletion. This token can be used to repeat the request.
+  --delete-stack: oneof<nothing, bool> # Whether to send a delete request for the primary stack in AWS CloudFormation originally used to generate the project and its resources. This option will delete all AWS resources for the project (except for any buckets in Amazon S3) as well as deleting the project itself. Recommended for most use cases.
+]: any -> record<stackId: string, projectArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeStar_20170419.DeleteProject")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id, "clientRequestToken": $client_request_token, "deleteStack": $delete_stack} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -366,12 +372,13 @@ export def "delete-user-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  user_arn: any
-]: any -> record<userArn: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  user_arn: string # The Amazon Resource Name (ARN) of the user to delete from AWS CodeStar.
+]: any -> record<userArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeStar_20170419.DeleteUserProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"userArn": $user_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -414,12 +421,13 @@ export def "describe-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  id: any
-]: any -> record<name: record, id: record, arn: record, description: record, clientRequestToken: record, createdTimeStamp: record, stackId: record, projectTemplateId: record, status: record<state: record, reason: record>> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  id: string # The ID of the project.
+]: any -> record<name: string, id: string, arn: string, description: string, clientRequestToken: string, createdTimeStamp: string, stackId: string, projectTemplateId: string, status: record<state: string, reason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeStar_20170419.DescribeProject")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -462,12 +470,13 @@ export def "describe-user-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  user_arn: any
-]: any -> record<userArn: record, displayName: record, emailAddress: record, sshPublicKey: record, createdTimestamp: record, lastModifiedTimestamp: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  user_arn: string # The Amazon Resource Name (ARN) of the user.
+]: any -> record<userArn: string, displayName: string, emailAddress: string, sshPublicKey: string, createdTimestamp: string, lastModifiedTimestamp: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeStar_20170419.DescribeUserProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"userArn": $user_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -510,13 +519,14 @@ export def "disassociate-team-member" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  project_id: any
-  user_arn: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  project_id: string # The ID of the AWS CodeStar project from which you want to remove a team member.
+  user_arn: string # The Amazon Resource Name (ARN) of the IAM user or group whom you want to remove from the project.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeStar_20170419.DisassociateTeamMember")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"projectId": $project_id, "userArn": $user_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -559,13 +569,14 @@ export def "list-projects" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  --next-token: any
-  --max-results: any
-]: any -> record<projects: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  --next-token: string # The continuation token to be used to return the next set of results, if the results cannot be returned in one response.
+  --max-results: int # The maximum amount of data that can be contained in a single set of results.
+]: any -> record<projects: table<projectId: string, projectArn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeStar_20170419.ListProjects")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"nextToken": $next_token, "maxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -608,14 +619,15 @@ export def "list-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  project_id: any
-  --next-token: any
-  --max-results: any
-]: any -> record<resources: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  project_id: string # The ID of the project.
+  --next-token: string # The continuation token for the next set of results, if the results cannot be returned in one response.
+  --max-results: int # The maximum amount of data that can be contained in a single set of results.
+]: any -> record<resources: table<id: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeStar_20170419.ListResources")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"projectId": $project_id, "nextToken": $next_token, "maxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -658,14 +670,15 @@ export def "list-tags-for-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  id: any
-  --next-token: any
-  --max-results: any
-]: any -> record<tags: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  id: string # The ID of the project to get tags for.
+  --next-token: string # Reserved for future use.
+  --max-results: int # Reserved for future use.
+]: any -> record<tags: record, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeStar_20170419.ListTagsForProject")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id, "nextToken": $next_token, "maxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -708,14 +721,15 @@ export def "list-team-members" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  project_id: any
-  --next-token: any
-  --max-results: any
-]: any -> record<teamMembers: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  project_id: string # The ID of the project for which you want to list team members.
+  --next-token: string # The continuation token for the next set of results, if the results cannot be returned in one response.
+  --max-results: int # The maximum number of team members you want returned in a response.
+]: any -> record<teamMembers: table<userArn: string, projectRole: string, remoteAccessAllowed: bool>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeStar_20170419.ListTeamMembers")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"projectId": $project_id, "nextToken": $next_token, "maxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -758,13 +772,14 @@ export def "list-user-profiles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  --next-token: any
-  --max-results: any
-]: any -> record<userProfiles: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  --next-token: string # The continuation token for the next set of results, if the results cannot be returned in one response.
+  --max-results: int # The maximum number of results to return in a response.
+]: any -> record<userProfiles: table<userArn: string, displayName: string, emailAddress: string, sshPublicKey: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeStar_20170419.ListUserProfiles")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"nextToken": $next_token, "maxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -807,13 +822,14 @@ export def "tag-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  id: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  id: string # The ID of the project you want to add a tag to.
+  tags: record # The tags you want to add to the project.
 ]: any -> record<tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeStar_20170419.TagProject")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -856,13 +872,14 @@ export def "untag-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  id: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  id: string # The ID of the project to remove tags from.
+  tags: list<string> # The tags to remove from the project.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeStar_20170419.UntagProject")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -905,14 +922,15 @@ export def "update-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  id: any
-  --name: any
-  --description: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  id: string # The ID of the project you want to update.
+  --name: string # The name of the project you want to update. (format: password)
+  --description: string # The description of the project, if any. (format: password)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeStar_20170419.UpdateProject")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id, "name": $name, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -955,15 +973,16 @@ export def "update-team-member" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  project_id: any
-  user_arn: any
-  --project-role: any
-  --remote-access-allowed: any
-]: any -> record<userArn: record, projectRole: record, remoteAccessAllowed: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  project_id: string # The ID of the project.
+  user_arn: string # The Amazon Resource Name (ARN) of the user for whom you want to change team membership attributes.
+  --project-role: string # The role assigned to the user in the project. Project roles have different levels of access. For more information, see Working with Teams (http://docs.aws.amazon.com/codestar/latest/userguide/working-with-teams.html) in the AWS CodeStar User Guide.
+  --remote-access-allowed: oneof<nothing, bool> # Whether a team member is allowed to remotely access project resources using the SSH public key associated with the user's profile. Even if this is set to True, the user must associate a public key with their profile before the user can access resources.
+]: any -> record<userArn: string, projectRole: string, remoteAccessAllowed: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeStar_20170419.UpdateTeamMember")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"projectId": $project_id, "userArn": $user_arn, "projectRole": $project_role, "remoteAccessAllowed": $remote_access_allowed} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1006,15 +1025,16 @@ export def "update-user-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  user_arn: any
-  --display-name: any
-  --email-address: any
-  --ssh-public-key: any
-]: any -> record<userArn: record, displayName: record, emailAddress: record, sshPublicKey: record, createdTimestamp: record, lastModifiedTimestamp: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  user_arn: string # The name that will be displayed as the friendly name for the user in AWS CodeStar.
+  --display-name: string # The name that is displayed as the friendly name for the user in AWS CodeStar. (format: password)
+  --email-address: string # The email address that is displayed as part of the user's profile in AWS CodeStar. (format: password)
+  --ssh-public-key: string # The SSH public key associated with the user in AWS CodeStar. If a project owner allows the user remote access to project resources, this public key will be used along with the user's private key for SSH access.
+]: any -> record<userArn: string, displayName: string, emailAddress: string, sshPublicKey: string, createdTimestamp: string, lastModifiedTimestamp: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodeStar_20170419.UpdateUserProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"userArn": $user_arn, "displayName": $display_name, "emailAddress": $email_address, "sshPublicKey": $ssh_public_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

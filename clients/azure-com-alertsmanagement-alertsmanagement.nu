@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -170,11 +170,13 @@ export def "alerts-meta-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # client API version
-  --identifier: string@identifier-completer # Identification of the information to be retrieved by API call.
+  --api-version: string@api-version-completer # client API version (required)
+  --identifier: string@identifier-completer # Identification of the information to be retrieved by API call. (required)
 ]: nothing -> record<properties: record<metadataIdentifier: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2019-05-05-preview")
+  let identifier = ($identifier | default "MonitorServiceList")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "identifier" $identifier "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.AlertsManagement/alertsMetaData" $qp $auth.query)
   let accept_val = "application/json"
@@ -207,10 +209,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # client API version
+  --api-version: string@api-version-completer # client API version (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2019-05-05-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.AlertsManagement/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -254,11 +257,12 @@ export def "action-rules-list-by-subscription" [
   --alert-rule-id: string # filter by alert rule id
   --action-group: string # filter by action group configured as part of action rule
   --name: string # filter by action rule name
-  --api-version: string@api-version-completer # client API version
-]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: any>> {
+  --api-version: string@api-version-completer # client API version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: any, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-05-preview")
   let qp = [(serialize-qp "targetResourceGroup" $target_resource_group "scalar") (serialize-qp "targetResourceType" $target_resource_type "scalar") (serialize-qp "targetResource" $target_resource "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "monitorService" $monitor_service "scalar") (serialize-qp "impactedScope" $impacted_scope "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "alertRuleId" $alert_rule_id "scalar") (serialize-qp "actionGroup" $action_group "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/actionRules") $qp $auth.query)
   let accept_val = "application/json"
@@ -309,11 +313,12 @@ export def "alerts-get-all" [
   --select: string # This filter allows to selection of the fields(comma separated) which would be part of the essential section. This would allow to project only the required fields rather than getting entire content. Default is to fetch all the fields in the essentials section.
   --time-range: string@time-range-completer # Filter by time range by below listed values. Default value is 1 day.
   --custom-time-range: string # Filter by custom time range in the format <start-time>/<end-time> where time is in (ISO-8601 format)'. Permissible values is within 30 days from query time. Either timeRange or customTimeRange could be used but not both. Default is none.
-  --api-version: string@api-version-completer # client API version
+  --api-version: string@api-version-completer # client API version (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-05-preview")
   let qp = [(serialize-qp "targetResource" $target_resource "scalar") (serialize-qp "targetResourceType" $target_resource_type "scalar") (serialize-qp "targetResourceGroup" $target_resource_group "scalar") (serialize-qp "monitorService" $monitor_service "scalar") (serialize-qp "monitorCondition" $monitor_condition "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "alertState" $alert_state "scalar") (serialize-qp "alertRule" $alert_rule "scalar") (serialize-qp "smartGroupId" $smart_group_id "scalar") (serialize-qp "includeContext" $include_context "scalar") (serialize-qp "includeEgressConfig" $include_egress_config "scalar") (serialize-qp "pageCount" $page_count "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "timeRange" $time_range "scalar") (serialize-qp "customTimeRange" $custom_time_range "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alerts") $qp $auth.query)
   let accept_val = "application/json"
@@ -348,12 +353,13 @@ export def "alerts-get-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # client API version
+  --api-version: string@api-version-completer # client API version (required)
 ]: nothing -> record<properties: record<context: record, egressConfig: record, essentials: record<alertRule: string, alertState: string, lastModifiedDateTime: string, lastModifiedUserName: string, monitorCondition: string, monitorConditionResolvedDateTime: string, monitorService: string, severity: string, signalType: string, smartGroupId: string, smartGroupingReason: string, sourceCreatedId: string, startDateTime: string, targetResource: string, targetResourceGroup: string, targetResourceName: string, targetResourceType: string>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($alert_id | is-empty) { error make --unspanned { msg: "path parameter 'alertId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-05-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), alert_id: (encode-path-segment $alert_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alerts/{alert_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -388,13 +394,15 @@ export def "alerts-change-state" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # client API version
-  --new-state: string@new-state-completer # New state of the alert.
+  --api-version: string@api-version-completer # client API version (required)
+  --new-state: string@new-state-completer # New state of the alert. (required)
 ]: nothing -> record<properties: record<context: record, egressConfig: record, essentials: record<alertRule: string, alertState: string, lastModifiedDateTime: string, lastModifiedUserName: string, monitorCondition: string, monitorConditionResolvedDateTime: string, monitorService: string, severity: string, signalType: string, smartGroupId: string, smartGroupingReason: string, sourceCreatedId: string, startDateTime: string, targetResource: string, targetResourceGroup: string, targetResourceName: string, targetResourceType: string>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($alert_id | is-empty) { error make --unspanned { msg: "path parameter 'alertId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-05-preview")
+  if ($new_state == null) { error make --unspanned { msg: "required query parameter 'newState' missing: pass --new-state" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "newState" $new_state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), alert_id: (encode-path-segment $alert_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alerts/{alert_id}/changestate") $qp $auth.query)
   let accept_val = "application/json"
@@ -429,12 +437,13 @@ export def "alerts-get-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # client API version
+  --api-version: string@api-version-completer # client API version (required)
 ]: nothing -> record<properties: record<alertId: string, modifications: list<record>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($alert_id | is-empty) { error make --unspanned { msg: "path parameter 'alertId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-05-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), alert_id: (encode-path-segment $alert_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alerts/{alert_id}/history") $qp $auth.query)
   let accept_val = "application/json"
@@ -468,7 +477,7 @@ export def "alerts-get-summary" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groupby: string@groupby-completer # This parameter allows the result set to be grouped by input fields (Maximum 2 comma separated fields supported). For example, groupby=severity or groupby=severity,alertstate.
+  --groupby: string@groupby-completer # This parameter allows the result set to be grouped by input fields (Maximum 2 comma separated fields supported). For example, groupby=severity or groupby=severity,alertstate. (required)
   --include-smart-groups-count: oneof<nothing, bool> # Include count of the SmartGroups as part of the summary. Default value is 'false'.
   --target-resource: string # Filter by target resource( which is full ARM ID) Default value is select all.
   --target-resource-type: string # Filter by target resource type. Default value is select all.
@@ -480,11 +489,13 @@ export def "alerts-get-summary" [
   --alert-rule: string # Filter by specific alert rule. Default value is to select all.
   --time-range: string@time-range-completer # Filter by time range by below listed values. Default value is 1 day.
   --custom-time-range: string # Filter by custom time range in the format <start-time>/<end-time> where time is in (ISO-8601 format)'. Permissible values is within 30 days from query time. Either timeRange or customTimeRange could be used but not both. Default is none.
-  --api-version: string@api-version-completer # client API version
+  --api-version: string@api-version-completer # client API version (required)
 ]: nothing -> record<properties: record<groupedby: string, smartGroupsCount: int, total: int, values: list<record>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($groupby == null) { error make --unspanned { msg: "required query parameter 'groupby' missing: pass --groupby" } }
+  let api_version = ($api_version | default "2019-05-05-preview")
   let qp = [(serialize-qp "groupby" $groupby "scalar") (serialize-qp "includeSmartGroupsCount" $include_smart_groups_count "scalar") (serialize-qp "targetResource" $target_resource "scalar") (serialize-qp "targetResourceType" $target_resource_type "scalar") (serialize-qp "targetResourceGroup" $target_resource_group "scalar") (serialize-qp "monitorService" $monitor_service "scalar") (serialize-qp "monitorCondition" $monitor_condition "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "alertState" $alert_state "scalar") (serialize-qp "alertRule" $alert_rule "scalar") (serialize-qp "timeRange" $time_range "scalar") (serialize-qp "customTimeRange" $custom_time_range "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alertsSummary") $qp $auth.query)
   let accept_val = "application/json"
@@ -529,11 +540,12 @@ export def "smart-groups-get-all" [
   --page-count: int # Determines number of alerts returned per page in response. Permissible value is between 1 to 250. When the "includeContent" filter is selected, maximum value allowed is 25. Default value is 25.
   --sort-by: string@sort-by-completer-1 # Sort the query results by input field. Default value is sort by 'lastModifiedDateTime'.
   --sort-order: string@sort-order-completer # Sort the query results order in either ascending or descending. Default value is 'desc' for time fields and 'asc' for others.
-  --api-version: string@api-version-completer # client API version
+  --api-version: string@api-version-completer # client API version (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-05-preview")
   let qp = [(serialize-qp "targetResource" $target_resource "scalar") (serialize-qp "targetResourceGroup" $target_resource_group "scalar") (serialize-qp "targetResourceType" $target_resource_type "scalar") (serialize-qp "monitorService" $monitor_service "scalar") (serialize-qp "monitorCondition" $monitor_condition "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "smartGroupState" $smart_group_state "scalar") (serialize-qp "timeRange" $time_range "scalar") (serialize-qp "pageCount" $page_count "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/smartGroups") $qp $auth.query)
   let accept_val = "application/json"
@@ -568,12 +580,13 @@ export def "smart-groups-get-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # client API version
+  --api-version: string@api-version-completer # client API version (required)
 ]: nothing -> record<properties: record<alertSeverities: list<record>, alertStates: list<record>, alertsCount: int, lastModifiedDateTime: string, lastModifiedUserName: string, monitorConditions: list<record>, monitorServices: list<record>, nextLink: string, resourceGroups: list<record>, resourceTypes: list<record>, resources: list<record>, severity: string, smartGroupState: string, startDateTime: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($smart_group_id | is-empty) { error make --unspanned { msg: "path parameter 'smartGroupId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-05-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), smart_group_id: (encode-path-segment $smart_group_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/smartGroups/{smart_group_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -608,13 +621,15 @@ export def "smart-groups-change-state" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # client API version
-  --new-state: string@new-state-completer # New state of the alert.
+  --api-version: string@api-version-completer # client API version (required)
+  --new-state: string@new-state-completer # New state of the alert. (required)
 ]: nothing -> record<properties: record<alertSeverities: list<record>, alertStates: list<record>, alertsCount: int, lastModifiedDateTime: string, lastModifiedUserName: string, monitorConditions: list<record>, monitorServices: list<record>, nextLink: string, resourceGroups: list<record>, resourceTypes: list<record>, resources: list<record>, severity: string, smartGroupState: string, startDateTime: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($smart_group_id | is-empty) { error make --unspanned { msg: "path parameter 'smartGroupId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-05-preview")
+  if ($new_state == null) { error make --unspanned { msg: "required query parameter 'newState' missing: pass --new-state" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "newState" $new_state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), smart_group_id: (encode-path-segment $smart_group_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/smartGroups/{smart_group_id}/changeState") $qp $auth.query)
   let accept_val = "application/json"
@@ -649,12 +664,13 @@ export def "smart-groups-get-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # client API version
+  --api-version: string@api-version-completer # client API version (required)
 ]: nothing -> record<properties: record<modifications: list<record>, nextLink: string, smartGroupId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($smart_group_id | is-empty) { error make --unspanned { msg: "path parameter 'smartGroupId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-05-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), smart_group_id: (encode-path-segment $smart_group_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/smartGroups/{smart_group_id}/history") $qp $auth.query)
   let accept_val = "application/json"
@@ -699,12 +715,13 @@ export def "action-rules-list-by-resource-group" [
   --alert-rule-id: string # filter by alert rule id
   --action-group: string # filter by action group configured as part of action rule
   --name: string # filter by action rule name
-  --api-version: string@api-version-completer # client API version
-]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: any>> {
+  --api-version: string@api-version-completer # client API version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: any, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-05-preview")
   let qp = [(serialize-qp "targetResourceGroup" $target_resource_group "scalar") (serialize-qp "targetResourceType" $target_resource_type "scalar") (serialize-qp "targetResource" $target_resource "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "monitorService" $monitor_service "scalar") (serialize-qp "impactedScope" $impacted_scope "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "alertRuleId" $alert_rule_id "scalar") (serialize-qp "actionGroup" $action_group "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules") $qp $auth.query)
   let accept_val = "application/json"
@@ -740,13 +757,14 @@ export def "action-rules-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # client API version
+  --api-version: string@api-version-completer # client API version (required)
 ]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($action_rule_name | is-empty) { error make --unspanned { msg: "path parameter 'actionRuleName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-05-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), action_rule_name: (encode-path-segment $action_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules/{action_rule_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -782,13 +800,14 @@ export def "action-rules-get-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # client API version
-]: nothing -> record<properties: record<conditions: record<alertContext: record, alertRuleId: record, description: record, monitorCondition: record, monitorService: record, severity: record, targetResourceType: record>, createdAt: string, createdBy: string, description: string, lastModifiedAt: string, lastModifiedBy: string, scope: record<scopeType: string, values: list>, status: string, type: string>, location: string, tags: any> {
+  --api-version: string@api-version-completer # client API version (required)
+]: nothing -> record<properties: record<conditions: record<alertContext: record, alertRuleId: record, description: record, monitorCondition: record, monitorService: record, severity: record, targetResourceType: record>, createdAt: string, createdBy: string, description: string, lastModifiedAt: string, lastModifiedBy: string, scope: record<scopeType: string, values: list>, status: string, type: string>, location: string, tags: any, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($action_rule_name | is-empty) { error make --unspanned { msg: "path parameter 'actionRuleName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-05-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), action_rule_name: (encode-path-segment $action_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules/{action_rule_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -825,16 +844,17 @@ export def "action-rules-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # client API version
+  --api-version: string@api-version-completer # client API version (required)
   --properties: any # Action rule properties supported by patch — shape: {status?: "Enabled"|"Disabled"}
   --tags: record # tags to be updated
-]: any -> record<properties: record<conditions: record<alertContext: record, alertRuleId: record, description: record, monitorCondition: record, monitorService: record, severity: record, targetResourceType: record>, createdAt: string, createdBy: string, description: string, lastModifiedAt: string, lastModifiedBy: string, scope: record<scopeType: string, values: list>, status: string, type: string>, location: string, tags: any> {
+]: any -> record<properties: record<conditions: record<alertContext: record, alertRuleId: record, description: record, monitorCondition: record, monitorService: record, severity: record, targetResourceType: record>, createdAt: string, createdBy: string, description: string, lastModifiedAt: string, lastModifiedBy: string, scope: record<scopeType: string, values: list>, status: string, type: string>, location: string, tags: any, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($action_rule_name | is-empty) { error make --unspanned { msg: "path parameter 'actionRuleName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-05-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), action_rule_name: (encode-path-segment $action_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules/{action_rule_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -873,17 +893,18 @@ export def "action-rules-create-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # client API version
+  --api-version: string@api-version-completer # client API version (required)
   --properties: any # Action rule properties defining scope, conditions, suppression logic for action rule — shape: {conditions?: record, description?: string, scope?: record, status?: "Enabled"|"Disabled", type: "Suppression"|"ActionGroup"|"Diagnostics"}
   location: string # Resource location
   --tags: any # Resource tags
-]: any -> record<properties: record<conditions: record<alertContext: record, alertRuleId: record, description: record, monitorCondition: record, monitorService: record, severity: record, targetResourceType: record>, createdAt: string, createdBy: string, description: string, lastModifiedAt: string, lastModifiedBy: string, scope: record<scopeType: string, values: list>, status: string, type: string>, location: string, tags: any> {
+]: any -> record<properties: record<conditions: record<alertContext: record, alertRuleId: record, description: record, monitorCondition: record, monitorService: record, severity: record, targetResourceType: record>, createdAt: string, createdBy: string, description: string, lastModifiedAt: string, lastModifiedBy: string, scope: record<scopeType: string, values: list>, status: string, type: string>, location: string, tags: any, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($action_rule_name | is-empty) { error make --unspanned { msg: "path parameter 'actionRuleName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-05-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), action_rule_name: (encode-path-segment $action_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules/{action_rule_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact

@@ -1,4 +1,4 @@
-# Auto-generated client for Credas API vv1
+# Auto-generated client for Credas API v1
 # Source: https://api.apis.guru/v2/specs/credas.co.uk/pi/v1/openapi.json
 # Auth: --token flag or $env.CREDAS_API_TOKEN
 
@@ -156,7 +156,7 @@ export def "verify" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
   account_details: record # shape: {accountNumber: string, sortcode: string}
   address: record # shape: {addressLine1: string, addressLine2?: string, addressLine3?: string, city: string, country: string, county?: string, postcode: string}
   person: record # shape: {forename: string, middleName?: string, surname: string}
@@ -165,6 +165,7 @@ export def "verify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/bank-accounts/verify" $auth.query)
   let req_body = {"accountDetails": $account_details, "address": $address, "person": $person, "regEntryId": $reg_entry_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -202,10 +203,11 @@ export def "search-company" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --company-number: string # The company registration number of the company that should be searched.
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> record<addressLine1: string, companyName: string, companyNumber: string, dateOfRegistration: string, duplicate: bool, id: string, locality: string, postCode: string, region: string, significantParentCompanies: list<any>, significantPeople: table<forename: string, id: string, regEntryId: string, surname: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let qp = [(serialize-qp "companyNumber" $company_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/companies" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -241,11 +243,12 @@ export def "get-company" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> record<addressLine1: string, companyName: string, companyNumber: string, dateOfRegistration: string, duplicate: bool, id: string, locality: string, postCode: string, region: string, significantParentCompanies: list<any>, significantPeople: table<forename: string, id: string, regEntryId: string, surname: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/api/companies/{company_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -282,7 +285,7 @@ export def "check-credit-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
   address: record # shape: {addressLine1: string, addressLine2?: string, addressLine3?: string, city: string, country: string, county?: string, postcode: string}
   person: record # shape: {dateOfBirth: string, forename: string, middleName?: string, surname: string}
   reg_entry_id: string # format: uuid
@@ -290,6 +293,7 @@ export def "check-credit-status" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/credit-status/perform" $auth.query)
   let req_body = {"address": $address, "person": $person, "regEntryId": $reg_entry_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -328,7 +332,7 @@ export def "add-data-check" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
   check_type: int@check-type-completer # The value of checkType dictates what checks are performed. The StandardAml check (value = 1) will check DOB & Mortality. The InternationalPepSanctions check (value = 3) will check just International PEP & Sanctions. The EnhancedAml check (value = 2) will perform both these checks and is equivalent to making two calls with values of 1 then 3 and will be charged accordingly. values=> None = 0, StandardAml = 1, EnhancedAml = 2, InternationalPepSanctions = 3 (format: int32)
   current_address: record # shape: {addressLine1: string, addressLine2?: string, addressLine3?: string, city: string, country: string, county?: string, postcode: string}
   person: record # shape: {dateOfBirth: string, forename: string, middleName?: string, surname: string}
@@ -337,6 +341,7 @@ export def "add-data-check" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/datachecks" $auth.query)
   let req_body = {"checkType": $check_type, "currentAddress": $current_address, "person": $person, "regEntryId": $reg_entry_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -374,7 +379,7 @@ export def "add-id-document-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
   --document-parameters: list # item shape: {key?: string, value?: string}
   document_type: int@document-type-completer # Other = 0, Passport = 1, DrivingLicence = 2, Visa = 3, CscsCard = 4, HomeOfficeLetter = 5, BirthCertificate = 6, NationalIdCard = 7, ResidencePermit = 9, UtilityBill = 11 (format: int32)
   image_data: string
@@ -383,6 +388,7 @@ export def "add-id-document-image" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/images/id-document" $auth.query)
   let req_body = {"documentParameters": $document_parameters, "documentType": $document_type, "imageData": $image_data, "registrationId": $registration_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -420,11 +426,12 @@ export def "get-id-document-images" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> table<addressCity: string, addressFull: string, addressPostcode: string, country: string, countryCode: string, dateCreated: string, dateOfBirth: string, description: string, documentAnalysisResult: int, documentNumber: string, documentSide: int, expiryDate: string, facialMatch: bool, forename: string, fullName: string, hiResUrl: string, id: string, isUnderReview: bool, manuallyVerified: bool, middleName: string, mrz1: string, mrz2: string, mrz3: string, nameCheck: bool, nameCheckMethod: int, nfcCheck: bool, nfcFacialUrl: string, nfcReadStatus: int, primaryScanId: string, status: int, surname: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationId' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/images/id-document/{registration_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -458,13 +465,14 @@ export def "add-liveness-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
   image_data: string
   registration_id: string # format: uuid
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/images/liveness" $auth.query)
   let req_body = {"imageData": $image_data, "registrationId": $registration_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -502,11 +510,12 @@ export def "get-liveness-performed-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> record<base64Data: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationId' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/images/liveness-performed/{registration_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -542,11 +551,12 @@ export def "get-liveness-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> record<description: string, id: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationId' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/images/liveness/{registration_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -582,11 +592,12 @@ export def "get-scan-report-pdf" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scan_id | is-empty) { error make --unspanned { msg: "path parameter 'scanId' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({scan_id: (encode-path-segment $scan_id)} | format pattern "/api/images/scan-report-pdf/{scan_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -621,13 +632,14 @@ export def "add-selfie-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
   image_data: string
   registration_id: string # format: uuid
 ]: any -> record<livenessConfirmed: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/images/selfie" $auth.query)
   let req_body = {"imageData": $image_data, "registrationId": $registration_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -665,11 +677,12 @@ export def "get-selfie-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> record<base64Data: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationId' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/images/selfie/{registration_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -706,7 +719,7 @@ export def "add-property-register-check" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
   address: record # shape: {addressLine1: string, addressLine2?: string, addressLine3?: string, city: string, country: string, county?: string, postcode: string}
   person: record # shape: {forename: string, middleName?: string, surname: string}
   reg_entry_id: string # format: uuid
@@ -714,6 +727,7 @@ export def "add-property-register-check" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/property-register" $auth.query)
   let req_body = {"address": $address, "person": $person, "regEntryId": $reg_entry_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -751,11 +765,12 @@ export def "get-property-register-check-result" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> record<checkStatus: int, hasBeenOverridden: bool, matchResult: int, matchResultText: string, propertyOwnership: int, propertyOwnershipText: string, titleNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/property-register/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -790,10 +805,11 @@ export def "get-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/reg-types" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -831,7 +847,7 @@ export def "add-registration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
   --dialling-code: string
   --duplicate-acknowledgement: oneof<nothing, bool>
   --email-address: string
@@ -852,9 +868,11 @@ export def "add-registration" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/registrations" $auth.query)
   let req_body = {"diallingCode": $dialling_code, "duplicateAcknowledgement": $duplicate_acknowledgement, "emailAddress": $email_address, "forename": $forename, "middleName": $middle_name, "parameters": $parameters, "phoneNumber": $phone_number, "provideWebJourneyLink": $provide_web_journey_link, "referenceId": $reference_id, "regTypeId": $reg_type_id, "returnUrls": $return_urls, "sendEmail": $send_email, "sendSms": $send_sms, "settings": $settings, "significantPersonId": $significant_person_id, "surname": $surname} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "sendSms") == null) { error make --unspanned { msg: "required body field 'sendSms' missing: pass --send-sms or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"apikey": $apikey} | compact
@@ -890,7 +908,7 @@ export def "add-instant-registration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
   document: string
   --document-parameters: list # item shape: {key?: string, value?: string}
   document_type: int@document-type-completer # Other = 0, Passport = 1, DrivingLicence = 2, Visa = 3, CscsCard = 4, HomeOfficeLetter = 5, BirthCertificate = 6, NationalIdCard = 7, ResidencePermit = 9, UtilityBill = 11 (format: int32)
@@ -906,6 +924,7 @@ export def "add-instant-registration" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/registrations/instant" $auth.query)
   let req_body = {"document": $document, "documentParameters": $document_parameters, "documentType": $document_type, "forename": $forename, "middleName": $middle_name, "parameters": $parameters, "referenceId": $reference_id, "regTypeId": $reg_type_id, "selfie": $selfie, "significantPersonId": $significant_person_id, "surname": $surname} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -943,11 +962,12 @@ export def "get-registration-summaries-by-reference-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> table<Comments: list<record>, DITFDate: string, DITFStatus: int, bankAccountChecks: list<record>, createdByAgencyUserId: string, creditStatusCheck: record<address: record, ccj: list, checkDate: string, companyDirector: list, hasBeenOverridden: bool, insolvency: list, person: record, status: int>, customTermsAccepted: bool, customTermsAcceptedDateTime: string, customTermsAcceptedVersion: int, dataCheckResult: int, dataCheckSources: list<record>, dataChecksPerformed: bool, dateCompleted: string, dateCreated: string, email: string, forename: string, hasLivenessPerformed: bool, hasSelfie: bool, id: string, idDocuments: list<record>, idVerification: record<checkStatus: int, hasBeenOverridden: bool>, isAgentLed: bool, livenessMethod: int, livenessStatus: int, livenessVerified: bool, middleName: string, personalDetails: record<address: record, dateOfBirth: string, forename: string, surname: string>, phoneNumber: string, proofOfOwnershipCheck: record<checkStatus: int, hasBeenOverridden: bool, matchResult: int, matchResultText: string, propertyOwnership: int, propertyOwnershipText: string, titleNumber: string>, referenceId: string, regCode: string, regTypeId: string, rightToRentCheck: record<checkStatus: int, hasBeenOverridden: bool, hasShareCodePdf: bool, shareCodeFacialMatchStatus: int, shareCodeNameCheckStatus: int>, rightToWorkCheck: record<checkStatus: int, hasBeenOverridden: bool, hasShareCodePdf: bool, shareCodeFacialMatchStatus: int, shareCodeNameCheckStatus: int>, rightToWorkDocumentsProvided: int, safeHarbourVerifiedDate: string, safeHarbourVerifiedStatus: int, status: int, surname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reference_id | is-empty) { error make --unspanned { msg: "path parameter 'referenceId' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({reference_id: (encode-path-segment $reference_id)} | format pattern "/api/registrations/referenceid/{reference_id}/summary") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -983,11 +1003,12 @@ export def "get-registration-summary-by-reg-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> record<Comments: table<checkType: int, comment: string, dateCreated: string, id: string, name: string, type: int>, DITFDate: string, DITFStatus: int, bankAccountChecks: table<Address1: string, City: string, Forename: string, MiddleName: string, PostCode: string, Surname: string, accountNumber: string, accountNumberValidation: int, accountNumberValidationText: string, accountStatus: int, accountStatusText: string, accountValid: bool, addressValidation: int, addressValidationText: string, checkDate: string, checkId: string, checkStatus: int, error: bool, hasBeenOverridden: bool, nameValidation: int, nameValidationText: string, referenceId: string, sortcode: string, sortcodeValidation: int, sortcodeValidationText: string>, createdByAgencyUserId: string, creditStatusCheck: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, country: string, county: string, postcode: string>, ccj: list<record>, checkDate: string, companyDirector: list<record>, hasBeenOverridden: bool, insolvency: list<record>, person: record<dateOfBirth: string, forename: string, middleName: string, surname: string>, status: int>, customTermsAccepted: bool, customTermsAcceptedDateTime: string, customTermsAcceptedVersion: int, dataCheckResult: int, dataCheckSources: table<address: record, dateCreated: string, hasBeenOverridden: bool, hasPepSanctionsData: bool, label: string, pepSanctionsData: list, person: record, remarks: list, sourceType: int, status: int>, dataChecksPerformed: bool, dateCompleted: string, dateCreated: string, email: string, forename: string, hasLivenessPerformed: bool, hasSelfie: bool, id: string, idDocuments: table<addressCity: string, addressFull: string, addressPostcode: string, country: string, countryCode: string, dateCreated: string, dateOfBirth: string, description: string, documentAnalysisResult: int, documentNumber: string, documentSide: int, expiryDate: string, facialMatch: bool, forename: string, fullName: string, id: string, isUnderReview: bool, manuallyVerified: bool, middleName: string, mrz1: string, mrz2: string, mrz3: string, nameCheck: bool, nameCheckMethod: int, nfcCheck: bool, nfcReadStatus: int, primaryScanId: string, status: int, surname: string>, idVerification: record<checkStatus: int, hasBeenOverridden: bool>, isAgentLed: bool, livenessMethod: int, livenessStatus: int, livenessVerified: bool, middleName: string, personalDetails: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, country: string, county: string, postcode: string>, dateOfBirth: string, forename: string, surname: string>, phoneNumber: string, proofOfOwnershipCheck: record<checkStatus: int, hasBeenOverridden: bool, matchResult: int, matchResultText: string, propertyOwnership: int, propertyOwnershipText: string, titleNumber: string>, referenceId: string, regCode: string, regTypeId: string, rightToRentCheck: record<checkStatus: int, hasBeenOverridden: bool, hasShareCodePdf: bool, shareCodeFacialMatchStatus: int, shareCodeNameCheckStatus: int>, rightToWorkCheck: record<checkStatus: int, hasBeenOverridden: bool, hasShareCodePdf: bool, shareCodeFacialMatchStatus: int, shareCodeNameCheckStatus: int>, rightToWorkDocumentsProvided: int, safeHarbourVerifiedDate: string, safeHarbourVerifiedStatus: int, status: int, surname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reg_code | is-empty) { error make --unspanned { msg: "path parameter 'regCode' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({reg_code: (encode-path-segment $reg_code)} | format pattern "/api/registrations/regcode/{reg_code}/summary") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1028,10 +1049,11 @@ export def "get-registration-search" [
   --surname: string # Search by surname.
   --email: string # Search by user email.
   --dob: string # Date of birth in (yyyy-MM-dd) format
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> record<registrationSummaries: table<Comments: list, DITFDate: string, DITFStatus: int, bankAccountChecks: list, createdByAgencyUserId: string, creditStatusCheck: record, customTermsAccepted: bool, customTermsAcceptedDateTime: string, customTermsAcceptedVersion: int, dataCheckResult: int, dataCheckSources: list, dataChecksPerformed: bool, dateCompleted: string, dateCreated: string, email: string, forename: string, hasLivenessPerformed: bool, hasSelfie: bool, id: string, idDocuments: list, idVerification: record, isAgentLed: bool, livenessMethod: int, livenessStatus: int, livenessVerified: bool, middleName: string, personalDetails: record, phoneNumber: string, proofOfOwnershipCheck: record, referenceId: string, regCode: string, regTypeId: string, rightToRentCheck: record, rightToWorkCheck: record, rightToWorkDocumentsProvided: int, safeHarbourVerifiedDate: string, safeHarbourVerifiedStatus: int, status: int, surname: string>, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let qp = [(serialize-qp "pageNum" $page_num "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "forename" $forename "scalar") (serialize-qp "surname" $surname "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "dob" $dob "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/registrations/search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1068,11 +1090,12 @@ export def "check-submitted-id-documents" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> record<checkCode: int, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/check-submitted-id-documents") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1107,7 +1130,7 @@ export def "update-contact-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
   --delivery-method: int@delivery-method-completer # None = 0, Email = 1, Sms = 2 (format: int32)
   --dialling-code: string
   --email: string
@@ -1120,6 +1143,7 @@ export def "update-contact-details" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/contact-details") $auth.query)
   let req_body = {"deliveryMethod": $delivery_method, "diallingCode": $dialling_code, "email": $email, "forename": $forename, "middleName": $middle_name, "phoneNumber": $phone_number, "surname": $surname} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1156,7 +1180,7 @@ export def "override-check-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
   check_type: int@check-type-completer-1 # IdDocuments = 1, StandardChecks = 2, InternationalSanctionsAndPep = 3, CreditStatusCheck = 4, BankAccountCheck = 5, ProofOfOwnership = 6, RightToWork = 7, RightToRent = 8 (format: int32)
   comment: string
   status: int@status-completer # Unknown = 0, Pass = 1, Refer = 2, Fail = 3 (format: int32)
@@ -1165,6 +1189,7 @@ export def "override-check-status" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/override-check-status") $auth.query)
   let req_body = {"checkType": $check_type, "comment": $comment, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1202,11 +1227,12 @@ export def "get-registration-pdf-export" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/pdf-export") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1252,11 +1278,12 @@ export def "get-api-registrations-id-pdf-export-sections" [
   --exclude-selfie: oneof<nothing, bool>
   --exclude-id-documents: oneof<nothing, bool>
   --diatf-section: oneof<nothing, bool>
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let qp = [(serialize-qp "Comments" $comments "scalar") (serialize-qp "ContactDetails" $contact_details "scalar") (serialize-qp "StandardChecks" $standard_checks "scalar") (serialize-qp "PepSanctionChecks" $pep_sanction_checks "scalar") (serialize-qp "ProofOfOwnership" $proof_of_ownership "scalar") (serialize-qp "BankAccountCheck" $bank_account_check "scalar") (serialize-qp "CreditStatusCheck" $credit_status_check "scalar") (serialize-qp "Liveness" $liveness "scalar") (serialize-qp "ExcludeSelfie" $exclude_selfie "scalar") (serialize-qp "ExcludeIDDocuments" $exclude_id_documents "scalar") (serialize-qp "DIATFSection" $diatf_section "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/pdf-export-sections") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1293,11 +1320,12 @@ export def "get-share-code-pdf-export" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/pdf-settlement-status") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1332,11 +1360,12 @@ export def "resend-invitation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/resend-invitation") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1371,11 +1400,12 @@ export def "get-registration-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/settings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1410,7 +1440,7 @@ export def "update-registration-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
   --capture-personal-details: oneof<nothing, bool>
   --name-match-routine: int@name-match-routine-completer # Fuzzy = 1, Strict = 2 (format: int32)
   --required-checks: list<int> # The value of required checks determines what checks are performed. Unknown = 0,Id Documents = 1, Standard Checks = 2, International Sanctions and Pep = 3, Credit Status Check = 4, Bank Account Check = 5, Proof of Ownership = 6, Right to Work = 7, Right to Rent = 8
@@ -1420,6 +1450,7 @@ export def "update-registration-settings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/settings") $auth.query)
   let req_body = {"capturePersonalDetails": $capture_personal_details, "nameMatchRoutine": $name_match_routine, "requiredChecks": $required_checks, "skipEmailStep": $skip_email_step} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1456,13 +1487,14 @@ export def "update-registration-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
   status: int@status-completer-1 # Unknown = 0, Submitted = 1, Approved = 2, Rejected = 3, Exported = 4, Invited = 6 (format: int32)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/status") $auth.query)
   let req_body = {"status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1500,11 +1532,12 @@ export def "get-registration-summary" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> record<Comments: table<checkType: int, comment: string, dateCreated: string, id: string, name: string, type: int>, DITFDate: string, DITFStatus: int, bankAccountChecks: table<Address1: string, City: string, Forename: string, MiddleName: string, PostCode: string, Surname: string, accountNumber: string, accountNumberValidation: int, accountNumberValidationText: string, accountStatus: int, accountStatusText: string, accountValid: bool, addressValidation: int, addressValidationText: string, checkDate: string, checkId: string, checkStatus: int, error: bool, hasBeenOverridden: bool, nameValidation: int, nameValidationText: string, referenceId: string, sortcode: string, sortcodeValidation: int, sortcodeValidationText: string>, createdByAgencyUserId: string, creditStatusCheck: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, country: string, county: string, postcode: string>, ccj: list<record>, checkDate: string, companyDirector: list<record>, hasBeenOverridden: bool, insolvency: list<record>, person: record<dateOfBirth: string, forename: string, middleName: string, surname: string>, status: int>, customTermsAccepted: bool, customTermsAcceptedDateTime: string, customTermsAcceptedVersion: int, dataCheckResult: int, dataCheckSources: table<address: record, dateCreated: string, hasBeenOverridden: bool, hasPepSanctionsData: bool, label: string, pepSanctionsData: list, person: record, remarks: list, sourceType: int, status: int>, dataChecksPerformed: bool, dateCompleted: string, dateCreated: string, email: string, forename: string, hasLivenessPerformed: bool, hasSelfie: bool, id: string, idDocuments: table<addressCity: string, addressFull: string, addressPostcode: string, country: string, countryCode: string, dateCreated: string, dateOfBirth: string, description: string, documentAnalysisResult: int, documentNumber: string, documentSide: int, expiryDate: string, facialMatch: bool, forename: string, fullName: string, id: string, isUnderReview: bool, manuallyVerified: bool, middleName: string, mrz1: string, mrz2: string, mrz3: string, nameCheck: bool, nameCheckMethod: int, nfcCheck: bool, nfcReadStatus: int, primaryScanId: string, status: int, surname: string>, idVerification: record<checkStatus: int, hasBeenOverridden: bool>, isAgentLed: bool, livenessMethod: int, livenessStatus: int, livenessVerified: bool, middleName: string, personalDetails: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, country: string, county: string, postcode: string>, dateOfBirth: string, forename: string, surname: string>, phoneNumber: string, proofOfOwnershipCheck: record<checkStatus: int, hasBeenOverridden: bool, matchResult: int, matchResultText: string, propertyOwnership: int, propertyOwnershipText: string, titleNumber: string>, referenceId: string, regCode: string, regTypeId: string, rightToRentCheck: record<checkStatus: int, hasBeenOverridden: bool, hasShareCodePdf: bool, shareCodeFacialMatchStatus: int, shareCodeNameCheckStatus: int>, rightToWorkCheck: record<checkStatus: int, hasBeenOverridden: bool, hasShareCodePdf: bool, shareCodeFacialMatchStatus: int, shareCodeNameCheckStatus: int>, rightToWorkDocumentsProvided: int, safeHarbourVerifiedDate: string, safeHarbourVerifiedStatus: int, status: int, surname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/summary") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1540,11 +1573,12 @@ export def "get-registration-supported-id-documents" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
 ]: nothing -> record<name: string, type: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/supported-id-documents") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1579,7 +1613,7 @@ export def "get-report-view-by-reference-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
   --can-change-status: oneof<nothing, bool>
   --can-verify: oneof<nothing, bool>
   reference_id: string
@@ -1588,6 +1622,7 @@ export def "get-report-view-by-reference-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/report-view/by-referenceid" $auth.query)
   let req_body = {"canChangeStatus": $can_change_status, "canVerify": $can_verify, "referenceId": $reference_id, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1624,7 +1659,7 @@ export def "get-report-view-by-registration-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
   --can-change-status: oneof<nothing, bool>
   --can-verify: oneof<nothing, bool>
   registration_id: string # format: uuid
@@ -1633,6 +1668,7 @@ export def "get-report-view-by-registration-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/report-view/by-registrationid" $auth.query)
   let req_body = {"canChangeStatus": $can_change_status, "canVerify": $can_verify, "registrationId": $registration_id, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1670,13 +1706,14 @@ export def "get-web-verifications-by-reference-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
   reference_id: string
   --return-urls: record # shape: {returnUrl?: string}
 ]: any -> record<results: table<journeyUrl: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/web-verifications/by-referenceid" $auth.query)
   let req_body = {"referenceId": $reference_id, "returnUrls": $return_urls} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1714,13 +1751,14 @@ export def "get-web-verifications-by-registration-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apikey: string # ApiKey supplied.
+  --apikey: string # ApiKey supplied. (required)
   registration_id: string # format: uuid
   --return-urls: record # shape: {returnUrl?: string}
 ]: any -> record<results: table<journeyUrl: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/web-verifications/by-registrationid" $auth.query)
   let req_body = {"registrationId": $registration_id, "returnUrls": $return_urls} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

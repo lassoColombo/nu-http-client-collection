@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -100,9 +100,12 @@ def x-amz-target-completer [] { ["ElasticMapReduce.AddInstanceFleet"] }
 def x-amz-target-completer-1 [] { ["ElasticMapReduce.AddInstanceGroups"] }
 def x-amz-target-completer-2 [] { ["ElasticMapReduce.AddJobFlowSteps"] }
 def x-amz-target-completer-3 [] { ["ElasticMapReduce.AddTags"] }
+def step-cancellation-option-completer [] { ["SEND_INTERRUPT" "TERMINATE_PROCESS"] }
 def x-amz-target-completer-4 [] { ["ElasticMapReduce.CancelSteps"] }
 def x-amz-target-completer-5 [] { ["ElasticMapReduce.CreateSecurityConfiguration"] }
+def auth-mode-completer [] { ["IAM" "SSO"] }
 def x-amz-target-completer-6 [] { ["ElasticMapReduce.CreateStudio"] }
+def identity-type-completer [] { ["GROUP" "USER"] }
 def x-amz-target-completer-7 [] { ["ElasticMapReduce.CreateStudioSessionMapping"] }
 def x-amz-target-completer-8 [] { ["ElasticMapReduce.DeleteSecurityConfiguration"] }
 def x-amz-target-completer-9 [] { ["ElasticMapReduce.DeleteStudio"] }
@@ -123,7 +126,9 @@ def x-amz-target-completer-23 [] { ["ElasticMapReduce.ListBootstrapActions"] }
 def x-amz-target-completer-24 [] { ["ElasticMapReduce.ListClusters"] }
 def x-amz-target-completer-25 [] { ["ElasticMapReduce.ListInstanceFleets"] }
 def x-amz-target-completer-26 [] { ["ElasticMapReduce.ListInstanceGroups"] }
+def instance-fleet-type-completer [] { ["CORE" "MASTER" "TASK"] }
 def x-amz-target-completer-27 [] { ["ElasticMapReduce.ListInstances"] }
+def status-completer [] { ["FAILED" "FAILING" "FINISHED" "FINISHING" "RUNNING" "STARTING" "START_PENDING" "STOPPED" "STOPPING" "STOP_PENDING"] }
 def x-amz-target-completer-28 [] { ["ElasticMapReduce.ListNotebookExecutions"] }
 def x-amz-target-completer-29 [] { ["ElasticMapReduce.ListReleaseLabels"] }
 def x-amz-target-completer-30 [] { ["ElasticMapReduce.ListSecurityConfigurations"] }
@@ -141,6 +146,8 @@ def x-amz-target-completer-41 [] { ["ElasticMapReduce.RemoveAutoScalingPolicy"] 
 def x-amz-target-completer-42 [] { ["ElasticMapReduce.RemoveAutoTerminationPolicy"] }
 def x-amz-target-completer-43 [] { ["ElasticMapReduce.RemoveManagedScalingPolicy"] }
 def x-amz-target-completer-44 [] { ["ElasticMapReduce.RemoveTags"] }
+def scale-down-behavior-completer [] { ["TERMINATE_AT_INSTANCE_HOUR" "TERMINATE_AT_TASK_COMPLETION"] }
+def repo-upgrade-on-boot-completer [] { ["NONE" "SECURITY"] }
 def x-amz-target-completer-45 [] { ["ElasticMapReduce.RunJobFlow"] }
 def x-amz-target-completer-46 [] { ["ElasticMapReduce.SetTerminationProtection"] }
 def x-amz-target-completer-47 [] { ["ElasticMapReduce.SetVisibleToAllUsers"] }
@@ -177,6 +184,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddInstanceFleet
+# --InstanceFleet shape: {Name?: string, InstanceFleetType: "MASTER"|"CORE"|"TASK", TargetOnDemandCapacity?: int, TargetSpotCapacity?: int, InstanceTypeConfigs?: list, LaunchSpecifications?: record, ResizeSpecifications?: record}
 export def "add-instance-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,13 +202,14 @@ export def "add-instance-fleet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  cluster_id: any
-  instance_fleet: any
-]: any -> record<ClusterId: record, InstanceFleetId: record, ClusterArn: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  cluster_id: string # The unique identifier of the cluster.
+  instance_fleet: record # The configuration that defines an instance fleet. The instance fleet configuration is available only in Amazon EMR versions 4.8.0 and later, excluding 5.0.x versions. — shape: {Name?: string, InstanceFleetType: "MASTER"|"CORE"|"TASK", TargetOnDemandCapacity?: int, TargetSpotCapacity?: int, InstanceTypeConfigs?: list, LaunchSpecifications?: record, ResizeSpecifications?: record}
+]: any -> record<ClusterId: string, InstanceFleetId: string, ClusterArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.AddInstanceFleet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id, "InstanceFleet": $instance_fleet} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -226,6 +235,7 @@ export def "add-instance-fleet" [
 #
 # POST /
 # operationId: AddInstanceGroups
+# --InstanceGroups item shape: {Name?: string, Market?: "ON_DEMAND"|"SPOT", InstanceRole: "MASTER"|"CORE"|"TASK", BidPrice?: string, InstanceType: string, InstanceCount: int, Configurations?: list, EbsConfiguration?: record, AutoScalingPolicy?: record, CustomAmiId?: string}
 export def "add-instance-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -243,13 +253,14 @@ export def "add-instance-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  instance_groups: any
-  job_flow_id: any
-]: any -> record<JobFlowId: record, InstanceGroupIds: record, ClusterArn: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  instance_groups: list # Instance groups to add. — item shape: {Name?: string, Market?: "ON_DEMAND"|"SPOT", InstanceRole: "MASTER"|"CORE"|"TASK", BidPrice?: string, InstanceType: string, InstanceCount: int, Configurations?: list, EbsConfiguration?: record, AutoScalingPolicy?: record, CustomAmiId?: string}
+  job_flow_id: string # Job flow in which to add the instance groups.
+]: any -> record<JobFlowId: string, InstanceGroupIds: list<string>, ClusterArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.AddInstanceGroups")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InstanceGroups": $instance_groups, "JobFlowId": $job_flow_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -275,6 +286,7 @@ export def "add-instance-groups" [
 #
 # POST /
 # operationId: AddJobFlowSteps
+# --Steps item shape: {Name: string, ActionOnFailure?: "TERMINATE_JOB_FLOW"|"TERMINATE_CLUSTER"|"CANCEL_AND_WAIT"|"CONTINUE", HadoopJarStep: record}
 export def "add-job-flow-steps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -292,14 +304,15 @@ export def "add-job-flow-steps" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  job_flow_id: any
-  steps: any
-  --execution-role-arn: any
-]: any -> record<StepIds: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  job_flow_id: string # A string that uniquely identifies the job flow. This identifier is returned by RunJobFlow and can also be obtained from ListClusters.
+  steps: list # A list of StepConfig to be executed by the job flow. — item shape: {Name: string, ActionOnFailure?: "TERMINATE_JOB_FLOW"|"TERMINATE_CLUSTER"|"CANCEL_AND_WAIT"|"CONTINUE", HadoopJarStep: record}
+  --execution-role-arn: string # The Amazon Resource Name (ARN) of the runtime role for a step on the cluster. The runtime role can be a cross-account IAM role. The runtime role ARN is a combination of account ID, role name, and role type using the following format: arn:partition:service:region:account:resource. For example, arn:aws:iam::1234567890:role/ReadOnly is a correctly formatted runtime role ARN.
+]: any -> record<StepIds: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.AddJobFlowSteps")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobFlowId": $job_flow_id, "Steps": $steps, "ExecutionRoleArn": $execution_role_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -325,6 +338,7 @@ export def "add-job-flow-steps" [
 #
 # POST /
 # operationId: AddTags
+# --Tags item shape: {Key?: string, Value?: string}
 export def "add-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,13 +356,14 @@ export def "add-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  resource_id: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  resource_id: string # The Amazon EMR resource identifier to which tags will be added. For example, a cluster identifier or an Amazon EMR Studio ID.
+  tags: list # A list of tags to associate with a resource. Tags are user-defined key-value pairs that consist of a required key string with a maximum of 128 characters, and an optional value string with a maximum of 256 characters. — item shape: {Key?: string, Value?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.AddTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -391,14 +406,15 @@ export def "cancel-steps" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  cluster_id: any
-  step_ids: any
-  --step-cancellation-option: any
-]: any -> record<CancelStepsInfoList: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  cluster_id: string # The ClusterID for the specified steps that will be canceled. Use RunJobFlow and ListClusters to get ClusterIDs.
+  step_ids: list<string> # The list of StepIDs to cancel. Use ListSteps to get steps and their states for the specified cluster.
+  --step-cancellation-option: string@step-cancellation-option-completer # The option to choose to cancel RUNNING steps. By default, the value is SEND_INTERRUPT.
+]: any -> record<CancelStepsInfoList: table<StepId: string, Status: string, Reason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.CancelSteps")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id, "StepIds": $step_ids, "StepCancellationOption": $step_cancellation_option} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -441,13 +457,14 @@ export def "create-security-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  name: any
-  security_configuration: any
-]: any -> record<Name: record, CreationDateTime: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  name: string # The name of the security configuration.
+  security_configuration: string # The security configuration details in JSON format. For JSON parameters and examples, see Use Security Configurations to Set Up Cluster Security (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-security-configurations.html) in the Amazon EMR Management Guide.
+]: any -> record<Name: string, CreationDateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.CreateSecurityConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "SecurityConfiguration": $security_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -473,6 +490,7 @@ export def "create-security-configuration" [
 #
 # POST /
 # operationId: CreateStudio
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-studio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -490,24 +508,25 @@ export def "create-studio" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  name: any
-  --description: any
-  auth_mode: any
-  vpc_id: any
-  subnet_ids: any
-  service_role: any
-  --user-role: any
-  workspace_security_group_id: any
-  engine_security_group_id: any
-  default_s3_location: any
-  --idp-auth-url: any
-  --idp-relay-state-parameter-name: any
-  --tags: any
-]: any -> record<StudioId: record, Url: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  name: string # A descriptive name for the Amazon EMR Studio.
+  --description: string # A detailed description of the Amazon EMR Studio.
+  auth_mode: string@auth-mode-completer # Specifies whether the Studio authenticates users using IAM or IAM Identity Center.
+  vpc_id: string # The ID of the Amazon Virtual Private Cloud (Amazon VPC) to associate with the Studio.
+  subnet_ids: list<string> # A list of subnet IDs to associate with the Amazon EMR Studio. A Studio can have a maximum of 5 subnets. The subnets must belong to the VPC specified by VpcId. Studio users can create a Workspace in any of the specified subnets.
+  service_role: string # The IAM role that the Amazon EMR Studio assumes. The service role provides a way for Amazon EMR Studio to interoperate with other Amazon Web Services services.
+  --user-role: string # The IAM user role that users and groups assume when logged in to an Amazon EMR Studio. Only specify a UserRole when you use IAM Identity Center authentication. The permissions attached to the UserRole can be scoped down for each user or group using session policies.
+  workspace_security_group_id: string # The ID of the Amazon EMR Studio Workspace security group. The Workspace security group allows outbound network traffic to resources in the Engine security group, and it must be in the same VPC specified by VpcId.
+  engine_security_group_id: string # The ID of the Amazon EMR Studio Engine security group. The Engine security group allows inbound network traffic from the Workspace security group, and it must be in the same VPC specified by VpcId.
+  default_s3_location: string # The Amazon S3 location to back up Amazon EMR Studio Workspaces and notebook files.
+  --idp-auth-url: string # The authentication endpoint of your identity provider (IdP). Specify this value when you use IAM authentication and want to let federated users log in to a Studio with the Studio URL and credentials from your IdP. Amazon EMR Studio redirects users to this endpoint to enter credentials.
+  --idp-relay-state-parameter-name: string # The name that your identity provider (IdP) uses for its RelayState parameter. For example, RelayState or TargetSource. Specify this value when you use IAM authentication and want to let federated users log in to a Studio using the Studio URL. The RelayState parameter differs by IdP.
+  --tags: list # A list of tags to associate with the Amazon EMR Studio. Tags are user-defined key-value pairs that consist of a required key string with a maximum of 128 characters, and an optional value string with a maximum of 256 characters. — item shape: {Key?: string, Value?: string}
+]: any -> record<StudioId: string, Url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.CreateStudio")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "AuthMode": $auth_mode, "VpcId": $vpc_id, "SubnetIds": $subnet_ids, "ServiceRole": $service_role, "UserRole": $user_role, "WorkspaceSecurityGroupId": $workspace_security_group_id, "EngineSecurityGroupId": $engine_security_group_id, "DefaultS3Location": $default_s3_location, "IdpAuthUrl": $idp_auth_url, "IdpRelayStateParameterName": $idp_relay_state_parameter_name, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -550,16 +569,17 @@ export def "create-studio-session-mapping" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  studio_id: any
-  --identity-id: any
-  --identity-name: any
-  identity_type: any
-  session_policy_arn: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  studio_id: string # The ID of the Amazon EMR Studio to which the user or group will be mapped.
+  --identity-id: string # The globally unique identifier (GUID) of the user or group from the IAM Identity Center Identity Store. For more information, see UserId (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_User.html#singlesignon-Type-User-UserId) and GroupId (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_Group.html#singlesignon-Type-Group-GroupId) in the IAM Identity Center Identity Store API Reference. Either IdentityName or IdentityId must be specified, but not both.
+  --identity-name: string # The name of the user or group. For more information, see UserName (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_User.html#singlesignon-Type-User-UserName) and DisplayName (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_Group.html#singlesignon-Type-Group-DisplayName) in the IAM Identity Center Identity Store API Reference. Either IdentityName or IdentityId must be specified, but not both.
+  identity_type: string@identity-type-completer # Specifies whether the identity to map to the Amazon EMR Studio is a user or a group.
+  session_policy_arn: string # The Amazon Resource Name (ARN) for the session policy that will be applied to the user or group. You should specify the ARN for the session policy that you want to apply, not the ARN of your user role. For more information, see Create an EMR Studio User Role with Session Policies (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-studio-user-role.html).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.CreateStudioSessionMapping")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StudioId": $studio_id, "IdentityId": $identity_id, "IdentityName": $identity_name, "IdentityType": $identity_type, "SessionPolicyArn": $session_policy_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -602,12 +622,13 @@ export def "delete-security-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  name: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  name: string # The name of the security configuration.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DeleteSecurityConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -650,12 +671,13 @@ export def "delete-studio" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  studio_id: any
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  studio_id: string # The ID of the Amazon EMR Studio.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DeleteStudio")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StudioId": $studio_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -698,15 +720,16 @@ export def "delete-studio-session-mapping" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  studio_id: any
-  --identity-id: any
-  --identity-name: any
-  identity_type: any
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  studio_id: string # The ID of the Amazon EMR Studio.
+  --identity-id: string # The globally unique identifier (GUID) of the user or group to remove from the Amazon EMR Studio. For more information, see UserId (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_User.html#singlesignon-Type-User-UserId) and GroupId (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_Group.html#singlesignon-Type-Group-GroupId) in the IAM Identity Center Identity Store API Reference. Either IdentityName or IdentityId must be specified.
+  --identity-name: string # The name of the user name or group to remove from the Amazon EMR Studio. For more information, see UserName (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_User.html#singlesignon-Type-User-UserName) and DisplayName (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_Group.html#singlesignon-Type-Group-DisplayName) in the IAM Identity Center Store API Reference. Either IdentityName or IdentityId must be specified.
+  identity_type: string@identity-type-completer # Specifies whether the identity to delete from the Amazon EMR Studio is a user or a group.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DeleteStudioSessionMapping")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StudioId": $studio_id, "IdentityId": $identity_id, "IdentityName": $identity_name, "IdentityType": $identity_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -749,12 +772,13 @@ export def "describe-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  cluster_id: any
-]: any -> record<Cluster: record<Id: record, Name: record, Status: record<State: record, StateChangeReason: record, Timeline: record, ErrorDetails: record>, Ec2InstanceAttributes: record<Ec2KeyName: record, Ec2SubnetId: record, RequestedEc2SubnetIds: record, Ec2AvailabilityZone: record, RequestedEc2AvailabilityZones: record, IamInstanceProfile: record, EmrManagedMasterSecurityGroup: record, EmrManagedSlaveSecurityGroup: record, ServiceAccessSecurityGroup: record, AdditionalMasterSecurityGroups: record, AdditionalSlaveSecurityGroups: record>, InstanceCollectionType: record, LogUri: record, LogEncryptionKmsKeyId: record, RequestedAmiVersion: record, RunningAmiVersion: record, ReleaseLabel: record, AutoTerminate: record, TerminationProtected: record, VisibleToAllUsers: record, Applications: record, Tags: record, ServiceRole: record, NormalizedInstanceHours: record, MasterPublicDnsName: record, Configurations: record, SecurityConfiguration: record, AutoScalingRole: record, ScaleDownBehavior: record, CustomAmiId: record, EbsRootVolumeSize: record, RepoUpgradeOnBoot: record, KerberosAttributes: record<Realm: record, KdcAdminPassword: record, CrossRealmTrustPrincipalPassword: record, ADDomainJoinUser: record, ADDomainJoinPassword: record>, ClusterArn: record, OutpostArn: record, StepConcurrencyLevel: record, PlacementGroups: record, OSReleaseLabel: record>> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  cluster_id: string # The identifier of the cluster to describe.
+]: any -> record<Cluster: record<Id: string, Name: string, Status: record<State: string, StateChangeReason: record, Timeline: record, ErrorDetails: list>, Ec2InstanceAttributes: record<Ec2KeyName: string, Ec2SubnetId: string, RequestedEc2SubnetIds: list, Ec2AvailabilityZone: string, RequestedEc2AvailabilityZones: list, IamInstanceProfile: string, EmrManagedMasterSecurityGroup: string, EmrManagedSlaveSecurityGroup: string, ServiceAccessSecurityGroup: string, AdditionalMasterSecurityGroups: list, AdditionalSlaveSecurityGroups: list>, InstanceCollectionType: string, LogUri: string, LogEncryptionKmsKeyId: string, RequestedAmiVersion: string, RunningAmiVersion: string, ReleaseLabel: string, AutoTerminate: bool, TerminationProtected: bool, VisibleToAllUsers: bool, Applications: list<record>, Tags: list<record>, ServiceRole: string, NormalizedInstanceHours: int, MasterPublicDnsName: string, Configurations: list<record>, SecurityConfiguration: string, AutoScalingRole: string, ScaleDownBehavior: string, CustomAmiId: string, EbsRootVolumeSize: int, RepoUpgradeOnBoot: string, KerberosAttributes: record<Realm: string, KdcAdminPassword: string, CrossRealmTrustPrincipalPassword: string, ADDomainJoinUser: string, ADDomainJoinPassword: string>, ClusterArn: string, OutpostArn: string, StepConcurrencyLevel: int, PlacementGroups: list<record>, OSReleaseLabel: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DescribeCluster")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -799,15 +823,16 @@ export def "describe-job-flows" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  --created-after: any
-  --created-before: any
-  --job-flow-ids: any
-  --job-flow-states: any
-]: any -> record<JobFlows: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  --created-after: string # Return only job flows created after this date and time. (format: date-time)
+  --created-before: string # Return only job flows created before this date and time. (format: date-time)
+  --job-flow-ids: list<string> # Return only job flows whose job flow ID is contained in this list.
+  --job-flow-states: list<string> # Return only job flows whose state is contained in this list.
+]: any -> record<JobFlows: table<JobFlowId: string, Name: string, LogUri: string, LogEncryptionKmsKeyId: string, AmiVersion: string, ExecutionStatusDetail: record, Instances: record, Steps: list, BootstrapActions: list, SupportedProducts: list, VisibleToAllUsers: bool, JobFlowRole: string, ServiceRole: string, AutoScalingRole: string, ScaleDownBehavior: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DescribeJobFlows")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CreatedAfter": $created_after, "CreatedBefore": $created_before, "JobFlowIds": $job_flow_ids, "JobFlowStates": $job_flow_states} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -850,12 +875,13 @@ export def "describe-notebook-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  notebook_execution_id: any
-]: any -> record<NotebookExecution: record<NotebookExecutionId: record, EditorId: record, ExecutionEngine: record<Id: record, Type: record, MasterInstanceSecurityGroupId: record>, NotebookExecutionName: record, NotebookParams: record, Status: record, StartTime: record, EndTime: record, Arn: record, OutputNotebookURI: record, LastStateChangeReason: record, NotebookInstanceSecurityGroupId: record, Tags: record>> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  notebook_execution_id: string # The unique identifier of the notebook execution.
+]: any -> record<NotebookExecution: record<NotebookExecutionId: string, EditorId: string, ExecutionEngine: record<Id: string, Type: string, MasterInstanceSecurityGroupId: string>, NotebookExecutionName: string, NotebookParams: string, Status: string, StartTime: string, EndTime: string, Arn: string, OutputNotebookURI: string, LastStateChangeReason: string, NotebookInstanceSecurityGroupId: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DescribeNotebookExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NotebookExecutionId": $notebook_execution_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -898,14 +924,15 @@ export def "describe-release-label" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  --release-label: any
-  --next-token: any
-  --max-results: any
-]: any -> record<ReleaseLabel: record, Applications: record, NextToken: record, AvailableOSReleases: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  --release-label: string # The target release label to be described.
+  --next-token: string # The pagination token. Reserved for future use. Currently set to null.
+  --max-results: int # Reserved for future use. Currently set to null.
+]: any -> record<ReleaseLabel: string, Applications: table<Name: string, Version: string>, NextToken: string, AvailableOSReleases: table<Label: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DescribeReleaseLabel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ReleaseLabel": $release_label, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -948,12 +975,13 @@ export def "describe-security-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  name: any
-]: any -> record<Name: record, SecurityConfiguration: record, CreationDateTime: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  name: string # The name of the security configuration.
+]: any -> record<Name: string, SecurityConfiguration: string, CreationDateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DescribeSecurityConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -996,13 +1024,14 @@ export def "describe-step" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  cluster_id: any
-  step_id: any
-]: any -> record<Step: record<Id: record, Name: record, Config: record<Jar: record, Properties: record, MainClass: record, Args: record>, ActionOnFailure: record, Status: record<State: record, StateChangeReason: record, FailureDetails: record, Timeline: record>, ExecutionRoleArn: record>> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  cluster_id: string # The identifier of the cluster with steps to describe.
+  step_id: string # The identifier of the step to describe.
+]: any -> record<Step: record<Id: string, Name: string, Config: record<Jar: string, Properties: record, MainClass: string, Args: list>, ActionOnFailure: string, Status: record<State: string, StateChangeReason: record, FailureDetails: record, Timeline: record>, ExecutionRoleArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DescribeStep")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id, "StepId": $step_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1045,12 +1074,13 @@ export def "describe-studio" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  studio_id: any
-]: any -> record<Studio: record<StudioId: record, StudioArn: record, Name: record, Description: record, AuthMode: record, VpcId: record, SubnetIds: record, ServiceRole: record, UserRole: record, WorkspaceSecurityGroupId: record, EngineSecurityGroupId: record, Url: record, CreationTime: record, DefaultS3Location: record, IdpAuthUrl: record, IdpRelayStateParameterName: record, Tags: record>> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  studio_id: string # The Amazon EMR Studio ID.
+]: any -> record<Studio: record<StudioId: string, StudioArn: string, Name: string, Description: string, AuthMode: string, VpcId: string, SubnetIds: list<string>, ServiceRole: string, UserRole: string, WorkspaceSecurityGroupId: string, EngineSecurityGroupId: string, Url: string, CreationTime: string, DefaultS3Location: string, IdpAuthUrl: string, IdpRelayStateParameterName: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.DescribeStudio")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StudioId": $studio_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1093,12 +1123,13 @@ export def "get-auto-termination-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  cluster_id: any
-]: any -> record<AutoTerminationPolicy: record<IdleTimeout: record>> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  cluster_id: string # Specifies the ID of the Amazon EMR cluster for which the auto-termination policy will be fetched.
+]: any -> record<AutoTerminationPolicy: record<IdleTimeout: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.GetAutoTerminationPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1141,12 +1172,13 @@ export def "get-block-public-access-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
+  --x-amz-target: string@x-amz-target-completer-19 # required
   --body: record
-]: any -> record<BlockPublicAccessConfiguration: record<BlockPublicSecurityGroupRules: record, PermittedPublicSecurityGroupRuleRanges: record>, BlockPublicAccessConfigurationMetadata: record<CreationDateTime: record, CreatedByArn: record>> {
+]: any -> record<BlockPublicAccessConfiguration: record<BlockPublicSecurityGroupRules: bool, PermittedPublicSecurityGroupRuleRanges: list<record>>, BlockPublicAccessConfigurationMetadata: record<CreationDateTime: string, CreatedByArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.GetBlockPublicAccessConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1189,13 +1221,14 @@ export def "get-cluster-session-credentials" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  cluster_id: any
-  execution_role_arn: any
-]: any -> record<Credentials: record<UsernamePassword: record<Username: record, Password: record>>, ExpiresAt: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  cluster_id: string # The unique identifier of the cluster.
+  execution_role_arn: string # The Amazon Resource Name (ARN) of the runtime role for interactive workload submission on the cluster. The runtime role can be a cross-account IAM role. The runtime role ARN is a combination of account ID, role name, and role type using the following format: arn:partition:service:region:account:resource.
+]: any -> record<Credentials: record<UsernamePassword: record<Username: string, Password: string>>, ExpiresAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.GetClusterSessionCredentials")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id, "ExecutionRoleArn": $execution_role_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1238,12 +1271,13 @@ export def "get-managed-scaling-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  cluster_id: any
-]: any -> record<ManagedScalingPolicy: record<ComputeLimits: record<UnitType: record, MinimumCapacityUnits: record, MaximumCapacityUnits: record, MaximumOnDemandCapacityUnits: record, MaximumCoreCapacityUnits: record>>> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  cluster_id: string # Specifies the ID of the cluster for which the managed scaling policy will be fetched.
+]: any -> record<ManagedScalingPolicy: record<ComputeLimits: record<UnitType: string, MinimumCapacityUnits: int, MaximumCapacityUnits: int, MaximumOnDemandCapacityUnits: int, MaximumCoreCapacityUnits: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.GetManagedScalingPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1286,15 +1320,16 @@ export def "get-studio-session-mapping" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  studio_id: any
-  --identity-id: any
-  --identity-name: any
-  identity_type: any
-]: any -> record<SessionMapping: record<StudioId: record, IdentityId: record, IdentityName: record, IdentityType: record, SessionPolicyArn: record, CreationTime: record, LastModifiedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  studio_id: string # The ID of the Amazon EMR Studio.
+  --identity-id: string # The globally unique identifier (GUID) of the user or group. For more information, see UserId (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_User.html#singlesignon-Type-User-UserId) and GroupId (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_Group.html#singlesignon-Type-Group-GroupId) in the IAM Identity Center Identity Store API Reference. Either IdentityName or IdentityId must be specified.
+  --identity-name: string # The name of the user or group to fetch. For more information, see UserName (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_User.html#singlesignon-Type-User-UserName) and DisplayName (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_Group.html#singlesignon-Type-Group-DisplayName) in the IAM Identity Center Identity Store API Reference. Either IdentityName or IdentityId must be specified.
+  identity_type: string@identity-type-completer # Specifies whether the identity to fetch is a user or a group.
+]: any -> record<SessionMapping: record<StudioId: string, IdentityId: string, IdentityName: string, IdentityType: string, SessionPolicyArn: string, CreationTime: string, LastModifiedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.GetStudioSessionMapping")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StudioId": $studio_id, "IdentityId": $identity_id, "IdentityName": $identity_name, "IdentityType": $identity_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1338,13 +1373,14 @@ export def "list-bootstrap-actions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  cluster_id: any
-  --marker-body: any #  (body field)
-]: any -> record<BootstrapActions: record, Marker: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  cluster_id: string # The cluster identifier for the bootstrap actions to list.
+  --marker-body: string # The pagination token that indicates the next set of results to retrieve. (body field)
+]: any -> record<BootstrapActions: table<Name: string, ScriptPath: string, Args: list>, Marker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListBootstrapActions")
   let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ClusterId": $cluster_id, "Marker": $marker_body} | compact
@@ -1389,15 +1425,16 @@ export def "list-clusters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  --created-after: any
-  --created-before: any
-  --cluster-states: any
-  --marker-body: any #  (body field)
-]: any -> record<Clusters: record, Marker: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  --created-after: string # The creation date and time beginning value filter for listing clusters. (format: date-time)
+  --created-before: string # The creation date and time end value filter for listing clusters. (format: date-time)
+  --cluster-states: list<string> # The cluster state filters to apply when listing clusters. Clusters that change state while this action runs may be not be returned as expected in the list of clusters.
+  --marker-body: string # The pagination token that indicates the next set of results to retrieve. (body field)
+]: any -> record<Clusters: table<Id: string, Name: string, Status: record, NormalizedInstanceHours: int, ClusterArn: string, OutpostArn: string>, Marker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListClusters")
   let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"CreatedAfter": $created_after, "CreatedBefore": $created_before, "ClusterStates": $cluster_states, "Marker": $marker_body} | compact
@@ -1442,13 +1479,14 @@ export def "list-instance-fleets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  cluster_id: any
-  --marker-body: any #  (body field)
-]: any -> record<InstanceFleets: record, Marker: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  cluster_id: string # The unique identifier of the cluster.
+  --marker-body: string # The pagination token that indicates the next set of results to retrieve. (body field)
+]: any -> record<InstanceFleets: table<Id: string, Name: string, Status: record, InstanceFleetType: string, TargetOnDemandCapacity: int, TargetSpotCapacity: int, ProvisionedOnDemandCapacity: int, ProvisionedSpotCapacity: int, InstanceTypeSpecifications: list, LaunchSpecifications: record, ResizeSpecifications: record>, Marker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListInstanceFleets")
   let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ClusterId": $cluster_id, "Marker": $marker_body} | compact
@@ -1493,13 +1531,14 @@ export def "list-instance-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  cluster_id: any
-  --marker-body: any #  (body field)
-]: any -> record<InstanceGroups: record, Marker: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  cluster_id: string # The identifier of the cluster for which to list the instance groups.
+  --marker-body: string # The pagination token that indicates the next set of results to retrieve. (body field)
+]: any -> record<InstanceGroups: table<Id: string, Name: string, Market: string, InstanceGroupType: string, BidPrice: string, InstanceType: string, RequestedInstanceCount: int, RunningInstanceCount: int, Status: record, Configurations: list, ConfigurationsVersion: int, LastSuccessfullyAppliedConfigurations: list, LastSuccessfullyAppliedConfigurationsVersion: int, EbsBlockDevices: list, EbsOptimized: bool, ShrinkPolicy: record, AutoScalingPolicy: record, CustomAmiId: string>, Marker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListInstanceGroups")
   let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ClusterId": $cluster_id, "Marker": $marker_body} | compact
@@ -1544,18 +1583,19 @@ export def "list-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  cluster_id: any
-  --instance-group-id: any
-  --instance-group-types: any
-  --instance-fleet-id: any
-  --instance-fleet-type: any
-  --instance-states: any
-  --marker-body: any #  (body field)
-]: any -> record<Instances: record, Marker: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  cluster_id: string # The identifier of the cluster for which to list the instances.
+  --instance-group-id: string # The identifier of the instance group for which to list the instances.
+  --instance-group-types: list<string> # The type of instance group for which to list the instances.
+  --instance-fleet-id: string # The unique identifier of the instance fleet.
+  --instance-fleet-type: string@instance-fleet-type-completer # The node type of the instance fleet. For example MASTER, CORE, or TASK.
+  --instance-states: list<string> # A list of instance states that will filter the instances returned with this request.
+  --marker-body: string # The pagination token that indicates the next set of results to retrieve. (body field)
+]: any -> record<Instances: table<Id: string, Ec2InstanceId: string, PublicDnsName: string, PublicIpAddress: string, PrivateDnsName: string, PrivateIpAddress: string, Status: record, InstanceGroupId: string, InstanceFleetId: string, Market: string, InstanceType: string, EbsVolumes: list>, Marker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListInstances")
   let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ClusterId": $cluster_id, "InstanceGroupId": $instance_group_id, "InstanceGroupTypes": $instance_group_types, "InstanceFleetId": $instance_fleet_id, "InstanceFleetType": $instance_fleet_type, "InstanceStates": $instance_states, "Marker": $marker_body} | compact
@@ -1600,19 +1640,20 @@ export def "list-notebook-executions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  --editor-id: any
-  --status: any
-  --body-from: any
-  --body-to: any
-  --marker-body: any #  (body field)
-]: any -> record<NotebookExecutions: record, Marker: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  --editor-id: string # The unique ID of the editor associated with the notebook execution.
+  --status: string@status-completer # The status filter for listing notebook executions. START_PENDING indicates that the cluster has received the execution request but execution has not begun. STARTING indicates that the execution is starting on the cluster. RUNNING indicates that the execution is being processed by the cluster. FINISHING indicates that execution processing is in the final stages. FINISHED indicates that the execution has completed without error. FAILING indicates that the execution is failing and will not finish successfully. FAILED indicates that the execution failed. STOP_PENDING indicates that the cluster has received a StopNotebookExecution request and the stop is pending. STOPPING indicates that the cluster is in the process of stopping the execution as a result of a StopNotebookExecution request. STOPPED indicates that the execution stopped because of a StopNotebookExecution request.
+  --from: string # The beginning of time range filter for listing notebook executions. The default is the timestamp of 30 days ago. (format: date-time)
+  --to: string # The end of time range filter for listing notebook executions. The default is the current timestamp. (format: date-time)
+  --marker-body: string # The pagination token, returned by a previous ListNotebookExecutions call, that indicates the start of the list for this ListNotebookExecutions call. (body field)
+]: any -> record<NotebookExecutions: table<NotebookExecutionId: string, EditorId: string, NotebookExecutionName: string, Status: string, StartTime: string, EndTime: string>, Marker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListNotebookExecutions")
   let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"EditorId": $editor_id, "Status": $status, "From": $body_from, "To": $body_to, "Marker": $marker_body} | compact
+  let req_body = {"EditorId": $editor_id, "Status": $status, "From": $from, "To": $to, "Marker": $marker_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1636,6 +1677,7 @@ export def "list-notebook-executions" [
 #
 # POST /
 # operationId: ListReleaseLabels
+# --Filters shape: {Prefix?: string, Application?: string}
 export def "list-release-labels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1655,14 +1697,15 @@ export def "list-release-labels" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  --filters: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<ReleaseLabels: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  --filters: record # The release label filters by application or version prefix. — shape: {Prefix?: string, Application?: string}
+  --next-token-body: string # Specifies the next page of results. If NextToken is not specified, which is usually the case for the first request of ListReleaseLabels, the first page of results are determined by other filtering parameters or by the latest version. The ListReleaseLabels request fails if the identity (Amazon Web Services account ID) and all filtering parameters are different from the original request, or if the NextToken is expired or tampered with. (body field)
+  --max-results-body: int # Defines the maximum number of release labels to return in a single response. The default is 100. (body field)
+]: any -> record<ReleaseLabels: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListReleaseLabels")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Filters": $filters, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1707,12 +1750,13 @@ export def "list-security-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  --marker-body: any #  (body field)
-]: any -> record<SecurityConfigurations: record, Marker: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  --marker-body: string # The pagination token that indicates the set of results to retrieve. (body field)
+]: any -> record<SecurityConfigurations: table<Name: string, CreationDateTime: string>, Marker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListSecurityConfigurations")
   let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Marker": $marker_body} | compact
@@ -1757,15 +1801,16 @@ export def "list-steps" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  cluster_id: any
-  --step-states: any
-  --step-ids: any
-  --marker-body: any #  (body field)
-]: any -> record<Steps: record, Marker: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  cluster_id: string # The identifier of the cluster for which to list the steps.
+  --step-states: list<string> # The filter to limit the step list based on certain states.
+  --step-ids: list<string> # The filter to limit the step list based on the identifier of the steps. You can specify a maximum of ten Step IDs. The character constraint applies to the overall length of the array.
+  --marker-body: string # The maximum number of steps that a single ListSteps action returns is 50. To return a longer list of steps, use multiple ListSteps actions along with the Marker parameter, which is a pagination token that indicates the next set of results to retrieve. (body field)
+]: any -> record<Steps: table<Id: string, Name: string, Config: record, ActionOnFailure: string, Status: record>, Marker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListSteps")
   let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ClusterId": $cluster_id, "StepStates": $step_states, "StepIds": $step_ids, "Marker": $marker_body} | compact
@@ -1810,14 +1855,15 @@ export def "list-studio-session-mappings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  --studio-id: any
-  --identity-type: any
-  --marker-body: any #  (body field)
-]: any -> record<SessionMappings: record, Marker: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  --studio-id: string # The ID of the Amazon EMR Studio.
+  --identity-type: string@identity-type-completer # Specifies whether to return session mappings for users or groups. If not specified, the results include session mapping details for both users and groups.
+  --marker-body: string # The pagination token that indicates the set of results to retrieve. (body field)
+]: any -> record<SessionMappings: table<StudioId: string, IdentityId: string, IdentityName: string, IdentityType: string, SessionPolicyArn: string, CreationTime: string>, Marker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListStudioSessionMappings")
   let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"StudioId": $studio_id, "IdentityType": $identity_type, "Marker": $marker_body} | compact
@@ -1862,12 +1908,13 @@ export def "list-studios" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  --marker-body: any #  (body field)
-]: any -> record<Studios: record, Marker: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  --marker-body: string # The pagination token that indicates the set of results to retrieve. (body field)
+]: any -> record<Studios: table<StudioId: string, Name: string, VpcId: string, Description: string, Url: string, AuthMode: string, CreationTime: string>, Marker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ListStudios")
   let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Marker": $marker_body} | compact
@@ -1911,13 +1958,14 @@ export def "modify-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  cluster_id: any
-  --step-concurrency-level: any
-]: any -> record<StepConcurrencyLevel: record> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  cluster_id: string # The unique identifier of the cluster.
+  --step-concurrency-level: int # The number of steps that can be executed concurrently. You can specify a minimum of 1 step and a maximum of 256 steps. We recommend that you do not change this parameter while steps are running or the ActionOnFailure setting may not behave as expected. For more information see Step$ActionOnFailure.
+]: any -> record<StepConcurrencyLevel: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ModifyCluster")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id, "StepConcurrencyLevel": $step_concurrency_level} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1943,6 +1991,7 @@ export def "modify-cluster" [
 #
 # POST /
 # operationId: ModifyInstanceFleet
+# --InstanceFleet shape: {InstanceFleetId: string, TargetOnDemandCapacity?: int, TargetSpotCapacity?: int, ResizeSpecifications?: record}
 export def "modify-instance-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1960,13 +2009,14 @@ export def "modify-instance-fleet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  cluster_id: any
-  instance_fleet: any
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  cluster_id: string # The unique identifier of the cluster.
+  instance_fleet: record # Configuration parameters for an instance fleet modification request. The instance fleet configuration is available only in Amazon EMR versions 4.8.0 and later, excluding 5.0.x versions. — shape: {InstanceFleetId: string, TargetOnDemandCapacity?: int, TargetSpotCapacity?: int, ResizeSpecifications?: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ModifyInstanceFleet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id, "InstanceFleet": $instance_fleet} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1992,6 +2042,7 @@ export def "modify-instance-fleet" [
 #
 # POST /
 # operationId: ModifyInstanceGroups
+# --InstanceGroups item shape: {InstanceGroupId: string, InstanceCount?: int, EC2InstanceIdsToTerminate?: list<string>, ShrinkPolicy?: record, ReconfigurationType?: "OVERWRITE"|"MERGE", Configurations?: list}
 export def "modify-instance-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2009,13 +2060,14 @@ export def "modify-instance-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  --cluster-id: any
-  --instance-groups: any
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  --cluster-id: string # The ID of the cluster to which the instance group belongs.
+  --instance-groups: list # Instance groups to change. — item shape: {InstanceGroupId: string, InstanceCount?: int, EC2InstanceIdsToTerminate?: list<string>, ShrinkPolicy?: record, ReconfigurationType?: "OVERWRITE"|"MERGE", Configurations?: list}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.ModifyInstanceGroups")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id, "InstanceGroups": $instance_groups} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2041,6 +2093,7 @@ export def "modify-instance-groups" [
 #
 # POST /
 # operationId: PutAutoScalingPolicy
+# --AutoScalingPolicy shape: {Constraints: record, Rules: list}
 export def "put-auto-scaling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2058,14 +2111,15 @@ export def "put-auto-scaling-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  cluster_id: any
-  instance_group_id: any
-  auto_scaling_policy: any
-]: any -> record<ClusterId: record, InstanceGroupId: record, AutoScalingPolicy: record<Status: record<State: record, StateChangeReason: record>, Constraints: record<MinCapacity: record, MaxCapacity: record>, Rules: record>, ClusterArn: record> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  cluster_id: string # Specifies the ID of a cluster. The instance group to which the automatic scaling policy is applied is within this cluster.
+  instance_group_id: string # Specifies the ID of the instance group to which the automatic scaling policy is applied.
+  auto_scaling_policy: record # An automatic scaling policy for a core instance group or task instance group in an Amazon EMR cluster. An automatic scaling policy defines how an instance group dynamically adds and terminates EC2 instances in response to the value of a CloudWatch metric. See PutAutoScalingPolicy. — shape: {Constraints: record, Rules: list}
+]: any -> record<ClusterId: string, InstanceGroupId: string, AutoScalingPolicy: record<Status: record<State: string, StateChangeReason: record>, Constraints: record<MinCapacity: int, MaxCapacity: int>, Rules: list<record>>, ClusterArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.PutAutoScalingPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id, "InstanceGroupId": $instance_group_id, "AutoScalingPolicy": $auto_scaling_policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2091,6 +2145,7 @@ export def "put-auto-scaling-policy" [
 #
 # POST /
 # operationId: PutAutoTerminationPolicy
+# --AutoTerminationPolicy shape: {IdleTimeout?: int}
 export def "put-auto-termination-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2108,13 +2163,14 @@ export def "put-auto-termination-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  cluster_id: any
-  --auto-termination-policy: any
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  cluster_id: string # Specifies the ID of the Amazon EMR cluster to which the auto-termination policy will be attached.
+  --auto-termination-policy: record # An auto-termination policy for an Amazon EMR cluster. An auto-termination policy defines the amount of idle time in seconds after which a cluster automatically terminates. For alternative cluster termination options, see Control cluster termination (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-plan-termination.html). — shape: {IdleTimeout?: int}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.PutAutoTerminationPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id, "AutoTerminationPolicy": $auto_termination_policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2140,6 +2196,7 @@ export def "put-auto-termination-policy" [
 #
 # POST /
 # operationId: PutBlockPublicAccessConfiguration
+# --BlockPublicAccessConfiguration shape: {BlockPublicSecurityGroupRules: bool, PermittedPublicSecurityGroupRuleRanges?: list}
 export def "put-block-public-access-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2157,12 +2214,13 @@ export def "put-block-public-access-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  block_public_access_configuration: any
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  block_public_access_configuration: record # A configuration for Amazon EMR block public access. When BlockPublicSecurityGroupRules is set to true, Amazon EMR prevents cluster creation if one of the cluster's security groups has a rule that allows inbound traffic from 0.0.0.0/0 or ::/0 on a port, unless the port is specified as an exception using PermittedPublicSecurityGroupRuleRanges. — shape: {BlockPublicSecurityGroupRules: bool, PermittedPublicSecurityGroupRuleRanges?: list}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.PutBlockPublicAccessConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BlockPublicAccessConfiguration": $block_public_access_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2188,6 +2246,7 @@ export def "put-block-public-access-configuration" [
 #
 # POST /
 # operationId: PutManagedScalingPolicy
+# --ManagedScalingPolicy shape: {ComputeLimits?: record}
 export def "put-managed-scaling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2205,13 +2264,14 @@ export def "put-managed-scaling-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  cluster_id: any
-  managed_scaling_policy: any
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  cluster_id: string # Specifies the ID of an EMR cluster where the managed scaling policy is attached.
+  managed_scaling_policy: record # Managed scaling policy for an Amazon EMR cluster. The policy specifies the limits for resources that can be added or terminated from a cluster. The policy only applies to the core and task nodes. The master node cannot be scaled after initial configuration. — shape: {ComputeLimits?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.PutManagedScalingPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id, "ManagedScalingPolicy": $managed_scaling_policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2254,13 +2314,14 @@ export def "remove-auto-scaling-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  cluster_id: any
-  instance_group_id: any
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  cluster_id: string # Specifies the ID of a cluster. The instance group to which the automatic scaling policy is applied is within this cluster.
+  instance_group_id: string # Specifies the ID of the instance group to which the scaling policy is applied.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.RemoveAutoScalingPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id, "InstanceGroupId": $instance_group_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2303,12 +2364,13 @@ export def "remove-auto-termination-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  cluster_id: any
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  cluster_id: string # Specifies the ID of the Amazon EMR cluster from which the auto-termination policy will be removed.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.RemoveAutoTerminationPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2351,12 +2413,13 @@ export def "remove-managed-scaling-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  cluster_id: any
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  cluster_id: string # Specifies the ID of the cluster from which the managed scaling policy will be removed.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.RemoveManagedScalingPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2399,13 +2462,14 @@ export def "remove-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  resource_id: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  resource_id: string # The Amazon EMR resource identifier from which tags will be removed. For example, a cluster identifier or an Amazon EMR Studio ID.
+  tag_keys: list<string> # A list of tag keys to remove from the resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.RemoveTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2431,7 +2495,17 @@ export def "remove-tags" [
 #
 # POST /
 # operationId: RunJobFlow
-# --AutoTerminationPolicy shape: {IdleTimeout?: any}
+# --Instances shape: {MasterInstanceType?: string, SlaveInstanceType?: string, InstanceCount?: int, InstanceGroups?: list, InstanceFleets?: list, Ec2KeyName?: string, Placement?: record, KeepJobFlowAliveWhenNoSteps?: bool, TerminationProtected?: bool, HadoopVersion?: string, Ec2SubnetId?: string, Ec2SubnetIds?: list<string>, EmrManagedMasterSecurityGroup?: string, EmrManagedSlaveSecurityGroup?: string, ServiceAccessSecurityGroup?: string, AdditionalMasterSecurityGroups?: list<string>, ... (1 more fields)}
+# --Steps item shape: {Name: string, ActionOnFailure?: "TERMINATE_JOB_FLOW"|"TERMINATE_CLUSTER"|"CANCEL_AND_WAIT"|"CONTINUE", HadoopJarStep: record}
+# --BootstrapActions item shape: {Name: string, ScriptBootstrapAction: record}
+# --NewSupportedProducts item shape: {Name?: string, Args?: list<string>}
+# --Applications item shape: {Name?: string, Version?: string, Args?: list<string>, AdditionalInfo?: record}
+# --Configurations item shape: {Classification?: string, Configurations?: list, Properties?: record}
+# --Tags item shape: {Key?: string, Value?: string}
+# --KerberosAttributes shape: {Realm: string, KdcAdminPassword: string, CrossRealmTrustPrincipalPassword?: string, ADDomainJoinUser?: string, ADDomainJoinPassword?: string}
+# --ManagedScalingPolicy shape: {ComputeLimits?: record}
+# --PlacementGroupConfigs item shape: {InstanceRole: "MASTER"|"CORE"|"TASK", PlacementStrategy?: "SPREAD"|"PARTITION"|"CLUSTER"|"NONE"}
+# --AutoTerminationPolicy shape: {IdleTimeout?: int}
 export def "run-job-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2449,40 +2523,41 @@ export def "run-job-flow" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  name: any
-  --log-uri: any
-  --log-encryption-kms-key-id: any
-  --additional-info: any
-  --ami-version: any
-  --release-label: any
-  instances: any
-  --steps: any
-  --bootstrap-actions: any
-  --supported-products: any
-  --new-supported-products: any
-  --applications: any
-  --configurations: any
-  --visible-to-all-users: any
-  --job-flow-role: any
-  --service-role: any
-  --tags: any
-  --security-configuration: any
-  --auto-scaling-role: any
-  --scale-down-behavior: any
-  --custom-ami-id: any
-  --ebs-root-volume-size: any
-  --repo-upgrade-on-boot: any
-  --kerberos-attributes: any
-  --step-concurrency-level: any
-  --managed-scaling-policy: any
-  --placement-group-configs: any
-  --auto-termination-policy: record # An auto-termination policy for an Amazon EMR cluster. An auto-termination policy defines the amount of idle time in seconds after which a cluster automatically terminates. For alternative cluster termination options, see Control cluster termination (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-plan-termination.html). — shape: {IdleTimeout?: any}
-  --os-release-label: any
-]: any -> record<JobFlowId: record, ClusterArn: record> {
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  name: string # The name of the job flow.
+  --log-uri: string # The location in Amazon S3 to write the log files of the job flow. If a value is not provided, logs are not created.
+  --log-encryption-kms-key-id: string # The KMS key used for encrypting log files. If a value is not provided, the logs remain encrypted by AES-256. This attribute is only available with Amazon EMR version 5.30.0 and later, excluding Amazon EMR 6.0.0.
+  --additional-info: string # A JSON string for selecting additional features.
+  --ami-version: string # Applies only to Amazon EMR AMI versions 3.x and 2.x. For Amazon EMR releases 4.0 and later, ReleaseLabel is used. To specify a custom AMI, use CustomAmiID.
+  --release-label: string # The Amazon EMR release label, which determines the version of open-source application packages installed on the cluster. Release labels are in the form emr-x.x.x, where x.x.x is an Amazon EMR release version such as emr-5.14.0. For more information about Amazon EMR release versions and included application versions and features, see https://docs.aws.amazon.com/emr/latest/ReleaseGuide/ (https://docs.aws.amazon.com/emr/latest/ReleaseGuide/). The release label applies only to Amazon EMR releases version 4.0 and later. Earlier versions use AmiVersion.
+  instances: record # A description of the Amazon EC2 instance on which the cluster (job flow) runs. A valid JobFlowInstancesConfig must contain either InstanceGroups or InstanceFleets. They cannot be used together. You may also have MasterInstanceType, SlaveInstanceType, and InstanceCount (all three must be present), but we don't recommend this configuration. — shape: {MasterInstanceType?: string, SlaveInstanceType?: string, InstanceCount?: int, InstanceGroups?: list, InstanceFleets?: list, Ec2KeyName?: string, Placement?: record, KeepJobFlowAliveWhenNoSteps?: bool, TerminationProtected?: bool, HadoopVersion?: string, Ec2SubnetId?: string, Ec2SubnetIds?: list<string>, EmrManagedMasterSecurityGroup?: string, EmrManagedSlaveSecurityGroup?: string, ServiceAccessSecurityGroup?: string, AdditionalMasterSecurityGroups?: list<string>, ... (1 more fields)}
+  --steps: list # A list of steps to run. — item shape: {Name: string, ActionOnFailure?: "TERMINATE_JOB_FLOW"|"TERMINATE_CLUSTER"|"CANCEL_AND_WAIT"|"CONTINUE", HadoopJarStep: record}
+  --bootstrap-actions: list # A list of bootstrap actions to run before Hadoop starts on the cluster nodes. — item shape: {Name: string, ScriptBootstrapAction: record}
+  --supported-products: list<string> # For Amazon EMR releases 3.x and 2.x. For Amazon EMR releases 4.x and later, use Applications. A list of strings that indicates third-party software to use. For more information, see the Amazon EMR Developer Guide (https://docs.aws.amazon.com/emr/latest/DeveloperGuide/emr-dg.pdf). Currently supported values are: "mapr-m3" - launch the job flow using MapR M3 Edition. "mapr-m5" - launch the job flow using MapR M5 Edition.
+  --new-supported-products: list # For Amazon EMR releases 3.x and 2.x. For Amazon EMR releases 4.x and later, use Applications. A list of strings that indicates third-party software to use with the job flow that accepts a user argument list. EMR accepts and forwards the argument list to the corresponding installation script as bootstrap action arguments. For more information, see "Launch a Job Flow on the MapR Distribution for Hadoop" in the Amazon EMR Developer Guide (https://docs.aws.amazon.com/emr/latest/DeveloperGuide/emr-dg.pdf). Supported values are: "mapr-m3" - launch the cluster using MapR M3 Edition. "mapr-m5" - launch the cluster using MapR M5 Edition. "mapr" with the user arguments specifying "--edition,m3" or "--edition,m5" - launch the job flow using MapR M3 or M5 Edition respectively. "mapr-m7" - launch the cluster using MapR M7 Edition. "hunk" - launch the cluster with the Hunk Big Data Analytics Platform. "hue"- launch the cluster with Hue installed. "spark" - launch the cluster with Apache Spark installed. "ganglia" - launch the cluster with the Ganglia Monitoring System installed. — item shape: {Name?: string, Args?: list<string>}
+  --applications: list # Applies to Amazon EMR releases 4.0 and later. A case-insensitive list of applications for Amazon EMR to install and configure when launching the cluster. For a list of applications available for each Amazon EMR release version, see the Amazon EMRRelease Guide (https://docs.aws.amazon.com/emr/latest/ReleaseGuide/). — item shape: {Name?: string, Version?: string, Args?: list<string>, AdditionalInfo?: record}
+  --configurations: list # For Amazon EMR releases 4.0 and later. The list of configurations supplied for the EMR cluster you are creating. — item shape: {Classification?: string, Configurations?: list, Properties?: record}
+  --visible-to-all-users: oneof<nothing, bool> # The VisibleToAllUsers parameter is no longer supported. By default, the value is set to true. Setting it to false now has no effect. Set this value to true so that IAM principals in the Amazon Web Services account associated with the cluster can perform EMR actions on the cluster that their IAM policies allow. This value defaults to true for clusters created using the EMR API or the CLI create-cluster (https://docs.aws.amazon.com/cli/latest/reference/emr/create-cluster.html) command. When set to false, only the IAM principal that created the cluster and the Amazon Web Services account root user can perform EMR actions for the cluster, regardless of the IAM permissions policies attached to other IAM principals. For more information, see Understanding the EMR Cluster VisibleToAllUsers Setting (https://docs.aws.amazon.com/emr/latest/ManagementGuide/security_iam_emr-with-iam.html#security_set_visible_to_all_users) in the Amazon EMRManagement Guide.
+  --job-flow-role: string # Also called instance profile and EC2 role. An IAM role for an EMR cluster. The EC2 instances of the cluster assume this role. The default role is EMR_EC2_DefaultRole. In order to use the default role, you must have already created it using the CLI or console.
+  --service-role: string # The IAM role that Amazon EMR assumes in order to access Amazon Web Services resources on your behalf. If you've created a custom service role path, you must specify it for the service role when you launch your cluster.
+  --tags: list # A list of tags to associate with a cluster and propagate to Amazon EC2 instances. — item shape: {Key?: string, Value?: string}
+  --security-configuration: string # The name of a security configuration to apply to the cluster.
+  --auto-scaling-role: string # An IAM role for automatic scaling policies. The default role is EMR_AutoScaling_DefaultRole. The IAM role provides permissions that the automatic scaling feature requires to launch and terminate EC2 instances in an instance group.
+  --scale-down-behavior: string@scale-down-behavior-completer # Specifies the way that individual Amazon EC2 instances terminate when an automatic scale-in activity occurs or an instance group is resized. TERMINATE_AT_INSTANCE_HOUR indicates that Amazon EMR terminates nodes at the instance-hour boundary, regardless of when the request to terminate the instance was submitted. This option is only available with Amazon EMR 5.1.0 and later and is the default for clusters created using that version. TERMINATE_AT_TASK_COMPLETION indicates that Amazon EMR adds nodes to a deny list and drains tasks from nodes before terminating the Amazon EC2 instances, regardless of the instance-hour boundary. With either behavior, Amazon EMR removes the least active nodes first and blocks instance termination if it could lead to HDFS corruption. TERMINATE_AT_TASK_COMPLETION available only in Amazon EMR version 4.1.0 and later, and is the default for versions of Amazon EMR earlier than 5.1.0.
+  --custom-ami-id: string # Available only in Amazon EMR version 5.7.0 and later. The ID of a custom Amazon EBS-backed Linux AMI. If specified, Amazon EMR uses this AMI when it launches cluster EC2 instances. For more information about custom AMIs in Amazon EMR, see Using a Custom AMI (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-custom-ami.html) in the Amazon EMR Management Guide. If omitted, the cluster uses the base Linux AMI for the ReleaseLabel specified. For Amazon EMR versions 2.x and 3.x, use AmiVersion instead. For information about creating a custom AMI, see Creating an Amazon EBS-Backed Linux AMI (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/creating-an-ami-ebs.html) in the Amazon Elastic Compute Cloud User Guide for Linux Instances. For information about finding an AMI ID, see Finding a Linux AMI (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/finding-an-ami.html).
+  --ebs-root-volume-size: int # The size, in GiB, of the Amazon EBS root device volume of the Linux AMI that is used for each EC2 instance. Available in Amazon EMR version 4.x and later.
+  --repo-upgrade-on-boot: string@repo-upgrade-on-boot-completer # Applies only when CustomAmiID is used. Specifies which updates from the Amazon Linux AMI package repositories to apply automatically when the instance boots using the AMI. If omitted, the default is SECURITY, which indicates that only security updates are applied. If NONE is specified, no updates are applied, and all updates must be applied manually.
+  --kerberos-attributes: record # Attributes for Kerberos configuration when Kerberos authentication is enabled using a security configuration. For more information see Use Kerberos Authentication (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-kerberos.html) in the Amazon EMR Management Guide. — shape: {Realm: string, KdcAdminPassword: string, CrossRealmTrustPrincipalPassword?: string, ADDomainJoinUser?: string, ADDomainJoinPassword?: string}
+  --step-concurrency-level: int # Specifies the number of steps that can be executed concurrently. The default value is 1. The maximum value is 256.
+  --managed-scaling-policy: record # Managed scaling policy for an Amazon EMR cluster. The policy specifies the limits for resources that can be added or terminated from a cluster. The policy only applies to the core and task nodes. The master node cannot be scaled after initial configuration. — shape: {ComputeLimits?: record}
+  --placement-group-configs: list # The specified placement group configuration for an Amazon EMR cluster. — item shape: {InstanceRole: "MASTER"|"CORE"|"TASK", PlacementStrategy?: "SPREAD"|"PARTITION"|"CLUSTER"|"NONE"}
+  --auto-termination-policy: record # An auto-termination policy for an Amazon EMR cluster. An auto-termination policy defines the amount of idle time in seconds after which a cluster automatically terminates. For alternative cluster termination options, see Control cluster termination (https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-plan-termination.html). — shape: {IdleTimeout?: int}
+  --os-release-label: string # Specifies a particular Amazon Linux release for all nodes in a cluster launch RunJobFlow request. If a release is not specified, Amazon EMR uses the latest validated Amazon Linux release for cluster launch.
+]: any -> record<JobFlowId: string, ClusterArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.RunJobFlow")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "LogUri": $log_uri, "LogEncryptionKmsKeyId": $log_encryption_kms_key_id, "AdditionalInfo": $additional_info, "AmiVersion": $ami_version, "ReleaseLabel": $release_label, "Instances": $instances, "Steps": $steps, "BootstrapActions": $bootstrap_actions, "SupportedProducts": $supported_products, "NewSupportedProducts": $new_supported_products, "Applications": $applications, "Configurations": $configurations, "VisibleToAllUsers": $visible_to_all_users, "JobFlowRole": $job_flow_role, "ServiceRole": $service_role, "Tags": $tags, "SecurityConfiguration": $security_configuration, "AutoScalingRole": $auto_scaling_role, "ScaleDownBehavior": $scale_down_behavior, "CustomAmiId": $custom_ami_id, "EbsRootVolumeSize": $ebs_root_volume_size, "RepoUpgradeOnBoot": $repo_upgrade_on_boot, "KerberosAttributes": $kerberos_attributes, "StepConcurrencyLevel": $step_concurrency_level, "ManagedScalingPolicy": $managed_scaling_policy, "PlacementGroupConfigs": $placement_group_configs, "AutoTerminationPolicy": $auto_termination_policy, "OSReleaseLabel": $os_release_label} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2525,16 +2600,18 @@ export def "set-termination-protection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  job_flow_ids: any
-  termination_protected: any
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  job_flow_ids: list<string> # A list of strings that uniquely identify the clusters to protect. This identifier is returned by RunJobFlow and can also be obtained from DescribeJobFlows .
+  --termination-protected: oneof<nothing, bool> # A Boolean that indicates whether to protect the cluster and prevent the Amazon EC2 instances in the cluster from shutting down due to API calls, user intervention, or job-flow error.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.SetTerminationProtection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobFlowIds": $job_flow_ids, "TerminationProtected": $termination_protected} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "TerminationProtected") == null) { error make --unspanned { msg: "required body field 'TerminationProtected' missing: pass --termination-protected or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -2574,16 +2651,18 @@ export def "set-visible-to-all-users" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  job_flow_ids: any
-  visible_to_all_users: any
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  job_flow_ids: list<string> # The unique identifier of the job flow (cluster).
+  --visible-to-all-users: oneof<nothing, bool> # A value of true indicates that an IAM principal in the Amazon Web Services account can perform EMR actions on the cluster that the IAM policies attached to the principal allow. A value of false indicates that only the IAM principal that created the cluster and the Amazon Web Services root user can perform EMR actions on the cluster.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.SetVisibleToAllUsers")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobFlowIds": $job_flow_ids, "VisibleToAllUsers": $visible_to_all_users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "VisibleToAllUsers") == null) { error make --unspanned { msg: "required body field 'VisibleToAllUsers' missing: pass --visible-to-all-users or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -2606,6 +2685,8 @@ export def "set-visible-to-all-users" [
 #
 # POST /
 # operationId: StartNotebookExecution
+# --ExecutionEngine shape: {Id: string, Type?: "EMR", MasterInstanceSecurityGroupId?: string}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "start-notebook-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2623,19 +2704,20 @@ export def "start-notebook-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-48
-  editor_id: any
-  relative_path: any
-  --notebook-execution-name: any
-  --notebook-params: any
-  execution_engine: any
-  service_role: any
-  --notebook-instance-security-group-id: any
-  --tags: any
-]: any -> record<NotebookExecutionId: record> {
+  --x-amz-target: string@x-amz-target-completer-48 # required
+  editor_id: string # The unique identifier of the EMR Notebook to use for notebook execution.
+  relative_path: string # The path and file name of the notebook file for this execution, relative to the path specified for the EMR Notebook. For example, if you specify a path of s3://MyBucket/MyNotebooks when you create an EMR Notebook for a notebook with an ID of e-ABCDEFGHIJK1234567890ABCD (the EditorID of this request), and you specify a RelativePath of my_notebook_executions/notebook_execution.ipynb, the location of the file for the notebook execution is s3://MyBucket/MyNotebooks/e-ABCDEFGHIJK1234567890ABCD/my_notebook_executions/notebook_execution.ipynb.
+  --notebook-execution-name: string # An optional name for the notebook execution.
+  --notebook-params: string # Input parameters in JSON format passed to the EMR Notebook at runtime for execution.
+  execution_engine: record # Specifies the execution engine (cluster) to run the notebook and perform the notebook execution, for example, an EMR cluster. — shape: {Id: string, Type?: "EMR", MasterInstanceSecurityGroupId?: string}
+  service_role: string # The name or ARN of the IAM role that is used as the service role for Amazon EMR (the EMR role) for the notebook execution.
+  --notebook-instance-security-group-id: string # The unique identifier of the Amazon EC2 security group to associate with the EMR Notebook for this notebook execution.
+  --tags: list # A list of tags associated with a notebook execution. Tags are user-defined key-value pairs that consist of a required key string with a maximum of 128 characters and an optional value string with a maximum of 256 characters. — item shape: {Key?: string, Value?: string}
+]: any -> record<NotebookExecutionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.StartNotebookExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EditorId": $editor_id, "RelativePath": $relative_path, "NotebookExecutionName": $notebook_execution_name, "NotebookParams": $notebook_params, "ExecutionEngine": $execution_engine, "ServiceRole": $service_role, "NotebookInstanceSecurityGroupId": $notebook_instance_security_group_id, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2678,12 +2760,13 @@ export def "stop-notebook-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-49
-  notebook_execution_id: any
+  --x-amz-target: string@x-amz-target-completer-49 # required
+  notebook_execution_id: string # The unique identifier of the notebook execution.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.StopNotebookExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NotebookExecutionId": $notebook_execution_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2726,12 +2809,13 @@ export def "terminate-job-flows" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-50
-  job_flow_ids: any
+  --x-amz-target: string@x-amz-target-completer-50 # required
+  job_flow_ids: list<string> # A list of job flows to be shut down.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.TerminateJobFlows")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobFlowIds": $job_flow_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2774,16 +2858,17 @@ export def "update-studio" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-51
-  studio_id: any
-  --name: any
-  --description: any
-  --subnet-ids: any
-  --default-s3-location: any
+  --x-amz-target: string@x-amz-target-completer-51 # required
+  studio_id: string # The ID of the Amazon EMR Studio to update.
+  --name: string # A descriptive name for the Amazon EMR Studio.
+  --description: string # A detailed description to assign to the Amazon EMR Studio.
+  --subnet-ids: list<string> # A list of subnet IDs to associate with the Amazon EMR Studio. The list can include new subnet IDs, but must also include all of the subnet IDs previously associated with the Studio. The list order does not matter. A Studio can have a maximum of 5 subnets. The subnets must belong to the same VPC as the Studio.
+  --default-s3-location: string # The Amazon S3 location to back up Workspaces and notebook files for the Amazon EMR Studio.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.UpdateStudio")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StudioId": $studio_id, "Name": $name, "Description": $description, "SubnetIds": $subnet_ids, "DefaultS3Location": $default_s3_location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2826,16 +2911,17 @@ export def "update-studio-session-mapping" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-52
-  studio_id: any
-  --identity-id: any
-  --identity-name: any
-  identity_type: any
-  session_policy_arn: any
+  --x-amz-target: string@x-amz-target-completer-52 # required
+  studio_id: string # The ID of the Amazon EMR Studio.
+  --identity-id: string # The globally unique identifier (GUID) of the user or group. For more information, see UserId (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_User.html#singlesignon-Type-User-UserId) and GroupId (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_Group.html#singlesignon-Type-Group-GroupId) in the IAM Identity Center Identity Store API Reference. Either IdentityName or IdentityId must be specified.
+  --identity-name: string # The name of the user or group to update. For more information, see UserName (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_User.html#singlesignon-Type-User-UserName) and DisplayName (https://docs.aws.amazon.com/singlesignon/latest/IdentityStoreAPIReference/API_Group.html#singlesignon-Type-Group-DisplayName) in the IAM Identity Center Identity Store API Reference. Either IdentityName or IdentityId must be specified.
+  identity_type: string@identity-type-completer # Specifies whether the identity to update is a user or a group.
+  session_policy_arn: string # The Amazon Resource Name (ARN) of the session policy to associate with the specified user or group.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ElasticMapReduce.UpdateStudioSessionMapping")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StudioId": $studio_id, "IdentityId": $identity_id, "IdentityName": $identity_name, "IdentityType": $identity_type, "SessionPolicyArn": $session_policy_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

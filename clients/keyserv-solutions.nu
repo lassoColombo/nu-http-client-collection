@@ -531,11 +531,12 @@ export def "products-api-delete-product" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-api-key: string
+  --x-api-key: string # required, format: guid
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-Api-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/v1/ProductsApi/{serial}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -569,11 +570,12 @@ export def "products-api-delete-product2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-api-key: string
+  --x-api-key: string # required, format: guid
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-Api-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/v1/ProductsApi/{serial}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1010,12 +1012,14 @@ export def "subscriptions-api-delete-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --keep: oneof<nothing, bool> # nullable
-  --x-api-key: string
+  --keep: oneof<nothing, bool> # required, nullable
+  --x-api-key: string # required, format: guid
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
+  if ($keep == null) { error make --unspanned { msg: "required query parameter 'keep' missing: pass --keep" } }
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-Api-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "keep" $keep "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/v1/SubscriptionsApi/{serial}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1050,12 +1054,14 @@ export def "subscriptions-api-delete-subscription2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --keep: oneof<nothing, bool> # nullable
-  --x-api-key: string
+  --keep: oneof<nothing, bool> # required, nullable
+  --x-api-key: string # required, format: guid
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
+  if ($keep == null) { error make --unspanned { msg: "required query parameter 'keep' missing: pass --keep" } }
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-Api-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "keep" $keep "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/v1/SubscriptionsApi/{serial}") $qp $auth.query)
   let accept_val = "application/json"

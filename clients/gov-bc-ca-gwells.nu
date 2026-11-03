@@ -1,4 +1,4 @@
-# Auto-generated client for Groundwater Wells, Aquifers and Registry API vv1
+# Auto-generated client for Groundwater Wells, Aquifers and Registry API v1
 # Source: https://api.apis.guru/v2/specs/gov.bc.ca/gwells/v1/openapi.json
 # Auth: --token flag or $env.GROUNDWATER_WELLS_AQUIFERS_AND_REGISTRY_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "jwt" => { {scheme: $scheme, headers: {JWT: $token_val}, query: "", location: "header"} }
+    "jwt" => { {scheme: $scheme, headers: {"JWT": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }

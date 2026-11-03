@@ -137,12 +137,14 @@ export def "rate-card-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --filter: string # The filter to apply on the operation. It ONLY supports the 'eq' and 'and' logical operators at this time. All the 4 query parameters 'OfferDurableId', 'Currency', 'Locale', 'Region' are required to be a part of the $filter.
-  --api-version: string # Client Api Version.
+  --filter: string # The filter to apply on the operation. It ONLY supports the 'eq' and 'and' logical operators at this time. All the 4 query parameters 'OfferDurableId', 'Currency', 'Locale', 'Region' are required to be a part of the $filter. (required)
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<Currency: string, IsTaxIncluded: bool, Locale: string, Meters: table<EffectiveDate: string, IncludedQuantity: float, MeterCategory: string, MeterId: string, MeterName: string, MeterRates: record, MeterRegion: string, MeterSubCategory: string, MeterTags: list, Unit: string>, OfferTerms: table<EffectiveDate: string, Name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($filter == null) { error make --unspanned { msg: "required query parameter '$filter' missing: pass --filter" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Commerce/RateCard") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -178,16 +180,19 @@ export def "usage-aggregates-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --reported-start-time: string # The start of the time range to retrieve data for. (format: date-time)
-  --reported-end-time: string # The end of the time range to retrieve data for. (format: date-time)
+  --reported-start-time: string # The start of the time range to retrieve data for. (required, format: date-time)
+  --reported-end-time: string # The end of the time range to retrieve data for. (required, format: date-time)
   --show-details: oneof<nothing, bool> # `True` returns usage data in instance-level detail, `false` causes server-side aggregation with fewer details. For example, if you have 3 website instances, by default you will get 3 line items for website consumption. If you specify showDetails = false, the data will be aggregated as a single line item for website consumption within the time period (for the given subscriptionId, meterId, usageStartTime and usageEndTime).
   --aggregation-granularity: string@aggregation-granularity-completer # `Daily` (default) returns the data in daily granularity, `Hourly` returns the data in hourly granularity. (default: Daily)
   --continuation-token: string # Used when a continuation token string is provided in the response body of the previous call, enabling paging through a large result set. If not present, the data is retrieved from the beginning of the day/hour (based on the granularity) passed in.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($reported_start_time == null) { error make --unspanned { msg: "required query parameter 'reportedStartTime' missing: pass --reported-start-time" } }
+  if ($reported_end_time == null) { error make --unspanned { msg: "required query parameter 'reportedEndTime' missing: pass --reported-end-time" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "reportedStartTime" $reported_start_time "scalar") (serialize-qp "reportedEndTime" $reported_end_time "scalar") (serialize-qp "showDetails" $show_details "scalar") (serialize-qp "aggregationGranularity" $aggregation_granularity "scalar") (serialize-qp "continuationToken" $continuation_token "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Commerce/UsageAggregates") $qp $auth.query)
   let accept_val = ($accept | default "application/json")

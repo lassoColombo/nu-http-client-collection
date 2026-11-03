@@ -140,13 +140,14 @@ export def "create-alert-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string # A valid key for a locked thing. If the thing is not locked, this can be ignored.
+  --key: string # A valid key for a locked thing. If the thing is not locked, this can be ignored. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($who | is-empty) { error make --unspanned { msg: "path parameter 'who' must be non-empty" } }
   if ($thing | is-empty) { error make --unspanned { msg: "path parameter 'thing' must be non-empty" } }
   if ($condition | is-empty) { error make --unspanned { msg: "path parameter 'condition' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({who: (encode-path-segment $who), thing: (encode-path-segment $thing), condition: (encode-path-segment $condition)} | format pattern "/alert/{who}/when/{thing}/{condition}") $qp $auth.query)
   let accept_val = "application/json"
@@ -262,11 +263,12 @@ export def "get-alert" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string # A valid key for a locked thing. If the thing is not locked, this can be ignored.
+  --key: string # A valid key for a locked thing. If the thing is not locked, this can be ignored. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($thing | is-empty) { error make --unspanned { msg: "path parameter 'thing' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({thing: (encode-path-segment $thing)} | format pattern "/get/alert/for/{thing}") $qp $auth.query)
   let accept_val = "application/json"
@@ -375,14 +377,16 @@ export def "get-stored-alerts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string # A valid key for a locked thing. If the thing is not locked, this can be ignored.
-  --date: string # The calendar date (YYYY-MM-DD) from which you'd like to start your query. The response will be a maximum of one day.
+  --key: string # A valid key for a locked thing. If the thing is not locked, this can be ignored. (required)
+  --date: string # The calendar date (YYYY-MM-DD) from which you'd like to start your query. The response will be a maximum of one day. (required)
   --hour: string # The hour of the day represented in the date parameter in 24-hour (00-23) format. If this parameter is included, a maximum of 1 hour will be returned starting at this hour.
   --response-type: string # Current valid parameters for this are 'csv' and 'json'. If this parameter is left blank, all responses default to hapi-json dweet-speak.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($thing | is-empty) { error make --unspanned { msg: "path parameter 'thing' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
+  if ($date == null) { error make --unspanned { msg: "required query parameter 'date' missing: pass --date" } }
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "hour" $hour "scalar") (serialize-qp "responseType" $response_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({thing: (encode-path-segment $thing)} | format pattern "/get/stored/alerts/for/{thing}") $qp $auth.query)
   let accept_val = "application/json"
@@ -415,14 +419,16 @@ export def "get-get-stored-dweets-for-thing" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string # A valid key for a locked thing. If the thing is not locked, this can be ignored.
-  --date: string # The calendar date (YYYY-MM-DD) from which you'd like to start your query. The response will be a maximum of one day.
+  --key: string # A valid key for a locked thing. If the thing is not locked, this can be ignored. (required)
+  --date: string # The calendar date (YYYY-MM-DD) from which you'd like to start your query. The response will be a maximum of one day. (required)
   --hour: string # The hour of the day represented in the date parameter in 24-hour (00-23) format. If this parameter is included, a maximum of 1 hour will be returned starting at this hour.
   --response-type: string # Current valid parameters for this are 'csv' and 'json'. If this parameter is left blank, all responses default to hapi-json dweet-speak.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($thing | is-empty) { error make --unspanned { msg: "path parameter 'thing' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
+  if ($date == null) { error make --unspanned { msg: "required query parameter 'date' missing: pass --date" } }
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "hour" $hour "scalar") (serialize-qp "responseType" $response_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({thing: (encode-path-segment $thing)} | format pattern "/get/stored/dweets/for/{thing}") $qp $auth.query)
   let accept_val = "application/json"
@@ -492,12 +498,14 @@ export def "lock-thing" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lock: string # A valid dweet.io lock.
-  --key: string # A valid dweet.io master key.
+  --lock: string # A valid dweet.io lock. (required)
+  --key: string # A valid dweet.io master key. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($thing | is-empty) { error make --unspanned { msg: "path parameter 'thing' must be non-empty" } }
+  if ($lock == null) { error make --unspanned { msg: "required query parameter 'lock' missing: pass --lock" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "lock" $lock "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({thing: (encode-path-segment $thing)} | format pattern "/lock/{thing}") $qp $auth.query)
   let accept_val = "application/json"
@@ -531,11 +539,12 @@ export def "remove-alert" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string # A valid key for a locked thing. If the thing is not locked, this can be ignored.
+  --key: string # A valid key for a locked thing. If the thing is not locked, this can be ignored. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($thing | is-empty) { error make --unspanned { msg: "path parameter 'thing' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({thing: (encode-path-segment $thing)} | format pattern "/remove/alert/for/{thing}") $qp $auth.query)
   let accept_val = "application/json"
@@ -569,11 +578,12 @@ export def "remove-lock" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string # A valid dweet.io master key.
+  --key: string # A valid dweet.io master key. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lock | is-empty) { error make --unspanned { msg: "path parameter 'lock' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({lock: (encode-path-segment $lock)} | format pattern "/remove/lock/{lock}") $qp $auth.query)
   let accept_val = "application/json"
@@ -607,11 +617,12 @@ export def "unlock-thing" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string # A valid dweet.io master key.
+  --key: string # A valid dweet.io master key. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($thing | is-empty) { error make --unspanned { msg: "path parameter 'thing' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({thing: (encode-path-segment $thing)} | format pattern "/unlock/{thing}") $qp $auth.query)
   let accept_val = "application/json"

@@ -131,12 +131,14 @@ export def "list-activities" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --latitude: float # Latitude (decimal coordinates) (e.g. 41.397158)
-  --longitude: float # Longitude (decimal coordinates) (e.g. 2.160873)
+  --latitude: float # Latitude (decimal coordinates) (required, e.g. 41.397158)
+  --longitude: float # Longitude (decimal coordinates) (required, e.g. 2.160873)
   --radius: int # radius of the search in Kilometer. Can be from 0 to 20, default value is 1 Km. (default: 1)
-]: nothing -> any {
+]: nothing -> record<data: table<bookingLink: string, description: string, geoCode: record, id: string, minimumDuration: string, name: string, pictures: list, price: record, rating: string, self: record, shortDescription: string, type: string>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>, warnings: table<code: int, detail: string, source: record, status: int, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($latitude == null) { error make --unspanned { msg: "required query parameter 'latitude' missing: pass --latitude" } }
+  if ($longitude == null) { error make --unspanned { msg: "required query parameter 'longitude' missing: pass --longitude" } }
   let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shopping/activities" $qp $auth.query)
   let accept_val = "application/vnd.amadeus+json"
@@ -169,13 +171,17 @@ export def "list-activities-by-square" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --north: float # Latitude north of bounding box (decimal coordinates) (e.g. 41.397158)
-  --west: float # Longitude west of bounding box (decimal coordinates) (e.g. 2.160873)
-  --south: float # Latitude south of bounding box (decimal coordinates) (e.g. 41.394582)
-  --east: float # Longitude east of bounding box (decimal coordinates) (e.g. 2.177181)
-]: nothing -> any {
+  --north: float # Latitude north of bounding box (decimal coordinates) (required, e.g. 41.397158)
+  --west: float # Longitude west of bounding box (decimal coordinates) (required, e.g. 2.160873)
+  --south: float # Latitude south of bounding box (decimal coordinates) (required, e.g. 41.394582)
+  --east: float # Longitude east of bounding box (decimal coordinates) (required, e.g. 2.177181)
+]: nothing -> record<data: table<bookingLink: string, description: string, geoCode: record, id: string, minimumDuration: string, name: string, pictures: list, price: record, rating: string, self: record, shortDescription: string, type: string>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>, warnings: table<code: int, detail: string, source: record, status: int, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($north == null) { error make --unspanned { msg: "required query parameter 'north' missing: pass --north" } }
+  if ($west == null) { error make --unspanned { msg: "required query parameter 'west' missing: pass --west" } }
+  if ($south == null) { error make --unspanned { msg: "required query parameter 'south' missing: pass --south" } }
+  if ($east == null) { error make --unspanned { msg: "required query parameter 'east' missing: pass --east" } }
   let qp = [(serialize-qp "north" $north "scalar") (serialize-qp "west" $west "scalar") (serialize-qp "south" $south "scalar") (serialize-qp "east" $east "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shopping/activities/by-square" $qp $auth.query)
   let accept_val = "application/vnd.amadeus+json"
@@ -209,7 +215,7 @@ export def "get-activity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<bookingLink: string, description: string, geoCode: record<latitude: float, longitude: float>, id: string, minimumDuration: string, name: string, pictures: list<string>, price: record<amount: string, currencyCode: string>, rating: string, self: record<href: string, methods: list>, shortDescription: string, type: string>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>, warnings: table<code: int, detail: string, source: record, status: int, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }

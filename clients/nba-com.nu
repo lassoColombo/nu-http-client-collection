@@ -1,4 +1,4 @@
-# Auto-generated client for NBA Stats API vversion
+# Auto-generated client for NBA Stats API version
 # Source: https://api.apis.guru/v2/specs/nba.com/version/swagger.json
 # Auth: --token flag or $env.NBA_STATS_API_TOKEN
 
@@ -132,19 +132,29 @@ export def "get-allstarballotpredictor" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --point-cap: string
-  --west-player1: string
-  --west-player2: string
-  --west-player3: string
-  --west-player4: string
-  --west-player5: string
-  --east-player1: string
-  --east-player2: string
-  --east-player3: string
-  --east-player4: string
-  --east-player5: string
+  --west-player1: string # required
+  --west-player2: string # required
+  --west-player3: string # required
+  --west-player4: string # required
+  --west-player5: string # required
+  --east-player1: string # required
+  --east-player2: string # required
+  --east-player3: string # required
+  --east-player4: string # required
+  --east-player5: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($west_player1 == null) { error make --unspanned { msg: "required query parameter 'WestPlayer1' missing: pass --west-player1" } }
+  if ($west_player2 == null) { error make --unspanned { msg: "required query parameter 'WestPlayer2' missing: pass --west-player2" } }
+  if ($west_player3 == null) { error make --unspanned { msg: "required query parameter 'WestPlayer3' missing: pass --west-player3" } }
+  if ($west_player4 == null) { error make --unspanned { msg: "required query parameter 'WestPlayer4' missing: pass --west-player4" } }
+  if ($west_player5 == null) { error make --unspanned { msg: "required query parameter 'WestPlayer5' missing: pass --west-player5" } }
+  if ($east_player1 == null) { error make --unspanned { msg: "required query parameter 'EastPlayer1' missing: pass --east-player1" } }
+  if ($east_player2 == null) { error make --unspanned { msg: "required query parameter 'EastPlayer2' missing: pass --east-player2" } }
+  if ($east_player3 == null) { error make --unspanned { msg: "required query parameter 'EastPlayer3' missing: pass --east-player3" } }
+  if ($east_player4 == null) { error make --unspanned { msg: "required query parameter 'EastPlayer4' missing: pass --east-player4" } }
+  if ($east_player5 == null) { error make --unspanned { msg: "required query parameter 'EastPlayer5' missing: pass --east-player5" } }
   let qp = [(serialize-qp "PointCap" $point_cap "scalar") (serialize-qp "WestPlayer1" $west_player1 "scalar") (serialize-qp "WestPlayer2" $west_player2 "scalar") (serialize-qp "WestPlayer3" $west_player3 "scalar") (serialize-qp "WestPlayer4" $west_player4 "scalar") (serialize-qp "WestPlayer5" $west_player5 "scalar") (serialize-qp "EastPlayer1" $east_player1 "scalar") (serialize-qp "EastPlayer2" $east_player2 "scalar") (serialize-qp "EastPlayer3" $east_player3 "scalar") (serialize-qp "EastPlayer4" $east_player4 "scalar") (serialize-qp "EastPlayer5" $east_player5 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/allstarballotpredictor" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -259,15 +269,21 @@ export def "get-boxscoreadvancedv2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --game-id: string
-  --start-period: string
-  --end-period: string
-  --start-range: string
-  --end-range: string
-  --range-type: string
+  --game-id: string # required
+  --start-period: string # required
+  --end-period: string # required
+  --start-range: string # required
+  --end-range: string # required
+  --range-type: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
+  if ($start_period == null) { error make --unspanned { msg: "required query parameter 'StartPeriod' missing: pass --start-period" } }
+  if ($end_period == null) { error make --unspanned { msg: "required query parameter 'EndPeriod' missing: pass --end-period" } }
+  if ($start_range == null) { error make --unspanned { msg: "required query parameter 'StartRange' missing: pass --start-range" } }
+  if ($end_range == null) { error make --unspanned { msg: "required query parameter 'EndRange' missing: pass --end-range" } }
+  if ($range_type == null) { error make --unspanned { msg: "required query parameter 'RangeType' missing: pass --range-type" } }
   let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar") (serialize-qp "StartRange" $start_range "scalar") (serialize-qp "EndRange" $end_range "scalar") (serialize-qp "RangeType" $range_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/boxscoreadvancedv2" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -340,15 +356,21 @@ export def "get-boxscorefourfactorsv2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --game-id: string
-  --start-period: string
-  --end-period: string
-  --start-range: string
-  --end-range: string
-  --range-type: string
+  --game-id: string # required
+  --start-period: string # required
+  --end-period: string # required
+  --start-range: string # required
+  --end-range: string # required
+  --range-type: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
+  if ($start_period == null) { error make --unspanned { msg: "required query parameter 'StartPeriod' missing: pass --start-period" } }
+  if ($end_period == null) { error make --unspanned { msg: "required query parameter 'EndPeriod' missing: pass --end-period" } }
+  if ($start_range == null) { error make --unspanned { msg: "required query parameter 'StartRange' missing: pass --start-range" } }
+  if ($end_range == null) { error make --unspanned { msg: "required query parameter 'EndRange' missing: pass --end-range" } }
+  if ($range_type == null) { error make --unspanned { msg: "required query parameter 'RangeType' missing: pass --range-type" } }
   let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar") (serialize-qp "StartRange" $start_range "scalar") (serialize-qp "EndRange" $end_range "scalar") (serialize-qp "RangeType" $range_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/boxscorefourfactorsv2" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -421,15 +443,21 @@ export def "get-boxscoremiscv2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --game-id: string
-  --start-period: string
-  --end-period: string
-  --start-range: string
-  --end-range: string
-  --range-type: string
+  --game-id: string # required
+  --start-period: string # required
+  --end-period: string # required
+  --start-range: string # required
+  --end-range: string # required
+  --range-type: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
+  if ($start_period == null) { error make --unspanned { msg: "required query parameter 'StartPeriod' missing: pass --start-period" } }
+  if ($end_period == null) { error make --unspanned { msg: "required query parameter 'EndPeriod' missing: pass --end-period" } }
+  if ($start_range == null) { error make --unspanned { msg: "required query parameter 'StartRange' missing: pass --start-range" } }
+  if ($end_range == null) { error make --unspanned { msg: "required query parameter 'EndRange' missing: pass --end-range" } }
+  if ($range_type == null) { error make --unspanned { msg: "required query parameter 'RangeType' missing: pass --range-type" } }
   let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar") (serialize-qp "StartRange" $start_range "scalar") (serialize-qp "EndRange" $end_range "scalar") (serialize-qp "RangeType" $range_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/boxscoremiscv2" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -460,10 +488,11 @@ export def "get-boxscoreplayertrackv2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --game-id: string
+  --game-id: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
   let qp = [(serialize-qp "GameID" $game_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/boxscoreplayertrackv2" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -536,15 +565,21 @@ export def "get-boxscorescoringv2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --game-id: string
-  --start-period: string
-  --end-period: string
-  --start-range: string
-  --end-range: string
-  --range-type: string
+  --game-id: string # required
+  --start-period: string # required
+  --end-period: string # required
+  --start-range: string # required
+  --end-range: string # required
+  --range-type: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
+  if ($start_period == null) { error make --unspanned { msg: "required query parameter 'StartPeriod' missing: pass --start-period" } }
+  if ($end_period == null) { error make --unspanned { msg: "required query parameter 'EndPeriod' missing: pass --end-period" } }
+  if ($start_range == null) { error make --unspanned { msg: "required query parameter 'StartRange' missing: pass --start-range" } }
+  if ($end_range == null) { error make --unspanned { msg: "required query parameter 'EndRange' missing: pass --end-range" } }
+  if ($range_type == null) { error make --unspanned { msg: "required query parameter 'RangeType' missing: pass --range-type" } }
   let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar") (serialize-qp "StartRange" $start_range "scalar") (serialize-qp "EndRange" $end_range "scalar") (serialize-qp "RangeType" $range_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/boxscorescoringv2" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -575,10 +610,11 @@ export def "get-boxscoresummaryv2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --game-id: string
+  --game-id: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
   let qp = [(serialize-qp "GameID" $game_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/boxscoresummaryv2" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -609,15 +645,21 @@ export def "get-boxscoretraditionalv2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --game-id: string
-  --start-period: string
-  --end-period: string
-  --start-range: string
-  --end-range: string
-  --range-type: string
+  --game-id: string # required
+  --start-period: string # required
+  --end-period: string # required
+  --start-range: string # required
+  --end-range: string # required
+  --range-type: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
+  if ($start_period == null) { error make --unspanned { msg: "required query parameter 'StartPeriod' missing: pass --start-period" } }
+  if ($end_period == null) { error make --unspanned { msg: "required query parameter 'EndPeriod' missing: pass --end-period" } }
+  if ($start_range == null) { error make --unspanned { msg: "required query parameter 'StartRange' missing: pass --start-range" } }
+  if ($end_range == null) { error make --unspanned { msg: "required query parameter 'EndRange' missing: pass --end-range" } }
+  if ($range_type == null) { error make --unspanned { msg: "required query parameter 'RangeType' missing: pass --range-type" } }
   let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar") (serialize-qp "StartRange" $start_range "scalar") (serialize-qp "EndRange" $end_range "scalar") (serialize-qp "RangeType" $range_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/boxscoretraditionalv2" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -690,15 +732,21 @@ export def "get-boxscoreusagev2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --game-id: string
-  --start-period: string
-  --end-period: string
-  --start-range: string
-  --end-range: string
-  --range-type: string
+  --game-id: string # required
+  --start-period: string # required
+  --end-period: string # required
+  --start-range: string # required
+  --end-range: string # required
+  --range-type: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
+  if ($start_period == null) { error make --unspanned { msg: "required query parameter 'StartPeriod' missing: pass --start-period" } }
+  if ($end_period == null) { error make --unspanned { msg: "required query parameter 'EndPeriod' missing: pass --end-period" } }
+  if ($start_range == null) { error make --unspanned { msg: "required query parameter 'StartRange' missing: pass --start-range" } }
+  if ($end_range == null) { error make --unspanned { msg: "required query parameter 'EndRange' missing: pass --end-range" } }
+  if ($range_type == null) { error make --unspanned { msg: "required query parameter 'RangeType' missing: pass --range-type" } }
   let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar") (serialize-qp "StartRange" $start_range "scalar") (serialize-qp "EndRange" $end_range "scalar") (serialize-qp "RangeType" $range_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/boxscoreusagev2" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -729,10 +777,11 @@ export def "get-common-team-years" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
+  --league-id: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/commonTeamYears" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -763,12 +812,15 @@ export def "get-commonallplayers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
-  --season: string
-  --is-only-current-season: string
+  --league-id: string # required
+  --season: string # required
+  --is-only-current-season: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($is_only_current_season == null) { error make --unspanned { msg: "required query parameter 'IsOnlyCurrentSeason' missing: pass --is-only-current-season" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "IsOnlyCurrentSeason" $is_only_current_season "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/commonallplayers" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -799,10 +851,11 @@ export def "get-commonplayerinfo" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --player-id: string
+  --player-id: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
   let qp = [(serialize-qp "PlayerID" $player_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/commonplayerinfo" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -833,11 +886,13 @@ export def "get-commonplayoffseries" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
-  --season: string
+  --league-id: string # required
+  --season: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "Season" $season "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/commonplayoffseries" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -868,11 +923,13 @@ export def "get-commonteamroster" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --season: string
-  --team-id: string
+  --season: string # required
+  --team-id: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
   let qp = [(serialize-qp "Season" $season "scalar") (serialize-qp "TeamID" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/commonteamroster" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -903,11 +960,13 @@ export def "get-draftcombinedrillresults" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
-  --season-year: string
+  --league-id: string # required
+  --season-year: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($season_year == null) { error make --unspanned { msg: "required query parameter 'SeasonYear' missing: pass --season-year" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "SeasonYear" $season_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/draftcombinedrillresults" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -938,11 +997,13 @@ export def "get-draftcombinenonstationaryshooting" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
-  --season-year: string
+  --league-id: string # required
+  --season-year: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($season_year == null) { error make --unspanned { msg: "required query parameter 'SeasonYear' missing: pass --season-year" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "SeasonYear" $season_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/draftcombinenonstationaryshooting" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -973,11 +1034,13 @@ export def "get-draftcombineplayeranthro" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
-  --season-year: string
+  --league-id: string # required
+  --season-year: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($season_year == null) { error make --unspanned { msg: "required query parameter 'SeasonYear' missing: pass --season-year" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "SeasonYear" $season_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/draftcombineplayeranthro" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1008,11 +1071,13 @@ export def "get-draftcombinespotshooting" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
-  --season-year: string
+  --league-id: string # required
+  --season-year: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($season_year == null) { error make --unspanned { msg: "required query parameter 'SeasonYear' missing: pass --season-year" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "SeasonYear" $season_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/draftcombinespotshooting" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1043,11 +1108,13 @@ export def "get-draftcombinestats" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
-  --season-year: string
+  --league-id: string # required
+  --season-year: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($season_year == null) { error make --unspanned { msg: "required query parameter 'SeasonYear' missing: pass --season-year" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "SeasonYear" $season_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/draftcombinestats" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1078,10 +1145,11 @@ export def "get-drafthistory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
+  --league-id: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/drafthistory" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1112,10 +1180,11 @@ export def "get-franchisehistory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
+  --league-id: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/franchisehistory" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1146,18 +1215,25 @@ export def "get-homepageleaders" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --stat-category: string
-  --league-id: string
-  --season: string
-  --season-type: string
-  --player-or-team: string
+  --stat-category: string # required
+  --league-id: string # required
+  --season: string # required
+  --season-type: string # required
+  --player-or-team: string # required
   --game: string
   --player: string
-  --player-scope: string
-  --game-scope: string
+  --player-scope: string # required
+  --game-scope: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stat_category == null) { error make --unspanned { msg: "required query parameter 'StatCategory' missing: pass --stat-category" } }
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($player_or_team == null) { error make --unspanned { msg: "required query parameter 'PlayerOrTeam' missing: pass --player-or-team" } }
+  if ($player_scope == null) { error make --unspanned { msg: "required query parameter 'PlayerScope' missing: pass --player-scope" } }
+  if ($game_scope == null) { error make --unspanned { msg: "required query parameter 'GameScope' missing: pass --game-scope" } }
   let qp = [(serialize-qp "StatCategory" $stat_category "scalar") (serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerOrTeam" $player_or_team "scalar") (serialize-qp "Game" $game "scalar") (serialize-qp "Player" $player "scalar") (serialize-qp "PlayerScope" $player_scope "scalar") (serialize-qp "GameScope" $game_scope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/homepageleaders" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1188,18 +1264,25 @@ export def "get-homepagev2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --stat-type: string
-  --league-id: string
-  --season: string
-  --season-type: string
-  --player-or-team: string
+  --stat-type: string # required
+  --league-id: string # required
+  --season: string # required
+  --season-type: string # required
+  --player-or-team: string # required
   --game: string
   --player: string
-  --player-scope: string
-  --game-scope: string
+  --player-scope: string # required
+  --game-scope: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stat_type == null) { error make --unspanned { msg: "required query parameter 'StatType' missing: pass --stat-type" } }
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($player_or_team == null) { error make --unspanned { msg: "required query parameter 'PlayerOrTeam' missing: pass --player-or-team" } }
+  if ($player_scope == null) { error make --unspanned { msg: "required query parameter 'PlayerScope' missing: pass --player-scope" } }
+  if ($game_scope == null) { error make --unspanned { msg: "required query parameter 'GameScope' missing: pass --game-scope" } }
   let qp = [(serialize-qp "StatType" $stat_type "scalar") (serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerOrTeam" $player_or_team "scalar") (serialize-qp "Game" $game "scalar") (serialize-qp "Player" $player "scalar") (serialize-qp "PlayerScope" $player_scope "scalar") (serialize-qp "GameScope" $game_scope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/homepagev2" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1230,18 +1313,25 @@ export def "get-leaderstiles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --stat: string
-  --league-id: string
-  --season: string
-  --season-type: string
-  --player-or-team: string
+  --stat: string # required
+  --league-id: string # required
+  --season: string # required
+  --season-type: string # required
+  --player-or-team: string # required
   --game: string
   --player: string
-  --player-scope: string
-  --game-scope: string
+  --player-scope: string # required
+  --game-scope: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stat == null) { error make --unspanned { msg: "required query parameter 'Stat' missing: pass --stat" } }
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($player_or_team == null) { error make --unspanned { msg: "required query parameter 'PlayerOrTeam' missing: pass --player-or-team" } }
+  if ($player_scope == null) { error make --unspanned { msg: "required query parameter 'PlayerScope' missing: pass --player-scope" } }
+  if ($game_scope == null) { error make --unspanned { msg: "required query parameter 'GameScope' missing: pass --game-scope" } }
   let qp = [(serialize-qp "Stat" $stat "scalar") (serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerOrTeam" $player_or_team "scalar") (serialize-qp "Game" $game "scalar") (serialize-qp "Player" $player "scalar") (serialize-qp "PlayerScope" $player_scope "scalar") (serialize-qp "GameScope" $game_scope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/leaderstiles" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1272,29 +1362,49 @@ export def "get-leaguedashlineups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --group-quantity: string
-  --season-type: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --group-quantity: string # required
+  --season-type: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_quantity == null) { error make --unspanned { msg: "required query parameter 'GroupQuantity' missing: pass --group-quantity" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "GroupQuantity" $group_quantity "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/leaguedashlineups" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1325,13 +1435,17 @@ export def "get-leaguedashplayerbiostats" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --per-mode: string
-  --league-id: string
-  --season: string
-  --season-type: string
+  --per-mode: string # required
+  --league-id: string # required
+  --season: string # required
+  --season-type: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
   let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/leaguedashplayerbiostats" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1362,35 +1476,61 @@ export def "get-leaguedashplayerclutch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clutch-time: string
-  --ahead-behind: string
-  --point-diff: string
-  --game-scope: string
-  --player-experience: string
-  --player-position: string
-  --starter-bench: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --clutch-time: string # required
+  --ahead-behind: string # required
+  --point-diff: string # required
+  --game-scope: string # required
+  --player-experience: string # required
+  --player-position: string # required
+  --starter-bench: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clutch_time == null) { error make --unspanned { msg: "required query parameter 'ClutchTime' missing: pass --clutch-time" } }
+  if ($ahead_behind == null) { error make --unspanned { msg: "required query parameter 'AheadBehind' missing: pass --ahead-behind" } }
+  if ($point_diff == null) { error make --unspanned { msg: "required query parameter 'PointDiff' missing: pass --point-diff" } }
+  if ($game_scope == null) { error make --unspanned { msg: "required query parameter 'GameScope' missing: pass --game-scope" } }
+  if ($player_experience == null) { error make --unspanned { msg: "required query parameter 'PlayerExperience' missing: pass --player-experience" } }
+  if ($player_position == null) { error make --unspanned { msg: "required query parameter 'PlayerPosition' missing: pass --player-position" } }
+  if ($starter_bench == null) { error make --unspanned { msg: "required query parameter 'StarterBench' missing: pass --starter-bench" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "ClutchTime" $clutch_time "scalar") (serialize-qp "AheadBehind" $ahead_behind "scalar") (serialize-qp "PointDiff" $point_diff "scalar") (serialize-qp "GameScope" $game_scope "scalar") (serialize-qp "PlayerExperience" $player_experience "scalar") (serialize-qp "PlayerPosition" $player_position "scalar") (serialize-qp "StarterBench" $starter_bench "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/leaguedashplayerclutch" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1421,13 +1561,17 @@ export def "get-leaguedashplayerptshot" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
-  --per-mode: string
-  --season: string
-  --season-type: string
+  --league-id: string # required
+  --per-mode: string # required
+  --season: string # required
+  --season-type: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/leaguedashplayerptshot" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1458,33 +1602,57 @@ export def "get-leaguedashplayershotlocations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
-  --distance-range: string
-  --game-scope: string
-  --player-experience: string
-  --player-position: string
-  --starter-bench: string
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
+  --distance-range: string # required
+  --game-scope: string # required
+  --player-experience: string # required
+  --player-position: string # required
+  --starter-bench: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
+  if ($distance_range == null) { error make --unspanned { msg: "required query parameter 'DistanceRange' missing: pass --distance-range" } }
+  if ($game_scope == null) { error make --unspanned { msg: "required query parameter 'GameScope' missing: pass --game-scope" } }
+  if ($player_experience == null) { error make --unspanned { msg: "required query parameter 'PlayerExperience' missing: pass --player-experience" } }
+  if ($player_position == null) { error make --unspanned { msg: "required query parameter 'PlayerPosition' missing: pass --player-position" } }
+  if ($starter_bench == null) { error make --unspanned { msg: "required query parameter 'StarterBench' missing: pass --starter-bench" } }
   let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar") (serialize-qp "DistanceRange" $distance_range "scalar") (serialize-qp "GameScope" $game_scope "scalar") (serialize-qp "PlayerExperience" $player_experience "scalar") (serialize-qp "PlayerPosition" $player_position "scalar") (serialize-qp "StarterBench" $starter_bench "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/leaguedashplayershotlocations" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1515,32 +1683,55 @@ export def "get-leaguedashplayerstats" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --game-scope: string
-  --player-experience: string
-  --player-position: string
-  --starter-bench: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --game-scope: string # required
+  --player-experience: string # required
+  --player-position: string # required
+  --starter-bench: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($game_scope == null) { error make --unspanned { msg: "required query parameter 'GameScope' missing: pass --game-scope" } }
+  if ($player_experience == null) { error make --unspanned { msg: "required query parameter 'PlayerExperience' missing: pass --player-experience" } }
+  if ($player_position == null) { error make --unspanned { msg: "required query parameter 'PlayerPosition' missing: pass --player-position" } }
+  if ($starter_bench == null) { error make --unspanned { msg: "required query parameter 'StarterBench' missing: pass --starter-bench" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "GameScope" $game_scope "scalar") (serialize-qp "PlayerExperience" $player_experience "scalar") (serialize-qp "PlayerPosition" $player_position "scalar") (serialize-qp "StarterBench" $starter_bench "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/leaguedashplayerstats" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1571,14 +1762,19 @@ export def "get-leaguedashptdefend" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
-  --per-mode: string
-  --season: string
-  --season-type: string
-  --defense-category: string
+  --league-id: string # required
+  --per-mode: string # required
+  --season: string # required
+  --season-type: string # required
+  --defense-category: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($defense_category == null) { error make --unspanned { msg: "required query parameter 'DefenseCategory' missing: pass --defense-category" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "DefenseCategory" $defense_category "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/leaguedashptdefend" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1609,14 +1805,19 @@ export def "get-leaguedashptteamdefend" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
-  --per-mode: string
-  --season: string
-  --season-type: string
-  --defense-category: string
+  --league-id: string # required
+  --per-mode: string # required
+  --season: string # required
+  --season-type: string # required
+  --defense-category: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($defense_category == null) { error make --unspanned { msg: "required query parameter 'DefenseCategory' missing: pass --defense-category" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "DefenseCategory" $defense_category "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/leaguedashptteamdefend" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1647,35 +1848,61 @@ export def "get-leaguedashteamclutch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clutch-time: string
-  --ahead-behind: string
-  --point-diff: string
-  --game-scope: string
-  --player-experience: string
-  --player-position: string
-  --starter-bench: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --clutch-time: string # required
+  --ahead-behind: string # required
+  --point-diff: string # required
+  --game-scope: string # required
+  --player-experience: string # required
+  --player-position: string # required
+  --starter-bench: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clutch_time == null) { error make --unspanned { msg: "required query parameter 'ClutchTime' missing: pass --clutch-time" } }
+  if ($ahead_behind == null) { error make --unspanned { msg: "required query parameter 'AheadBehind' missing: pass --ahead-behind" } }
+  if ($point_diff == null) { error make --unspanned { msg: "required query parameter 'PointDiff' missing: pass --point-diff" } }
+  if ($game_scope == null) { error make --unspanned { msg: "required query parameter 'GameScope' missing: pass --game-scope" } }
+  if ($player_experience == null) { error make --unspanned { msg: "required query parameter 'PlayerExperience' missing: pass --player-experience" } }
+  if ($player_position == null) { error make --unspanned { msg: "required query parameter 'PlayerPosition' missing: pass --player-position" } }
+  if ($starter_bench == null) { error make --unspanned { msg: "required query parameter 'StarterBench' missing: pass --starter-bench" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "ClutchTime" $clutch_time "scalar") (serialize-qp "AheadBehind" $ahead_behind "scalar") (serialize-qp "PointDiff" $point_diff "scalar") (serialize-qp "GameScope" $game_scope "scalar") (serialize-qp "PlayerExperience" $player_experience "scalar") (serialize-qp "PlayerPosition" $player_position "scalar") (serialize-qp "StarterBench" $starter_bench "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/leaguedashteamclutch" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1706,13 +1933,17 @@ export def "get-leaguedashteamptshot" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
-  --per-mode: string
-  --season: string
-  --season-type: string
+  --league-id: string # required
+  --per-mode: string # required
+  --season: string # required
+  --season-type: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/leaguedashteamptshot" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1743,33 +1974,57 @@ export def "get-leaguedashteamshotlocations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
-  --distance-range: string
-  --game-scope: string
-  --player-experience: string
-  --player-position: string
-  --starter-bench: string
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
+  --distance-range: string # required
+  --game-scope: string # required
+  --player-experience: string # required
+  --player-position: string # required
+  --starter-bench: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
+  if ($distance_range == null) { error make --unspanned { msg: "required query parameter 'DistanceRange' missing: pass --distance-range" } }
+  if ($game_scope == null) { error make --unspanned { msg: "required query parameter 'GameScope' missing: pass --game-scope" } }
+  if ($player_experience == null) { error make --unspanned { msg: "required query parameter 'PlayerExperience' missing: pass --player-experience" } }
+  if ($player_position == null) { error make --unspanned { msg: "required query parameter 'PlayerPosition' missing: pass --player-position" } }
+  if ($starter_bench == null) { error make --unspanned { msg: "required query parameter 'StarterBench' missing: pass --starter-bench" } }
   let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar") (serialize-qp "DistanceRange" $distance_range "scalar") (serialize-qp "GameScope" $game_scope "scalar") (serialize-qp "PlayerExperience" $player_experience "scalar") (serialize-qp "PlayerPosition" $player_position "scalar") (serialize-qp "StarterBench" $starter_bench "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/leaguedashteamshotlocations" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1800,28 +2055,47 @@ export def "get-leaguedashteamstats" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/leaguedashteamstats" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1852,15 +2126,20 @@ export def "get-leagueleaders" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
-  --per-mode: string
+  --league-id: string # required
+  --per-mode: string # required
   --stat-category: string
-  --season: string
-  --season-type: string
-  --scope: string
+  --season: string # required
+  --season-type: string # required
+  --scope: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($scope == null) { error make --unspanned { msg: "required query parameter 'Scope' missing: pass --scope" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "StatCategory" $stat_category "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Scope" $scope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/leagueleaders" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1891,12 +2170,15 @@ export def "get-playbyplay" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --game-id: string
-  --start-period: string
-  --end-period: string
+  --game-id: string # required
+  --start-period: string # required
+  --end-period: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
+  if ($start_period == null) { error make --unspanned { msg: "required query parameter 'StartPeriod' missing: pass --start-period" } }
+  if ($end_period == null) { error make --unspanned { msg: "required query parameter 'EndPeriod' missing: pass --end-period" } }
   let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playbyplay" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1927,12 +2209,15 @@ export def "get-playbyplayv2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --game-id: string
-  --start-period: string
-  --end-period: string
+  --game-id: string # required
+  --start-period: string # required
+  --end-period: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
+  if ($start_period == null) { error make --unspanned { msg: "required query parameter 'StartPeriod' missing: pass --start-period" } }
+  if ($end_period == null) { error make --unspanned { msg: "required query parameter 'EndPeriod' missing: pass --end-period" } }
   let qp = [(serialize-qp "GameID" $game_id "scalar") (serialize-qp "StartPeriod" $start_period "scalar") (serialize-qp "EndPeriod" $end_period "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playbyplayv2" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1963,11 +2248,13 @@ export def "get-playercareerstats" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --per-mode: string
-  --player-id: string
+  --per-mode: string # required
+  --player-id: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
   let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlayerID" $player_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playercareerstats" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1998,30 +2285,51 @@ export def "get-playercompare" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --player-id-list: string
-  --vs-player-id-list: string
-  --season-type: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --player-id-list: string # required
+  --vs-player-id-list: string # required
+  --season-type: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($player_id_list == null) { error make --unspanned { msg: "required query parameter 'PlayerIDList' missing: pass --player-id-list" } }
+  if ($vs_player_id_list == null) { error make --unspanned { msg: "required query parameter 'VsPlayerIDList' missing: pass --vs-player-id-list" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "PlayerIDList" $player_id_list "scalar") (serialize-qp "VsPlayerIDList" $vs_player_id_list "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playercompare" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2052,29 +2360,49 @@ export def "get-playerdashboardbyclutch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --player-id: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --player-id: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playerdashboardbyclutch" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2105,29 +2433,49 @@ export def "get-playerdashboardbygamesplits" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --player-id: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --player-id: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playerdashboardbygamesplits" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2158,29 +2506,49 @@ export def "get-playerdashboardbygeneralsplits" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --player-id: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --player-id: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playerdashboardbygeneralsplits" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2211,29 +2579,49 @@ export def "get-playerdashboardbylastngames" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --player-id: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --player-id: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playerdashboardbylastngames" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2264,29 +2652,49 @@ export def "get-playerdashboardbyopponent" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --player-id: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --player-id: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playerdashboardbyopponent" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2317,29 +2725,49 @@ export def "get-playerdashboardbyshootingsplits" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --player-id: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --player-id: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playerdashboardbyshootingsplits" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2370,29 +2798,49 @@ export def "get-playerdashboardbyteamperformance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --player-id: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --player-id: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playerdashboardbyteamperformance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2423,29 +2871,49 @@ export def "get-playerdashboardbyyearoveryear" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --player-id: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --player-id: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playerdashboardbyyearoveryear" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2476,24 +2944,39 @@ export def "get-playerdashptpass" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --per-mode: string
-  --season: string
-  --season-type: string
-  --player-id: string
-  --team-id: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --last-n-games: string
+  --per-mode: string # required
+  --season: string # required
+  --season-type: string # required
+  --player-id: string # required
+  --team-id: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playerdashptpass" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2524,26 +3007,43 @@ export def "get-playerdashptreb" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --per-mode: string
-  --season: string
-  --season-type: string
-  --player-id: string
-  --team-id: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --per-mode: string # required
+  --season: string # required
+  --season-type: string # required
+  --player-id: string # required
+  --team-id: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playerdashptreb" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2626,26 +3126,43 @@ export def "get-playerdashptshotdefend" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --per-mode: string
-  --season: string
-  --season-type: string
-  --player-id: string
-  --team-id: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --per-mode: string # required
+  --season: string # required
+  --season-type: string # required
+  --player-id: string # required
+  --team-id: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playerdashptshotdefend" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2717,26 +3234,43 @@ export def "get-playerdashptshots" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --per-mode: string
-  --season: string
-  --season-type: string
-  --player-id: string
-  --team-id: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --per-mode: string # required
+  --season: string # required
+  --season-type: string # required
+  --player-id: string # required
+  --team-id: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playerdashptshots" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2767,12 +3301,15 @@ export def "get-playergamelog" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --player-id: string
-  --season: string
-  --season-type: string
+  --player-id: string # required
+  --season: string # required
+  --season-type: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
   let qp = [(serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playergamelog" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2803,16 +3340,23 @@ export def "get-playerprofile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
-  --player-id: string
-  --season: string
-  --season-type: string
-  --graph-start-season: string
-  --graph-end-season: string
-  --graph-stat: string
+  --league-id: string # required
+  --player-id: string # required
+  --season: string # required
+  --season-type: string # required
+  --graph-start-season: string # required
+  --graph-end-season: string # required
+  --graph-stat: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($graph_start_season == null) { error make --unspanned { msg: "required query parameter 'GraphStartSeason' missing: pass --graph-start-season" } }
+  if ($graph_end_season == null) { error make --unspanned { msg: "required query parameter 'GraphEndSeason' missing: pass --graph-end-season" } }
+  if ($graph_stat == null) { error make --unspanned { msg: "required query parameter 'GraphStat' missing: pass --graph-stat" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "GraphStartSeason" $graph_start_season "scalar") (serialize-qp "GraphEndSeason" $graph_end_season "scalar") (serialize-qp "GraphStat" $graph_stat "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playerprofile" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2843,11 +3387,13 @@ export def "get-playerprofilev2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --per-mode: string
-  --player-id: string
+  --per-mode: string # required
+  --player-id: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
   let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlayerID" $player_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playerprofilev2" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2878,40 +3424,71 @@ export def "get-playersvsplayers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --player-team-id: string
-  --player-id1: string
-  --player-id2: string
-  --player-id3: string
-  --player-id4: string
-  --player-id5: string
-  --vs-team-id: string
-  --vs-player-id1: string
-  --vs-player-id2: string
-  --vs-player-id3: string
-  --vs-player-id4: string
-  --vs-player-id5: string
-  --season-type: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --player-team-id: string # required
+  --player-id1: string # required
+  --player-id2: string # required
+  --player-id3: string # required
+  --player-id4: string # required
+  --player-id5: string # required
+  --vs-team-id: string # required
+  --vs-player-id1: string # required
+  --vs-player-id2: string # required
+  --vs-player-id3: string # required
+  --vs-player-id4: string # required
+  --vs-player-id5: string # required
+  --season-type: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($player_team_id == null) { error make --unspanned { msg: "required query parameter 'PlayerTeamID' missing: pass --player-team-id" } }
+  if ($player_id1 == null) { error make --unspanned { msg: "required query parameter 'PlayerID1' missing: pass --player-id1" } }
+  if ($player_id2 == null) { error make --unspanned { msg: "required query parameter 'PlayerID2' missing: pass --player-id2" } }
+  if ($player_id3 == null) { error make --unspanned { msg: "required query parameter 'PlayerID3' missing: pass --player-id3" } }
+  if ($player_id4 == null) { error make --unspanned { msg: "required query parameter 'PlayerID4' missing: pass --player-id4" } }
+  if ($player_id5 == null) { error make --unspanned { msg: "required query parameter 'PlayerID5' missing: pass --player-id5" } }
+  if ($vs_team_id == null) { error make --unspanned { msg: "required query parameter 'VsTeamID' missing: pass --vs-team-id" } }
+  if ($vs_player_id1 == null) { error make --unspanned { msg: "required query parameter 'VsPlayerID1' missing: pass --vs-player-id1" } }
+  if ($vs_player_id2 == null) { error make --unspanned { msg: "required query parameter 'VsPlayerID2' missing: pass --vs-player-id2" } }
+  if ($vs_player_id3 == null) { error make --unspanned { msg: "required query parameter 'VsPlayerID3' missing: pass --vs-player-id3" } }
+  if ($vs_player_id4 == null) { error make --unspanned { msg: "required query parameter 'VsPlayerID4' missing: pass --vs-player-id4" } }
+  if ($vs_player_id5 == null) { error make --unspanned { msg: "required query parameter 'VsPlayerID5' missing: pass --vs-player-id5" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "PlayerTeamID" $player_team_id "scalar") (serialize-qp "PlayerID1" $player_id1 "scalar") (serialize-qp "PlayerID2" $player_id2 "scalar") (serialize-qp "PlayerID3" $player_id3 "scalar") (serialize-qp "PlayerID4" $player_id4 "scalar") (serialize-qp "PlayerID5" $player_id5 "scalar") (serialize-qp "VsTeamID" $vs_team_id "scalar") (serialize-qp "VsPlayerID1" $vs_player_id1 "scalar") (serialize-qp "VsPlayerID2" $vs_player_id2 "scalar") (serialize-qp "VsPlayerID3" $vs_player_id3 "scalar") (serialize-qp "VsPlayerID4" $vs_player_id4 "scalar") (serialize-qp "VsPlayerID5" $vs_player_id5 "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playersvsplayers" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2942,30 +3519,51 @@ export def "get-playervsplayer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --player-id: string
-  --vs-player-id: string
-  --season-type: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --player-id: string # required
+  --vs-player-id: string # required
+  --season-type: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
+  if ($vs_player_id == null) { error make --unspanned { msg: "required query parameter 'VsPlayerID' missing: pass --vs-player-id" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "VsPlayerID" $vs_player_id "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playervsplayer" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2996,11 +3594,13 @@ export def "get-playoffpicture" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
-  --season-id: string
+  --league-id: string # required
+  --season-id: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($season_id == null) { error make --unspanned { msg: "required query parameter 'SeasonID' missing: pass --season-id" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "SeasonID" $season_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playoffpicture" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3031,12 +3631,15 @@ export def "get-scoreboard" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --game-date: string
-  --league-id: string
-  --day-offset: string
+  --game-date: string # required
+  --league-id: string # required
+  --day-offset: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($game_date == null) { error make --unspanned { msg: "required query parameter 'GameDate' missing: pass --game-date" } }
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($day_offset == null) { error make --unspanned { msg: "required query parameter 'DayOffset' missing: pass --day-offset" } }
   let qp = [(serialize-qp "GameDate" $game_date "scalar") (serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "DayOffset" $day_offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/scoreboard" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3067,12 +3670,15 @@ export def "get-scoreboard-v2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --game-date: string
-  --league-id: string
-  --day-offset: string
+  --game-date: string # required
+  --league-id: string # required
+  --day-offset: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($game_date == null) { error make --unspanned { msg: "required query parameter 'GameDate' missing: pass --game-date" } }
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($day_offset == null) { error make --unspanned { msg: "required query parameter 'DayOffset' missing: pass --day-offset" } }
   let qp = [(serialize-qp "GameDate" $game_date "scalar") (serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "DayOffset" $day_offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/scoreboardV2" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3103,28 +3709,47 @@ export def "get-shotchartdetail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --season-type: string
-  --team-id: string
-  --player-id: string
-  --game-id: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --position: string
-  --rookie-year: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
-  --context-measure: string
+  --season-type: string # required
+  --team-id: string # required
+  --player-id: string # required
+  --game-id: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --position: string # required
+  --rookie-year: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
+  --context-measure: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($player_id == null) { error make --unspanned { msg: "required query parameter 'PlayerID' missing: pass --player-id" } }
+  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($position == null) { error make --unspanned { msg: "required query parameter 'Position' missing: pass --position" } }
+  if ($rookie_year == null) { error make --unspanned { msg: "required query parameter 'RookieYear' missing: pass --rookie-year" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
+  if ($context_measure == null) { error make --unspanned { msg: "required query parameter 'ContextMeasure' missing: pass --context-measure" } }
   let qp = [(serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "PlayerID" $player_id "scalar") (serialize-qp "GameID" $game_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "Position" $position "scalar") (serialize-qp "RookieYear" $rookie_year "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar") (serialize-qp "ContextMeasure" $context_measure "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shotchartdetail" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3155,29 +3780,49 @@ export def "get-shotchartlineupdetail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
-  --season: string
-  --season-type: string
-  --team-id: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
-  --game-id: string
-  --group-id: string
-  --context-measure: string
-  --context-filter: string
+  --league-id: string # required
+  --season: string # required
+  --season-type: string # required
+  --team-id: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
+  --game-id: string # required
+  --group-id: string # required
+  --context-measure: string # required
+  --context-filter: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
+  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
+  if ($group_id == null) { error make --unspanned { msg: "required query parameter 'GROUP_ID' missing: pass --group-id" } }
+  if ($context_measure == null) { error make --unspanned { msg: "required query parameter 'ContextMeasure' missing: pass --context-measure" } }
+  if ($context_filter == null) { error make --unspanned { msg: "required query parameter 'ContextFilter' missing: pass --context-filter" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar") (serialize-qp "GameID" $game_id "scalar") (serialize-qp "GROUP_ID" $group_id "scalar") (serialize-qp "ContextMeasure" $context_measure "scalar") (serialize-qp "ContextFilter" $context_filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shotchartlineupdetail" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3208,29 +3853,49 @@ export def "get-teamdashboardbyclutch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --team-id: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --team-id: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamdashboardbyclutch" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3261,29 +3926,49 @@ export def "get-teamdashboardbygamesplits" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --team-id: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --team-id: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamdashboardbygamesplits" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3314,29 +3999,49 @@ export def "get-teamdashboardbygeneralsplits" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --season-type: string
-  --team-id: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --season-type: string # required
+  --team-id: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamdashboardbygeneralsplits" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3367,29 +4072,49 @@ export def "get-teamdashboardbylastngames" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --team-id: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --team-id: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamdashboardbylastngames" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3420,29 +4145,49 @@ export def "get-teamdashboardbyopponent" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --team-id: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --team-id: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamdashboardbyopponent" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3473,29 +4218,49 @@ export def "get-teamdashboardbyshootingsplits" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --team-id: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --team-id: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamdashboardbyshootingsplits" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3526,29 +4291,49 @@ export def "get-teamdashboardbyteamperformance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --team-id: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --team-id: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamdashboardbyteamperformance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3579,29 +4364,49 @@ export def "get-teamdashboardbyyearoveryear" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --team-id: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --team-id: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamdashboardbyyearoveryear" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3632,31 +4437,53 @@ export def "get-teamdashlineups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --group-quantity: string
-  --game-id: string
-  --season-type: string
-  --team-id: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --group-quantity: string # required
+  --game-id: string # required
+  --season-type: string # required
+  --team-id: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_quantity == null) { error make --unspanned { msg: "required query parameter 'GroupQuantity' missing: pass --group-quantity" } }
+  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'GameID' missing: pass --game-id" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "GroupQuantity" $group_quantity "scalar") (serialize-qp "GameID" $game_id "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamdashlineups" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3687,23 +4514,37 @@ export def "get-teamdashptpass" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --per-mode: string
-  --season: string
-  --season-type: string
-  --team-id: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --last-n-games: string
+  --per-mode: string # required
+  --season: string # required
+  --season-type: string # required
+  --team-id: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamdashptpass" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3734,25 +4575,41 @@ export def "get-teamdashptreb" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --per-mode: string
-  --season: string
-  --season-type: string
-  --team-id: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --per-mode: string # required
+  --season: string # required
+  --season-type: string # required
+  --team-id: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamdashptreb" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3783,25 +4640,41 @@ export def "get-teamdashptshots" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --per-mode: string
-  --season: string
-  --season-type: string
-  --team-id: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --per-mode: string # required
+  --season: string # required
+  --season-type: string # required
+  --team-id: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamdashptshots" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3832,12 +4705,15 @@ export def "get-teamgamelog" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --team-id: string
-  --season: string
-  --season-type: string
+  --team-id: string # required
+  --season: string # required
+  --season-type: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
   let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamgamelog" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3868,13 +4744,17 @@ export def "get-teaminfocommon" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --season: string
-  --team-id: string
-  --league-id: string
-  --season-type: string
+  --season: string # required
+  --team-id: string # required
+  --league-id: string # required
+  --season-type: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
   let qp = [(serialize-qp "Season" $season "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "SeasonType" $season_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teaminfocommon" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3905,29 +4785,49 @@ export def "get-teamplayerdashboard" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --season-type: string
-  --team-id: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --season-type: string # required
+  --team-id: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamplayerdashboard" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3958,29 +4858,49 @@ export def "get-teamplayeronoffdetails" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --team-id: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --team-id: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamplayeronoffdetails" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4011,29 +4931,49 @@ export def "get-teamplayeronoffsummary" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --team-id: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --season-type: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --team-id: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --season-type: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamplayeronoffsummary" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4064,30 +5004,51 @@ export def "get-teamvsplayer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --team-id: string
-  --vs-player-id: string
-  --season-type: string
-  --measure-type: string
-  --per-mode: string
-  --plus-minus: string
-  --pace-adjust: string
-  --rank: string
-  --season: string
-  --outcome: string
-  --location: string
-  --month: string
-  --season-segment: string
-  --date-from: string
-  --date-to: string
-  --opponent-team-id: string
-  --vs-conference: string
-  --vs-division: string
-  --game-segment: string
-  --period: string
-  --last-n-games: string
+  --team-id: string # required
+  --vs-player-id: string # required
+  --season-type: string # required
+  --measure-type: string # required
+  --per-mode: string # required
+  --plus-minus: string # required
+  --pace-adjust: string # required
+  --rank: string # required
+  --season: string # required
+  --outcome: string # required
+  --location: string # required
+  --month: string # required
+  --season-segment: string # required
+  --date-from: string # required
+  --date-to: string # required
+  --opponent-team-id: string # required
+  --vs-conference: string # required
+  --vs-division: string # required
+  --game-segment: string # required
+  --period: string # required
+  --last-n-games: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
+  if ($vs_player_id == null) { error make --unspanned { msg: "required query parameter 'VsPlayerID' missing: pass --vs-player-id" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($measure_type == null) { error make --unspanned { msg: "required query parameter 'MeasureType' missing: pass --measure-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($plus_minus == null) { error make --unspanned { msg: "required query parameter 'PlusMinus' missing: pass --plus-minus" } }
+  if ($pace_adjust == null) { error make --unspanned { msg: "required query parameter 'PaceAdjust' missing: pass --pace-adjust" } }
+  if ($rank == null) { error make --unspanned { msg: "required query parameter 'Rank' missing: pass --rank" } }
+  if ($season == null) { error make --unspanned { msg: "required query parameter 'Season' missing: pass --season" } }
+  if ($outcome == null) { error make --unspanned { msg: "required query parameter 'Outcome' missing: pass --outcome" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'Location' missing: pass --location" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'Month' missing: pass --month" } }
+  if ($season_segment == null) { error make --unspanned { msg: "required query parameter 'SeasonSegment' missing: pass --season-segment" } }
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'DateFrom' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'DateTo' missing: pass --date-to" } }
+  if ($opponent_team_id == null) { error make --unspanned { msg: "required query parameter 'OpponentTeamID' missing: pass --opponent-team-id" } }
+  if ($vs_conference == null) { error make --unspanned { msg: "required query parameter 'VsConference' missing: pass --vs-conference" } }
+  if ($vs_division == null) { error make --unspanned { msg: "required query parameter 'VsDivision' missing: pass --vs-division" } }
+  if ($game_segment == null) { error make --unspanned { msg: "required query parameter 'GameSegment' missing: pass --game-segment" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  if ($last_n_games == null) { error make --unspanned { msg: "required query parameter 'LastNGames' missing: pass --last-n-games" } }
   let qp = [(serialize-qp "TeamID" $team_id "scalar") (serialize-qp "VsPlayerID" $vs_player_id "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "MeasureType" $measure_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "PlusMinus" $plus_minus "scalar") (serialize-qp "PaceAdjust" $pace_adjust "scalar") (serialize-qp "Rank" $rank "scalar") (serialize-qp "Season" $season "scalar") (serialize-qp "Outcome" $outcome "scalar") (serialize-qp "Location" $location "scalar") (serialize-qp "Month" $month "scalar") (serialize-qp "SeasonSegment" $season_segment "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "OpponentTeamID" $opponent_team_id "scalar") (serialize-qp "VsConference" $vs_conference "scalar") (serialize-qp "VsDivision" $vs_division "scalar") (serialize-qp "GameSegment" $game_segment "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "LastNGames" $last_n_games "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamvsplayer" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4118,13 +5079,17 @@ export def "get-teamyearbyyearstats" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
-  --season-type: string
-  --per-mode: string
-  --team-id: string
+  --league-id: string # required
+  --season-type: string # required
+  --per-mode: string # required
+  --team-id: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($season_type == null) { error make --unspanned { msg: "required query parameter 'SeasonType' missing: pass --season-type" } }
+  if ($per_mode == null) { error make --unspanned { msg: "required query parameter 'PerMode' missing: pass --per-mode" } }
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'TeamID' missing: pass --team-id" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "SeasonType" $season_type "scalar") (serialize-qp "PerMode" $per_mode "scalar") (serialize-qp "TeamID" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamyearbyyearstats" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4155,11 +5120,13 @@ export def "get-video-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --league-id: string
-  --game-date: string
+  --league-id: string # required
+  --game-date: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($league_id == null) { error make --unspanned { msg: "required query parameter 'LeagueID' missing: pass --league-id" } }
+  if ($game_date == null) { error make --unspanned { msg: "required query parameter 'GameDate' missing: pass --game-date" } }
   let qp = [(serialize-qp "LeagueID" $league_id "scalar") (serialize-qp "GameDate" $game_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/videoStatus" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

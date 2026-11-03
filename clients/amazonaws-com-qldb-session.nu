@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -125,6 +125,10 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: SendCommand
+# --StartSession shape: {LedgerName: string}
+# --CommitTransaction shape: {TransactionId: string, CommitDigest: string}
+# --ExecuteStatement shape: {TransactionId: string, Statement: string, Parameters?: list}
+# --FetchPage shape: {TransactionId: string, NextPageToken: string}
 export def "send-command" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -142,19 +146,20 @@ export def "send-command" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  --session-token: any
-  --start-session: any
-  --start-transaction: any
-  --end-session: any
-  --commit-transaction: any
-  --abort-transaction: any
-  --execute-statement: any
-  --fetch-page: any
-]: any -> record<StartSession: record<SessionToken: record, TimingInformation: record<ProcessingTimeMilliseconds: record>>, StartTransaction: record<TransactionId: record, TimingInformation: record<ProcessingTimeMilliseconds: record>>, EndSession: record<TimingInformation: record<ProcessingTimeMilliseconds: record>>, CommitTransaction: record<TransactionId: record, CommitDigest: record, TimingInformation: record<ProcessingTimeMilliseconds: record>, ConsumedIOs: record<ReadIOs: record, WriteIOs: record>>, AbortTransaction: record<TimingInformation: record<ProcessingTimeMilliseconds: record>>, ExecuteStatement: record<FirstPage: record<Values: record, NextPageToken: record>, TimingInformation: record<ProcessingTimeMilliseconds: record>, ConsumedIOs: record<ReadIOs: record, WriteIOs: record>>, FetchPage: record<Page: record<Values: record, NextPageToken: record>, TimingInformation: record<ProcessingTimeMilliseconds: record>, ConsumedIOs: record<ReadIOs: record, WriteIOs: record>>> {
+  --x-amz-target: string@x-amz-target-completer # required
+  --session-token: string # Specifies the session token for the current command. A session token is constant throughout the life of the session. To obtain a session token, run the StartSession command. This SessionToken is required for every subsequent command that is issued during the current session.
+  --start-session: record # Specifies a request to start a new session. — shape: {LedgerName: string}
+  --start-transaction: record # Specifies a request to start a transaction.
+  --end-session: record # Specifies a request to end the session.
+  --commit-transaction: record # Contains the details of the transaction to commit. — shape: {TransactionId: string, CommitDigest: string}
+  --abort-transaction: record # Contains the details of the transaction to abort.
+  --execute-statement: record # Specifies a request to execute a statement. — shape: {TransactionId: string, Statement: string, Parameters?: list}
+  --fetch-page: record # Specifies the details of the page to be fetched. — shape: {TransactionId: string, NextPageToken: string}
+]: any -> record<StartSession: record<SessionToken: string, TimingInformation: record<ProcessingTimeMilliseconds: int>>, StartTransaction: record<TransactionId: string, TimingInformation: record<ProcessingTimeMilliseconds: int>>, EndSession: record<TimingInformation: record<ProcessingTimeMilliseconds: int>>, CommitTransaction: record<TransactionId: string, CommitDigest: string, TimingInformation: record<ProcessingTimeMilliseconds: int>, ConsumedIOs: record<ReadIOs: int, WriteIOs: int>>, AbortTransaction: record<TimingInformation: record<ProcessingTimeMilliseconds: int>>, ExecuteStatement: record<FirstPage: record<Values: list, NextPageToken: string>, TimingInformation: record<ProcessingTimeMilliseconds: int>, ConsumedIOs: record<ReadIOs: int, WriteIOs: int>>, FetchPage: record<Page: record<Values: list, NextPageToken: string>, TimingInformation: record<ProcessingTimeMilliseconds: int>, ConsumedIOs: record<ReadIOs: int, WriteIOs: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "QLDBSession.SendCommand")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SessionToken": $session_token, "StartSession": $start_session, "StartTransaction": $start_transaction, "EndSession": $end_session, "CommitTransaction": $commit_transaction, "AbortTransaction": $abort_transaction, "ExecuteStatement": $execute_statement, "FetchPage": $fetch_page} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

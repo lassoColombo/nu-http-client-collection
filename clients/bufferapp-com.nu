@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -100,6 +100,8 @@ def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: 
 def base-url-completer [] { ["https://api.bufferapp.com/1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def media-type-extension-completer [] { [".json"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -128,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # GET /info/configuration{mediaTypeExtension}
 export def "get-info-configuration-media-type-extension" [
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +165,7 @@ export def "get-info-configuration-media-type-extension" [
 #
 # GET /links/shares{mediaTypeExtension}
 export def "get-links-shares-media-type-extension" [
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,11 +175,12 @@ export def "get-links-shares-media-type-extension" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # URL-encoded URL of the page for which the number of shares is requested.
+  --url: string # URL-encoded URL of the page for which the number of shares is requested. (required)
 ]: nothing -> record<shares: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/links/shares{media_type_extension}") $qp $auth.query)
   let accept_val = "application/json"
@@ -201,7 +204,7 @@ export def "get-links-shares-media-type-extension" [
 # POST /profiles/{id}/schedules/update{mediaTypeExtension}
 export def "post-profiles-id-schedules-update-media-type-extension" [
   id: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +241,7 @@ export def "post-profiles-id-schedules-update-media-type-extension" [
 # GET /profiles/{id}/schedules{mediaTypeExtension}
 export def "get-profiles-id-schedules-media-type-extension" [
   id: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,7 +278,7 @@ export def "get-profiles-id-schedules-media-type-extension" [
 # GET /profiles/{id}/updates/pending{mediaTypeExtension}
 export def "get-profiles-id-updates-pending-media-type-extension" [
   id: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,7 +320,7 @@ export def "get-profiles-id-updates-pending-media-type-extension" [
 # POST /profiles/{id}/updates/reorder{mediaTypeExtension}
 export def "post-profiles-id-updates-reorder-media-type-extension" [
   id: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +357,7 @@ export def "post-profiles-id-updates-reorder-media-type-extension" [
 # GET /profiles/{id}/updates/sent{mediaTypeExtension}
 export def "get-profiles-id-updates-sent-media-type-extension" [
   id: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,7 +399,7 @@ export def "get-profiles-id-updates-sent-media-type-extension" [
 # POST /profiles/{id}/updates/shuffle{mediaTypeExtension}
 export def "post-profiles-id-updates-shuffle-media-type-extension" [
   id: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -433,7 +436,7 @@ export def "post-profiles-id-updates-shuffle-media-type-extension" [
 # GET /profiles/{id}{mediaTypeExtension}
 export def "get-profiles-id-media-type-extension" [
   id: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,7 +472,7 @@ export def "get-profiles-id-media-type-extension" [
 #
 # GET /profiles{mediaTypeExtension}
 export def "get-profiles-media-type-extension" [
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,7 +507,7 @@ export def "get-profiles-media-type-extension" [
 #
 # POST /updates/create{mediaTypeExtension}
 export def "post-updates-create-media-type-extension" [
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,7 +543,7 @@ export def "post-updates-create-media-type-extension" [
 # POST /updates/{id}/destroy{mediaTypeExtension}
 export def "post-updates-id-destroy-media-type-extension" [
   id: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -577,7 +580,7 @@ export def "post-updates-id-destroy-media-type-extension" [
 # GET /updates/{id}/interactions{mediaTypeExtension}
 export def "get-updates-id-interactions-media-type-extension" [
   id: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -587,7 +590,7 @@ export def "get-updates-id-interactions-media-type-extension" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --event: string # Specifies a type of event to be retrieved, for example "retweet", "like", "comment", "mention" or "reshare". They can also be plural (e.g., "reshares"). Plurality has no effect other than visual semantics. See /info/configuration for more information on supported interaction events.
+  --event: string # Specifies a type of event to be retrieved, for example "retweet", "like", "comment", "mention" or "reshare". They can also be plural (e.g., "reshares"). Plurality has no effect other than visual semantics. See /info/configuration for more information on supported interaction events. (required)
   --page: int # Specifies the page of status updates to receive. If not specified the first page of results will be returned.
   --count: int # Specifies the number of status updates to receive. If provided, must be between 1 and 100.
 ]: nothing -> record<interactions: table<_id: string, created_at: float, event: string, id: string, interaction_id: string, user: record>, total: float> {
@@ -595,6 +598,7 @@ export def "get-updates-id-interactions-media-type-extension" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
+  if ($event == null) { error make --unspanned { msg: "required query parameter 'event' missing: pass --event" } }
   let qp = [(serialize-qp "event" $event "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/updates/{id}/interactions{media_type_extension}") $qp $auth.query)
   let accept_val = "application/json"
@@ -618,7 +622,7 @@ export def "get-updates-id-interactions-media-type-extension" [
 # POST /updates/{id}/move_to_top{mediaTypeExtension}
 export def "post-updates-id-move-to-top-media-type-extension" [
   id: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,7 +659,7 @@ export def "post-updates-id-move-to-top-media-type-extension" [
 # POST /updates/{id}/share{mediaTypeExtension}
 export def "post-updates-id-share-media-type-extension" [
   id: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -692,7 +696,7 @@ export def "post-updates-id-share-media-type-extension" [
 # POST /updates/{id}/update{mediaTypeExtension}
 export def "post-updates-id-update-media-type-extension" [
   id: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -729,7 +733,7 @@ export def "post-updates-id-update-media-type-extension" [
 # GET /updates/{id}{mediaTypeExtension}
 export def "get-updates-id-media-type-extension" [
   id: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -765,7 +769,7 @@ export def "get-updates-id-media-type-extension" [
 #
 # GET /user{mediaTypeExtension}
 export def "get-user-media-type-extension" [
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

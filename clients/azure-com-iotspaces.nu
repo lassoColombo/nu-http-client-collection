@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -158,10 +158,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The version of the API.
+  --api-version: string@api-version-completer # The version of the API. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2017-10-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.IoTSpaces/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -195,11 +196,12 @@ export def "io-t-spaces-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The version of the API.
-]: nothing -> record<nextLink: string, value: table<properties: record, sku: record>> {
+  --api-version: string@api-version-completer # The version of the API. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2017-10-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.IoTSpaces/Graph") $qp $auth.query)
   let accept_val = "application/json"
@@ -233,13 +235,14 @@ export def "io-t-spaces-check-name-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The version of the API.
+  --api-version: string@api-version-completer # The version of the API. (required)
   name: string # The name of the IoTSpaces service instance to check.
 ]: any -> record<message: string, nameAvailable: bool, reason: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2017-10-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.IoTSpaces/checkNameAvailability") $qp $auth.query)
   let req_body = {"name": $name} | compact
@@ -276,12 +279,13 @@ export def "io-t-spaces-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The version of the API.
-]: nothing -> record<nextLink: string, value: table<properties: record, sku: record>> {
+  --api-version: string@api-version-completer # The version of the API. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  let api_version = ($api_version | default "2017-10-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.IoTSpaces/Graph") $qp $auth.query)
   let accept_val = "application/json"
@@ -317,13 +321,14 @@ export def "io-t-spaces-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The version of the API.
-]: nothing -> record<properties: record<managementApiUrl: string, provisioningState: string, storageContainer: record<connectionString: string, containerName: string, resourceGroup: string, subscriptionId: string>, webPortalUrl: string>, sku: record<name: string>> {
+  --api-version: string@api-version-completer # The version of the API. (required)
+]: nothing -> record<properties: record<managementApiUrl: string, provisioningState: string, storageContainer: record<connectionString: string, containerName: string, resourceGroup: string, subscriptionId: string>, webPortalUrl: string>, sku: record<name: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  let api_version = ($api_version | default "2017-10-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.IoTSpaces/Graph/{resource_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -359,13 +364,14 @@ export def "io-t-spaces-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The version of the API.
-]: nothing -> record<properties: record<managementApiUrl: string, provisioningState: string, storageContainer: record<connectionString: string, containerName: string, resourceGroup: string, subscriptionId: string>, webPortalUrl: string>, sku: record<name: string>> {
+  --api-version: string@api-version-completer # The version of the API. (required)
+]: nothing -> record<properties: record<managementApiUrl: string, provisioningState: string, storageContainer: record<connectionString: string, containerName: string, resourceGroup: string, subscriptionId: string>, webPortalUrl: string>, sku: record<name: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  let api_version = ($api_version | default "2017-10-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.IoTSpaces/Graph/{resource_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -402,16 +408,17 @@ export def "io-t-spaces-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The version of the API.
+  --api-version: string@api-version-completer # The version of the API. (required)
   --properties: record # The properties of an IoTSpaces instance. — shape: {storageContainer?: record}
   --tags: record # Instance tags
-]: any -> record<properties: record<managementApiUrl: string, provisioningState: string, storageContainer: record<connectionString: string, containerName: string, resourceGroup: string, subscriptionId: string>, webPortalUrl: string>, sku: record<name: string>> {
+]: any -> record<properties: record<managementApiUrl: string, provisioningState: string, storageContainer: record<connectionString: string, containerName: string, resourceGroup: string, subscriptionId: string>, webPortalUrl: string>, sku: record<name: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  let api_version = ($api_version | default "2017-10-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.IoTSpaces/Graph/{resource_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -451,18 +458,19 @@ export def "io-t-spaces-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The version of the API.
+  --api-version: string@api-version-completer # The version of the API. (required)
   --properties: record # The properties of an IoTSpaces instance. — shape: {storageContainer?: record}
   sku: record # Information about the SKU of the IoTSpaces instance. — shape: {name: "F1"|"S1"|"S2"|"S3"}
   location: string # The resource location.
   --tags: record # The resource tags.
-]: any -> record<properties: record<managementApiUrl: string, provisioningState: string, storageContainer: record<connectionString: string, containerName: string, resourceGroup: string, subscriptionId: string>, webPortalUrl: string>, sku: record<name: string>> {
+]: any -> record<properties: record<managementApiUrl: string, provisioningState: string, storageContainer: record<connectionString: string, containerName: string, resourceGroup: string, subscriptionId: string>, webPortalUrl: string>, sku: record<name: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  let api_version = ($api_version | default "2017-10-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.IoTSpaces/Graph/{resource_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact

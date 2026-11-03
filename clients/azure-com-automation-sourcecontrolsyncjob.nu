@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -144,7 +144,7 @@ export def "source-control-sync-job-list-by-automation-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The filter to apply on the operation.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -152,6 +152,7 @@ export def "source-control-sync-job-list-by-automation-account" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($automation_account_name | is-empty) { error make --unspanned { msg: "path parameter 'automationAccountName' must be non-empty" } }
   if ($source_control_name | is-empty) { error make --unspanned { msg: "path parameter 'sourceControlName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), automation_account_name: (encode-path-segment $automation_account_name), source_control_name: (encode-path-segment $source_control_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/sourceControls/{source_control_name}/sourceControlSyncJobs") $qp $auth.query)
   let accept_val = "application/json"
@@ -190,7 +191,7 @@ export def "source-control-sync-job-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<id: string, properties: record<creationTime: string, endTime: string, exception: string, provisioningState: string, sourceControlSyncJobId: string, startTime: string, syncType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -199,6 +200,7 @@ export def "source-control-sync-job-get" [
   if ($automation_account_name | is-empty) { error make --unspanned { msg: "path parameter 'automationAccountName' must be non-empty" } }
   if ($source_control_name | is-empty) { error make --unspanned { msg: "path parameter 'sourceControlName' must be non-empty" } }
   if ($source_control_sync_job_id | is-empty) { error make --unspanned { msg: "path parameter 'sourceControlSyncJobId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), automation_account_name: (encode-path-segment $automation_account_name), source_control_name: (encode-path-segment $source_control_name), source_control_sync_job_id: (encode-path-segment $source_control_sync_job_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/sourceControls/{source_control_name}/sourceControlSyncJobs/{source_control_sync_job_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -238,7 +240,7 @@ export def "source-control-sync-job-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   properties: any # Definition of create source control sync job properties. — shape: {commitId: string}
 ]: any -> record<id: string, name: string, properties: record<creationTime: string, endTime: string, provisioningState: string, sourceControlSyncJobId: string, startTime: string, syncType: string>, type: string> {
   let input = $in
@@ -249,6 +251,7 @@ export def "source-control-sync-job-create" [
   if ($automation_account_name | is-empty) { error make --unspanned { msg: "path parameter 'automationAccountName' must be non-empty" } }
   if ($source_control_name | is-empty) { error make --unspanned { msg: "path parameter 'sourceControlName' must be non-empty" } }
   if ($source_control_sync_job_id | is-empty) { error make --unspanned { msg: "path parameter 'sourceControlSyncJobId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), automation_account_name: (encode-path-segment $automation_account_name), source_control_name: (encode-path-segment $source_control_name), source_control_sync_job_id: (encode-path-segment $source_control_sync_job_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/sourceControls/{source_control_name}/sourceControlSyncJobs/{source_control_sync_job_id}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

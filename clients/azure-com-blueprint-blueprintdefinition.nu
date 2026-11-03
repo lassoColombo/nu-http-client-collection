@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -147,11 +147,12 @@ export def "blueprints-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints") $qp $auth.query)
   let accept_val = "application/json"
@@ -186,12 +187,13 @@ export def "blueprints-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
-]: nothing -> record<properties: record<layout: record, versions: record>> {
+  --api-version: string # Client API Version. (required)
+]: nothing -> record<properties: record<layout: record, versions: record, parameters: record, resourceGroups: record, status: record<lastModified: string, timeCreated: string>, targetScope: string, description: string, displayName: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($blueprint_name | is-empty) { error make --unspanned { msg: "path parameter 'blueprintName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -226,12 +228,13 @@ export def "blueprints-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
-]: nothing -> record<properties: record<layout: record, versions: record>> {
+  --api-version: string # Client API Version. (required)
+]: nothing -> record<properties: record<layout: record, versions: record, parameters: record, resourceGroups: record, status: record<lastModified: string, timeCreated: string>, targetScope: string, description: string, displayName: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($blueprint_name | is-empty) { error make --unspanned { msg: "path parameter 'blueprintName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -254,7 +257,7 @@ export def "blueprints-get" [
 #
 # PUT /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}
 # operationId: Blueprints_CreateOrUpdate
-# --properties shape: {layout?: record, versions?: record, parameters?: record, resourceGroups?: record, status?: record, targetScope: "subscription"|"managementGroup"}
+# --properties shape: {layout?: record, versions?: record, parameters?: record, resourceGroups?: record, status?: record, targetScope: "subscription"|"managementGroup", description?: string, displayName?: string}
 export def "blueprints-create-or-update" [
   scope: string
   blueprint_name: string
@@ -267,14 +270,15 @@ export def "blueprints-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
-  properties: record # Schema for blueprint definition properties. — shape: {layout?: record, versions?: record, parameters?: record, resourceGroups?: record, status?: record, targetScope: "subscription"|"managementGroup"}
-]: any -> record<properties: record<layout: record, versions: record>> {
+  --api-version: string # Client API Version. (required)
+  properties: record # Schema for blueprint definition properties. — shape: {layout?: record, versions?: record, parameters?: record, resourceGroups?: record, status?: record, targetScope: "subscription"|"managementGroup", description?: string, displayName?: string}
+]: any -> record<properties: record<layout: record, versions: record, parameters: record, resourceGroups: record, status: record<lastModified: string, timeCreated: string>, targetScope: string, description: string, displayName: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($blueprint_name | is-empty) { error make --unspanned { msg: "path parameter 'blueprintName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -311,12 +315,13 @@ export def "artifacts-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
-]: nothing -> record<nextLink: string, value: table<kind: string>> {
+  --api-version: string # Client API Version. (required)
+]: nothing -> record<nextLink: string, value: table<kind: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($blueprint_name | is-empty) { error make --unspanned { msg: "path parameter 'blueprintName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/artifacts") $qp $auth.query)
   let accept_val = "application/json"
@@ -352,13 +357,14 @@ export def "artifacts-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
-]: nothing -> record<kind: string> {
+  --api-version: string # Client API Version. (required)
+]: nothing -> record<kind: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($blueprint_name | is-empty) { error make --unspanned { msg: "path parameter 'blueprintName' must be non-empty" } }
   if ($artifact_name | is-empty) { error make --unspanned { msg: "path parameter 'artifactName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name), artifact_name: (encode-path-segment $artifact_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/artifacts/{artifact_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -394,13 +400,14 @@ export def "artifacts-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
-]: nothing -> record<kind: string> {
+  --api-version: string # Client API Version. (required)
+]: nothing -> record<kind: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($blueprint_name | is-empty) { error make --unspanned { msg: "path parameter 'blueprintName' must be non-empty" } }
   if ($artifact_name | is-empty) { error make --unspanned { msg: "path parameter 'artifactName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name), artifact_name: (encode-path-segment $artifact_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/artifacts/{artifact_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -437,15 +444,16 @@ export def "artifacts-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
+  --api-version: string # Client API Version. (required)
   kind: string@kind-completer # Specifies the kind of blueprint artifact.
-]: any -> record<kind: string> {
+]: any -> record<kind: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($blueprint_name | is-empty) { error make --unspanned { msg: "path parameter 'blueprintName' must be non-empty" } }
   if ($artifact_name | is-empty) { error make --unspanned { msg: "path parameter 'artifactName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name), artifact_name: (encode-path-segment $artifact_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/artifacts/{artifact_name}") $qp $auth.query)
   let req_body = {"kind": $kind} | compact
@@ -482,12 +490,13 @@ export def "published-blueprints-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($blueprint_name | is-empty) { error make --unspanned { msg: "path parameter 'blueprintName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/versions") $qp $auth.query)
   let accept_val = "application/json"
@@ -523,13 +532,14 @@ export def "published-blueprints-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
-]: nothing -> record<properties: record<blueprintName: string, changeNotes: string>> {
+  --api-version: string # Client API Version. (required)
+]: nothing -> record<properties: record<blueprintName: string, changeNotes: string, parameters: record, resourceGroups: record, status: record<lastModified: string, timeCreated: string>, targetScope: string, description: string, displayName: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($blueprint_name | is-empty) { error make --unspanned { msg: "path parameter 'blueprintName' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name), version_id: (encode-path-segment $version_id)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/versions/{version_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -565,13 +575,14 @@ export def "published-blueprints-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
-]: nothing -> record<properties: record<blueprintName: string, changeNotes: string>> {
+  --api-version: string # Client API Version. (required)
+]: nothing -> record<properties: record<blueprintName: string, changeNotes: string, parameters: record, resourceGroups: record, status: record<lastModified: string, timeCreated: string>, targetScope: string, description: string, displayName: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($blueprint_name | is-empty) { error make --unspanned { msg: "path parameter 'blueprintName' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name), version_id: (encode-path-segment $version_id)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/versions/{version_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -594,7 +605,7 @@ export def "published-blueprints-get" [
 #
 # PUT /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/versions/{versionId}
 # operationId: PublishedBlueprints_Create
-# --properties shape: {blueprintName?: string, changeNotes?: string, parameters?: record, resourceGroups?: record, status?: record, targetScope?: "subscription"|"managementGroup"}
+# --properties shape: {blueprintName?: string, changeNotes?: string, parameters?: record, resourceGroups?: record, status?: record, targetScope?: "subscription"|"managementGroup", description?: string, displayName?: string}
 export def "published-blueprints-create" [
   scope: string
   blueprint_name: string
@@ -608,15 +619,16 @@ export def "published-blueprints-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
-  properties: record # Schema for published blueprint definition properties. — shape: {blueprintName?: string, changeNotes?: string, parameters?: record, resourceGroups?: record, status?: record, targetScope?: "subscription"|"managementGroup"}
-]: any -> record<properties: record<blueprintName: string, changeNotes: string>> {
+  --api-version: string # Client API Version. (required)
+  properties: record # Schema for published blueprint definition properties. — shape: {blueprintName?: string, changeNotes?: string, parameters?: record, resourceGroups?: record, status?: record, targetScope?: "subscription"|"managementGroup", description?: string, displayName?: string}
+]: any -> record<properties: record<blueprintName: string, changeNotes: string, parameters: record, resourceGroups: record, status: record<lastModified: string, timeCreated: string>, targetScope: string, description: string, displayName: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($blueprint_name | is-empty) { error make --unspanned { msg: "path parameter 'blueprintName' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name), version_id: (encode-path-segment $version_id)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/versions/{version_id}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -654,13 +666,14 @@ export def "published-artifacts-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
-]: nothing -> record<nextLink: string, value: table<kind: string>> {
+  --api-version: string # Client API Version. (required)
+]: nothing -> record<nextLink: string, value: table<kind: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($blueprint_name | is-empty) { error make --unspanned { msg: "path parameter 'blueprintName' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name), version_id: (encode-path-segment $version_id)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/versions/{version_id}/artifacts") $qp $auth.query)
   let accept_val = "application/json"
@@ -697,14 +710,15 @@ export def "published-artifacts-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version.
-]: nothing -> record<kind: string> {
+  --api-version: string # Client API Version. (required)
+]: nothing -> record<kind: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($blueprint_name | is-empty) { error make --unspanned { msg: "path parameter 'blueprintName' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   if ($artifact_name | is-empty) { error make --unspanned { msg: "path parameter 'artifactName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), blueprint_name: (encode-path-segment $blueprint_name), version_id: (encode-path-segment $version_id), artifact_name: (encode-path-segment $artifact_name)} | format pattern "/{scope}/providers/Microsoft.Blueprint/blueprints/{blueprint_name}/versions/{version_id}/artifacts/{artifact_name}") $qp $auth.query)
   let accept_val = "application/json"

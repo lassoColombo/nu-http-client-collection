@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -97,6 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def x-amz-target-completer [] { ["AWSServerMigrationService_V2016_10_24.CreateApp"] }
+def license-type-completer [] { ["AWS" "BYOL"] }
 def x-amz-target-completer-1 [] { ["AWSServerMigrationService_V2016_10_24.CreateReplicationJob"] }
 def x-amz-target-completer-2 [] { ["AWSServerMigrationService_V2016_10_24.DeleteApp"] }
 def x-amz-target-completer-3 [] { ["AWSServerMigrationService_V2016_10_24.DeleteAppLaunchConfiguration"] }
@@ -105,7 +106,9 @@ def x-amz-target-completer-5 [] { ["AWSServerMigrationService_V2016_10_24.Delete
 def x-amz-target-completer-6 [] { ["AWSServerMigrationService_V2016_10_24.DeleteReplicationJob"] }
 def x-amz-target-completer-7 [] { ["AWSServerMigrationService_V2016_10_24.DeleteServerCatalog"] }
 def x-amz-target-completer-8 [] { ["AWSServerMigrationService_V2016_10_24.DisassociateConnector"] }
+def changeset-format-completer [] { ["JSON" "YAML"] }
 def x-amz-target-completer-9 [] { ["AWSServerMigrationService_V2016_10_24.GenerateChangeSet"] }
+def template-format-completer [] { ["JSON" "YAML"] }
 def x-amz-target-completer-10 [] { ["AWSServerMigrationService_V2016_10_24.GenerateTemplate"] }
 def x-amz-target-completer-11 [] { ["AWSServerMigrationService_V2016_10_24.GetApp"] }
 def x-amz-target-completer-12 [] { ["AWSServerMigrationService_V2016_10_24.GetAppLaunchConfiguration"] }
@@ -159,6 +162,8 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateApp
+# --serverGroups item shape: {serverGroupId?: string, name?: string, serverList?: list}
+# --tags item shape: {key?: string, value?: string}
 export def "create-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -176,17 +181,18 @@ export def "create-app" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  --name: any
-  --description: any
-  --role-name: any
-  --client-token: any
-  --server-groups: any
-  --tags: any
-]: any -> record<appSummary: record<appId: record, importedAppId: record, name: record, description: record, status: record, statusMessage: record, replicationConfigurationStatus: record, replicationStatus: record, replicationStatusMessage: record, latestReplicationTime: record, launchConfigurationStatus: record, launchStatus: record, launchStatusMessage: record, launchDetails: record<latestLaunchTime: record, stackName: record, stackId: record>, creationTime: record, lastModified: record, roleName: record, totalServerGroups: record, totalServers: record>, serverGroups: record, tags: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  --name: string # The name of the new application.
+  --description: string # The description of the new application
+  --role-name: string # The name of the service role in the customer's account to be used by Server Migration Service.
+  --client-token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency of application creation.
+  --server-groups: list # The server groups to include in the application. — item shape: {serverGroupId?: string, name?: string, serverList?: list}
+  --tags: list # The tags to be associated with the application. — item shape: {key?: string, value?: string}
+]: any -> record<appSummary: record<appId: string, importedAppId: string, name: string, description: string, status: string, statusMessage: string, replicationConfigurationStatus: string, replicationStatus: string, replicationStatusMessage: string, latestReplicationTime: string, launchConfigurationStatus: string, launchStatus: string, launchStatusMessage: string, launchDetails: record<latestLaunchTime: string, stackName: string, stackId: string>, creationTime: string, lastModified: string, roleName: string, totalServerGroups: int, totalServers: int>, serverGroups: table<serverGroupId: string, name: string, serverList: list>, tags: table<key: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.CreateApp")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "description": $description, "roleName": $role_name, "clientToken": $client_token, "serverGroups": $server_groups, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -229,21 +235,22 @@ export def "create-replication-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  server_id: any
-  seed_replication_time: any
-  --frequency: any
-  --run-once: any
-  --license-type: any
-  --role-name: any
-  --description: any
-  --number-of-recent-amis-to-keep: any
-  --encrypted: any
-  --kms-key-id: any
-]: any -> record<replicationJobId: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  server_id: string # The ID of the server.
+  seed_replication_time: string # The seed replication time. (format: date-time)
+  --frequency: int # The time between consecutive replication runs, in hours.
+  --run-once: oneof<nothing, bool> # Indicates whether to run the replication job one time.
+  --license-type: string@license-type-completer # The license type to be used for the AMI created by a successful replication run.
+  --role-name: string # The name of the IAM role to be used by the Server Migration Service.
+  --description: string # The description of the replication job.
+  --number-of-recent-amis-to-keep: int # The maximum number of SMS-created AMIs to retain. The oldest is deleted after the maximum number is reached and a new AMI is created.
+  --encrypted: oneof<nothing, bool> # Indicates whether the replication job produces encrypted AMIs.
+  --kms-key-id: string # The ID of the KMS key for replication jobs that produce encrypted AMIs. This value can be any of the following: KMS key ID KMS key alias ARN referring to the KMS key ID ARN referring to the KMS key alias If encrypted is true but a KMS key ID is not specified, the customer's default KMS key for Amazon EBS is used.
+]: any -> record<replicationJobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.CreateReplicationJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"serverId": $server_id, "seedReplicationTime": $seed_replication_time, "frequency": $frequency, "runOnce": $run_once, "licenseType": $license_type, "roleName": $role_name, "description": $description, "numberOfRecentAmisToKeep": $number_of_recent_amis_to_keep, "encrypted": $encrypted, "kmsKeyId": $kms_key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -286,14 +293,15 @@ export def "delete-app" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  --app-id: any
-  --force-stop-app-replication: any
-  --force-terminate-app: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  --app-id: string # The ID of the application.
+  --force-stop-app-replication: oneof<nothing, bool> # Indicates whether to stop all replication jobs corresponding to the servers in the application while deleting the application.
+  --force-terminate-app: oneof<nothing, bool> # Indicates whether to terminate the stack corresponding to the application while deleting the application.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.DeleteApp")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id, "forceStopAppReplication": $force_stop_app_replication, "forceTerminateApp": $force_terminate_app} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -336,12 +344,13 @@ export def "delete-app-launch-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  --app-id: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  --app-id: string # The ID of the application.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.DeleteAppLaunchConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -384,12 +393,13 @@ export def "delete-app-replication-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  --app-id: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  --app-id: string # The ID of the application.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.DeleteAppReplicationConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -432,12 +442,13 @@ export def "delete-app-validation-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  app_id: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  app_id: string # The ID of the application.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.DeleteAppValidationConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -480,12 +491,13 @@ export def "delete-replication-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  replication_job_id: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  replication_job_id: string # The ID of the replication job.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.DeleteReplicationJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"replicationJobId": $replication_job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -528,12 +540,13 @@ export def "delete-server-catalog" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
+  --x-amz-target: string@x-amz-target-completer-7 # required
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.DeleteServerCatalog")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -576,12 +589,13 @@ export def "disassociate-connector" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  connector_id: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  connector_id: string # The ID of the connector.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.DisassociateConnector")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"connectorId": $connector_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -624,13 +638,14 @@ export def "generate-change-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  --app-id: any
-  --changeset-format: any
-]: any -> record<s3Location: record<bucket: record, key: record>> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  --app-id: string # The ID of the application associated with the change set.
+  --changeset-format: string@changeset-format-completer # The format for the change set.
+]: any -> record<s3Location: record<bucket: string, key: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.GenerateChangeSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id, "changesetFormat": $changeset_format} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -673,13 +688,14 @@ export def "generate-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  --app-id: any
-  --template-format: any
-]: any -> record<s3Location: record<bucket: record, key: record>> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  --app-id: string # The ID of the application associated with the CloudFormation template.
+  --template-format: string@template-format-completer # The format for generating the CloudFormation template.
+]: any -> record<s3Location: record<bucket: string, key: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.GenerateTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id, "templateFormat": $template_format} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -722,12 +738,13 @@ export def "get-app" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  --app-id: any
-]: any -> record<appSummary: record<appId: record, importedAppId: record, name: record, description: record, status: record, statusMessage: record, replicationConfigurationStatus: record, replicationStatus: record, replicationStatusMessage: record, latestReplicationTime: record, launchConfigurationStatus: record, launchStatus: record, launchStatusMessage: record, launchDetails: record<latestLaunchTime: record, stackName: record, stackId: record>, creationTime: record, lastModified: record, roleName: record, totalServerGroups: record, totalServers: record>, serverGroups: record, tags: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  --app-id: string # The ID of the application.
+]: any -> record<appSummary: record<appId: string, importedAppId: string, name: string, description: string, status: string, statusMessage: string, replicationConfigurationStatus: string, replicationStatus: string, replicationStatusMessage: string, latestReplicationTime: string, launchConfigurationStatus: string, launchStatus: string, launchStatusMessage: string, launchDetails: record<latestLaunchTime: string, stackName: string, stackId: string>, creationTime: string, lastModified: string, roleName: string, totalServerGroups: int, totalServers: int>, serverGroups: table<serverGroupId: string, name: string, serverList: list>, tags: table<key: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.GetApp")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -770,12 +787,13 @@ export def "get-app-launch-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  --app-id: any
-]: any -> record<appId: record, roleName: record, autoLaunch: record, serverGroupLaunchConfigurations: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  --app-id: string # The ID of the application.
+]: any -> record<appId: string, roleName: string, autoLaunch: bool, serverGroupLaunchConfigurations: table<serverGroupId: string, launchOrder: int, serverLaunchConfigurations: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.GetAppLaunchConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -818,12 +836,13 @@ export def "get-app-replication-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  --app-id: any
-]: any -> record<serverGroupReplicationConfigurations: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  --app-id: string # The ID of the application.
+]: any -> record<serverGroupReplicationConfigurations: table<serverGroupId: string, serverReplicationConfigurations: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.GetAppReplicationConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -866,12 +885,13 @@ export def "get-app-validation-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  app_id: any
-]: any -> record<appValidationConfigurations: record, serverGroupValidationConfigurations: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  app_id: string # The ID of the application.
+]: any -> record<appValidationConfigurations: table<validationId: string, name: string, appValidationStrategy: string, ssmValidationParameters: record>, serverGroupValidationConfigurations: table<serverGroupId: string, serverValidationConfigurations: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.GetAppValidationConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -914,12 +934,13 @@ export def "get-app-validation-output" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  app_id: any
-]: any -> record<validationOutputList: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  app_id: string # The ID of the application.
+]: any -> record<validationOutputList: table<validationId: string, name: string, status: string, statusMessage: string, latestValidationTime: string, appValidationOutput: record, serverValidationOutput: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.GetAppValidationOutput")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -964,13 +985,14 @@ export def "get-connectors" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<connectorList: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  --next-token-body: string # The token for the next set of results. (body field)
+  --max-results-body: int # The maximum number of results to return in a single call. The default value is 50. To retrieve the remaining results, make another call with the returned NextToken value. (body field)
+]: any -> record<connectorList: table<connectorId: string, version: string, status: string, capabilityList: list, vmManagerName: string, vmManagerType: string, vmManagerId: string, ipAddress: string, macAddress: string, associatedOn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.GetConnectors")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1016,14 +1038,15 @@ export def "get-replication-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  --replication-job-id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<replicationJobList: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  --replication-job-id: string # The ID of the replication job.
+  --next-token-body: string # The token for the next set of results. (body field)
+  --max-results-body: int # The maximum number of results to return in a single call. The default value is 50. To retrieve the remaining results, make another call with the returned NextToken value. (body field)
+]: any -> record<replicationJobList: table<replicationJobId: string, serverId: string, serverType: string, vmServer: record, seedReplicationTime: string, frequency: int, runOnce: bool, nextReplicationRunStartTime: string, licenseType: string, roleName: string, latestAmiId: string, state: string, statusMessage: string, description: string, numberOfRecentAmisToKeep: int, encrypted: bool, kmsKeyId: string, replicationRunList: list>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.GetReplicationJobs")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"replicationJobId": $replication_job_id, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1069,14 +1092,15 @@ export def "get-replication-runs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  replication_job_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<replicationJob: record<replicationJobId: record, serverId: record, serverType: record, vmServer: record<vmServerAddress: record, vmName: record, vmManagerName: record, vmManagerType: record, vmPath: record>, seedReplicationTime: record, frequency: record, runOnce: record, nextReplicationRunStartTime: record, licenseType: record, roleName: record, latestAmiId: record, state: record, statusMessage: record, description: record, numberOfRecentAmisToKeep: record, encrypted: record, kmsKeyId: record, replicationRunList: record>, replicationRunList: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  replication_job_id: string # The ID of the replication job.
+  --next-token-body: string # The token for the next set of results. (body field)
+  --max-results-body: int # The maximum number of results to return in a single call. The default value is 50. To retrieve the remaining results, make another call with the returned NextToken value. (body field)
+]: any -> record<replicationJob: record<replicationJobId: string, serverId: string, serverType: string, vmServer: record<vmServerAddress: record, vmName: string, vmManagerName: string, vmManagerType: string, vmPath: string>, seedReplicationTime: string, frequency: int, runOnce: bool, nextReplicationRunStartTime: string, licenseType: string, roleName: string, latestAmiId: string, state: string, statusMessage: string, description: string, numberOfRecentAmisToKeep: int, encrypted: bool, kmsKeyId: string, replicationRunList: list<record>>, replicationRunList: table<replicationRunId: string, state: string, type: string, stageDetails: record, statusMessage: string, amiId: string, scheduledStartTime: string, completedTime: string, description: string, encrypted: bool, kmsKeyId: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.GetReplicationRuns")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"replicationJobId": $replication_job_id, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1103,6 +1127,7 @@ export def "get-replication-runs" [
 #
 # POST /
 # operationId: GetServers
+# --vmServerAddressList item shape: {vmManagerId?: string, vmId?: string}
 export def "get-servers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1122,14 +1147,15 @@ export def "get-servers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --vm-server-address-list: any
-]: any -> record<lastModifiedOn: record, serverCatalogStatus: record, serverList: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  --next-token-body: string # The token for the next set of results. (body field)
+  --max-results-body: int # The maximum number of results to return in a single call. The default value is 50. To retrieve the remaining results, make another call with the returned NextToken value. (body field)
+  --vm-server-address-list: list # The server addresses. — item shape: {vmManagerId?: string, vmId?: string}
+]: any -> record<lastModifiedOn: string, serverCatalogStatus: string, serverList: table<serverId: string, serverType: string, vmServer: record, replicationJobId: string, replicationJobTerminated: bool>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.GetServers")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"nextToken": $next_token_body, "maxResults": $max_results_body, "vmServerAddressList": $vm_server_address_list} | compact
@@ -1173,12 +1199,13 @@ export def "import-app-catalog" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  --role-name: any
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  --role-name: string # The name of the service role. If you omit this parameter, we create a service-linked role for Migration Hub in your account. Otherwise, the role that you provide must have the policy and trust policy (https://docs.aws.amazon.com/migrationhub/latest/ug/new-customer-setup.html#sms-managed) described in the Migration Hub User Guide.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.ImportAppCatalog")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"roleName": $role_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1221,12 +1248,13 @@ export def "import-server-catalog" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
+  --x-amz-target: string@x-amz-target-completer-21 # required
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.ImportServerCatalog")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1269,12 +1297,13 @@ export def "launch-app" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  --app-id: any
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  --app-id: string # The ID of the application.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.LaunchApp")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1317,14 +1346,15 @@ export def "list-apps" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  --app-ids: any
-  --next-token: any
-  --max-results: any
-]: any -> record<apps: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  --app-ids: list<string> # The unique application IDs.
+  --next-token: string # The token for the next set of results.
+  --max-results: int # The maximum number of results to return in a single call. The default value is 100. To retrieve the remaining results, make another call with the returned NextToken value.
+]: any -> record<apps: table<appId: string, importedAppId: string, name: string, description: string, status: string, statusMessage: string, replicationConfigurationStatus: string, replicationStatus: string, replicationStatusMessage: string, latestReplicationTime: string, launchConfigurationStatus: string, launchStatus: string, launchStatusMessage: string, launchDetails: record, creationTime: string, lastModified: string, roleName: string, totalServerGroups: int, totalServers: int>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.ListApps")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appIds": $app_ids, "nextToken": $next_token, "maxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1350,6 +1380,7 @@ export def "list-apps" [
 #
 # POST /
 # operationId: NotifyAppValidationOutput
+# --notificationContext shape: {validationId?: string, status?: "READY_FOR_VALIDATION"|"PENDING"|"IN_PROGRESS"|"SUCCEEDED"|"FAILED", statusMessage?: string}
 export def "notify-app-validation-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1367,13 +1398,14 @@ export def "notify-app-validation-output" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  app_id: any
-  --notification-context: any
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  app_id: string # The ID of the application.
+  --notification-context: record # Contains the status of validating an application. — shape: {validationId?: string, status?: "READY_FOR_VALIDATION"|"PENDING"|"IN_PROGRESS"|"SUCCEEDED"|"FAILED", statusMessage?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.NotifyAppValidationOutput")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id, "notificationContext": $notification_context} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1399,6 +1431,7 @@ export def "notify-app-validation-output" [
 #
 # POST /
 # operationId: PutAppLaunchConfiguration
+# --serverGroupLaunchConfigurations item shape: {serverGroupId?: string, launchOrder?: int, serverLaunchConfigurations?: list}
 export def "put-app-launch-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1416,15 +1449,16 @@ export def "put-app-launch-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  --app-id: any
-  --role-name: any
-  --auto-launch: any
-  --server-group-launch-configurations: any
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  --app-id: string # The ID of the application.
+  --role-name: string # The name of service role in the customer's account that CloudFormation uses to launch the application.
+  --auto-launch: oneof<nothing, bool> # Indicates whether the application is configured to launch automatically after replication is complete.
+  --server-group-launch-configurations: list # Information about the launch configurations for server groups in the application. — item shape: {serverGroupId?: string, launchOrder?: int, serverLaunchConfigurations?: list}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.PutAppLaunchConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id, "roleName": $role_name, "autoLaunch": $auto_launch, "serverGroupLaunchConfigurations": $server_group_launch_configurations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1450,6 +1484,7 @@ export def "put-app-launch-configuration" [
 #
 # POST /
 # operationId: PutAppReplicationConfiguration
+# --serverGroupReplicationConfigurations item shape: {serverGroupId?: string, serverReplicationConfigurations?: list}
 export def "put-app-replication-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1467,13 +1502,14 @@ export def "put-app-replication-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  --app-id: any
-  --server-group-replication-configurations: any
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  --app-id: string # The ID of the application.
+  --server-group-replication-configurations: list # Information about the replication configurations for server groups in the application. — item shape: {serverGroupId?: string, serverReplicationConfigurations?: list}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.PutAppReplicationConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id, "serverGroupReplicationConfigurations": $server_group_replication_configurations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1499,6 +1535,8 @@ export def "put-app-replication-configuration" [
 #
 # POST /
 # operationId: PutAppValidationConfiguration
+# --appValidationConfigurations item shape: {validationId?: string, name?: string, appValidationStrategy?: "SSM", ssmValidationParameters?: record}
+# --serverGroupValidationConfigurations item shape: {serverGroupId?: string, serverValidationConfigurations?: list}
 export def "put-app-validation-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1516,14 +1554,15 @@ export def "put-app-validation-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  app_id: any
-  --app-validation-configurations: any
-  --server-group-validation-configurations: any
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  app_id: string # The ID of the application.
+  --app-validation-configurations: list # The configuration for application validation. — item shape: {validationId?: string, name?: string, appValidationStrategy?: "SSM", ssmValidationParameters?: record}
+  --server-group-validation-configurations: list # The configuration for instance validation. — item shape: {serverGroupId?: string, serverValidationConfigurations?: list}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.PutAppValidationConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id, "appValidationConfigurations": $app_validation_configurations, "serverGroupValidationConfigurations": $server_group_validation_configurations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1566,12 +1605,13 @@ export def "start-app-replication" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  --app-id: any
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  --app-id: string # The ID of the application.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.StartAppReplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1614,13 +1654,14 @@ export def "start-on-demand-app-replication" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  app_id: any
-  --description: any
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  app_id: string # The ID of the application.
+  --description: string # The description of the replication run.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.StartOnDemandAppReplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1663,13 +1704,14 @@ export def "start-on-demand-replication-run" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  replication_job_id: any
-  --description: any
-]: any -> record<replicationRunId: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  replication_job_id: string # The ID of the replication job.
+  --description: string # The description of the replication run.
+]: any -> record<replicationRunId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.StartOnDemandReplicationRun")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"replicationJobId": $replication_job_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1712,12 +1754,13 @@ export def "stop-app-replication" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  --app-id: any
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  --app-id: string # The ID of the application.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.StopAppReplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1760,12 +1803,13 @@ export def "terminate-app" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  --app-id: any
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  --app-id: string # The ID of the application.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.TerminateApp")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1791,6 +1835,8 @@ export def "terminate-app" [
 #
 # POST /
 # operationId: UpdateApp
+# --serverGroups item shape: {serverGroupId?: string, name?: string, serverList?: list}
+# --tags item shape: {key?: string, value?: string}
 export def "update-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1808,17 +1854,18 @@ export def "update-app" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  --app-id: any
-  --name: any
-  --description: any
-  --role-name: any
-  --server-groups: any
-  --tags: any
-]: any -> record<appSummary: record<appId: record, importedAppId: record, name: record, description: record, status: record, statusMessage: record, replicationConfigurationStatus: record, replicationStatus: record, replicationStatusMessage: record, latestReplicationTime: record, launchConfigurationStatus: record, launchStatus: record, launchStatusMessage: record, launchDetails: record<latestLaunchTime: record, stackName: record, stackId: record>, creationTime: record, lastModified: record, roleName: record, totalServerGroups: record, totalServers: record>, serverGroups: record, tags: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  --app-id: string # The ID of the application.
+  --name: string # The new name of the application.
+  --description: string # The new description of the application.
+  --role-name: string # The name of the service role in the customer's account used by Server Migration Service.
+  --server-groups: list # The server groups in the application to update. — item shape: {serverGroupId?: string, name?: string, serverList?: list}
+  --tags: list # The tags to associate with the application. — item shape: {key?: string, value?: string}
+]: any -> record<appSummary: record<appId: string, importedAppId: string, name: string, description: string, status: string, statusMessage: string, replicationConfigurationStatus: string, replicationStatus: string, replicationStatusMessage: string, latestReplicationTime: string, launchConfigurationStatus: string, launchStatus: string, launchStatusMessage: string, launchDetails: record<latestLaunchTime: string, stackName: string, stackId: string>, creationTime: string, lastModified: string, roleName: string, totalServerGroups: int, totalServers: int>, serverGroups: table<serverGroupId: string, name: string, serverList: list>, tags: table<key: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.UpdateApp")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"appId": $app_id, "name": $name, "description": $description, "roleName": $role_name, "serverGroups": $server_groups, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1861,20 +1908,21 @@ export def "update-replication-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  replication_job_id: any
-  --frequency: any
-  --next-replication-run-start-time: any
-  --license-type: any
-  --role-name: any
-  --description: any
-  --number-of-recent-amis-to-keep: any
-  --encrypted: any
-  --kms-key-id: any
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  replication_job_id: string # The ID of the replication job.
+  --frequency: int # The time between consecutive replication runs, in hours.
+  --next-replication-run-start-time: string # The start time of the next replication run. (format: date-time)
+  --license-type: string@license-type-completer # The license type to be used for the AMI created by a successful replication run.
+  --role-name: string # The name of the IAM role to be used by Server Migration Service.
+  --description: string # The description of the replication job.
+  --number-of-recent-amis-to-keep: int # The maximum number of SMS-created AMIs to retain. The oldest is deleted after the maximum number is reached and a new AMI is created.
+  --encrypted: oneof<nothing, bool> # When true, the replication job produces encrypted AMIs. For more information, KmsKeyId.
+  --kms-key-id: string # The ID of the KMS key for replication jobs that produce encrypted AMIs. This value can be any of the following: KMS key ID KMS key alias ARN referring to the KMS key ID ARN referring to the KMS key alias If encrypted is enabled but a KMS key ID is not specified, the customer's default KMS key for Amazon EBS is used.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSServerMigrationService_V2016_10_24.UpdateReplicationJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"replicationJobId": $replication_job_id, "frequency": $frequency, "nextReplicationRunStartTime": $next_replication_run_start_time, "licenseType": $license_type, "roleName": $role_name, "description": $description, "numberOfRecentAmisToKeep": $number_of_recent_amis_to_keep, "encrypted": $encrypted, "kmsKeyId": $kms_key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

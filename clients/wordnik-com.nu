@@ -673,7 +673,7 @@ export def "reverse-dictionary" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # Search term
+  --query: string # Search term (required)
   --find-sense-for-word: string # Restricts words and finds closest sense
   --include-source-dictionaries: string@include-source-dictionaries-completer # Only include these comma-delimited source dictionaries
   --exclude-source-dictionaries: string@exclude-source-dictionaries-completer # Exclude these comma-delimited source dictionaries
@@ -692,6 +692,7 @@ export def "reverse-dictionary" [
 ]: nothing -> record<results: list<any>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "findSenseForWord" $find_sense_for_word "scalar") (serialize-qp "includeSourceDictionaries" $include_source_dictionaries "scalar") (serialize-qp "excludeSourceDictionaries" $exclude_source_dictionaries "scalar") (serialize-qp "includePartOfSpeech" $include_part_of_speech "scalar") (serialize-qp "excludePartOfSpeech" $exclude_part_of_speech "scalar") (serialize-qp "minCorpusCount" $min_corpus_count "scalar") (serialize-qp "maxCorpusCount" $max_corpus_count "scalar") (serialize-qp "minLength" $min_length "scalar") (serialize-qp "maxLength" $max_length "scalar") (serialize-qp "expandTerms" $expand_terms "scalar") (serialize-qp "includeTags" $include_tags "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/words.json/reverseDictionary" $qp $auth.query)
   let accept_val = "*/*"

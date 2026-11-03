@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -96,12 +96,14 @@ def base-url-completer [] { ["http://machinelearning.us-east-1.amazonaws.com" "h
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def resource-type-completer [] { ["BatchPrediction" "DataSource" "Evaluation" "MLModel"] }
 def x-amz-target-completer [] { ["AmazonML_20141212.AddTags"] }
 def x-amz-target-completer-1 [] { ["AmazonML_20141212.CreateBatchPrediction"] }
 def x-amz-target-completer-2 [] { ["AmazonML_20141212.CreateDataSourceFromRDS"] }
 def x-amz-target-completer-3 [] { ["AmazonML_20141212.CreateDataSourceFromRedshift"] }
 def x-amz-target-completer-4 [] { ["AmazonML_20141212.CreateDataSourceFromS3"] }
 def x-amz-target-completer-5 [] { ["AmazonML_20141212.CreateEvaluation"] }
+def ml-model-type-completer [] { ["BINARY" "MULTICLASS" "REGRESSION"] }
 def x-amz-target-completer-6 [] { ["AmazonML_20141212.CreateMLModel"] }
 def x-amz-target-completer-7 [] { ["AmazonML_20141212.CreateRealtimeEndpoint"] }
 def x-amz-target-completer-8 [] { ["AmazonML_20141212.DeleteBatchPrediction"] }
@@ -110,9 +112,13 @@ def x-amz-target-completer-10 [] { ["AmazonML_20141212.DeleteEvaluation"] }
 def x-amz-target-completer-11 [] { ["AmazonML_20141212.DeleteMLModel"] }
 def x-amz-target-completer-12 [] { ["AmazonML_20141212.DeleteRealtimeEndpoint"] }
 def x-amz-target-completer-13 [] { ["AmazonML_20141212.DeleteTags"] }
+def filter-variable-completer [] { ["CreatedAt" "DataSourceId" "DataURI" "IAMUser" "LastUpdatedAt" "MLModelId" "Name" "Status"] }
+def sort-order-completer [] { ["asc" "dsc"] }
 def x-amz-target-completer-14 [] { ["AmazonML_20141212.DescribeBatchPredictions"] }
+def filter-variable-completer-1 [] { ["CreatedAt" "DataLocationS3" "IAMUser" "LastUpdatedAt" "Name" "Status"] }
 def x-amz-target-completer-15 [] { ["AmazonML_20141212.DescribeDataSources"] }
 def x-amz-target-completer-16 [] { ["AmazonML_20141212.DescribeEvaluations"] }
+def filter-variable-completer-2 [] { ["Algorithm" "CreatedAt" "IAMUser" "LastUpdatedAt" "MLModelType" "Name" "RealtimeEndpointStatus" "Status" "TrainingDataSourceId" "TrainingDataURI"] }
 def x-amz-target-completer-17 [] { ["AmazonML_20141212.DescribeMLModels"] }
 def x-amz-target-completer-18 [] { ["AmazonML_20141212.DescribeTags"] }
 def x-amz-target-completer-19 [] { ["AmazonML_20141212.GetBatchPrediction"] }
@@ -152,6 +158,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddTags
+# --Tags item shape: {Key?: string, Value?: string}
 export def "add-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -169,14 +176,15 @@ export def "add-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  tags: any
-  resource_id: any
-  resource_type: any
-]: any -> record<ResourceId: record, ResourceType: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  tags: list # The key-value pairs to use to create tags. If you specify a key without specifying a value, Amazon ML creates a tag with the specified key and a value of null. — item shape: {Key?: string, Value?: string}
+  resource_id: string # The ID of the ML object to tag. For example, exampleModelId.
+  resource_type: string@resource-type-completer # The type of the ML object to tag.
+]: any -> record<ResourceId: string, ResourceType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.AddTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Tags": $tags, "ResourceId": $resource_id, "ResourceType": $resource_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -219,16 +227,17 @@ export def "create-batch-prediction" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  batch_prediction_id: any
-  --batch-prediction-name: any
-  ml_model_id: any
-  batch_prediction_data_source_id: any
-  output_uri: any
-]: any -> record<BatchPredictionId: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  batch_prediction_id: string # A user-supplied ID that uniquely identifies the BatchPrediction.
+  --batch-prediction-name: string # A user-supplied name or description of the Amazon ML resource.
+  ml_model_id: string # The ID of the MLModel that will generate predictions for the group of observations.
+  batch_prediction_data_source_id: string # The ID of the DataSource that points to the group of observations to predict.
+  output_uri: string # A reference to a file or bucket on Amazon Simple Storage Service (Amazon S3).
+]: any -> record<BatchPredictionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.CreateBatchPrediction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BatchPredictionId": $batch_prediction_id, "BatchPredictionName": $batch_prediction_name, "MLModelId": $ml_model_id, "BatchPredictionDataSourceId": $batch_prediction_data_source_id, "OutputUri": $output_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -254,6 +263,7 @@ export def "create-batch-prediction" [
 #
 # POST /
 # operationId: CreateDataSourceFromRDS
+# --RDSData shape: {DatabaseInformation: record, SelectSqlQuery: string, DatabaseCredentials: record, S3StagingLocation: string, DataRearrangement?: string, DataSchema?: string, DataSchemaUri?: string, ResourceRole: string, ServiceRole: string, SubnetId: string, SecurityGroupIds: list<string>}
 export def "create-data-source-from-rds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -271,16 +281,17 @@ export def "create-data-source-from-rds" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  data_source_id: any
-  --data-source-name: any
-  rds_data: any
-  role_arn: any
-  --compute-statistics: any
-]: any -> record<DataSourceId: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  data_source_id: string # A user-supplied ID that uniquely identifies the DataSource. Typically, an Amazon Resource Number (ARN) becomes the ID for a DataSource.
+  --data-source-name: string # A user-supplied name or description of the Amazon ML resource.
+  rds_data: record # The data specification of an Amazon Relational Database Service (Amazon RDS) DataSource. — shape: {DatabaseInformation: record, SelectSqlQuery: string, DatabaseCredentials: record, S3StagingLocation: string, DataRearrangement?: string, DataSchema?: string, DataSchemaUri?: string, ResourceRole: string, ServiceRole: string, SubnetId: string, SecurityGroupIds: list<string>}
+  role_arn: string # The Amazon Resource Name (ARN) of an AWS IAM Role (https://docs.aws.amazon.com/IAM/latest/UserGuide/roles-toplevel.html#roles-about-termsandconcepts), such as the following: arn:aws:iam::account:role/rolename.
+  --compute-statistics: oneof<nothing, bool> # The compute statistics for a DataSource. The statistics are generated from the observation data referenced by a DataSource. Amazon ML uses the statistics internally during MLModel training. This parameter must be set to true if the DataSource needs to be used for MLModel training.
+]: any -> record<DataSourceId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.CreateDataSourceFromRDS")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DataSourceId": $data_source_id, "DataSourceName": $data_source_name, "RDSData": $rds_data, "RoleARN": $role_arn, "ComputeStatistics": $compute_statistics} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -306,6 +317,7 @@ export def "create-data-source-from-rds" [
 #
 # POST /
 # operationId: CreateDataSourceFromRedshift
+# --DataSpec shape: {DatabaseInformation: record, SelectSqlQuery: string, DatabaseCredentials: record, S3StagingLocation: string, DataRearrangement?: string, DataSchema?: string, DataSchemaUri?: string}
 export def "create-data-source-from-redshift" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -323,16 +335,17 @@ export def "create-data-source-from-redshift" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  data_source_id: any
-  --data-source-name: any
-  data_spec: any
-  role_arn: any
-  --compute-statistics: any
-]: any -> record<DataSourceId: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  data_source_id: string # A user-supplied ID that uniquely identifies the DataSource.
+  --data-source-name: string # A user-supplied name or description of the Amazon ML resource.
+  data_spec: record # Describes the data specification of an Amazon Redshift DataSource. — shape: {DatabaseInformation: record, SelectSqlQuery: string, DatabaseCredentials: record, S3StagingLocation: string, DataRearrangement?: string, DataSchema?: string, DataSchemaUri?: string}
+  role_arn: string # The Amazon Resource Name (ARN) of an AWS IAM Role (https://docs.aws.amazon.com/IAM/latest/UserGuide/roles-toplevel.html#roles-about-termsandconcepts), such as the following: arn:aws:iam::account:role/rolename.
+  --compute-statistics: oneof<nothing, bool> # The compute statistics for a DataSource. The statistics are generated from the observation data referenced by a DataSource. Amazon ML uses the statistics internally during MLModel training. This parameter must be set to true if the DataSource needs to be used for MLModel training.
+]: any -> record<DataSourceId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.CreateDataSourceFromRedshift")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DataSourceId": $data_source_id, "DataSourceName": $data_source_name, "DataSpec": $data_spec, "RoleARN": $role_arn, "ComputeStatistics": $compute_statistics} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -358,6 +371,7 @@ export def "create-data-source-from-redshift" [
 #
 # POST /
 # operationId: CreateDataSourceFromS3
+# --DataSpec shape: {DataLocationS3: string, DataRearrangement?: string, DataSchema?: string, DataSchemaLocationS3?: string}
 export def "create-data-source-from-s3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -375,15 +389,16 @@ export def "create-data-source-from-s3" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  data_source_id: any
-  --data-source-name: any
-  data_spec: any
-  --compute-statistics: any
-]: any -> record<DataSourceId: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  data_source_id: string # A user-supplied identifier that uniquely identifies the DataSource.
+  --data-source-name: string # A user-supplied name or description of the Amazon ML resource.
+  data_spec: record # Describes the data specification of a DataSource. — shape: {DataLocationS3: string, DataRearrangement?: string, DataSchema?: string, DataSchemaLocationS3?: string}
+  --compute-statistics: oneof<nothing, bool> # The compute statistics for a DataSource. The statistics are generated from the observation data referenced by a DataSource. Amazon ML uses the statistics internally during MLModel training. This parameter must be set to true if the DataSource needs to be used for MLModel training.
+]: any -> record<DataSourceId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.CreateDataSourceFromS3")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DataSourceId": $data_source_id, "DataSourceName": $data_source_name, "DataSpec": $data_spec, "ComputeStatistics": $compute_statistics} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -426,15 +441,16 @@ export def "create-evaluation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  evaluation_id: any
-  --evaluation-name: any
-  ml_model_id: any
-  evaluation_data_source_id: any
-]: any -> record<EvaluationId: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  evaluation_id: string # A user-supplied ID that uniquely identifies the Evaluation.
+  --evaluation-name: string # A user-supplied name or description of the Amazon ML resource.
+  ml_model_id: string # The ID of the MLModel to evaluate. The schema used in creating the MLModel must match the schema of the DataSource used in the Evaluation.
+  evaluation_data_source_id: string # The ID of the DataSource for the evaluation. The schema of the DataSource must match the schema used to create the MLModel.
+]: any -> record<EvaluationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.CreateEvaluation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EvaluationId": $evaluation_id, "EvaluationName": $evaluation_name, "MLModelId": $ml_model_id, "EvaluationDataSourceId": $evaluation_data_source_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -477,18 +493,19 @@ export def "create-ml-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  ml_model_id: any
-  --ml-model-name: any
-  ml_model_type: any
-  --parameters: any
-  training_data_source_id: any
-  --recipe: any
-  --recipe-uri: any
-]: any -> record<MLModelId: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  ml_model_id: string # A user-supplied ID that uniquely identifies the MLModel.
+  --ml-model-name: string # A user-supplied name or description of the Amazon ML resource.
+  ml_model_type: string@ml-model-type-completer # The category of supervised learning that this MLModel will address. Choose from the following types: Choose REGRESSION if the MLModel will be used to predict a numeric value. Choose BINARY if the MLModel result has two possible values. Choose MULTICLASS if the MLModel result has a limited number of values. For more information, see the Amazon Machine Learning Developer Guide (https://docs.aws.amazon.com/machine-learning/latest/dg).
+  --parameters: record # A list of the training parameters in the MLModel. The list is implemented as a map of key-value pairs. The following is the current set of training parameters: sgd.maxMLModelSizeInBytes - The maximum allowed size of the model. Depending on the input data, the size of the model might affect its performance. The value is an integer that ranges from 100000 to 2147483648. The default value is 33554432. sgd.maxPasses - The number of times that the training process traverses the observations to build the MLModel. The value is an integer that ranges from 1 to 10000. The default value is 10. sgd.shuffleType - Whether Amazon ML shuffles the training data. Shuffling the data improves a model's ability to find the optimal solution for a variety of data types. The valid values are auto and none. The default value is none. We strongly recommend that you shuffle your data. sgd.l1RegularizationAmount - The coefficient regularization L1 norm. It controls overfitting the data by penalizing large coefficients. This tends to drive coefficients to zero, resulting in a sparse feature set. If you use this parameter, start by specifying a small value, such as 1.0E-08. The value is a double that ranges from 0 to MAX_DOUBLE. The default is to not use L1 normalization. This parameter can't be used when L2 is specified. Use this parameter sparingly. sgd.l2RegularizationAmount - The coefficient regularization L2 norm. It controls overfitting the data by penalizing large coefficients. This tends to drive coefficients to small, nonzero values. If you use this parameter, start by specifying a small value, such as 1.0E-08. The value is a double that ranges from 0 to MAX_DOUBLE. The default is to not use L2 normalization. This parameter can't be used when L1 is specified. Use this parameter sparingly.
+  training_data_source_id: string # The DataSource that points to the training data.
+  --recipe: string # The data recipe for creating the MLModel. You must specify either the recipe or its URI. If you don't specify a recipe or its URI, Amazon ML creates a default.
+  --recipe-uri: string # A reference to a file or bucket on Amazon Simple Storage Service (Amazon S3).
+]: any -> record<MLModelId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.CreateMLModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MLModelId": $ml_model_id, "MLModelName": $ml_model_name, "MLModelType": $ml_model_type, "Parameters": $parameters, "TrainingDataSourceId": $training_data_source_id, "Recipe": $recipe, "RecipeUri": $recipe_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -531,12 +548,13 @@ export def "create-realtime-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  ml_model_id: any
-]: any -> record<MLModelId: record, RealtimeEndpointInfo: record<PeakRequestsPerSecond: record, CreatedAt: record, EndpointUrl: record, EndpointStatus: record>> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  ml_model_id: string # The ID assigned to the MLModel during creation.
+]: any -> record<MLModelId: string, RealtimeEndpointInfo: record<PeakRequestsPerSecond: int, CreatedAt: string, EndpointUrl: string, EndpointStatus: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.CreateRealtimeEndpoint")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MLModelId": $ml_model_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -579,12 +597,13 @@ export def "delete-batch-prediction" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  batch_prediction_id: any
-]: any -> record<BatchPredictionId: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  batch_prediction_id: string # A user-supplied ID that uniquely identifies the BatchPrediction.
+]: any -> record<BatchPredictionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DeleteBatchPrediction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BatchPredictionId": $batch_prediction_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -627,12 +646,13 @@ export def "delete-data-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  data_source_id: any
-]: any -> record<DataSourceId: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  data_source_id: string # A user-supplied ID that uniquely identifies the DataSource.
+]: any -> record<DataSourceId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DeleteDataSource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DataSourceId": $data_source_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -675,12 +695,13 @@ export def "delete-evaluation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  evaluation_id: any
-]: any -> record<EvaluationId: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  evaluation_id: string # A user-supplied ID that uniquely identifies the Evaluation to delete.
+]: any -> record<EvaluationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DeleteEvaluation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EvaluationId": $evaluation_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -723,12 +744,13 @@ export def "delete-ml-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  ml_model_id: any
-]: any -> record<MLModelId: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  ml_model_id: string # A user-supplied ID that uniquely identifies the MLModel.
+]: any -> record<MLModelId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DeleteMLModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MLModelId": $ml_model_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -771,12 +793,13 @@ export def "delete-realtime-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  ml_model_id: any
-]: any -> record<MLModelId: record, RealtimeEndpointInfo: record<PeakRequestsPerSecond: record, CreatedAt: record, EndpointUrl: record, EndpointStatus: record>> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  ml_model_id: string # The ID assigned to the MLModel during creation.
+]: any -> record<MLModelId: string, RealtimeEndpointInfo: record<PeakRequestsPerSecond: int, CreatedAt: string, EndpointUrl: string, EndpointStatus: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DeleteRealtimeEndpoint")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MLModelId": $ml_model_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -819,14 +842,15 @@ export def "delete-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  tag_keys: any
-  resource_id: any
-  resource_type: any
-]: any -> record<ResourceId: record, ResourceType: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  tag_keys: list<string> # One or more tags to delete.
+  resource_id: string # The ID of the tagged ML object. For example, exampleModelId.
+  resource_type: string@resource-type-completer # The type of the tagged ML object.
+]: any -> record<ResourceId: string, ResourceType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DeleteTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TagKeys": $tag_keys, "ResourceId": $resource_id, "ResourceType": $resource_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -871,22 +895,23 @@ export def "describe-batch-predictions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  --filter-variable: any
-  --eq: any
-  --gt: any
-  --lt: any
-  --ge: any
-  --le: any
-  --ne: any
-  --prefix: any
-  --sort-order: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<Results: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  --filter-variable: string@filter-variable-completer # A list of the variables to use in searching or filtering BatchPrediction. CreatedAt - Sets the search criteria to BatchPrediction creation date. Status - Sets the search criteria to BatchPrediction status. Name - Sets the search criteria to the contents of BatchPrediction Name. IAMUser - Sets the search criteria to the user account that invoked the BatchPrediction creation. MLModelId - Sets the search criteria to the MLModel used in the BatchPrediction. DataSourceId - Sets the search criteria to the DataSource used in the BatchPrediction. DataURI - Sets the search criteria to the data file(s) used in the BatchPrediction. The URL can identify either a file or an Amazon Simple Storage Service (Amazon S3) bucket or directory.
+  --eq: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --gt: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --lt: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --ge: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --le: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --ne: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --prefix: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --sort-order: string@sort-order-completer # The sort order specified in a listing condition. Possible values include the following: asc - Present the information in ascending order (from A-Z). dsc - Present the information in descending order (from Z-A).
+  --next-token-body: string # String type. (body field)
+  --limit-body: int # The number of pages of information to include in the result. The range of acceptable values is 1 through 100. The default value is 100. (body field)
+]: any -> record<Results: table<BatchPredictionId: string, MLModelId: string, BatchPredictionDataSourceId: string, InputDataLocationS3: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, OutputUri: string, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string, TotalRecordCount: int, InvalidRecordCount: int>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DescribeBatchPredictions")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"FilterVariable": $filter_variable, "EQ": $eq, "GT": $gt, "LT": $lt, "GE": $ge, "LE": $le, "NE": $ne, "Prefix": $prefix, "SortOrder": $sort_order, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -932,22 +957,23 @@ export def "describe-data-sources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  --filter-variable: any
-  --eq: any
-  --gt: any
-  --lt: any
-  --ge: any
-  --le: any
-  --ne: any
-  --prefix: any
-  --sort-order: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<Results: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  --filter-variable: string@filter-variable-completer-1 # A list of the variables to use in searching or filtering DataSource. CreatedAt - Sets the search criteria to DataSource creation date. Status - Sets the search criteria to DataSource status. Name - Sets the search criteria to the contents of DataSource Name. DataUri - Sets the search criteria to the URI of data files used to create the DataSource. The URI can identify either a file or an Amazon Simple Storage Service (Amazon S3) bucket or directory. IAMUser - Sets the search criteria to the user account that invoked the DataSource creation. Note: The variable names should match the variable names in the DataSource.
+  --eq: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --gt: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --lt: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --ge: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --le: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --ne: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --prefix: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --sort-order: string@sort-order-completer # The sort order specified in a listing condition. Possible values include the following: asc - Present the information in ascending order (from A-Z). dsc - Present the information in descending order (from Z-A).
+  --next-token-body: string # String type. (body field)
+  --limit-body: int # The maximum number of DataSource to include in the result. (body field)
+]: any -> record<Results: table<DataSourceId: string, DataLocationS3: string, DataRearrangement: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, DataSizeInBytes: int, NumberOfFiles: int, Name: string, Status: string, Message: string, RedshiftMetadata: record, RDSMetadata: record, RoleARN: string, ComputeStatistics: bool, ComputeTime: int, FinishedAt: string, StartedAt: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DescribeDataSources")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"FilterVariable": $filter_variable, "EQ": $eq, "GT": $gt, "LT": $lt, "GE": $ge, "LE": $le, "NE": $ne, "Prefix": $prefix, "SortOrder": $sort_order, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -993,22 +1019,23 @@ export def "describe-evaluations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  --filter-variable: any
-  --eq: any
-  --gt: any
-  --lt: any
-  --ge: any
-  --le: any
-  --ne: any
-  --prefix: any
-  --sort-order: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<Results: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  --filter-variable: string@filter-variable-completer # A list of the variables to use in searching or filtering Evaluation. CreatedAt - Sets the search criteria to Evaluation creation date. Status - Sets the search criteria to Evaluation status. Name - Sets the search criteria to the contents of Evaluation Name. IAMUser - Sets the search criteria to the user account that invoked an evaluation. MLModelId - Sets the search criteria to the Predictor that was evaluated. DataSourceId - Sets the search criteria to the DataSource used in evaluation. DataUri - Sets the search criteria to the data file(s) used in evaluation. The URL can identify either a file or an Amazon Simple Storage Service (Amazon S3) bucket or directory.
+  --eq: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --gt: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --lt: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --ge: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --le: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --ne: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --prefix: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --sort-order: string@sort-order-completer # The sort order specified in a listing condition. Possible values include the following: asc - Present the information in ascending order (from A-Z). dsc - Present the information in descending order (from Z-A).
+  --next-token-body: string # String type. (body field)
+  --limit-body: int # The maximum number of Evaluation to include in the result. (body field)
+]: any -> record<Results: table<EvaluationId: string, MLModelId: string, EvaluationDataSourceId: string, InputDataLocationS3: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, PerformanceMetrics: record, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DescribeEvaluations")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"FilterVariable": $filter_variable, "EQ": $eq, "GT": $gt, "LT": $lt, "GE": $ge, "LE": $le, "NE": $ne, "Prefix": $prefix, "SortOrder": $sort_order, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -1054,22 +1081,23 @@ export def "describe-ml-models" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  --filter-variable: any
-  --eq: any
-  --gt: any
-  --lt: any
-  --ge: any
-  --le: any
-  --ne: any
-  --prefix: any
-  --sort-order: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<Results: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  --filter-variable: string@filter-variable-completer-2 # Use one of the following variables to filter a list of MLModel: CreatedAt - Sets the search criteria to MLModel creation date. Status - Sets the search criteria to MLModel status. Name - Sets the search criteria to the contents of MLModel Name. IAMUser - Sets the search criteria to the user account that invoked the MLModel creation. TrainingDataSourceId - Sets the search criteria to the DataSource used to train one or more MLModel. RealtimeEndpointStatus - Sets the search criteria to the MLModel real-time endpoint status. MLModelType - Sets the search criteria to MLModel type: binary, regression, or multi-class. Algorithm - Sets the search criteria to the algorithm that the MLModel uses. TrainingDataURI - Sets the search criteria to the data file(s) used in training a MLModel. The URL can identify either a file or an Amazon Simple Storage Service (Amazon S3) bucket or directory.
+  --eq: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --gt: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --lt: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --ge: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --le: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --ne: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --prefix: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
+  --sort-order: string@sort-order-completer # The sort order specified in a listing condition. Possible values include the following: asc - Present the information in ascending order (from A-Z). dsc - Present the information in descending order (from Z-A).
+  --next-token-body: string # String type. (body field)
+  --limit-body: int # The number of pages of information to include in the result. The range of acceptable values is 1 through 100. The default value is 100. (body field)
+]: any -> record<Results: table<MLModelId: string, TrainingDataSourceId: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, SizeInBytes: int, EndpointInfo: record, TrainingParameters: record, InputDataLocationS3: string, Algorithm: string, MLModelType: string, ScoreThreshold: float, ScoreThresholdLastUpdatedAt: string, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DescribeMLModels")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"FilterVariable": $filter_variable, "EQ": $eq, "GT": $gt, "LT": $lt, "GE": $ge, "LE": $le, "NE": $ne, "Prefix": $prefix, "SortOrder": $sort_order, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -1113,13 +1141,14 @@ export def "describe-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  resource_id: any
-  resource_type: any
-]: any -> record<ResourceId: record, ResourceType: record, Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  resource_id: string # The ID of the ML object. For example, exampleModelId.
+  resource_type: string@resource-type-completer # The type of the ML object.
+]: any -> record<ResourceId: string, ResourceType: string, Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DescribeTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "ResourceType": $resource_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1162,12 +1191,13 @@ export def "get-batch-prediction" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  batch_prediction_id: any
-]: any -> record<BatchPredictionId: record, MLModelId: record, BatchPredictionDataSourceId: record, InputDataLocationS3: record, CreatedByIamUser: record, CreatedAt: record, LastUpdatedAt: record, Name: record, Status: record, OutputUri: record, LogUri: record, Message: record, ComputeTime: record, FinishedAt: record, StartedAt: record, TotalRecordCount: record, InvalidRecordCount: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  batch_prediction_id: string # An ID assigned to the BatchPrediction at creation.
+]: any -> record<BatchPredictionId: string, MLModelId: string, BatchPredictionDataSourceId: string, InputDataLocationS3: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, OutputUri: string, LogUri: string, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string, TotalRecordCount: int, InvalidRecordCount: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.GetBatchPrediction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BatchPredictionId": $batch_prediction_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1210,13 +1240,14 @@ export def "get-data-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  data_source_id: any
-  --verbose: any
-]: any -> record<DataSourceId: record, DataLocationS3: record, DataRearrangement: record, CreatedByIamUser: record, CreatedAt: record, LastUpdatedAt: record, DataSizeInBytes: record, NumberOfFiles: record, Name: record, Status: record, LogUri: record, Message: record, RedshiftMetadata: record<RedshiftDatabase: record<DatabaseName: string, ClusterIdentifier: string>, DatabaseUserName: string, SelectSqlQuery: record>, RDSMetadata: record<Database: record<InstanceIdentifier: record, DatabaseName: string>, DatabaseUserName: string, SelectSqlQuery: record, ResourceRole: record, ServiceRole: record, DataPipelineId: record>, RoleARN: string, ComputeStatistics: record, ComputeTime: record, FinishedAt: record, StartedAt: record, DataSourceSchema: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  data_source_id: string # The ID assigned to the DataSource at creation.
+  --verbose: oneof<nothing, bool> # Specifies whether a describe operation should return exhaustive or abbreviated information.
+]: any -> record<DataSourceId: string, DataLocationS3: string, DataRearrangement: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, DataSizeInBytes: int, NumberOfFiles: int, Name: string, Status: string, LogUri: string, Message: string, RedshiftMetadata: record<RedshiftDatabase: record<DatabaseName: string, ClusterIdentifier: string>, DatabaseUserName: string, SelectSqlQuery: string>, RDSMetadata: record<Database: record<InstanceIdentifier: string, DatabaseName: string>, DatabaseUserName: string, SelectSqlQuery: string, ResourceRole: string, ServiceRole: string, DataPipelineId: string>, RoleARN: string, ComputeStatistics: bool, ComputeTime: int, FinishedAt: string, StartedAt: string, DataSourceSchema: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.GetDataSource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DataSourceId": $data_source_id, "Verbose": $verbose} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1259,12 +1290,13 @@ export def "get-evaluation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  evaluation_id: any
-]: any -> record<EvaluationId: record, MLModelId: record, EvaluationDataSourceId: record, InputDataLocationS3: record, CreatedByIamUser: record, CreatedAt: record, LastUpdatedAt: record, Name: record, Status: record, PerformanceMetrics: record<Properties: record>, LogUri: record, Message: record, ComputeTime: record, FinishedAt: record, StartedAt: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  evaluation_id: string # The ID of the Evaluation to retrieve. The evaluation of each MLModel is recorded and cataloged. The ID provides the means to access the information.
+]: any -> record<EvaluationId: string, MLModelId: string, EvaluationDataSourceId: string, InputDataLocationS3: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, PerformanceMetrics: record<Properties: record>, LogUri: string, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.GetEvaluation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EvaluationId": $evaluation_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1307,13 +1339,14 @@ export def "get-ml-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  ml_model_id: any
-  --verbose: any
-]: any -> record<MLModelId: record, TrainingDataSourceId: record, CreatedByIamUser: record, CreatedAt: record, LastUpdatedAt: record, Name: record, Status: record, SizeInBytes: int, EndpointInfo: record<PeakRequestsPerSecond: record, CreatedAt: record, EndpointUrl: record, EndpointStatus: record>, TrainingParameters: record, InputDataLocationS3: record, MLModelType: record, ScoreThreshold: record, ScoreThresholdLastUpdatedAt: record, LogUri: record, Message: record, ComputeTime: record, FinishedAt: record, StartedAt: record, Recipe: record, Schema: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  ml_model_id: string # The ID assigned to the MLModel at creation.
+  --verbose: oneof<nothing, bool> # Specifies whether a describe operation should return exhaustive or abbreviated information.
+]: any -> record<MLModelId: string, TrainingDataSourceId: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, SizeInBytes: int, EndpointInfo: record<PeakRequestsPerSecond: int, CreatedAt: string, EndpointUrl: string, EndpointStatus: string>, TrainingParameters: record, InputDataLocationS3: string, MLModelType: string, ScoreThreshold: float, ScoreThresholdLastUpdatedAt: string, LogUri: string, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string, Recipe: string, Schema: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.GetMLModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MLModelId": $ml_model_id, "Verbose": $verbose} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1356,14 +1389,15 @@ export def "predict" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  ml_model_id: any
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  ml_model_id: string # A unique identifier of the MLModel.
   record: record # A map of variable name-value pairs that represent an observation.
   predict_endpoint: string
-]: any -> record<Prediction: record<predictedLabel: record, predictedValue: record, predictedScores: record, details: record>> {
+]: any -> record<Prediction: record<predictedLabel: string, predictedValue: float, predictedScores: record, details: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.Predict")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MLModelId": $ml_model_id, "Record": $record, "PredictEndpoint": $predict_endpoint} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1406,13 +1440,14 @@ export def "update-batch-prediction" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  batch_prediction_id: any
-  batch_prediction_name: any
-]: any -> record<BatchPredictionId: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  batch_prediction_id: string # The ID assigned to the BatchPrediction during creation.
+  batch_prediction_name: string # A user-supplied name or description of the Amazon ML resource.
+]: any -> record<BatchPredictionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.UpdateBatchPrediction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BatchPredictionId": $batch_prediction_id, "BatchPredictionName": $batch_prediction_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1455,13 +1490,14 @@ export def "update-data-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  data_source_id: any
-  data_source_name: any
-]: any -> record<DataSourceId: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  data_source_id: string # The ID assigned to the DataSource during creation.
+  data_source_name: string # A user-supplied name or description of the Amazon ML resource.
+]: any -> record<DataSourceId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.UpdateDataSource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DataSourceId": $data_source_id, "DataSourceName": $data_source_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1504,13 +1540,14 @@ export def "update-evaluation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  evaluation_id: any
-  evaluation_name: any
-]: any -> record<EvaluationId: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  evaluation_id: string # The ID assigned to the Evaluation during creation.
+  evaluation_name: string # A user-supplied name or description of the Amazon ML resource.
+]: any -> record<EvaluationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.UpdateEvaluation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EvaluationId": $evaluation_id, "EvaluationName": $evaluation_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1553,14 +1590,15 @@ export def "update-ml-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  ml_model_id: any
-  --ml-model-name: any
-  --score-threshold: any
-]: any -> record<MLModelId: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  ml_model_id: string # The ID assigned to the MLModel during creation.
+  --ml-model-name: string # A user-supplied name or description of the Amazon ML resource.
+  --score-threshold: float # The ScoreThreshold used in binary classification MLModel that marks the boundary between a positive prediction and a negative prediction. Output values greater than or equal to the ScoreThreshold receive a positive result from the MLModel, such as true. Output values less than the ScoreThreshold receive a negative response from the MLModel, such as false. (format: float)
+]: any -> record<MLModelId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonML_20141212.UpdateMLModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MLModelId": $ml_model_id, "MLModelName": $ml_model_name, "ScoreThreshold": $score_threshold} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

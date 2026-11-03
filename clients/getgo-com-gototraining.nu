@@ -152,11 +152,12 @@ export def "get-all-organisers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<email: string, givenName: string, organizerKey: string, surname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_key | is-empty) { error make --unspanned { msg: "path parameter 'accountKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/accounts/{account_key}/organizers") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -191,11 +192,12 @@ export def "get-all-trainings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<description: string, name: string, organizers: list<record>, registrationSettings: record<disableConfirmationEmail: bool, disableWebRegistration: bool>, timeZone: string, times: list<record>, trainingId: string, trainingKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}/trainings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -232,7 +234,7 @@ export def "schedule-training" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
   --description: string # Description of the training
   name: string # Name of the training
   --organizers: list<int> # List of keys of the co-organizers for this training
@@ -244,6 +246,7 @@ export def "schedule-training" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}/trainings") $auth.query)
   let req_body = {"description": $description, "name": $name, "organizers": $organizers, "registrationSettings": $registration_settings, "timeZone": $time_zone, "times": $times} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -281,12 +284,13 @@ export def "cancel-training" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($training_key | is-empty) { error make --unspanned { msg: "path parameter 'trainingKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), training_key: (encode-path-segment $training_key)} | format pattern "/organizers/{organizer_key}/trainings/{training_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -322,12 +326,13 @@ export def "get-training" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> record<description: string, name: string, organizers: table<email: string, givenName: string, organizerKey: string, surname: string>, registrationSettings: record<disableConfirmationEmail: bool, disableWebRegistration: bool>, timeZone: string, times: table<endDate: string, startDate: string>, trainingId: string, trainingKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($training_key | is-empty) { error make --unspanned { msg: "path parameter 'trainingKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), training_key: (encode-path-segment $training_key)} | format pattern "/organizers/{organizer_key}/trainings/{training_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -363,12 +368,13 @@ export def "get-manage-training-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($training_key | is-empty) { error make --unspanned { msg: "path parameter 'trainingKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), training_key: (encode-path-segment $training_key)} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/manageUrl") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -404,7 +410,7 @@ export def "update-training-name-description" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
   --description: string # The training's description
   name: string # The training's name
 ]: any -> any {
@@ -413,6 +419,7 @@ export def "update-training-name-description" [
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($training_key | is-empty) { error make --unspanned { msg: "path parameter 'trainingKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), training_key: (encode-path-segment $training_key)} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/nameDescription") $auth.query)
   let req_body = {"description": $description, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -450,12 +457,13 @@ export def "get-organisers-for-training" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<email: string, givenName: string, organizerKey: string, surname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($training_key | is-empty) { error make --unspanned { msg: "path parameter 'trainingKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), training_key: (encode-path-segment $training_key)} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/organizers") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -491,7 +499,7 @@ export def "update-organisers-for-training" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
   --notify-organizers: oneof<nothing, bool> # Specifies whether an email should be sent notifying of the change to the training's organizers.
   organizers: list<int> # List of keys of the organizers for the training.
 ]: any -> any {
@@ -500,6 +508,7 @@ export def "update-organisers-for-training" [
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($training_key | is-empty) { error make --unspanned { msg: "path parameter 'trainingKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), training_key: (encode-path-segment $training_key)} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/organizers") $auth.query)
   let req_body = {"notifyOrganizers": $notify_organizers, "organizers": $organizers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -537,12 +546,13 @@ export def "get-registrants" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<confirmationUrl: string, email: string, givenName: string, joinUrl: string, registrantKey: string, registrationDate: string, status: string, surname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($training_key | is-empty) { error make --unspanned { msg: "path parameter 'trainingKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), training_key: (encode-path-segment $training_key)} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/registrants") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -578,7 +588,7 @@ export def "register-for-training" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
   email: string # The registrant's email address
   given_name: string # The registrant's first name
   surname: string # The registrant's surname
@@ -588,6 +598,7 @@ export def "register-for-training" [
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($training_key | is-empty) { error make --unspanned { msg: "path parameter 'trainingKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), training_key: (encode-path-segment $training_key)} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/registrants") $auth.query)
   let req_body = {"email": $email, "givenName": $given_name, "surname": $surname} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -626,13 +637,14 @@ export def "cancel-registration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($training_key | is-empty) { error make --unspanned { msg: "path parameter 'trainingKey' must be non-empty" } }
   if ($registrant_key | is-empty) { error make --unspanned { msg: "path parameter 'registrantKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), training_key: (encode-path-segment $training_key), registrant_key: (encode-path-segment $registrant_key)} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/registrants/{registrant_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -669,13 +681,14 @@ export def "get-registrant" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> record<confirmationUrl: string, email: string, givenName: string, joinUrl: string, registrantKey: string, registrationDate: string, status: string, surname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($training_key | is-empty) { error make --unspanned { msg: "path parameter 'trainingKey' must be non-empty" } }
   if ($registrant_key | is-empty) { error make --unspanned { msg: "path parameter 'registrantKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), training_key: (encode-path-segment $training_key), registrant_key: (encode-path-segment $registrant_key)} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/registrants/{registrant_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -711,7 +724,7 @@ export def "update-registration-settings-for-training" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
   --disable-confirmation-email: oneof<nothing, bool> # Indicates whether confirmation emails to the training registrants are disabled
   --disable-web-registration: oneof<nothing, bool> # Indicates whether the web registration for the training is disabled
 ]: any -> any {
@@ -720,9 +733,12 @@ export def "update-registration-settings-for-training" [
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($training_key | is-empty) { error make --unspanned { msg: "path parameter 'trainingKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), training_key: (encode-path-segment $training_key)} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/registrationSettings") $auth.query)
   let req_body = {"disableConfirmationEmail": $disable_confirmation_email, "disableWebRegistration": $disable_web_registration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "disableConfirmationEmail") == null) { error make --unspanned { msg: "required body field 'disableConfirmationEmail' missing: pass --disable-confirmation-email or pipe a record" } }
+  if (($req_body | get -o "disableWebRegistration") == null) { error make --unspanned { msg: "required body field 'disableWebRegistration' missing: pass --disable-web-registration or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
@@ -757,12 +773,13 @@ export def "get-start-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($training_key | is-empty) { error make --unspanned { msg: "path parameter 'trainingKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), training_key: (encode-path-segment $training_key)} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/startUrl") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -799,7 +816,7 @@ export def "update-training-times" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
   --notify-registrants: oneof<nothing, bool> # Notify registrants via email of change to training. Default is true
   --notify-trainers: oneof<nothing, bool> # Notify trainers via email of change to training. Default is true
   time_zone: string # Time zone of the training. Must be a valid time zone ID, see https://goto-developer.logmein.com/time-zones
@@ -810,6 +827,7 @@ export def "update-training-times" [
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($training_key | is-empty) { error make --unspanned { msg: "path parameter 'trainingKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), training_key: (encode-path-segment $training_key)} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/times") $auth.query)
   let req_body = {"notifyRegistrants": $notify_registrants, "notifyTrainers": $notify_trainers, "timeZone": $time_zone, "times": $times} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -846,7 +864,7 @@ export def "get-session-details-for-date-range" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
   end_date: string # The ending time of an interval (format: date-time)
   start_date: string # The starting time of an interval (format: date-time)
 ]: any -> table<attendanceCount: int, duration: int, organizers: list<record>, sessionEndTime: string, sessionKey: string, sessionStartTime: string, trainingName: string> {
@@ -854,6 +872,7 @@ export def "get-session-details-for-date-range" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/reports/organizers/{organizer_key}/sessions") $auth.query)
   let req_body = {"endDate": $end_date, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -891,12 +910,13 @@ export def "get-attendance-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<email: string, givenName: string, inSessionTimes: list<record>, surname: string, timeInSession: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($session_key | is-empty) { error make --unspanned { msg: "path parameter 'sessionKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), session_key: (encode-path-segment $session_key)} | format pattern "/reports/organizers/{organizer_key}/sessions/{session_key}/attendees") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -932,12 +952,13 @@ export def "get-session-details-for-training" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<attendanceCount: int, duration: int, organizers: list<record>, sessionEndTime: string, sessionKey: string, sessionStartTime: string, trainingName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($training_key | is-empty) { error make --unspanned { msg: "path parameter 'trainingKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), training_key: (encode-path-segment $training_key)} | format pattern "/reports/organizers/{organizer_key}/trainings/{training_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -972,11 +993,12 @@ export def "get-recordings-for-training" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> record<recordingList: table<description: string, downloadUrl: string, endDate: string, name: string, recordingId: int, registrationUrl: string, startDate: string>, trainingKey: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($training_key | is-empty) { error make --unspanned { msg: "path parameter 'trainingKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({training_key: (encode-path-segment $training_key)} | format pattern "/trainings/{training_key}/recordings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1012,12 +1034,13 @@ export def "get-recording-download-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($training_key | is-empty) { error make --unspanned { msg: "path parameter 'trainingKey' must be non-empty" } }
   if ($recording_id | is-empty) { error make --unspanned { msg: "path parameter 'recordingId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({training_key: (encode-path-segment $training_key), recording_id: (encode-path-segment $recording_id)} | format pattern "/trainings/{training_key}/recordings/{recording_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1052,11 +1075,12 @@ export def "start-training" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> record<hostURL: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($training_key | is-empty) { error make --unspanned { msg: "path parameter 'trainingKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({training_key: (encode-path-segment $training_key)} | format pattern "/trainings/{training_key}/start") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

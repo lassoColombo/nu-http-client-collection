@@ -135,11 +135,12 @@ export def "get-visual-crossing-web-services-rest-services-timeline-location" [
   --unit-group: string # e.g. us
   --include: string # data to include in the output (required for CSV format - days,hours,alerts,current,events ) (e.g. days)
   --lang: string # Language to use for weather descriptions (e.g. us)
-  --key: string # e.g. INSERT_YOUR_KEY
+  --key: string # required, e.g. INSERT_YOUR_KEY
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://weather.visualcrossing.com")
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "contentType" $content_type "scalar") (serialize-qp "unitGroup" $unit_group "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location: (encode-path-segment $location)} | format pattern "/VisualCrossingWebServices/rest/services/timeline/{location}") $qp $auth.query)
   let accept_val = "application/json"
@@ -177,12 +178,13 @@ export def "get-visual-crossing-web-services-rest-services-timeline-location-sta
   --unit-group: string # e.g. us
   --include: string # data to include in the output (required for CSV format - days,hours,alerts,current,events ) (e.g. days)
   --lang: string # Language to use for weather descriptions (e.g. us)
-  --key: string # e.g. INSERT_YOUR_KEY
+  --key: string # required, e.g. INSERT_YOUR_KEY
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://weather.visualcrossing.com")
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($startdate | is-empty) { error make --unspanned { msg: "path parameter 'startdate' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "contentType" $content_type "scalar") (serialize-qp "unitGroup" $unit_group "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location: (encode-path-segment $location), startdate: (encode-path-segment $startdate)} | format pattern "/VisualCrossingWebServices/rest/services/timeline/{location}/{startdate}") $qp $auth.query)
   let accept_val = "application/json"
@@ -221,13 +223,14 @@ export def "get-visual-crossing-web-services-rest-services-timeline-location-sta
   --unit-group: string # e.g. us
   --include: string # data to include in the output (required for CSV format - days,hours,alerts,current,events ) (e.g. days)
   --lang: string # Language to use for weather descriptions (e.g. us)
-  --key: string # e.g. INSERT_YOUR_KEY
+  --key: string # required, e.g. INSERT_YOUR_KEY
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://weather.visualcrossing.com")
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($startdate | is-empty) { error make --unspanned { msg: "path parameter 'startdate' must be non-empty" } }
   if ($enddate | is-empty) { error make --unspanned { msg: "path parameter 'enddate' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "contentType" $content_type "scalar") (serialize-qp "unitGroup" $unit_group "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location: (encode-path-segment $location), startdate: (encode-path-segment $startdate), enddate: (encode-path-segment $enddate)} | format pattern "/VisualCrossingWebServices/rest/services/timeline/{location}/{startdate}/{enddate}") $qp $auth.query)
   let accept_val = "application/json"

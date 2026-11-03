@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -100,6 +100,8 @@ def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: b
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def information-protection-policy-name-completer [] { ["custom" "effective"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -139,11 +141,12 @@ export def "information-protection-policies-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.Security/informationProtectionPolicies") $qp $auth.query)
   let accept_val = "application/json"
@@ -168,7 +171,7 @@ export def "information-protection-policies-list" [
 # operationId: InformationProtectionPolicies_Get
 export def "information-protection-policies-get" [
   scope: string
-  information_protection_policy_name: string
+  information_protection_policy_name: string@information-protection-policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,12 +181,13 @@ export def "information-protection-policies-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<properties: record<informationTypes: record, labels: record, lastModifiedUtc: string>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> record<properties: record<informationTypes: record, labels: record, lastModifiedUtc: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($information_protection_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'informationProtectionPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), information_protection_policy_name: (encode-path-segment $information_protection_policy_name)} | format pattern "/{scope}/providers/Microsoft.Security/informationProtectionPolicies/{information_protection_policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -208,7 +212,7 @@ export def "information-protection-policies-get" [
 # operationId: InformationProtectionPolicies_CreateOrUpdate
 export def "information-protection-policies-create-or-update" [
   scope: string
-  information_protection_policy_name: string
+  information_protection_policy_name: string@information-protection-policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,12 +222,13 @@ export def "information-protection-policies-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<properties: record<informationTypes: record, labels: record, lastModifiedUtc: string>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> record<properties: record<informationTypes: record, labels: record, lastModifiedUtc: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($information_protection_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'informationProtectionPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), information_protection_policy_name: (encode-path-segment $information_protection_policy_name)} | format pattern "/{scope}/providers/Microsoft.Security/informationProtectionPolicies/{information_protection_policy_name}") $qp $auth.query)
   let accept_val = "application/json"

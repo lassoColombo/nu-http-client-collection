@@ -124,8 +124,10 @@ export def commands []: nothing -> table {
 # a pure-JSON endpoint for packing requests.
 #
 # POST /
-# --boxTypes item shape: {dimensions: any, name?: string, price?: int, rateTable?: any, weightMax: float, weightTare?: float}
-# --itemSets item shape: {color?: string, dimensions: any, name?: string, refId?: int, sequence?: string, weight: float, quantity?: int}
+# --boxTypes item shape: {dimensions: record, name?: string, price?: int, rateTable?: record, weightMax: float, weightTare?: float}
+# --eye shape: {x?: float, y?: float, z?: float}
+# --itemSets item shape: {color?: string, dimensions: record, name?: string, refId?: int, sequence?: string, weight: float, quantity?: int}
+# --packOrigin shape: {x?: float, y?: float, z?: float}
 # --rules item shape: {itemRefId?: int, operation: "exclude"|"exclude-all"|"pack-as-is"|"irregular"|"lock-orientation", options?: record, parameters?: list<string>, targetItemRefIds?: list<int>}
 export def "post" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -139,22 +141,22 @@ export def "post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --allowable-overhang: float # The amount an item can overhang lower items that it is placed upon. The units are whatever units the box and item dimensions are given in. By convention, inches. (default: -1)
   --box-type-sets: list<string> # predefined box types to be used, separated by commas. Will be overridden by boxTypes. Acceptable values are "fedex"--FedEx OneRate"usps"--USPS Priority Flat Rate"pallet"--full-, half-, and quarter-sized 48"x40" pallets.
-  --box-types: list # box type definitions for packing, will override boxTypeSets defined. — item shape: {dimensions: any, name?: string, price?: int, rateTable?: any, weightMax: float, weightTare?: float}
+  --box-types: list # box type definitions for packing, will override boxTypeSets defined. — item shape: {dimensions: record, name?: string, price?: int, rateTable?: record, weightMax: float, weightTare?: float}
   --cohort-max: int # the maximum number of contiguous cohorts for a given item type within a single container. E.g., if you pack 40 chairs in a single container, a cohortMax of 2 could yield one (all 40 chairs in a single block if space is availabe) or two (say, 25 chairs in one corner and 15 in the other) contiguous cohorts. (default: 2)
   --cohort-packing: oneof<nothing, bool> # if selected, will ensure that all like items will be packed together, in no more than [cohortMax] different groups within a single container. (default: false)
   --coord-order: list<int> # If placementStyle is set to "default", coordOrder sets the placement priority of axes ascendingly. "0,1,2" would search for placement points along the Z(length,"2"), then Y(width,"1"), and finally X(height"0"). Keep in mind that in the default rendering the "up" direction is X and the other axes follow the right-hand rule. This is useful for different packing methods. E.g., Utilizing "2,0,1" would pack a shipping container first in the Y(width) direction, then in the X(height) direction, and finally in the Z(length) direction, replication a floor-to-ceiling, front-to-back loading method.
   --corners: oneof<nothing, bool> # only pack items at valid corner points of other items (optimal) (default: true)
-  --eye: any # The x,y,z coordinates of the virtual eye looking at the package for visualization purposes. Default is isometric, "1,1,1". To generate a side view, one could use "0.001,1.0,0.001".
+  --eye: record # The x,y,z coordinates of the virtual eye looking at the package for visualization purposes. Default is isometric, "1,1,1". To generate a side view, one could use "0.001,1.0,0.001". — shape: {x?: float, y?: float, z?: float}
   --img-size: int # width of rendered SVGs in pixels. (default: 400)
   --include-images: oneof<nothing, bool> # include inline images, default is always on (default: true)
   --include-scripts: oneof<nothing, bool> # include inline javascripts and styles for base template (default: true)
   --interlock: oneof<nothing, bool> # alternates layFlat orientation by layer, so as to create an interlocked placement pattern and improve item stability. (default: false)
-  --item-sets: list # item set definitions if not creating random items. — item shape: {color?: string, dimensions: any, name?: string, refId?: int, sequence?: string, weight: float, quantity?: int}
+  --item-sets: list # item set definitions if not creating random items. — item shape: {color?: string, dimensions: record, name?: string, refId?: int, sequence?: string, weight: float, quantity?: int}
   --key: string # issued API key.
   --lay-flat: oneof<nothing, bool> # aligns all items laying flat. If possible, it may create a "brick-laying" pattern to increase stability. (default: false)
   --max-sequence-distance: int # This is the maximum distance allowable between two sequence values of items packed in a common box. E.g., "Distance" for an item sequence composed of aisle/bin combinations of "0401" and "1228" has a sequence distance of \|1228 - 401\| = 827
   --n: int # number of random items to generate and the quantity of each if "random" is set to true. a value of 5 would create 5 different items with a quantity of 5 each, making the total item quantity equal to n&sup2; (default: 5)
-  --pack-origin: any # the x,y,z coordinates of an optional packing origin. A packing origin is used to create more balanced packing for situations where load needs to be considered. E.g., for a 40"x48" pallet, a packOrigin representing the middle of the pallet, "0,20,24", would cause placement to minimize the distance of the packed items from the center of the pallet.
+  --pack-origin: record # the x,y,z coordinates of an optional packing origin. A packing origin is used to create more balanced packing for situations where load needs to be considered. E.g., for a 40"x48" pallet, a packOrigin representing the middle of the pallet, "0,20,24", would cause placement to minimize the distance of the packed items from the center of the pallet. — shape: {x?: float, y?: float, z?: float}
   --placement-style: string@placement-style-completer # How to place items. 'default' will defer to coordOrder, 'corner' minimizes distance to rear, bottom corner, 'wedge' minimizes distance to middle of bottom, back edge, 'mound' minimizes distance to center of carton bottom. (default: default)
   --random: oneof<nothing, bool> # create random items (default: false)
   --random-max-dimension: int # maximum item dimension along a single axis for randomly generated items. (default: 10)

@@ -130,8 +130,8 @@ export def "get-atms-v1-atm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-offset: int # Zero-based offset where the response will start. The actual start position is this value +1. An offset of 10 starts at item 11. Combined with the PageLength option this allows pagination to be supported through the service requests. (e.g. 0)
-  --page-length: int # Maximum number of items to retrieve within the current "page" of results. (e.g. 5)
+  --page-offset: int # Zero-based offset where the response will start. The actual start position is this value +1. An offset of 10 starts at item 11. Combined with the PageLength option this allows pagination to be supported through the service requests. (required, e.g. 0)
+  --page-length: int # Maximum number of items to retrieve within the current "page" of results. (required, e.g. 5)
   --address-line1: string # Line 1 of the street address for the merchant location. Usually includes the street number and name. This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter and either City parameter or PostalCode parameter. (e.g. 114 Fifth Avenue)
   --address-line2: string # Line 2 of the street address usually an apartment number or suite number. This parameter is used rarely and is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter and either City parameter or PostalCode parameter. (e.g. Apartment 1)
   --city: string # The name of the city for a merchant location. This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter. (e.g. New York City)
@@ -147,6 +147,8 @@ export def "get-atms-v1-atm" [
 ]: nothing -> record<Atms: record<Atm: list<record>, PageOffset: string, TotalCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_offset == null) { error make --unspanned { msg: "required query parameter 'PageOffset' missing: pass --page-offset" } }
+  if ($page_length == null) { error make --unspanned { msg: "required query parameter 'PageLength' missing: pass --page-length" } }
   let qp = [(serialize-qp "PageOffset" $page_offset "scalar") (serialize-qp "PageLength" $page_length "scalar") (serialize-qp "AddressLine1" $address_line1 "scalar") (serialize-qp "AddressLine2" $address_line2 "scalar") (serialize-qp "City" $city "scalar") (serialize-qp "CountrySubdivision" $country_subdivision "scalar") (serialize-qp "PostalCode" $postal_code "scalar") (serialize-qp "Country" $country "scalar") (serialize-qp "Latitude" $latitude "scalar") (serialize-qp "Longitude" $longitude "scalar") (serialize-qp "DistanceUnit" $distance_unit "scalar") (serialize-qp "Radius" $radius "scalar") (serialize-qp "SupportEMV" $support_emv "scalar") (serialize-qp "InternationalMaestroAccepted" $international_maestro_accepted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/atms/v1/atm" $qp $auth.query)
   let accept_val = "application/json"
@@ -211,10 +213,11 @@ export def "get-atms-v1-countrysubdivision" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country: string # Any three digit country code as defined in ISO 3166-1. "USA" or "CAN" (e.g. USA)
+  --country: string # Any three digit country code as defined in ISO 3166-1. "USA" or "CAN" (required, e.g. USA)
 ]: nothing -> record<CountrySubdivisions: record<CountrySubdivision: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'Country' missing: pass --country" } }
   let qp = [(serialize-qp "Country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/atms/v1/countrysubdivision" $qp $auth.query)
   let accept_val = "application/json"
@@ -279,10 +282,11 @@ export def "get-merchants-v1-country" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --details: string # This is the type of merchant location. Options "acceptance.paypass" "topup.repower" "products.prepaidtravelcard" and "offers.easysavings" (e.g. acceptance.paypass)
+  --details: string # This is the type of merchant location. Options "acceptance.paypass" "topup.repower" "products.prepaidtravelcard" and "offers.easysavings" (required, e.g. acceptance.paypass)
 ]: nothing -> record<Countries: record<Country: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($details == null) { error make --unspanned { msg: "required query parameter 'details' missing: pass --details" } }
   let qp = [(serialize-qp "details" $details "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/merchants/v1/country" $qp $auth.query)
   let accept_val = "application/json"
@@ -314,11 +318,13 @@ export def "get-merchants-v1-countrysubdivision" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --details: string # This is the type of merchant location. Options "acceptance.paypass" "topup.repower" "products.prepaidtravelcard" and "offers.easysavings" (e.g. topup.repower)
-  --country: string # Any three digit country code as defined in ISO 3166-1. For example "USA or "CAN" (e.g. USA)
+  --details: string # This is the type of merchant location. Options "acceptance.paypass" "topup.repower" "products.prepaidtravelcard" and "offers.easysavings" (required, e.g. topup.repower)
+  --country: string # Any three digit country code as defined in ISO 3166-1. For example "USA or "CAN" (required, e.g. USA)
 ]: nothing -> record<CountrySubdivisions: record<CountrySubdivision: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($details == null) { error make --unspanned { msg: "required query parameter 'details' missing: pass --details" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "details" $details "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/merchants/v1/countrysubdivision" $qp $auth.query)
   let accept_val = "application/json"
@@ -350,9 +356,9 @@ export def "get-merchants-v1-merchant" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --details: string # Type of merchant location. Options are "acceptance.paypass" "topup.repower" "products.prepaidtravelcard" "offers.easysavings" and "features.cashback". Cash Back is currently only available in the US. (e.g. acceptance.paypass)
-  --page-offset: int # Zero-based offset where the response will start. The actual start position is this value +1. An offset of 10 starts at item 11. Combined with the PageLength option this allows pagination to be supported through the service requests. (e.g. 0)
-  --page-length: int # Maximum number of items to retrieve within the current "page" of results. (e.g. 5)
+  --details: string # Type of merchant location. Options are "acceptance.paypass" "topup.repower" "products.prepaidtravelcard" "offers.easysavings" and "features.cashback". Cash Back is currently only available in the US. (required, e.g. acceptance.paypass)
+  --page-offset: int # Zero-based offset where the response will start. The actual start position is this value +1. An offset of 10 starts at item 11. Combined with the PageLength option this allows pagination to be supported through the service requests. (required, e.g. 0)
+  --page-length: int # Maximum number of items to retrieve within the current "page" of results. (required, e.g. 5)
   --category: string # Category of the merchant location. See the Categories (Merchant) resource for a list of valid categories. This parameter is only valid for merchant queries with Details = "acceptance.paypass" or "features.cashback". (e.g. features.cashback)
   --address-line1: string # Line 1 of the street address for the merchant location. Usually includes the street number and name. This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter and either City parameter or PostalCode parameter. (e.g. 42 Elm Street)
   --address-line2: string # Line 2 of the street address usually an apartment number or suite number. This parameter is used rarely and is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter and either City parameter or PostalCode parameter. (e.g. Suite 101)
@@ -368,6 +374,9 @@ export def "get-merchants-v1-merchant" [
 ]: nothing -> record<Merchants: record<Merchant: list<record>, PageOffset: string, TotalCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($details == null) { error make --unspanned { msg: "required query parameter 'Details' missing: pass --details" } }
+  if ($page_offset == null) { error make --unspanned { msg: "required query parameter 'PageOffset' missing: pass --page-offset" } }
+  if ($page_length == null) { error make --unspanned { msg: "required query parameter 'PageLength' missing: pass --page-length" } }
   let qp = [(serialize-qp "Details" $details "scalar") (serialize-qp "PageOffset" $page_offset "scalar") (serialize-qp "PageLength" $page_length "scalar") (serialize-qp "Category" $category "scalar") (serialize-qp "AddressLine1" $address_line1 "scalar") (serialize-qp "AddressLine2" $address_line2 "scalar") (serialize-qp "City" $city "scalar") (serialize-qp "CountrySubdivision" $country_subdivision "scalar") (serialize-qp "PostalCode" $postal_code "scalar") (serialize-qp "Country" $country "scalar") (serialize-qp "Latitude" $latitude "scalar") (serialize-qp "Longitude" $longitude "scalar") (serialize-qp "DistanceUnit" $distance_unit "scalar") (serialize-qp "Radius" $radius "scalar") (serialize-qp "OfferMerchantID" $offer_merchant_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/merchants/v1/merchant" $qp $auth.query)
   let accept_val = "application/json"

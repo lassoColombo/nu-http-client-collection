@@ -1,4 +1,4 @@
-# Auto-generated client for Shop vv1
+# Auto-generated client for Shop v1
 # Source: https://api.apis.guru/v2/specs/shop.app/v1/openapi.json
 # Auth: --token flag or $env.SHOP_TOKEN
 
@@ -131,10 +131,11 @@ export def "details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: string # Comma separated list of product ids
+  --ids: string # Comma separated list of product ids (required)
 ]: nothing -> record<results: table<currency_code: string, description: string, price: float, title: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/openai/details" $qp $auth.query)
   let accept_val = "application/json"

@@ -347,11 +347,12 @@ export def "get-dfr-rest-services-get-air-compliance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<AirCompliance: record<Header: record, Sources: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_air_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -426,11 +427,12 @@ export def "get-dfr-rest-services-get-air-quality" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<AirQuality: record<CarbonMonoxide1971Area: string, Lead1978Area: string, Lead2008Area: string, NitrogenDioxide1971Area: string, Ozone8hr1997Area: string, Ozone8hr2008Area: string, Ozone8hr2015Area: string, ParticulateMatter1987Area: string, ParticulateMatter1997Area: string, ParticulateMatter2006Area: string, ParticulateMatter2012Area: string, SulfurDioxide1971Area: string, SulfurDioxide2010Area: string>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_air_quality" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -505,11 +507,12 @@ export def "get-dfr-rest-services-get-aws-docs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_aws_docs" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -584,11 +587,12 @@ export def "get-dfr-rest-services-get-case-formal-actions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<CaseFormalActions: record<Action: list, ProgramDates: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_case_formal_actions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -663,11 +667,12 @@ export def "get-dfr-rest-services-get-compliance-history" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<ComplianceHistory: record<Inspection: list, ProgramDates: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_compliance_history" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -742,11 +747,12 @@ export def "get-dfr-rest-services-get-compliance-summary" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<ComplianceSummary: record<ProgramDates: list, Source: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_compliance_summary" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -889,11 +895,12 @@ export def "get-dfr-rest-services-get-cwa-3yr-compliance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<CWA3YrCompliance: record<Header: record, Sources: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_3yr_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -968,11 +975,12 @@ export def "get-dfr-rest-services-get-cwa-3yr-d80d90-counts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<CWA3YrD80D90Counts: record<Header: record, Sources: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_3yr_d80d90_counts" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1047,11 +1055,12 @@ export def "get-dfr-rest-services-get-cwa-cs-compliance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<CWACSCompliance: record<Header: record, Sources: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_cs_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1126,11 +1135,12 @@ export def "get-dfr-rest-services-get-cwa-eff-alr" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<CWAEffluentALRExceedences: record<Header: record, Sources: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_alr" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1205,11 +1215,12 @@ export def "get-dfr-rest-services-get-cwa-eff-alr-exp" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<CWAEffluentALRExceedencesEXP: record<Header: record, Sources: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_alr_exp" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1284,11 +1295,12 @@ export def "get-dfr-rest-services-get-cwa-eff-compliance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<CWAEffluentCompliance: record<Header: record, Sources: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1363,11 +1375,12 @@ export def "get-dfr-rest-services-get-cwa-eff-compliance-exp" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<CWAEffluentComplianceEXP: record<Header: record, Sources: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_compliance_exp" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1442,11 +1455,12 @@ export def "get-dfr-rest-services-get-cwa-ps-compliance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<CWAPSCompliance: record<Header: record, Sources: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_ps_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1521,11 +1535,12 @@ export def "get-dfr-rest-services-get-cwa-rnc-compliance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<CWARNCCompliance: record<Header: record, Sources: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_rnc_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1600,11 +1615,12 @@ export def "get-dfr-rest-services-get-cwa-se-compliance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<CWASECompliance: record<Header: record, Sources: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_se_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1761,11 +1777,12 @@ export def "get-dfr-rest-services-get-demographics-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<Demographics: record<Adults: string, AfricanAmerican: string, AmericanIndian: string, AsianPacificIslander: string, BSBA: string, CenterLatitude: string, CenterLongitude: string, Child: string, Grades9to12: string, HSDiploma: string, HispanicOrigin: string, Households: string, HouseholdsPublicAssistance: string, HousingUnits: string, Income15to25k: string, Income25to50k: string, Income50to75k: string, Income75kPlus: string, IncomeLess15k: string, LandArea: string, Less9thGrade: string, Minors: string, OtherMultiracial: string, PercentMinority: string, PersonsBelowPovertyLevel: string, PopulationDensity: string, Radius: string, Seniors: string, SomeCollege: string, TotalPersons: string, WaterArea: string, White: string>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_demographics_by_id" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1840,12 +1857,13 @@ export def "get-dfr-rest-services-get-dfr" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --p-system: string # System Acronym Filter. Enter a single system acronym to filter results.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<AirCompliance: record<Header: record, Sources: list>, AirQuality: record<CarbonMonoxide1971Area: string, Lead1978Area: string, Lead2008Area: string, NitrogenDioxide1971Area: string, Ozone8hr1997Area: string, Ozone8hr2008Area: string, Ozone8hr2015Area: string, ParticulateMatter1987Area: string, ParticulateMatter1997Area: string, ParticulateMatter2006Area: string, ParticulateMatter2012Area: string, SulfurDioxide1971Area: string, SulfurDioxide2010Area: string>, CAEDDocuments: list<record>, CWA3YrCompliance: record<Header: record, Sources: list>, CWA3YrD80D90Counts: record<Header: record, Sources: list>, CWACSCompliance: record<Header: record, Sources: list>, CWAEffluentALRExceedences: record<Header: record, Sources: list>, CWAEffluentALRExceedencesEXP: record<Header: record, Sources: list>, CWAEffluentCompliance: record<Header: record, Sources: list>, CWAEffluentComplianceEXP: record<Header: record, Sources: list>, CWAPSCompliance: record<Header: record, Sources: list>, CWARNCCompliance: record<Header: record, Sources: list>, CWASECompliance: record<Header: record, Sources: list>, CaseFormalActions: record<Action: list, ProgramDates: list>, ComplianceHistory: record<Inspection: list, ProgramDates: list>, ComplianceSummary: record<ProgramDates: list, Source: list>, Demographics: record<Adults: string, AfricanAmerican: string, AmericanIndian: string, AsianPacificIslander: string, BSBA: string, CenterLatitude: string, CenterLongitude: string, Child: string, Grades9to12: string, HSDiploma: string, HispanicOrigin: string, Households: string, HouseholdsPublicAssistance: string, HousingUnits: string, Income15to25k: string, Income25to50k: string, Income50to75k: string, Income75kPlus: string, IncomeLess15k: string, LandArea: string, Less9thGrade: string, Minors: string, OtherMultiracial: string, PercentMinority: string, PersonsBelowPovertyLevel: string, PopulationDensity: string, Radius: string, Seniors: string, SomeCollege: string, TotalPersons: string, WaterArea: string, White: string>, EJScreenIndexes: record<HazardWasteProximity: string, LeadPaintIndicator: string, NATACancerRisk: string, NATADieselPM: string, NATARespiratoryHI: string, Over80Count: string, Ozone: string, PM25: string, RMPProximity: string, RegistryID: string, SuperfundProximity: string, TrafficProximity: string, WaterDischargeProximity: string>, EnforcementComplianceSummaries: record<ProgramDates: list, Summaries: list>, FormalActions: record<Action: list, ProgramDates: list>, ICISFormalActions: record<Action: list, ProgramDates: list>, InspectionEnforcementSummary: record<ProgramDates: list, Source: list>, LeadAndCopperRule5Yr: record<CopperSamples: list, CuALE: string, CuALEUnits: string, CuALEValue: string, CuSampleDates: string, CuViol: string, LeadAndCopperViol: string, LeadCopperRuleHealthBasedViol: string, LeadSamples: list, PbALE: string, PbALEUnits: string, PbALEValue: string, PbSampleDates: string, PbViol: string, RuleCode350Viol: string, SourceID: string, iCU90: string, iPB90: string>, MapOutput: record<CenterLatitude: string, CenterLongitude: string, IconBaseURL: string, MapData: list, PopUpBaseURL: string>, Message: string, MultipleFRSFacilities: record<RegistryIDs: list>, NAICS: record<Sources: list>, Notices: record<Notice: list, ProgramDates: list>, Permits: list<record>, RCRACompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>, Reports: record<HasPollRpt: string>, SDWISCompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth37End: string, Mnth37Start: string, Mnth38End: string, Mnth38Start: string, Mnth39End: string, Mnth39Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr13End: string, Qtr13Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>, SIC: record<Sources: list>, SanitarySurveys: record<Sources: list>, SiteVisits: record<Sources: list>, SpatialMetadata: record<CalculatedAccuracy: string, CollectionMethod: string, CoordinateSourceSystem: string, CoordinateSourceSystemId: string, Latitude83: string, Longitude83: string, ReferencePoint: string, RegistryID: string>, SystemExtractDates: record<Dates: list>, TRIHistory: record<Sources: list>, TRIReleases: record<Chemicals: list, Header: list>, Tribes: list<record>, ViolationsEnforcementActions: record<Sources: list>, WaterQuality: record<Sources: list>, WaterQualityDetails: record<Sources: list>, WebFireDocuments: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "p_system" $p_system "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_dfr" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1921,11 +1939,12 @@ export def "get-dfr-rest-services-get-ejscreen-indexes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<EJScreenIndexes: record<HazardWasteProximity: string, LeadPaintIndicator: string, NATACancerRisk: string, NATADieselPM: string, NATARespiratoryHI: string, Over80Count: string, Ozone: string, PM25: string, RMPProximity: string, RegistryID: string, SuperfundProximity: string, TrafficProximity: string, WaterDischargeProximity: string>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_ejscreen_indexes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2000,11 +2019,12 @@ export def "get-dfr-rest-services-get-enforcement-summary" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<EnforcementComplianceSummaries: record<ProgramDates: list, Summaries: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_enforcement_summary" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2079,11 +2099,12 @@ export def "get-dfr-rest-services-get-extract-dates" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<Message: string, SystemExtractDates: record<Dates: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_extract_dates" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2158,11 +2179,12 @@ export def "get-dfr-rest-services-get-formal-actions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<FormalActions: record<Action: list, ProgramDates: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_formal_actions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2237,11 +2259,12 @@ export def "get-dfr-rest-services-get-icis-formal-actions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<ICISFormalActions: record<Action: list, ProgramDates: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_icis_formal_actions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2316,11 +2339,12 @@ export def "get-dfr-rest-services-get-inspections" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<InspectionEnforcementSummary: record<ProgramDates: list, Source: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_inspections" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2395,11 +2419,12 @@ export def "get-dfr-rest-services-get-map" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<MapOutput: record<CenterLatitude: string, CenterLongitude: string, IconBaseURL: string, MapData: list, PopUpBaseURL: string>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_map" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2474,11 +2499,12 @@ export def "get-dfr-rest-services-get-naics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<Message: string, NAICS: record<Sources: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_naics" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2553,11 +2579,12 @@ export def "get-dfr-rest-services-get-notices" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<Message: string, Notices: record<Notice: list, ProgramDates: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_notices" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2632,11 +2659,12 @@ export def "get-dfr-rest-services-get-permits" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<Message: string, Permits: list<record>, Reports: record<HasPollRpt: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_permits" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2711,11 +2739,12 @@ export def "get-dfr-rest-services-get-rcra-compliance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<Message: string, RCRACompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_rcra_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2790,11 +2819,12 @@ export def "get-dfr-rest-services-get-sdwa-lead-and-copper" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<LeadAndCopperRule5Yr: record<CopperSamples: list, CuALE: string, CuALEUnits: string, CuALEValue: string, CuSampleDates: string, CuViol: string, LeadAndCopperViol: string, LeadCopperRuleHealthBasedViol: string, LeadSamples: list, PbALE: string, PbALEUnits: string, PbALEValue: string, PbSampleDates: string, PbViol: string, RuleCode350Viol: string, SourceID: string, iCU90: string, iPB90: string>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_sdwa_lead_and_copper" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2869,11 +2899,12 @@ export def "get-dfr-rest-services-get-sdwa-sanitary-surveys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<Message: string, SanitarySurveys: record<Sources: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_sdwa_sanitary_surveys" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2948,11 +2979,12 @@ export def "get-dfr-rest-services-get-sdwa-site-visits" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<Message: string, SiteVisits: record<Sources: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_sdwa_site_visits" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3027,11 +3059,12 @@ export def "get-dfr-rest-services-get-sdwa-violations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<Message: string, ViolationsEnforcementActions: record<Sources: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_sdwa_violations" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3106,11 +3139,12 @@ export def "get-dfr-rest-services-get-sdwis-compliance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<Message: string, SDWISCompliance: record<Mnth10End: string, Mnth10Start: string, Mnth11End: string, Mnth11Start: string, Mnth12End: string, Mnth12Start: string, Mnth13End: string, Mnth13Start: string, Mnth14End: string, Mnth14Start: string, Mnth15End: string, Mnth15Start: string, Mnth16End: string, Mnth16Start: string, Mnth17End: string, Mnth17Start: string, Mnth18End: string, Mnth18Start: string, Mnth19End: string, Mnth19Start: string, Mnth1End: string, Mnth1Start: string, Mnth20End: string, Mnth20Start: string, Mnth21End: string, Mnth21Start: string, Mnth22End: string, Mnth22Start: string, Mnth23End: string, Mnth23Start: string, Mnth24End: string, Mnth24Start: string, Mnth25End: string, Mnth25Start: string, Mnth26End: string, Mnth26Start: string, Mnth27End: string, Mnth27Start: string, Mnth28End: string, Mnth28Start: string, Mnth29End: string, Mnth29Start: string, Mnth2End: string, Mnth2Start: string, Mnth30End: string, Mnth30Start: string, Mnth31End: string, Mnth31Start: string, Mnth32End: string, Mnth32Start: string, Mnth33End: string, Mnth33Start: string, Mnth34End: string, Mnth34Start: string, Mnth35End: string, Mnth35Start: string, Mnth36End: string, Mnth36Start: string, Mnth37End: string, Mnth37Start: string, Mnth38End: string, Mnth38Start: string, Mnth39End: string, Mnth39Start: string, Mnth3End: string, Mnth3Start: string, Mnth4End: string, Mnth4Start: string, Mnth5End: string, Mnth5Start: string, Mnth6End: string, Mnth6Start: string, Mnth7End: string, Mnth7Start: string, Mnth8End: string, Mnth8Start: string, Mnth9End: string, Mnth9Start: string, Qtr10End: string, Qtr10Start: string, Qtr11End: string, Qtr11Start: string, Qtr12End: string, Qtr12Start: string, Qtr13End: string, Qtr13Start: string, Qtr1End: string, Qtr1Start: string, Qtr2End: string, Qtr2Start: string, Qtr3End: string, Qtr3Start: string, Qtr4End: string, Qtr4Start: string, Qtr5End: string, Qtr5Start: string, Qtr6End: string, Qtr6Start: string, Qtr7End: string, Qtr7Start: string, Qtr8End: string, Qtr8Start: string, Qtr9End: string, Qtr9Start: string, Sources: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_sdwis_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3185,11 +3219,12 @@ export def "get-dfr-rest-services-get-sic-codes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<Message: string, SIC: record<Sources: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_sic_codes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3264,11 +3299,12 @@ export def "get-dfr-rest-services-get-spatial-metadata" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<Message: string, SpatialMetadata: record<CalculatedAccuracy: string, CollectionMethod: string, CoordinateSourceSystem: string, CoordinateSourceSystemId: string, Latitude83: string, Longitude83: string, ReferencePoint: string, RegistryID: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_spatial_metadata" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3343,11 +3379,12 @@ export def "get-dfr-rest-services-get-tri-history" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<Message: string, TRIHistory: record<Sources: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_tri_history" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3422,11 +3459,12 @@ export def "get-dfr-rest-services-get-tri-releases" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<Message: string, TRIReleases: record<Chemicals: list, Header: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_tri_releases" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3501,11 +3539,12 @@ export def "get-dfr-rest-services-get-tribes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<Message: string, Tribes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_tribes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3580,11 +3619,12 @@ export def "get-dfr-rest-services-get-water-quality" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<Message: string, WaterQuality: record<Sources: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_water_quality" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3659,11 +3699,12 @@ export def "get-dfr-rest-services-get-water-quality-details" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID).
+  --p-id: string # Either the EPA Facility Registry System's REGISTRY_ID for a facility or the facility identifier from the following EPA Systems: RCRAINFO (HANDLER_ID), AFS (SCSC), ICIS NPDES (NPDES_ID), or SDWIS (PWS_ID). (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<Message: string, WaterQualityDetails: record<Sources: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_water_quality_details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

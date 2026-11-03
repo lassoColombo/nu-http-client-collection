@@ -1,4 +1,4 @@
-# Auto-generated client for Marketing API vv1.14.0
+# Auto-generated client for Marketing API v1.14.0
 # Source: https://api.apis.guru/v2/specs/ebay.com/sell-marketing/v1.14.0/openapi.json
 # Auth: --token flag or $env.MARKETING_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -277,10 +277,11 @@ export def "get-campaign-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --campaign-name: string # The name of the campaign.
+  --campaign-name: string # The name of the campaign. (required)
 ]: nothing -> record<alerts: table<alertType: string, details: list>, budget: record<daily: record<amount: record, budgetStatus: string>>, campaignCriterion: record<autoSelectFutureInventory: bool, criterionType: string, selectionRules: list<record>>, campaignId: string, campaignName: string, campaignStatus: string, endDate: string, fundingStrategy: record<adRateStrategy: string, bidPercentage: string, dynamicAdRatePreferences: list<record>, fundingModel: string>, marketplaceId: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_name == null) { error make --unspanned { msg: "required query parameter 'campaign_name' missing: pass --campaign-name" } }
   let qp = [(serialize-qp "campaign_name" $campaign_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ad_campaign/get_campaign_by_name" $qp $auth.query)
   let accept_val = "application/json"
@@ -1415,12 +1416,14 @@ export def "get-ads-by-inventory-reference" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --inventory-reference-id: string # The inventory reference ID associated with the ad you want returned. A seller's inventory reference ID is the ID of either a listing or the ID of an inventory item group (the parent of a multi-variation listing, such as a shirt that is available in multiple sizes and colors). You must always supply in both an inventory_reference_id and an inventory_reference_type.
-  --inventory-reference-type: string # The type of the inventory reference ID. Set this value to either INVENTORY_ITEM (a single listing) or INVENTORY_ITEM_GROUP (a multi-variation listing). You must always pass in both an inventory_reference_id and an inventory_reference_type.
+  --inventory-reference-id: string # The inventory reference ID associated with the ad you want returned. A seller's inventory reference ID is the ID of either a listing or the ID of an inventory item group (the parent of a multi-variation listing, such as a shirt that is available in multiple sizes and colors). You must always supply in both an inventory_reference_id and an inventory_reference_type. (required)
+  --inventory-reference-type: string # The type of the inventory reference ID. Set this value to either INVENTORY_ITEM (a single listing) or INVENTORY_ITEM_GROUP (a multi-variation listing). You must always pass in both an inventory_reference_id and an inventory_reference_type. (required)
 ]: nothing -> record<ads: table<adGroupId: string, adId: string, adStatus: string, alerts: list, bidPercentage: string, inventoryReferenceId: string, inventoryReferenceType: string, listingId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
+  if ($inventory_reference_id == null) { error make --unspanned { msg: "required query parameter 'inventory_reference_id' missing: pass --inventory-reference-id" } }
+  if ($inventory_reference_type == null) { error make --unspanned { msg: "required query parameter 'inventory_reference_type' missing: pass --inventory-reference-type" } }
   let qp = [(serialize-qp "inventory_reference_id" $inventory_reference_id "scalar") (serialize-qp "inventory_reference_type" $inventory_reference_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/get_ads_by_inventory_reference") $qp $auth.query)
   let accept_val = "application/json"
@@ -2719,23 +2722,24 @@ export def "get-promotions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Specifies the maximum number of promotions returned on a page from the result set. Default: 200 Maximum: 200
-  --marketplace-id: string # The eBay marketplace ID of the site where the promotion is hosted. Valid values: EBAY_AU = Australia EBAY_DE = Germany EBAY_ES = Spain EBAY_FR = France EBAY_GB = Great Britain EBAY_IT = Italy EBAY_US = United States
+  --marketplace-id: string # The eBay marketplace ID of the site where the promotion is hosted. Valid values: EBAY_AU = Australia EBAY_DE = Germany EBAY_ES = Spain EBAY_FR = France EBAY_GB = Great Britain EBAY_IT = Italy EBAY_US = United States (required)
   --offset: string # Specifies the number of promotions to skip in the result set before returning the first promotion in the paginated response. Combine offset with the limit query parameter to control the items returned in the response. For example, if you supply an offset of 0 and a limit of 10, the first page of the response contains the first 10 items from the complete list of items retrieved by the call. If offset is 10 and limit is 20, the first page of the response contains items 11-30 from the complete result set. Default: 0
   --promotion-status: string # Specifies the promotion state by which you want to filter the results. The response contains only those promotions that match the state you specify. Valid values: DRAFT SCHEDULED RUNNING PAUSED ENDEDMaximum number of input values: 1
   --promotion-type: string # Filters the returned promotions based on their campaign promotion type. Specify one of the following values to indicate the promotion type you want returned: CODED_COUPON &ndash; A coupon code promotion set with createItemPromotion. MARKDOWN_SALE &ndash; A markdown promotion set with createItemPriceMarkdownPromotion. ORDER_DISCOUNT &ndash; A threshold promotion set with createItemPromotion. VOLUME_DISCOUNT &ndash; A volume pricing promotion set with createItemPromotion.
   --q: string # A string consisting of one or more keywords. eBay filters the response by returning only the promotions that contain the supplied keywords in the promotion title. Example: "iPhone" or "Harry Potter." Commas that separate keywords are ignored. For example, a keyword string of "iPhone, iPad" equals "iPhone iPad", and each results in a response that contains promotions with both "iPhone" and "iPad" in the title.
-  --qp-sort: string # Specifies the order for how to sort the response. If you precede the supplied value with a dash, the response is sorted in reverse order. Example: sort=END_DATE Sorts the promotions in the response by their end dates in ascending order sort=-PROMOTION_NAME Sorts the promotions by their promotion name in descending alphabetical order (Z-Az-a) Valid values:START_DATE END_DATE PROMOTION_NAME For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/marketing/types/csb:SortField
+  --sort: string # Specifies the order for how to sort the response. If you precede the supplied value with a dash, the response is sorted in reverse order. Example: sort=END_DATE Sorts the promotions in the response by their end dates in ascending order sort=-PROMOTION_NAME Sorts the promotions by their promotion name in descending alphabetical order (Z-Az-a) Valid values:START_DATE END_DATE PROMOTION_NAME For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/marketing/types/csb:SortField
 ]: nothing -> record<href: string, limit: int, next: string, offset: int, prev: string, promotions: table<couponCode: string, description: string, endDate: string, marketplaceId: string, name: string, priority: string, promotionHref: string, promotionId: string, promotionImageUrl: string, promotionStatus: string, promotionType: string, startDate: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "marketplace_id" $marketplace_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "promotion_status" $promotion_status "scalar") (serialize-qp "promotion_type" $promotion_type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "marketplace_id" $marketplace_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "promotion_status" $promotion_status "scalar") (serialize-qp "promotion_type" $promotion_type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/promotion" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "marketplace_id": $marketplace_id, "offset": $offset, "promotion_status": $promotion_status, "promotion_type": $promotion_type, "q": $q, "sort": $qp_sort} | compact)
+    query: ({"limit": $limit, "marketplace_id": $marketplace_id, "offset": $offset, "promotion_status": $promotion_status, "promotion_type": $promotion_type, "q": $q, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2764,20 +2768,20 @@ export def "get-listing-set" [
   --limit: string # Specifies the maximum number of promotions returned on a page from the result set. Default: 200Maximum: 200
   --offset: string # Specifies the number of promotions to skip in the result set before returning the first promotion in the paginated response. Combine offset with the limit query parameter to control the items returned in the response. For example, if you supply an offset of 0 and a limit of 10, the first page of the response contains the first 10 items from the complete list of items retrieved by the call. If offset is 10 and limit is 20, the first page of the response contains items 11-30 from the complete result set. Default: 0
   --q: string # Reserved for future use.
-  --qp-sort: string # Specifies the order in which to sort the associated listings in the response. If you precede the supplied value with a dash, the response is sorted in reverse order. Example: sort=PRICE - Sorts the associated listings by their current price in ascending order sort=-TITLE - Sorts the associated listings by their title in descending alphabetical order (Z-Az-a) Valid values:AVAILABLE PRICE TITLE For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/marketing/types/csb:SortField
+  --sort: string # Specifies the order in which to sort the associated listings in the response. If you precede the supplied value with a dash, the response is sorted in reverse order. Example: sort=PRICE - Sorts the associated listings by their current price in ascending order sort=-TITLE - Sorts the associated listings by their title in descending alphabetical order (Z-Az-a) Valid values:AVAILABLE PRICE TITLE For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/marketing/types/csb:SortField
   --status: string # This query parameter applies only to markdown promotions. It filters the response based on the indicated status of the promotion. Currently, the only supported value for this parameter is MARKED_DOWN, which indicates active markdown promotions. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/marketing/types/sme:ItemMarkdownStatusEnum
 ]: nothing -> record<href: string, limit: int, listings: table<currentPrice: record, freeShipping: bool, inventoryReferenceId: string, inventoryReferenceType: string, listingCategoryId: string, listingCondition: string, listingConditionId: string, listingId: string, listingPromotionStatuses: list, quantity: int, storeCategoryId: string, title: string>, next: string, offset: int, prev: string, total: int, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($promotion_id | is-empty) { error make --unspanned { msg: "path parameter 'promotion_id' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({promotion_id: (encode-path-segment $promotion_id)} | format pattern "/promotion/{promotion_id}/get_listing_set") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "q": $q, "sort": $qp_sort, "status": $status} | compact)
+    query: ({"limit": $limit, "offset": $offset, "q": $q, "sort": $sort, "status": $status} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2875,7 +2879,7 @@ export def "get-promotion-reports" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Specifies the maximum number of promotions returned on a page from the result set. Default: 200 Maximum: 200
-  --marketplace-id: string # The eBay marketplace ID of the site for which you want the promotions report. Valid values: EBAY_AU = Australia EBAY_DE = Germany EBAY_ES = Spain EBAY_FR = France EBAY_GB = Great Britain EBAY_IT = Italy EBAY_US = United States
+  --marketplace-id: string # The eBay marketplace ID of the site for which you want the promotions report. Valid values: EBAY_AU = Australia EBAY_DE = Germany EBAY_ES = Spain EBAY_FR = France EBAY_GB = Great Britain EBAY_IT = Italy EBAY_US = United States (required)
   --offset: string # Specifies the number of promotions to skip in the result set before returning the first promotion in the paginated response. Combine offset with the limit query parameter to control the items returned in the response. For example, if you supply an offset of 0 and a limit of 10, the first page of the response contains the first 10 items from the complete list of items retrieved by the call. If offset is 10 and limit is 20, the first page of the response contains items 11-30 from the complete result set. Default: 0
   --promotion-status: string # Limits the results to the promotions that are in the state specified by this query parameter. Valid values: DRAFT SCHEDULED RUNNING PAUSED ENDEDMaximum number of values supported: 1
   --promotion-type: string # Filters the returned promotions in the report based on their campaign promotion type. Specify one of the following values to indicate the promotion type you want returned in the report: CODED_COUPON &ndash; A coupon code promotion set with createItemPromotion. MARKDOWN_SALE &ndash; A markdown promotion set with createItemPriceMarkdownPromotion. ORDER_DISCOUNT &ndash; A threshold promotion set with createItemPromotion. VOLUME_DISCOUNT &ndash; A volume pricing promotion set with createItemPromotion.
@@ -2883,6 +2887,7 @@ export def "get-promotion-reports" [
 ]: nothing -> record<href: string, limit: int, next: string, offset: int, prev: string, promotionReports: table<averageItemDiscount: record, averageItemRevenue: record, averageOrderDiscount: record, averageOrderRevenue: record, averageOrderSize: string, baseSale: record, itemsSoldQuantity: int, numberOfOrdersSold: int, percentageSalesLift: string, promotionHref: string, promotionId: string, promotionReportId: string, promotionSale: record, promotionType: string, totalDiscount: record, totalSale: record>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "marketplace_id" $marketplace_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "promotion_status" $promotion_status "scalar") (serialize-qp "promotion_type" $promotion_type "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/promotion_report" $qp $auth.query)
   let accept_val = "application/json"
@@ -2915,10 +2920,11 @@ export def "get-promotion-summary-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --marketplace-id: string # The eBay marketplace ID of the site you for which you want a promotion summary report. Valid values: EBAY_AU = Australia EBAY_DE = Germany EBAY_ES = Spain EBAY_FR = France EBAY_GB = Great Britain EBAY_IT = Italy EBAY_US = United States
+  --marketplace-id: string # The eBay marketplace ID of the site you for which you want a promotion summary report. Valid values: EBAY_AU = Australia EBAY_DE = Germany EBAY_ES = Spain EBAY_FR = France EBAY_GB = Great Britain EBAY_IT = Italy EBAY_US = United States (required)
 ]: nothing -> record<baseSale: record<currency: string, value: string>, lastUpdated: string, percentageSalesLift: string, promotionSale: record<currency: string, value: string>, totalSale: record<currency: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }
   let qp = [(serialize-qp "marketplace_id" $marketplace_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/promotion_summary_report" $qp $auth.query)
   let accept_val = "application/json"

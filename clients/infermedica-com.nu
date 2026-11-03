@@ -1,4 +1,4 @@
-# Auto-generated client for Infermedica API vv2
+# Auto-generated client for Infermedica API v2
 # Source: https://api.apis.guru/v2/specs/infermedica.com/v2/swagger.json
 # Auth: --token flag or $env.INFERMEDICA_API_TOKEN
 
@@ -487,13 +487,14 @@ export def "get-matching-observation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --phrase: string # phrase to match
+  --phrase: string # phrase to match (required)
   --sex: string@sex-completer # sex filter
   --age-value: int # age value (format: int32, e.g. 18)
   --age-unit: string@age-unit-completer # unit in which age value was provided (default: year, e.g. year)
 ]: nothing -> record<id: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($phrase == null) { error make --unspanned { msg: "required query parameter 'phrase' missing: pass --phrase" } }
   let qp = [(serialize-qp "phrase" $phrase "scalar") (serialize-qp "sex" $sex "scalar") (serialize-qp "age.value" $age_value "scalar") (serialize-qp "age.unit" $age_unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lookup" $qp $auth.query)
   let accept_val = "application/json"
@@ -732,7 +733,7 @@ export def "get-matching-observations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --phrase: string # phrase to match
+  --phrase: string # phrase to match (required)
   --sex: string@sex-completer # sex filter
   --age-value: int # age value (format: int32, e.g. 18)
   --age-unit: string@age-unit-completer # unit in which age value was provided (default: year, e.g. year)
@@ -741,6 +742,7 @@ export def "get-matching-observations" [
 ]: nothing -> table<id: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($phrase == null) { error make --unspanned { msg: "required query parameter 'phrase' missing: pass --phrase" } }
   let qp = [(serialize-qp "phrase" $phrase "scalar") (serialize-qp "sex" $sex "scalar") (serialize-qp "age.value" $age_value "scalar") (serialize-qp "age.unit" $age_unit "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "type" $type "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"

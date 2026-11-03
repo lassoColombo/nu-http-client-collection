@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -138,6 +138,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddAttachmentsToSet
+# --attachments item shape: {fileName?: string, data?: string}
 export def "add-attachments-to-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -155,13 +156,14 @@ export def "add-attachments-to-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  --attachment-set-id: any
-  attachments: any
-]: any -> record<attachmentSetId: record, expiryTime: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  --attachment-set-id: string # The ID of the attachment set. If an attachmentSetId is not specified, a new attachment set is created, and the ID of the set is returned in the response. If an attachmentSetId is specified, the attachments are added to the specified set, if it exists.
+  attachments: list # One or more attachments to add to the set. You can add up to three attachments per set. The size limit is 5 MB per attachment. In the Attachment object, use the data parameter to specify the contents of the attachment file. In the previous request syntax, the value for data appear as blob, which is represented as a base64-encoded string. The value for fileName is the name of the attachment, such as troubleshoot-screenshot.png. — item shape: {fileName?: string, data?: string}
+]: any -> record<attachmentSetId: string, expiryTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSSupport_20130415.AddAttachmentsToSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"attachmentSetId": $attachment_set_id, "attachments": $attachments} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -204,15 +206,16 @@ export def "add-communication-to-case" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  --case-id: any
-  communication_body: any
-  --cc-email-addresses: any
-  --attachment-set-id: any
-]: any -> record<result: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  --case-id: string # The support case ID requested or returned in the call. The case ID is an alphanumeric string formatted as shown in this example: case-12345678910-2013-c4c1d2bf33c5cf47
+  communication_body: string # The body of an email communication to add to the support case.
+  --cc-email-addresses: list<string> # The email addresses in the CC line of an email to be added to the support case.
+  --attachment-set-id: string # The ID of a set of one or more attachments for the communication to add to the case. Create the set by calling AddAttachmentsToSet
+]: any -> record<result: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSSupport_20130415.AddCommunicationToCase")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"caseId": $case_id, "communicationBody": $communication_body, "ccEmailAddresses": $cc_email_addresses, "attachmentSetId": $attachment_set_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -255,20 +258,21 @@ export def "create-case" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  subject: any
-  --service-code: any
-  --severity-code: any
-  --category-code: any
-  communication_body: any
-  --cc-email-addresses: any
-  --language: any
-  --issue-type: any
-  --attachment-set-id: any
-]: any -> record<caseId: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  subject: string # The title of the support case. The title appears in the Subject field on the Amazon Web Services Support Center Create Case (https://console.aws.amazon.com/support/home#/case/create) page.
+  --service-code: string # The code for the Amazon Web Services service. You can use the DescribeServices operation to get the possible serviceCode values.
+  --severity-code: string # A value that indicates the urgency of the case. This value determines the response time according to your service level agreement with Amazon Web Services Support. You can use the DescribeSeverityLevels operation to get the possible values for severityCode. For more information, see SeverityLevel and Choosing a Severity (https://docs.aws.amazon.com/awssupport/latest/user/getting-started.html#choosing-severity) in the Amazon Web Services Support User Guide. The availability of severity levels depends on the support plan for the Amazon Web Services account.
+  --category-code: string # The category of problem for the support case. You also use the DescribeServices operation to get the category code for a service. Each Amazon Web Services service defines its own set of category codes.
+  communication_body: string # The communication body text that describes the issue. This text appears in the Description field on the Amazon Web Services Support Center Create Case (https://console.aws.amazon.com/support/home#/case/create) page.
+  --cc-email-addresses: list<string> # A list of email addresses that Amazon Web Services Support copies on case correspondence. Amazon Web Services Support identifies the account that creates the case when you specify your Amazon Web Services credentials in an HTTP POST method or use the Amazon Web Services SDKs (http://aws.amazon.com/tools/).
+  --language: string # The language in which Amazon Web Services Support handles the case. Amazon Web Services Support currently supports English ("en") and Japanese ("ja"). You must specify the ISO 639-1 code for the language parameter if you want support in that language.
+  --issue-type: string # The type of issue for the case. You can specify customer-service or technical. If you don't specify a value, the default is technical.
+  --attachment-set-id: string # The ID of a set of one or more attachments for the case. Create the set by using the AddAttachmentsToSet operation.
+]: any -> record<caseId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSSupport_20130415.CreateCase")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"subject": $subject, "serviceCode": $service_code, "severityCode": $severity_code, "categoryCode": $category_code, "communicationBody": $communication_body, "ccEmailAddresses": $cc_email_addresses, "language": $language, "issueType": $issue_type, "attachmentSetId": $attachment_set_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -311,12 +315,13 @@ export def "describe-attachment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  attachment_id: any
-]: any -> record<attachment: record<fileName: record, data: record>> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  attachment_id: string # The ID of the attachment to return. Attachment IDs are returned by the DescribeCommunications operation.
+]: any -> record<attachment: record<fileName: string, data: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSSupport_20130415.DescribeAttachment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"attachmentId": $attachment_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -361,20 +366,21 @@ export def "describe-cases" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  --case-id-list: any
-  --display-id: any
-  --after-time: any
-  --before-time: any
-  --include-resolved-cases: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --language: any
-  --include-communications: any
-]: any -> record<cases: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  --case-id-list: list<string> # A list of ID numbers of the support cases you want returned. The maximum number of cases is 100.
+  --display-id: string # The ID displayed for a case in the Amazon Web Services Support Center user interface.
+  --after-time: string # The start date for a filtered date search on support case communications. Case communications are available for 12 months after creation.
+  --before-time: string # The end date for a filtered date search on support case communications. Case communications are available for 12 months after creation.
+  --include-resolved-cases: oneof<nothing, bool> # Specifies whether to include resolved support cases in the DescribeCases response. By default, resolved cases aren't included.
+  --next-token-body: string # A resumption point for pagination. (body field)
+  --max-results-body: int # The maximum number of results to return before paginating. (body field)
+  --language: string # The language in which Amazon Web Services Support handles the case. Amazon Web Services Support currently supports English ("en") and Japanese ("ja"). You must specify the ISO 639-1 code for the language parameter if you want support in that language.
+  --include-communications: oneof<nothing, bool> # Specifies whether to include communications in the DescribeCases response. By default, communications are included.
+]: any -> record<cases: table<caseId: string, displayId: string, subject: string, status: string, serviceCode: string, categoryCode: string, severityCode: string, submittedBy: string, timeCreated: string, recentCommunications: record, ccEmailAddresses: list, language: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSSupport_20130415.DescribeCases")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"caseIdList": $case_id_list, "displayId": $display_id, "afterTime": $after_time, "beforeTime": $before_time, "includeResolvedCases": $include_resolved_cases, "nextToken": $next_token_body, "maxResults": $max_results_body, "language": $language, "includeCommunications": $include_communications} | compact
@@ -420,16 +426,17 @@ export def "describe-communications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  case_id: any
-  --before-time: any
-  --after-time: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<communications: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  case_id: string # The support case ID requested or returned in the call. The case ID is an alphanumeric string formatted as shown in this example: case-12345678910-2013-c4c1d2bf33c5cf47
+  --before-time: string # The end date for a filtered date search on support case communications. Case communications are available for 12 months after creation.
+  --after-time: string # The start date for a filtered date search on support case communications. Case communications are available for 12 months after creation.
+  --next-token-body: string # A resumption point for pagination. (body field)
+  --max-results-body: int # The maximum number of results to return before paginating. (body field)
+]: any -> record<communications: table<caseId: string, body: string, submittedBy: string, timeCreated: string, attachmentSet: list>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSSupport_20130415.DescribeCommunications")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"caseId": $case_id, "beforeTime": $before_time, "afterTime": $after_time, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -473,13 +480,14 @@ export def "describe-services" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  --service-code-list: any
-  --language: any
-]: any -> record<services: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  --service-code-list: list<string> # A JSON-formatted list of service codes available for Amazon Web Services services.
+  --language: string # The language in which Amazon Web Services Support handles the case. Amazon Web Services Support currently supports English ("en") and Japanese ("ja"). You must specify the ISO 639-1 code for the language parameter if you want support in that language.
+]: any -> record<services: table<code: string, name: string, categories: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSSupport_20130415.DescribeServices")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"serviceCodeList": $service_code_list, "language": $language} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -522,12 +530,13 @@ export def "describe-severity-levels" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  --language: any
-]: any -> record<severityLevels: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  --language: string # The language in which Amazon Web Services Support handles the case. Amazon Web Services Support currently supports English ("en") and Japanese ("ja"). You must specify the ISO 639-1 code for the language parameter if you want support in that language.
+]: any -> record<severityLevels: table<code: string, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSSupport_20130415.DescribeSeverityLevels")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"language": $language} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -570,12 +579,13 @@ export def "describe-trusted-advisor-check-refresh-statuses" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  check_ids: any
-]: any -> record<statuses: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  check_ids: list<string> # The IDs of the Trusted Advisor checks to get the status. If you specify the check ID of a check that is automatically refreshed, you might see an InvalidParameterValue error.
+]: any -> record<statuses: table<checkId: string, status: string, millisUntilNextRefreshable: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSSupport_20130415.DescribeTrustedAdvisorCheckRefreshStatuses")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"checkIds": $check_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -618,13 +628,14 @@ export def "describe-trusted-advisor-check-result" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  check_id: any
-  --language: any
-]: any -> record<result: record<checkId: record, timestamp: record, status: record, resourcesSummary: record<resourcesProcessed: record, resourcesFlagged: record, resourcesIgnored: record, resourcesSuppressed: record>, categorySpecificSummary: record<costOptimizing: record>, flaggedResources: record>> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  check_id: string # The unique identifier for the Trusted Advisor check.
+  --language: string # The ISO 639-1 code for the language that you want your check results to appear in. The Amazon Web Services Support API currently supports the following languages for Trusted Advisor: Chinese, Simplified - zh Chinese, Traditional - zh_TW English - en French - fr German - de Indonesian - id Italian - it Japanese - ja Korean - ko Portuguese, Brazilian - pt_BR Spanish - es
+]: any -> record<result: record<checkId: string, timestamp: string, status: string, resourcesSummary: record<resourcesProcessed: int, resourcesFlagged: int, resourcesIgnored: int, resourcesSuppressed: int>, categorySpecificSummary: record<costOptimizing: record>, flaggedResources: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSSupport_20130415.DescribeTrustedAdvisorCheckResult")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"checkId": $check_id, "language": $language} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -667,12 +678,13 @@ export def "describe-trusted-advisor-check-summaries" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  check_ids: any
-]: any -> record<summaries: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  check_ids: list<string> # The IDs of the Trusted Advisor checks.
+]: any -> record<summaries: table<checkId: string, timestamp: string, status: string, hasFlaggedResources: bool, resourcesSummary: record, categorySpecificSummary: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSSupport_20130415.DescribeTrustedAdvisorCheckSummaries")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"checkIds": $check_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -715,12 +727,13 @@ export def "describe-trusted-advisor-checks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  language: any
-]: any -> record<checks: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  language: string # The ISO 639-1 code for the language that you want your checks to appear in. The Amazon Web Services Support API currently supports the following languages for Trusted Advisor: Chinese, Simplified - zh Chinese, Traditional - zh_TW English - en French - fr German - de Indonesian - id Italian - it Japanese - ja Korean - ko Portuguese, Brazilian - pt_BR Spanish - es
+]: any -> record<checks: table<id: string, name: string, description: string, category: string, metadata: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSSupport_20130415.DescribeTrustedAdvisorChecks")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"language": $language} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -763,12 +776,13 @@ export def "refresh-trusted-advisor-check" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  check_id: any
-]: any -> record<status: record<checkId: record, status: record, millisUntilNextRefreshable: record>> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  check_id: string # The unique identifier for the Trusted Advisor check to refresh. Specifying the check ID of a check that is automatically refreshed causes an InvalidParameterValue error.
+]: any -> record<status: record<checkId: string, status: string, millisUntilNextRefreshable: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSSupport_20130415.RefreshTrustedAdvisorCheck")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"checkId": $check_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -811,12 +825,13 @@ export def "resolve-case" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  --case-id: any
-]: any -> record<initialCaseStatus: record, finalCaseStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  --case-id: string # The support case ID requested or returned in the call. The case ID is an alphanumeric string formatted as shown in this example: case-12345678910-2013-c4c1d2bf33c5cf47
+]: any -> record<initialCaseStatus: string, finalCaseStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSSupport_20130415.ResolveCase")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"caseId": $case_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

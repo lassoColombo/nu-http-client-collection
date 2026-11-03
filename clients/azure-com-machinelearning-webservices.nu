@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -156,10 +156,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
 ]: nothing -> record<value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.MachineLearning/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -194,11 +195,12 @@ export def "web-services-list-by-subscription-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --skiptoken: string # Continuation token for pagination.
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$skiptoken" $skiptoken "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MachineLearning/webServices") $qp $auth.query)
   let accept_val = "application/json"
@@ -234,12 +236,13 @@ export def "web-services-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --skiptoken: string # Continuation token for pagination.
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$skiptoken" $skiptoken "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/webServices") $qp $auth.query)
   let accept_val = "application/json"
@@ -275,13 +278,14 @@ export def "web-services-remove" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($web_service_name | is-empty) { error make --unspanned { msg: "path parameter 'webServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), web_service_name: (encode-path-segment $web_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/webServices/{web_service_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -318,13 +322,14 @@ export def "web-services-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --region: string # The region for which encrypted credential parameters are valid.
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
-]: nothing -> record<properties: record<assets: record, commitmentPlan: record<id: string>, createdOn: string, description: string, diagnostics: record<expiry: string, level: string>, exampleRequest: record<globalParameters: record, inputs: record>, exposeSampleData: bool, input: record<description: string, properties: record, title: string, type: string>, keys: record<primary: string, secondary: string>, machineLearningWorkspace: record<id: string>, modifiedOn: string, output: record<description: string, properties: record, title: string, type: string>, packageType: string, parameters: record, payloadsInBlobStorage: bool, payloadsLocation: record<credentials: string, uri: string>, provisioningState: string, readOnly: bool, realtimeConfiguration: record<maxConcurrentCalls: int>, storageAccount: record<key: string, name: string>, swaggerLocation: string, title: string>> {
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
+]: nothing -> record<properties: record<assets: record, commitmentPlan: record<id: string>, createdOn: string, description: string, diagnostics: record<expiry: string, level: string>, exampleRequest: record<globalParameters: record, inputs: record>, exposeSampleData: bool, input: record<description: string, properties: record, title: string, type: string>, keys: record<primary: string, secondary: string>, machineLearningWorkspace: record<id: string>, modifiedOn: string, output: record<description: string, properties: record, title: string, type: string>, packageType: string, parameters: record, payloadsInBlobStorage: bool, payloadsLocation: record<credentials: string, uri: string>, provisioningState: string, readOnly: bool, realtimeConfiguration: record<maxConcurrentCalls: int>, storageAccount: record<key: string, name: string>, swaggerLocation: string, title: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($web_service_name | is-empty) { error make --unspanned { msg: "path parameter 'webServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "region" $region "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), web_service_name: (encode-path-segment $web_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/webServices/{web_service_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -361,16 +366,17 @@ export def "web-services-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
   --properties: record # The set of properties specific to the Azure ML web service resource. — shape: {assets?: record, commitmentPlan?: record, description?: string, diagnostics?: record, exampleRequest?: record, exposeSampleData?: bool, input?: record, keys?: record, machineLearningWorkspace?: record, output?: record, packageType: "Graph", parameters?: record, payloadsInBlobStorage?: bool, payloadsLocation?: record, readOnly?: bool, realtimeConfiguration?: record, storageAccount?: record, title?: string}
   --tags: record # Contains resource tags defined as key/value pairs.
-]: any -> record<properties: record<assets: record, commitmentPlan: record<id: string>, createdOn: string, description: string, diagnostics: record<expiry: string, level: string>, exampleRequest: record<globalParameters: record, inputs: record>, exposeSampleData: bool, input: record<description: string, properties: record, title: string, type: string>, keys: record<primary: string, secondary: string>, machineLearningWorkspace: record<id: string>, modifiedOn: string, output: record<description: string, properties: record, title: string, type: string>, packageType: string, parameters: record, payloadsInBlobStorage: bool, payloadsLocation: record<credentials: string, uri: string>, provisioningState: string, readOnly: bool, realtimeConfiguration: record<maxConcurrentCalls: int>, storageAccount: record<key: string, name: string>, swaggerLocation: string, title: string>> {
+]: any -> record<properties: record<assets: record, commitmentPlan: record<id: string>, createdOn: string, description: string, diagnostics: record<expiry: string, level: string>, exampleRequest: record<globalParameters: record, inputs: record>, exposeSampleData: bool, input: record<description: string, properties: record, title: string, type: string>, keys: record<primary: string, secondary: string>, machineLearningWorkspace: record<id: string>, modifiedOn: string, output: record<description: string, properties: record, title: string, type: string>, packageType: string, parameters: record, payloadsInBlobStorage: bool, payloadsLocation: record<credentials: string, uri: string>, provisioningState: string, readOnly: bool, realtimeConfiguration: record<maxConcurrentCalls: int>, storageAccount: record<key: string, name: string>, swaggerLocation: string, title: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($web_service_name | is-empty) { error make --unspanned { msg: "path parameter 'webServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), web_service_name: (encode-path-segment $web_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/webServices/{web_service_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -409,17 +415,18 @@ export def "web-services-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
   properties: record # The set of properties specific to the Azure ML web service resource. — shape: {assets?: record, commitmentPlan?: record, description?: string, diagnostics?: record, exampleRequest?: record, exposeSampleData?: bool, input?: record, keys?: record, machineLearningWorkspace?: record, output?: record, packageType: "Graph", parameters?: record, payloadsInBlobStorage?: bool, payloadsLocation?: record, readOnly?: bool, realtimeConfiguration?: record, storageAccount?: record, title?: string}
   location: string # Specifies the location of the resource.
   --tags: record # Contains resource tags defined as key/value pairs.
-]: any -> record<properties: record<assets: record, commitmentPlan: record<id: string>, createdOn: string, description: string, diagnostics: record<expiry: string, level: string>, exampleRequest: record<globalParameters: record, inputs: record>, exposeSampleData: bool, input: record<description: string, properties: record, title: string, type: string>, keys: record<primary: string, secondary: string>, machineLearningWorkspace: record<id: string>, modifiedOn: string, output: record<description: string, properties: record, title: string, type: string>, packageType: string, parameters: record, payloadsInBlobStorage: bool, payloadsLocation: record<credentials: string, uri: string>, provisioningState: string, readOnly: bool, realtimeConfiguration: record<maxConcurrentCalls: int>, storageAccount: record<key: string, name: string>, swaggerLocation: string, title: string>> {
+]: any -> record<properties: record<assets: record, commitmentPlan: record<id: string>, createdOn: string, description: string, diagnostics: record<expiry: string, level: string>, exampleRequest: record<globalParameters: record, inputs: record>, exposeSampleData: bool, input: record<description: string, properties: record, title: string, type: string>, keys: record<primary: string, secondary: string>, machineLearningWorkspace: record<id: string>, modifiedOn: string, output: record<description: string, properties: record, title: string, type: string>, packageType: string, parameters: record, payloadsInBlobStorage: bool, payloadsLocation: record<credentials: string, uri: string>, provisioningState: string, readOnly: bool, realtimeConfiguration: record<maxConcurrentCalls: int>, storageAccount: record<key: string, name: string>, swaggerLocation: string, title: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($web_service_name | is-empty) { error make --unspanned { msg: "path parameter 'webServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), web_service_name: (encode-path-segment $web_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/webServices/{web_service_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -457,14 +464,16 @@ export def "web-services-create-regional-properties" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --region: string # The region for which encrypted credential parameters are created.
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
+  --region: string # The region for which encrypted credential parameters are created. (required)
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
 ]: nothing -> record<endTime: string, errorInfo: record<code: string, details: list<any>, message: string, target: string>, id: string, name: string, percentComplete: float, provisioningState: string, startTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($web_service_name | is-empty) { error make --unspanned { msg: "path parameter 'webServiceName' must be non-empty" } }
+  if ($region == null) { error make --unspanned { msg: "required query parameter 'region' missing: pass --region" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "region" $region "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), web_service_name: (encode-path-segment $web_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/webServices/{web_service_name}/CreateRegionalBlob") $qp $auth.query)
   let accept_val = "application/json"
@@ -500,13 +509,14 @@ export def "web-services-list-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
 ]: nothing -> record<primary: string, secondary: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($web_service_name | is-empty) { error make --unspanned { msg: "path parameter 'webServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), web_service_name: (encode-path-segment $web_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/webServices/{web_service_name}/listKeys") $qp $auth.query)
   let accept_val = "application/json"

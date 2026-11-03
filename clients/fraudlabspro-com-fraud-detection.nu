@@ -134,14 +134,17 @@ export def "post-v1-order-feedback" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string
-  --key: string
+  --id: string # required
+  --key: string # required
   --format: string@format-completer
-  --action: string@action-completer
+  --action: string@action-completer # required
   --notes: string # allows empty value
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
+  if ($action == null) { error make --unspanned { msg: "required query parameter 'action' missing: pass --action" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "notes" $notes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/order/feedback" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
@@ -173,8 +176,8 @@ export def "post-v1-order-screen" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ip: string
-  --key: string
+  --ip: string # required
+  --key: string # required
   --format: string@format-completer
   --last-name: string # allows empty value
   --first-name: string # allows empty value
@@ -209,6 +212,8 @@ export def "post-v1-order-screen" [
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ip == null) { error make --unspanned { msg: "required query parameter 'ip' missing: pass --ip" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "ip" $ip "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "first_name" $first_name "scalar") (serialize-qp "bill_addr" $bill_addr "scalar") (serialize-qp "bill_city" $bill_city "scalar") (serialize-qp "bill_state" $bill_state "scalar") (serialize-qp "bill_country" $bill_country "scalar") (serialize-qp "bill_zip_code" $bill_zip_code "scalar") (serialize-qp "ship_addr" $ship_addr "scalar") (serialize-qp "ship_city" $ship_city "scalar") (serialize-qp "ship_state" $ship_state "scalar") (serialize-qp "ship_country" $ship_country "scalar") (serialize-qp "ship_zip_code" $ship_zip_code "scalar") (serialize-qp "email_domain" $email_domain "scalar") (serialize-qp "user_phone" $user_phone "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "email_hash" $email_hash "scalar") (serialize-qp "username_hash" $username_hash "scalar") (serialize-qp "password_hash" $password_hash "scalar") (serialize-qp "bin_no" $bin_no "scalar") (serialize-qp "card_hash" $card_hash "scalar") (serialize-qp "avs_result" $avs_result "scalar") (serialize-qp "cvv_result" $cvv_result "scalar") (serialize-qp "user_order_id" $user_order_id "scalar") (serialize-qp "user_order_memo" $user_order_memo "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "department" $department "scalar") (serialize-qp "payment_mode" $payment_mode "scalar") (serialize-qp "flp_checksum" $flp_checksum "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/order/screen" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"

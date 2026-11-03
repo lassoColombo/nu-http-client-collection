@@ -1,4 +1,4 @@
-# Auto-generated client for Members API vv1
+# Auto-generated client for Members API v1
 # Source: https://api.apis.guru/v2/specs/parliament.uk/members/v1/openapi.json
 # Auth: --token flag or $env.MEMBERS_API_TOKEN
 
@@ -94,10 +94,12 @@ def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def location-type-completer [] { ["0" "1" "2" "3"] }
 def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 def house-completer [] { ["1" "2"] }
 def membership-in-date-range-was-member-of-house-completer [] { ["1" "2"] }
 def crop-type-completer [] { ["0" "1" "2" "3"] }
+def type-completer [] { ["0" "1" "2"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -126,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/Location/Browse/{locationType}/{locationName}
 export def "get-api-location-browse-location-type-location-name" [
-  location_type: int
+  location_type: int@location-type-completer
   location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1221,12 +1223,13 @@ export def "get-api-members-id-voting" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --house: int@house-completer # format: int32
+  --house: int@house-completer # required, format: int32
   --page: int # format: int32
 ]: nothing -> record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($house == null) { error make --unspanned { msg: "required query parameter 'house' missing: pass --house" } }
   let qp = [(serialize-qp "house" $house "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Voting") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1287,7 +1290,7 @@ export def "get-api-members-id-written-questions" [
 #
 # GET /api/Parties/GetActive/{house}
 export def "get-api-parties-get-active-house" [
-  house: int
+  house: int@house-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1359,7 +1362,7 @@ export def "get-api-parties-lords-by-type-for-date" [
 #
 # GET /api/Parties/StateOfTheParties/{house}/{forDate}
 export def "get-api-parties-state-of-the-parties-house-for-date" [
-  house: int
+  house: int@house-completer
   for_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1397,7 +1400,7 @@ export def "get-api-parties-state-of-the-parties-house-for-date" [
 #
 # GET /api/Posts/Departments/{type}
 export def "get-api-posts-departments-type" [
-  type: int
+  type: int@type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

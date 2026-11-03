@@ -1,4 +1,4 @@
-# Auto-generated client for My Business Verifications API vv1
+# Auto-generated client for My Business Verifications API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/mybusinessverifications/v1/openapi.json
 # Auth: --token flag or $env.MY_BUSINESS_VERIFICATIONS_API_TOKEN
 

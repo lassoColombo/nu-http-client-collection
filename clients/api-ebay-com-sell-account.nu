@@ -1,4 +1,4 @@
-# Auto-generated client for Account API vv1.9.0
+# Auto-generated client for Account API v1.9.0
 # Source: https://api.apis.guru/v2/specs/api.ebay.com/sell-account/v1.9.0/openapi.json
 # Auth: --token flag or $env.ACCOUNT_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -151,10 +151,11 @@ export def "get-advertising-eligibility" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --program-types: string # A comma-separated list of eBay advertising programs.Tip: See the AdvertisingProgramEnum (/api-docs/sell/account/types/plser:AdvertisingProgramEnum) type for possible values.If no programs are specified, the results will be returned for all programs.
-  --x-ebay-c-marketplace-id: string # The unique identifier of the eBay marketplace for which the seller eligibility status shall be checked.Note: This value is case-sensitive.
+  --x-ebay-c-marketplace-id: string # The unique identifier of the eBay marketplace for which the seller eligibility status shall be checked.Note: This value is case-sensitive. (required)
 ]: nothing -> record<advertisingEligibility: table<programType: string, reason: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
   let qp = [(serialize-qp "program_types" $program_types "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/advertising_eligibility" $qp $auth.query)
   let accept_val = "application/json"
@@ -190,10 +191,11 @@ export def "get-custom-policies" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --policy-types: string # This query parameter specifies the type of custom policies to be returned.Multiple policy types may be requested in a single call by providing a comma-delimited set of all policy types to be returned.Note: Omitting this query parameter from a request will also return policies of all policy types.Two Custom Policy types are supported: Product Compliance (PRODUCT_COMPLIANCE) Takeback (TAKE_BACK)
-  --x-ebay-c-marketplace-id: string # This header parameter specifies the eBay marketplace for the custom policy that is being created. Supported values for this header can be found in the MarketplaceIdEnum (/api-docs/sell/account/types/ba:MarketplaceIdEnum) type definition. Note: The following eBay marketplaces support Custom Policies: Germany (EBAY_DE) Canada (EBAY_CA) Australia (EBAY_AU) United States (EBAY_US) France (EBAY_FR)
+  --x-ebay-c-marketplace-id: string # This header parameter specifies the eBay marketplace for the custom policy that is being created. Supported values for this header can be found in the MarketplaceIdEnum (/api-docs/sell/account/types/ba:MarketplaceIdEnum) type definition. Note: The following eBay marketplaces support Custom Policies: Germany (EBAY_DE) Canada (EBAY_CA) Australia (EBAY_AU) United States (EBAY_US) France (EBAY_FR) (required)
 ]: nothing -> record<customPolicies: table<customPolicyId: string, label: string, name: string, policyType: string>, href: string, limit: int, next: string, offset: int, prev: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
   let qp = [(serialize-qp "policy_types" $policy_types "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/custom_policy/" $qp $auth.query)
   let accept_val = "application/json"
@@ -228,7 +230,7 @@ export def "create-custom-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-ebay-c-marketplace-id: string # This header parameter specifies the eBay marketplace for the custom policy that is being created. Supported values for this header can be found in the MarketplaceIdEnum (/api-docs/sell/account/types/ba:MarketplaceIdEnum) type definition. Note: The following eBay marketplaces support Custom Policies: Germany (EBAY_DE) Canada (EBAY_CA) Australia (EBAY_AU) United States (EBAY_US) France (EBAY_FR)
+  --x-ebay-c-marketplace-id: string # This header parameter specifies the eBay marketplace for the custom policy that is being created. Supported values for this header can be found in the MarketplaceIdEnum (/api-docs/sell/account/types/ba:MarketplaceIdEnum) type definition. Note: The following eBay marketplaces support Custom Policies: Germany (EBAY_DE) Canada (EBAY_CA) Australia (EBAY_AU) United States (EBAY_US) France (EBAY_FR) (required)
   --description: string # Details of the seller's specific policy and terms for this policy.Max length: 15,000
   --label: string # Customer-facing label shown on View Item pages for items to which the policy applies. This seller-defined string is displayed as a system-generated hyperlink pointing to detailed policy information.Max length: 65
   --name: string # The seller-defined name for the custom policy. Names must be unique for policies assigned to the same seller, policy type, and eBay marketplace.Note: This field is visible only to the seller. Max length: 65
@@ -237,6 +239,7 @@ export def "create-custom-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
   let full_url = (build-url $base "/custom_policy/" $auth.query)
   let req_body = {"description": $description, "label": $label, "name": $name, "policyType": $policy_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -273,11 +276,12 @@ export def "get-custom-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-ebay-c-marketplace-id: string # This header parameter specifies the eBay marketplace for the custom policy that is being created. Supported values for this header can be found in the MarketplaceIdEnum (/api-docs/sell/account/types/ba:MarketplaceIdEnum) type definition. Note: The following eBay marketplaces support Custom Policies: Germany (EBAY_DE) Canada (EBAY_CA) Australia (EBAY_AU) United States (EBAY_US) France (EBAY_FR)
+  --x-ebay-c-marketplace-id: string # This header parameter specifies the eBay marketplace for the custom policy that is being created. Supported values for this header can be found in the MarketplaceIdEnum (/api-docs/sell/account/types/ba:MarketplaceIdEnum) type definition. Note: The following eBay marketplaces support Custom Policies: Germany (EBAY_DE) Canada (EBAY_CA) Australia (EBAY_AU) United States (EBAY_US) France (EBAY_FR) (required)
 ]: nothing -> record<customPolicyId: string, description: string, label: string, name: string, policyType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($custom_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'custom_policy_id' must be non-empty" } }
+  if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
   let full_url = (build-url $base ({custom_policy_id: (encode-path-segment $custom_policy_id)} | format pattern "/custom_policy/{custom_policy_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -312,7 +316,7 @@ export def "update-custom-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-ebay-c-marketplace-id: string # This header parameter specifies the eBay marketplace for the custom policy that is being created. Supported values for this header can be found in the MarketplaceIdEnum (/api-docs/sell/account/types/ba:MarketplaceIdEnum) type definition. Note: The following eBay marketplaces support Custom Policies: Germany (EBAY_DE) Canada (EBAY_CA) Australia (EBAY_AU) United States (EBAY_US) France (EBAY_FR)
+  --x-ebay-c-marketplace-id: string # This header parameter specifies the eBay marketplace for the custom policy that is being created. Supported values for this header can be found in the MarketplaceIdEnum (/api-docs/sell/account/types/ba:MarketplaceIdEnum) type definition. Note: The following eBay marketplaces support Custom Policies: Germany (EBAY_DE) Canada (EBAY_CA) Australia (EBAY_AU) United States (EBAY_US) France (EBAY_FR) (required)
   --description: string # Details of the seller's specific policy and terms for this policy.Max length: 15,000
   --label: string # Customer-facing label shown on View Item pages for items to which the policy applies. This seller-defined string is displayed as a system-generated hyperlink pointing to detailed policy information.Max length: 65
   --name: string # The seller-defined name for the custom policy. Names must be unique for policies assigned to the same seller, policy type, and eBay marketplace.Note: This field is visible only to the seller. Max length: 65
@@ -321,6 +325,7 @@ export def "update-custom-policy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($custom_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'custom_policy_id' must be non-empty" } }
+  if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
   let full_url = (build-url $base ({custom_policy_id: (encode-path-segment $custom_policy_id)} | format pattern "/custom_policy/{custom_policy_id}") $auth.query)
   let req_body = {"description": $description, "label": $label, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -356,10 +361,11 @@ export def "get-fulfillment-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --marketplace-id: string # This query parameter specifies the eBay marketplace of the policies you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:MarketplaceIdEnum
+  --marketplace-id: string # This query parameter specifies the eBay marketplace of the policies you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:MarketplaceIdEnum (required)
 ]: nothing -> record<fulfillmentPolicies: table<categoryTypes: list, description: string, freightShipping: bool, fulfillmentPolicyId: string, globalShipping: bool, handlingTime: record, localPickup: bool, marketplaceId: string, name: string, pickupDropOff: bool, shipToLocations: record, shippingOptions: list>, href: string, limit: int, next: string, offset: int, prev: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }
   let qp = [(serialize-qp "marketplace_id" $marketplace_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fulfillment_policy" $qp $auth.query)
   let accept_val = "application/json"
@@ -444,11 +450,13 @@ export def "get-fulfillment-policy-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --marketplace-id: string # This query parameter specifies the eBay marketplace of the policy you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:MarketplaceIdEnum
-  --name: string # This query parameter specifies the seller-defined name of the fulfillment policy you want to retrieve.
+  --marketplace-id: string # This query parameter specifies the eBay marketplace of the policy you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:MarketplaceIdEnum (required)
+  --name: string # This query parameter specifies the seller-defined name of the fulfillment policy you want to retrieve. (required)
 ]: nothing -> record<categoryTypes: table<default: bool, name: string>, description: string, freightShipping: bool, fulfillmentPolicyId: string, globalShipping: bool, handlingTime: record<unit: string, value: int>, localPickup: bool, marketplaceId: string, name: string, pickupDropOff: bool, shipToLocations: record<regionExcluded: list<record>, regionIncluded: list<record>>, shippingOptions: table<costType: string, insuranceFee: record, insuranceOffered: bool, optionType: string, packageHandlingCost: record, rateTableId: string, shippingDiscountProfileId: string, shippingPromotionOffered: bool, shippingServices: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "marketplace_id" $marketplace_id "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fulfillment_policy/get_by_policy_name" $qp $auth.query)
   let accept_val = "application/json"
@@ -641,10 +649,11 @@ export def "get-payment-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --marketplace-id: string # This query parameter specifies the eBay marketplace of the policies you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:MarketplaceIdEnum
+  --marketplace-id: string # This query parameter specifies the eBay marketplace of the policies you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:MarketplaceIdEnum (required)
 ]: nothing -> record<href: string, limit: int, next: string, offset: int, paymentPolicies: table<categoryTypes: list, deposit: record, description: string, fullPaymentDueIn: record, immediatePay: bool, marketplaceId: string, name: string, paymentInstructions: string, paymentMethods: list, paymentPolicyId: string>, prev: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }
   let qp = [(serialize-qp "marketplace_id" $marketplace_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/payment_policy" $qp $auth.query)
   let accept_val = "application/json"
@@ -727,11 +736,13 @@ export def "get-payment-policy-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --marketplace-id: string # This query parameter specifies the eBay marketplace of the policy you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:MarketplaceIdEnum
-  --name: string # This query parameter specifies the seller-defined name of the payment policy you want to retrieve.
+  --marketplace-id: string # This query parameter specifies the eBay marketplace of the policy you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:MarketplaceIdEnum (required)
+  --name: string # This query parameter specifies the seller-defined name of the payment policy you want to retrieve. (required)
 ]: nothing -> record<categoryTypes: table<default: bool, name: string>, deposit: record<amount: record<currency: string, value: string>, dueIn: record<unit: string, value: int>, paymentMethods: list<record>>, description: string, fullPaymentDueIn: record<unit: string, value: int>, immediatePay: bool, marketplaceId: string, name: string, paymentInstructions: string, paymentMethods: table<brands: list, paymentMethodType: string, recipientAccountReference: record>, paymentPolicyId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "marketplace_id" $marketplace_id "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/payment_policy/get_by_policy_name" $qp $auth.query)
   let accept_val = "application/json"
@@ -1144,10 +1155,11 @@ export def "get-return-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --marketplace-id: string # This query parameter specifies the ID of the eBay marketplace of the policy you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:MarketplaceIdEnum
+  --marketplace-id: string # This query parameter specifies the ID of the eBay marketplace of the policy you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:MarketplaceIdEnum (required)
 ]: nothing -> record<href: string, limit: int, next: string, offset: int, prev: string, returnPolicies: table<categoryTypes: list, description: string, extendedHolidayReturnsOffered: bool, internationalOverride: record, marketplaceId: string, name: string, refundMethod: string, restockingFeePercentage: string, returnInstructions: string, returnMethod: string, returnPeriod: record, returnPolicyId: string, returnShippingCostPayer: string, returnsAccepted: bool>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }
   let qp = [(serialize-qp "marketplace_id" $marketplace_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/return_policy" $qp $auth.query)
   let accept_val = "application/json"
@@ -1233,11 +1245,13 @@ export def "get-return-policy-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --marketplace-id: string # This query parameter specifies the ID of the eBay marketplace of the policy you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:MarketplaceIdEnum
-  --name: string # This query parameter specifies the seller-defined name of the return policy you want to retrieve.
+  --marketplace-id: string # This query parameter specifies the ID of the eBay marketplace of the policy you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:MarketplaceIdEnum (required)
+  --name: string # This query parameter specifies the seller-defined name of the return policy you want to retrieve. (required)
 ]: nothing -> record<categoryTypes: table<default: bool, name: string>, description: string, extendedHolidayReturnsOffered: bool, internationalOverride: record<returnMethod: string, returnPeriod: record<unit: string, value: int>, returnShippingCostPayer: string, returnsAccepted: bool>, marketplaceId: string, name: string, refundMethod: string, restockingFeePercentage: string, returnInstructions: string, returnMethod: string, returnPeriod: record<unit: string, value: int>, returnPolicyId: string, returnShippingCostPayer: string, returnsAccepted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "marketplace_id" $marketplace_id "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/return_policy/get_by_policy_name" $qp $auth.query)
   let accept_val = "application/json"
@@ -1397,10 +1411,11 @@ export def "get-sales-taxes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-code: string # This path parameter specifies the two-letter ISO 3166 (https://www.iso.org/iso-3166-country-codes.html ) code for the country whose tax table you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:CountryCodeEnum
+  --country-code: string # This path parameter specifies the two-letter ISO 3166 (https://www.iso.org/iso-3166-country-codes.html ) code for the country whose tax table you want to retrieve. For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/sell/account/types/ba:CountryCodeEnum (required)
 ]: nothing -> record<salesTaxes: table<countryCode: string, salesTaxJurisdictionId: string, salesTaxPercentage: string, shippingAndHandlingTaxed: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country_code == null) { error make --unspanned { msg: "required query parameter 'country_code' missing: pass --country-code" } }
   let qp = [(serialize-qp "country_code" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sales_tax" $qp $auth.query)
   let accept_val = "application/json"

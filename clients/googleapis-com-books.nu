@@ -1,4 +1,4 @@
-# Auto-generated client for Books API vv1
+# Auto-generated client for Books API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/books/v1/openapi.json
 # Auth: --token flag or $env.BOOKS_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -168,8 +158,8 @@ export def commands []: nothing -> table {
 # operationId: books.cloudloading.addBook
 export def "books-cloudloading-add-book" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -192,7 +182,7 @@ export def "books-cloudloading-add-book" [
   --name: string # The document name. It can be set only if the drive_document_id is set.
   --upload-client-token: string # Scotty upload token.
 ]: nothing -> record<author: string, processingState: string, title: string, volumeId: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "drive_document_id" $drive_document_id "scalar") (serialize-qp "mime_type" $mime_type "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "upload_client_token" $upload_client_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/cloudloading/addBook" $qp $auth.query)
@@ -218,8 +208,8 @@ export def "books-cloudloading-add-book" [
 # operationId: books.cloudloading.deleteBook
 export def "books-cloudloading-delete-book" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -237,10 +227,11 @@ export def "books-cloudloading-delete-book" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --volume-id: string # The id of the book to be removed.
+  --volume-id: string # The id of the book to be removed. (required)
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($volume_id == null) { error make --unspanned { msg: "required query parameter 'volumeId' missing: pass --volume-id" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "volumeId" $volume_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/cloudloading/deleteBook" $qp $auth.query)
   let accept_val = "application/json"
@@ -265,8 +256,8 @@ export def "books-cloudloading-delete-book" [
 # operationId: books.cloudloading.updateBook
 export def "books-cloudloading-update-book" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -290,7 +281,7 @@ export def "books-cloudloading-update-book" [
   --volume-id: string
 ]: any -> record<author: string, processingState: string, title: string, volumeId: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/cloudloading/updateBook" $qp $auth.query)
@@ -318,8 +309,8 @@ export def "books-cloudloading-update-book" [
 # operationId: books.dictionary.listOfflineMetadata
 export def "books-dictionary-list-offline-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -337,10 +328,11 @@ export def "books-dictionary-list-offline-metadata" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --cpksver: string # The device/version ID from which to request the data.
+  --cpksver: string # The device/version ID from which to request the data. (required)
 ]: nothing -> record<items: table<download_url: string, encrypted_key: string, language: string, size: string, version: string>, kind: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cpksver == null) { error make --unspanned { msg: "required query parameter 'cpksver' missing: pass --cpksver" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "cpksver" $cpksver "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/dictionary/listOfflineMetadata" $qp $auth.query)
   let accept_val = "application/json"
@@ -365,8 +357,8 @@ export def "books-dictionary-list-offline-metadata" [
 # operationId: books.familysharing.getFamilyInfo
 export def "books-familysharing-get-family-info" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -384,18 +376,18 @@ export def "books-familysharing-get-family-info" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record<kind: string, membership: record<acquirePermission: string, ageGroup: string, allowedMaturityRating: string, isInFamily: bool, role: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/familysharing/getFamilyInfo" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -412,8 +404,8 @@ export def "books-familysharing-get-family-info" [
 # operationId: books.familysharing.share
 export def "books-familysharing-share" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -432,19 +424,19 @@ export def "books-familysharing-share" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --doc-id: string # The docid to share.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
   --volume-id: string # The volume to share.
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "docId" $doc_id "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "volumeId" $volume_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "docId" $doc_id "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "volumeId" $volume_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/familysharing/share" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "docId": $doc_id, "source": $qp_source, "volumeId": $volume_id} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "docId": $doc_id, "source": $source, "volumeId": $volume_id} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -461,8 +453,8 @@ export def "books-familysharing-share" [
 # operationId: books.familysharing.unshare
 export def "books-familysharing-unshare" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -481,19 +473,19 @@ export def "books-familysharing-unshare" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --doc-id: string # The docid to unshare.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
   --volume-id: string # The volume to unshare.
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "docId" $doc_id "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "volumeId" $volume_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "docId" $doc_id "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "volumeId" $volume_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/familysharing/unshare" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "docId": $doc_id, "source": $qp_source, "volumeId": $volume_id} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "docId": $doc_id, "source": $source, "volumeId": $volume_id} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -510,8 +502,8 @@ export def "books-familysharing-unshare" [
 # operationId: books.myconfig.getUserSettings
 export def "books-myconfig-get-user-settings" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -531,7 +523,7 @@ export def "books-myconfig-get-user-settings" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --country: string # Unused. Added only to workaround TEX mandatory request template requirement
 ]: nothing -> record<kind: string, notesExport: record<folderName: string, isEnabled: bool>, notification: record<matchMyInterests: record<opted_state: string>, moreFromAuthors: record<opted_state: string>, moreFromSeries: record<opted_state: string>, priceDrop: record<opted_state: string>, rewardExpirations: record<opted_state: string>>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/myconfig/getUserSettings" $qp $auth.query)
@@ -557,8 +549,8 @@ export def "books-myconfig-get-user-settings" [
 # operationId: books.myconfig.releaseDownloadAccess
 export def "books-myconfig-release-download-access" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -576,21 +568,23 @@ export def "books-myconfig-release-download-access" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --cpksver: string # The device/version ID from which to release the restriction.
-  --volume-ids: list<string> # The volume(s) to release restrictions for.
+  --cpksver: string # The device/version ID from which to release the restriction. (required)
+  --volume-ids: list<string> # The volume(s) to release restrictions for. (required)
   --locale: string # ISO-639-1, ISO-3166-1 codes for message localization, i.e. en_US.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record<downloadAccessList: table<deviceAllowed: bool, downloadsAcquired: int, justAcquired: bool, kind: string, maxDownloadDevices: int, message: string, nonce: string, reasonCode: string, restricted: bool, signature: string, source: string, volumeId: string>, kind: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "cpksver" $cpksver "scalar") (serialize-qp "volumeIds" $volume_ids "multi") (serialize-qp "locale" $locale "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  if ($cpksver == null) { error make --unspanned { msg: "required query parameter 'cpksver' missing: pass --cpksver" } }
+  if ($volume_ids == null) { error make --unspanned { msg: "required query parameter 'volumeIds' missing: pass --volume-ids" } }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "cpksver" $cpksver "scalar") (serialize-qp "volumeIds" $volume_ids "multi") (serialize-qp "locale" $locale "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/myconfig/releaseDownloadAccess" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "cpksver": $cpksver, "volumeIds": $volume_ids, "locale": $locale, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "cpksver": $cpksver, "volumeIds": $volume_ids, "locale": $locale, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -607,8 +601,8 @@ export def "books-myconfig-release-download-access" [
 # operationId: books.myconfig.requestAccess
 export def "books-myconfig-request-access" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -626,23 +620,27 @@ export def "books-myconfig-request-access" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --cpksver: string # The device/version ID from which to request the restrictions.
-  --nonce: string # The client nonce value.
-  --qp-source: string # String to identify the originator of this request.
-  --volume-id: string # The volume to request concurrent/download restrictions for.
+  --cpksver: string # The device/version ID from which to request the restrictions. (required)
+  --nonce: string # The client nonce value. (required)
+  --source: string # String to identify the originator of this request. (required)
+  --volume-id: string # The volume to request concurrent/download restrictions for. (required)
   --license-types: string@license-types-completer # The type of access license to request. If not specified, the default is BOTH.
   --locale: string # ISO-639-1, ISO-3166-1 codes for message localization, i.e. en_US.
 ]: nothing -> record<concurrentAccess: record<deviceAllowed: bool, kind: string, maxConcurrentDevices: int, message: string, nonce: string, reasonCode: string, restricted: bool, signature: string, source: string, timeWindowSeconds: int, volumeId: string>, downloadAccess: record<deviceAllowed: bool, downloadsAcquired: int, justAcquired: bool, kind: string, maxDownloadDevices: int, message: string, nonce: string, reasonCode: string, restricted: bool, signature: string, source: string, volumeId: string>, kind: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "cpksver" $cpksver "scalar") (serialize-qp "nonce" $nonce "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "volumeId" $volume_id "scalar") (serialize-qp "licenseTypes" $license_types "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
+  if ($cpksver == null) { error make --unspanned { msg: "required query parameter 'cpksver' missing: pass --cpksver" } }
+  if ($nonce == null) { error make --unspanned { msg: "required query parameter 'nonce' missing: pass --nonce" } }
+  if ($source == null) { error make --unspanned { msg: "required query parameter 'source' missing: pass --source" } }
+  if ($volume_id == null) { error make --unspanned { msg: "required query parameter 'volumeId' missing: pass --volume-id" } }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "cpksver" $cpksver "scalar") (serialize-qp "nonce" $nonce "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "volumeId" $volume_id "scalar") (serialize-qp "licenseTypes" $license_types "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/myconfig/requestAccess" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "cpksver": $cpksver, "nonce": $nonce, "source": $qp_source, "volumeId": $volume_id, "licenseTypes": $license_types, "locale": $locale} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "cpksver": $cpksver, "nonce": $nonce, "source": $source, "volumeId": $volume_id, "licenseTypes": $license_types, "locale": $locale} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -659,8 +657,8 @@ export def "books-myconfig-request-access" [
 # operationId: books.myconfig.syncVolumeLicenses
 export def "books-myconfig-sync-volume-licenses" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -678,25 +676,28 @@ export def "books-myconfig-sync-volume-licenses" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --cpksver: string # The device/version ID from which to release the restriction.
-  --nonce: string # The client nonce value.
-  --qp-source: string # String to identify the originator of this request.
+  --cpksver: string # The device/version ID from which to release the restriction. (required)
+  --nonce: string # The client nonce value. (required)
+  --source: string # String to identify the originator of this request. (required)
   --features: list<string> # List of features supported by the client, i.e., 'RENTALS'
   --include-non-comics-series: oneof<nothing, bool> # Set to true to include non-comics series. Defaults to false.
   --locale: string # ISO-639-1, ISO-3166-1 codes for message localization, i.e. en_US.
   --show-preorders: oneof<nothing, bool> # Set to true to show pre-ordered books. Defaults to false.
   --volume-ids: list<string> # The volume(s) to request download restrictions for.
 ]: nothing -> record<items: table<accessInfo: record, etag: string, id: string, kind: string, layerInfo: record, recommendedInfo: record, saleInfo: record, searchInfo: record, selfLink: string, userInfo: record, volumeInfo: record>, kind: string, totalItems: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "cpksver" $cpksver "scalar") (serialize-qp "nonce" $nonce "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "features" $features "multi") (serialize-qp "includeNonComicsSeries" $include_non_comics_series "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "showPreorders" $show_preorders "scalar") (serialize-qp "volumeIds" $volume_ids "multi")] | flatten | str join "&"
+  if ($cpksver == null) { error make --unspanned { msg: "required query parameter 'cpksver' missing: pass --cpksver" } }
+  if ($nonce == null) { error make --unspanned { msg: "required query parameter 'nonce' missing: pass --nonce" } }
+  if ($source == null) { error make --unspanned { msg: "required query parameter 'source' missing: pass --source" } }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "cpksver" $cpksver "scalar") (serialize-qp "nonce" $nonce "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "features" $features "multi") (serialize-qp "includeNonComicsSeries" $include_non_comics_series "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "showPreorders" $show_preorders "scalar") (serialize-qp "volumeIds" $volume_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/myconfig/syncVolumeLicenses" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "cpksver": $cpksver, "nonce": $nonce, "source": $qp_source, "features": $features, "includeNonComicsSeries": $include_non_comics_series, "locale": $locale, "showPreorders": $show_preorders, "volumeIds": $volume_ids} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "cpksver": $cpksver, "nonce": $nonce, "source": $source, "features": $features, "includeNonComicsSeries": $include_non_comics_series, "locale": $locale, "showPreorders": $show_preorders, "volumeIds": $volume_ids} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -715,8 +716,8 @@ export def "books-myconfig-sync-volume-licenses" [
 # --notification shape: {matchMyInterests?: record, moreFromAuthors?: record, moreFromSeries?: record, priceDrop?: record, rewardExpirations?: record}
 export def "books-myconfig-update-user-settings" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -739,7 +740,7 @@ export def "books-myconfig-update-user-settings" [
   --notification: record # shape: {matchMyInterests?: record, moreFromAuthors?: record, moreFromSeries?: record, priceDrop?: record, rewardExpirations?: record}
 ]: any -> record<kind: string, notesExport: record<folderName: string, isEnabled: bool>, notification: record<matchMyInterests: record<opted_state: string>, moreFromAuthors: record<opted_state: string>, moreFromSeries: record<opted_state: string>, priceDrop: record<opted_state: string>, rewardExpirations: record<opted_state: string>>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/myconfig/updateUserSettings" $qp $auth.query)
@@ -767,8 +768,8 @@ export def "books-myconfig-update-user-settings" [
 # operationId: books.mylibrary.annotations.list
 export def "books-mylibrary-annotations-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -792,21 +793,21 @@ export def "books-mylibrary-annotations-list" [
   --max-results: int # Maximum number of results to return
   --page-token: string # The value of the nextToken from the previous page.
   --show-deleted: oneof<nothing, bool> # Set to true to return deleted annotations. updatedMin must be in the request to use this. Defaults to false.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
   --updated-max: string # RFC 3339 timestamp to restrict to items updated prior to this timestamp (exclusive).
   --updated-min: string # RFC 3339 timestamp to restrict to items updated since this timestamp (inclusive).
   --volume-id: string # The volume to restrict annotations to.
 ]: nothing -> record<items: table<afterSelectedText: string, beforeSelectedText: string, clientVersionRanges: record, created: string, currentVersionRanges: record, data: string, deleted: bool, highlightStyle: string, id: string, kind: string, layerId: string, layerSummary: record, pageIds: list, selectedText: string, selfLink: string, updated: string, volumeId: string>, kind: string, nextPageToken: string, totalItems: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "contentVersion" $content_version "scalar") (serialize-qp "layerId" $layer_id "scalar") (serialize-qp "layerIds" $layer_ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "updatedMax" $updated_max "scalar") (serialize-qp "updatedMin" $updated_min "scalar") (serialize-qp "volumeId" $volume_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "contentVersion" $content_version "scalar") (serialize-qp "layerId" $layer_id "scalar") (serialize-qp "layerIds" $layer_ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "updatedMax" $updated_max "scalar") (serialize-qp "updatedMin" $updated_min "scalar") (serialize-qp "volumeId" $volume_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/mylibrary/annotations" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "contentVersion": $content_version, "layerId": $layer_id, "layerIds": $layer_ids, "maxResults": $max_results, "pageToken": $page_token, "showDeleted": $show_deleted, "source": $qp_source, "updatedMax": $updated_max, "updatedMin": $updated_min, "volumeId": $volume_id} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "contentVersion": $content_version, "layerId": $layer_id, "layerIds": $layer_ids, "maxResults": $max_results, "pageToken": $page_token, "showDeleted": $show_deleted, "source": $source, "updatedMax": $updated_max, "updatedMin": $updated_min, "volumeId": $volume_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -826,8 +827,8 @@ export def "books-mylibrary-annotations-list" [
 # --layerSummary shape: {allowedCharacterCount?: int, limitType?: string, remainingCharacterCount?: int}
 export def "books-mylibrary-annotations-insert" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -848,7 +849,7 @@ export def "books-mylibrary-annotations-insert" [
   --annotation-id: string # The ID for the annotation to insert.
   --country: string # ISO-3166-1 code to override the IP-based location.
   --show-only-summary-in-response: oneof<nothing, bool> # Requests that only the summary of the specified layer be provided in the response.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
   --after-selected-text: string # Anchor text after excerpt. For requests, if the user bookmarked a screen that has no flowing text on it, then this field should be empty.
   --before-selected-text: string # Anchor text before excerpt. For requests, if the user bookmarked a screen that has no flowing text on it, then this field should be empty.
   --client-version-ranges: record # Selection ranges sent from the client. — shape: {cfiRange?: record, contentVersion?: string, gbImageRange?: record, gbTextRange?: record, imageCfiRange?: record}
@@ -868,9 +869,9 @@ export def "books-mylibrary-annotations-insert" [
   --volume-id: string # The volume that this annotation belongs to.
 ]: any -> record<afterSelectedText: string, beforeSelectedText: string, clientVersionRanges: record<cfiRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>, contentVersion: string, gbImageRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>, gbTextRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>, imageCfiRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>>, created: string, currentVersionRanges: record<cfiRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>, contentVersion: string, gbImageRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>, gbTextRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>, imageCfiRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>>, data: string, deleted: bool, highlightStyle: string, id: string, kind: string, layerId: string, layerSummary: record<allowedCharacterCount: int, limitType: string, remainingCharacterCount: int>, pageIds: list<string>, selectedText: string, selfLink: string, updated: string, volumeId: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "annotationId" $annotation_id "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "showOnlySummaryInResponse" $show_only_summary_in_response "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "annotationId" $annotation_id "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "showOnlySummaryInResponse" $show_only_summary_in_response "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/mylibrary/annotations" $qp $auth.query)
   let req_body = {"afterSelectedText": $after_selected_text, "beforeSelectedText": $before_selected_text, "clientVersionRanges": $client_version_ranges, "created": $created, "currentVersionRanges": $current_version_ranges, "data": $data, "deleted": $deleted, "highlightStyle": $highlight_style, "id": $id, "kind": $kind, "layerId": $layer_id, "layerSummary": $layer_summary, "pageIds": $page_ids, "selectedText": $selected_text, "selfLink": $self_link, "updated": $updated, "volumeId": $volume_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -879,7 +880,7 @@ export def "books-mylibrary-annotations-insert" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "annotationId": $annotation_id, "country": $country, "showOnlySummaryInResponse": $show_only_summary_in_response, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "annotationId": $annotation_id, "country": $country, "showOnlySummaryInResponse": $show_only_summary_in_response, "source": $source} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -896,8 +897,8 @@ export def "books-mylibrary-annotations-insert" [
 # operationId: books.mylibrary.annotations.summary
 export def "books-mylibrary-annotations-summary" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -915,11 +916,13 @@ export def "books-mylibrary-annotations-summary" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --layer-ids: list<string> # Array of layer IDs to get the summary for.
-  --volume-id: string # Volume id to get the summary for.
+  --layer-ids: list<string> # Array of layer IDs to get the summary for. (required)
+  --volume-id: string # Volume id to get the summary for. (required)
 ]: nothing -> record<kind: string, layers: table<allowedCharacterCount: int, layerId: string, limitType: string, remainingCharacterCount: int, updated: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($layer_ids == null) { error make --unspanned { msg: "required query parameter 'layerIds' missing: pass --layer-ids" } }
+  if ($volume_id == null) { error make --unspanned { msg: "required query parameter 'volumeId' missing: pass --volume-id" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "layerIds" $layer_ids "multi") (serialize-qp "volumeId" $volume_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/mylibrary/annotations/summary" $qp $auth.query)
   let accept_val = "application/json"
@@ -945,8 +948,8 @@ export def "books-mylibrary-annotations-summary" [
 export def "books-mylibrary-annotations-delete" [
   annotation_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -964,19 +967,19 @@ export def "books-mylibrary-annotations-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($annotation_id | is-empty) { error make --unspanned { msg: "path parameter 'annotationId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({annotation_id: (encode-path-segment $annotation_id)} | format pattern "/books/v1/mylibrary/annotations/{annotation_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -997,8 +1000,8 @@ export def "books-mylibrary-annotations-delete" [
 export def "books-mylibrary-annotations-update" [
   annotation_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1016,7 +1019,7 @@ export def "books-mylibrary-annotations-update" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
   --after-selected-text: string # Anchor text after excerpt. For requests, if the user bookmarked a screen that has no flowing text on it, then this field should be empty.
   --before-selected-text: string # Anchor text before excerpt. For requests, if the user bookmarked a screen that has no flowing text on it, then this field should be empty.
   --client-version-ranges: record # Selection ranges sent from the client. — shape: {cfiRange?: record, contentVersion?: string, gbImageRange?: record, gbTextRange?: record, imageCfiRange?: record}
@@ -1036,10 +1039,10 @@ export def "books-mylibrary-annotations-update" [
   --volume-id: string # The volume that this annotation belongs to.
 ]: any -> record<afterSelectedText: string, beforeSelectedText: string, clientVersionRanges: record<cfiRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>, contentVersion: string, gbImageRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>, gbTextRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>, imageCfiRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>>, created: string, currentVersionRanges: record<cfiRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>, contentVersion: string, gbImageRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>, gbTextRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>, imageCfiRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>>, data: string, deleted: bool, highlightStyle: string, id: string, kind: string, layerId: string, layerSummary: record<allowedCharacterCount: int, limitType: string, remainingCharacterCount: int>, pageIds: list<string>, selectedText: string, selfLink: string, updated: string, volumeId: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($annotation_id | is-empty) { error make --unspanned { msg: "path parameter 'annotationId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({annotation_id: (encode-path-segment $annotation_id)} | format pattern "/books/v1/mylibrary/annotations/{annotation_id}") $qp $auth.query)
   let req_body = {"afterSelectedText": $after_selected_text, "beforeSelectedText": $before_selected_text, "clientVersionRanges": $client_version_ranges, "created": $created, "currentVersionRanges": $current_version_ranges, "data": $data, "deleted": $deleted, "highlightStyle": $highlight_style, "id": $id, "kind": $kind, "layerId": $layer_id, "layerSummary": $layer_summary, "pageIds": $page_ids, "selectedText": $selected_text, "selfLink": $self_link, "updated": $updated, "volumeId": $volume_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1048,7 +1051,7 @@ export def "books-mylibrary-annotations-update" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "source": $source} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -1065,8 +1068,8 @@ export def "books-mylibrary-annotations-update" [
 # operationId: books.mylibrary.bookshelves.list
 export def "books-mylibrary-bookshelves-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1084,18 +1087,18 @@ export def "books-mylibrary-bookshelves-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record<items: table<access: string, created: string, description: string, id: int, kind: string, selfLink: string, title: string, updated: string, volumeCount: int, volumesLastUpdated: string>, kind: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/mylibrary/bookshelves" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1113,8 +1116,8 @@ export def "books-mylibrary-bookshelves-list" [
 export def "books-mylibrary-bookshelves-get" [
   shelf: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1132,19 +1135,19 @@ export def "books-mylibrary-bookshelves-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record<access: string, created: string, description: string, id: int, kind: string, selfLink: string, title: string, updated: string, volumeCount: int, volumesLastUpdated: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shelf | is-empty) { error make --unspanned { msg: "path parameter 'shelf' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({shelf: (encode-path-segment $shelf)} | format pattern "/books/v1/mylibrary/bookshelves/{shelf}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1162,8 +1165,8 @@ export def "books-mylibrary-bookshelves-get" [
 export def "books-mylibrary-bookshelves-add-volume" [
   shelf: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1181,21 +1184,22 @@ export def "books-mylibrary-bookshelves-add-volume" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --volume-id: string # ID of volume to add.
+  --volume-id: string # ID of volume to add. (required)
   --reason: string@reason-completer # The reason for which the book is added to the library.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shelf | is-empty) { error make --unspanned { msg: "path parameter 'shelf' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "volumeId" $volume_id "scalar") (serialize-qp "reason" $reason "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  if ($volume_id == null) { error make --unspanned { msg: "required query parameter 'volumeId' missing: pass --volume-id" } }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "volumeId" $volume_id "scalar") (serialize-qp "reason" $reason "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({shelf: (encode-path-segment $shelf)} | format pattern "/books/v1/mylibrary/bookshelves/{shelf}/addVolume") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "volumeId": $volume_id, "reason": $reason, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "volumeId": $volume_id, "reason": $reason, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -1213,8 +1217,8 @@ export def "books-mylibrary-bookshelves-add-volume" [
 export def "books-mylibrary-bookshelves-clear-volumes" [
   shelf: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1232,19 +1236,19 @@ export def "books-mylibrary-bookshelves-clear-volumes" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shelf | is-empty) { error make --unspanned { msg: "path parameter 'shelf' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({shelf: (encode-path-segment $shelf)} | format pattern "/books/v1/mylibrary/bookshelves/{shelf}/clearVolumes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -1262,8 +1266,8 @@ export def "books-mylibrary-bookshelves-clear-volumes" [
 export def "books-mylibrary-bookshelves-move-volume" [
   shelf: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1281,21 +1285,23 @@ export def "books-mylibrary-bookshelves-move-volume" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --volume-id: string # ID of volume to move.
-  --volume-position: int # Position on shelf to move the item (0 puts the item before the current first item, 1 puts it between the first and the second and so on.)
-  --qp-source: string # String to identify the originator of this request.
+  --volume-id: string # ID of volume to move. (required)
+  --volume-position: int # Position on shelf to move the item (0 puts the item before the current first item, 1 puts it between the first and the second and so on.) (required)
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shelf | is-empty) { error make --unspanned { msg: "path parameter 'shelf' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "volumeId" $volume_id "scalar") (serialize-qp "volumePosition" $volume_position "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  if ($volume_id == null) { error make --unspanned { msg: "required query parameter 'volumeId' missing: pass --volume-id" } }
+  if ($volume_position == null) { error make --unspanned { msg: "required query parameter 'volumePosition' missing: pass --volume-position" } }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "volumeId" $volume_id "scalar") (serialize-qp "volumePosition" $volume_position "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({shelf: (encode-path-segment $shelf)} | format pattern "/books/v1/mylibrary/bookshelves/{shelf}/moveVolume") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "volumeId": $volume_id, "volumePosition": $volume_position, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "volumeId": $volume_id, "volumePosition": $volume_position, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -1313,8 +1319,8 @@ export def "books-mylibrary-bookshelves-move-volume" [
 export def "books-mylibrary-bookshelves-remove-volume" [
   shelf: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1332,21 +1338,22 @@ export def "books-mylibrary-bookshelves-remove-volume" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --volume-id: string # ID of volume to remove.
+  --volume-id: string # ID of volume to remove. (required)
   --reason: string@reason-completer-1 # The reason for which the book is removed from the library.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shelf | is-empty) { error make --unspanned { msg: "path parameter 'shelf' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "volumeId" $volume_id "scalar") (serialize-qp "reason" $reason "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  if ($volume_id == null) { error make --unspanned { msg: "required query parameter 'volumeId' missing: pass --volume-id" } }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "volumeId" $volume_id "scalar") (serialize-qp "reason" $reason "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({shelf: (encode-path-segment $shelf)} | format pattern "/books/v1/mylibrary/bookshelves/{shelf}/removeVolume") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "volumeId": $volume_id, "reason": $reason, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "volumeId": $volume_id, "reason": $reason, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -1364,8 +1371,8 @@ export def "books-mylibrary-bookshelves-remove-volume" [
 export def "books-mylibrary-bookshelves-volumes-list" [
   shelf: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1388,20 +1395,20 @@ export def "books-mylibrary-bookshelves-volumes-list" [
   --projection: string@projection-completer # Restrict information returned to a set of selected fields.
   --q: string # Full-text search query string in this bookshelf.
   --show-preorders: oneof<nothing, bool> # Set to true to show pre-ordered books. Defaults to false.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
   --start-index: int # Index of the first element to return (starts at 0)
 ]: nothing -> record<items: table<accessInfo: record, etag: string, id: string, kind: string, layerInfo: record, recommendedInfo: record, saleInfo: record, searchInfo: record, selfLink: string, userInfo: record, volumeInfo: record>, kind: string, totalItems: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shelf | is-empty) { error make --unspanned { msg: "path parameter 'shelf' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "showPreorders" $show_preorders "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "showPreorders" $show_preorders "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({shelf: (encode-path-segment $shelf)} | format pattern "/books/v1/mylibrary/bookshelves/{shelf}/volumes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "country": $country, "maxResults": $max_results, "projection": $projection, "q": $q, "showPreorders": $show_preorders, "source": $qp_source, "startIndex": $start_index} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "country": $country, "maxResults": $max_results, "projection": $projection, "q": $q, "showPreorders": $show_preorders, "source": $source, "startIndex": $start_index} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1419,8 +1426,8 @@ export def "books-mylibrary-bookshelves-volumes-list" [
 export def "books-mylibrary-readingpositions-get" [
   volume_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1439,19 +1446,19 @@ export def "books-mylibrary-readingpositions-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --content-version: string # Volume content version for which this reading position is requested.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record<epubCfiPosition: string, gbImagePosition: string, gbTextPosition: string, kind: string, pdfPosition: string, updated: string, volumeId: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "contentVersion" $content_version "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "contentVersion" $content_version "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({volume_id: (encode-path-segment $volume_id)} | format pattern "/books/v1/mylibrary/readingpositions/{volume_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "contentVersion": $content_version, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "contentVersion": $content_version, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1469,8 +1476,8 @@ export def "books-mylibrary-readingpositions-get" [
 export def "books-mylibrary-readingpositions-set-position" [
   volume_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1488,24 +1495,26 @@ export def "books-mylibrary-readingpositions-set-position" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --position: string # Position string for the new volume reading position.
-  --timestamp: string # RFC 3339 UTC format timestamp associated with this reading position.
+  --position: string # Position string for the new volume reading position. (required)
+  --timestamp: string # RFC 3339 UTC format timestamp associated with this reading position. (required)
   --action: string@action-completer # Action that caused this reading position to be set.
   --content-version: string # Volume content version for which this reading position applies.
   --device-cookie: string # Random persistent device cookie optional on set position.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "contentVersion" $content_version "scalar") (serialize-qp "deviceCookie" $device_cookie "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  if ($position == null) { error make --unspanned { msg: "required query parameter 'position' missing: pass --position" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "contentVersion" $content_version "scalar") (serialize-qp "deviceCookie" $device_cookie "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({volume_id: (encode-path-segment $volume_id)} | format pattern "/books/v1/mylibrary/readingpositions/{volume_id}/setPosition") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "position": $position, "timestamp": $timestamp, "action": $action, "contentVersion": $content_version, "deviceCookie": $device_cookie, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "position": $position, "timestamp": $timestamp, "action": $action, "contentVersion": $content_version, "deviceCookie": $device_cookie, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -1522,8 +1531,8 @@ export def "books-mylibrary-readingpositions-set-position" [
 # operationId: books.notification.get
 export def "books-notification-get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1541,20 +1550,21 @@ export def "books-notification-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --notification-id: string # String to identify the notification.
+  --notification-id: string # String to identify the notification. (required)
   --locale: string # ISO-639-1 language and ISO-3166-1 country code. Ex: 'en_US'. Used for generating notification title and body.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record<body: string, crmExperimentIds: list<string>, doc_id: string, doc_type: string, dont_show_notification: bool, iconUrl: string, is_document_mature: bool, kind: string, notificationGroup: string, notification_type: string, pcampaign_id: string, reason: string, show_notification_settings_action: bool, targetUrl: string, timeToExpireMs: string, title: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "notification_id" $notification_id "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  if ($notification_id == null) { error make --unspanned { msg: "required query parameter 'notification_id' missing: pass --notification-id" } }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "notification_id" $notification_id "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/notification/get" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "notification_id": $notification_id, "locale": $locale, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "notification_id": $notification_id, "locale": $locale, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1571,8 +1581,8 @@ export def "books-notification-get" [
 # operationId: books.onboarding.listCategories
 export def "books-onboarding-list-categories" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1592,7 +1602,7 @@ export def "books-onboarding-list-categories" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --locale: string # ISO-639-1 language and ISO-3166-1 country code. Default is en-US if unset.
 ]: nothing -> record<items: table<badgeUrl: string, categoryId: string, name: string>, kind: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/onboarding/listCategories" $qp $auth.query)
@@ -1618,8 +1628,8 @@ export def "books-onboarding-list-categories" [
 # operationId: books.onboarding.listCategoryVolumes
 export def "books-onboarding-list-category-volumes" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1643,7 +1653,7 @@ export def "books-onboarding-list-category-volumes" [
   --page-size: int # Number of maximum results per page to be included in the response.
   --page-token: string # The value of the nextToken from the previous page.
 ]: nothing -> record<items: table<accessInfo: record, etag: string, id: string, kind: string, layerInfo: record, recommendedInfo: record, saleInfo: record, searchInfo: record, selfLink: string, userInfo: record, volumeInfo: record>, kind: string, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "categoryId" $category_id "multi") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxAllowedMaturityRating" $max_allowed_maturity_rating "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/onboarding/listCategoryVolumes" $qp $auth.query)
@@ -1669,8 +1679,8 @@ export def "books-onboarding-list-category-volumes" [
 # operationId: books.personalizedstream.get
 export def "books-personalizedstream-get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1690,18 +1700,18 @@ export def "books-personalizedstream-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --locale: string # ISO-639-1 language and ISO-3166-1 country code. Ex: 'en_US'. Used for generating recommendations.
   --max-allowed-maturity-rating: string@max-allowed-maturity-rating-completer # The maximum allowed maturity rating of returned recommendations. Books with a higher maturity rating are filtered out.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record<clusters: table<banner_with_content_container: record, subTitle: string, title: string, totalVolumes: int, uid: string, volumes: list>, kind: string, totalClusters: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxAllowedMaturityRating" $max_allowed_maturity_rating "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxAllowedMaturityRating" $max_allowed_maturity_rating "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/personalizedstream/get" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "locale": $locale, "maxAllowedMaturityRating": $max_allowed_maturity_rating, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "locale": $locale, "maxAllowedMaturityRating": $max_allowed_maturity_rating, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1718,8 +1728,8 @@ export def "books-personalizedstream-get" [
 # operationId: books.promooffer.accept
 export def "books-promooffer-accept" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1746,7 +1756,7 @@ export def "books-promooffer-accept" [
   --serial: string # device serial
   --volume-id: string # Volume id to exercise the offer
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "androidId" $android_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "manufacturer" $manufacturer "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "offerId" $offer_id "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "serial" $serial "scalar") (serialize-qp "volumeId" $volume_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/promooffer/accept" $qp $auth.query)
@@ -1772,8 +1782,8 @@ export def "books-promooffer-accept" [
 # operationId: books.promooffer.dismiss
 export def "books-promooffer-dismiss" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1799,7 +1809,7 @@ export def "books-promooffer-dismiss" [
   --product: string # device product
   --serial: string # device serial
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "androidId" $android_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "manufacturer" $manufacturer "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "offerId" $offer_id "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "serial" $serial "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/promooffer/dismiss" $qp $auth.query)
@@ -1825,8 +1835,8 @@ export def "books-promooffer-dismiss" [
 # operationId: books.promooffer.get
 export def "books-promooffer-get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1851,7 +1861,7 @@ export def "books-promooffer-get" [
   --product: string # device product
   --serial: string # device serial
 ]: nothing -> record<items: table<artUrl: string, gservicesKey: string, id: string, items: list>, kind: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "androidId" $android_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "manufacturer" $manufacturer "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "serial" $serial "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/promooffer/get" $qp $auth.query)
@@ -1877,8 +1887,8 @@ export def "books-promooffer-get" [
 # operationId: books.series.get
 export def "books-series-get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1896,10 +1906,11 @@ export def "books-series-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --series-id: list<string> # String that identifies the series
+  --series-id: list<string> # String that identifies the series (required)
 ]: nothing -> record<kind: string, series: table<bannerImageUrl: string, eligibleForSubscription: bool, imageUrl: string, isComplete: bool, seriesFormatType: string, seriesId: string, seriesSubscriptionReleaseInfo: record, seriesType: string, subscriptionId: string, title: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($series_id == null) { error make --unspanned { msg: "required query parameter 'series_id' missing: pass --series-id" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "series_id" $series_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/series/get" $qp $auth.query)
   let accept_val = "application/json"
@@ -1924,8 +1935,8 @@ export def "books-series-get" [
 # operationId: books.series.membership.get
 export def "books-series-membership-get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1943,12 +1954,13 @@ export def "books-series-membership-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --series-id: string # String that identifies the series
+  --series-id: string # String that identifies the series (required)
   --page-size: int # Number of maximum results per page to be included in the response.
   --page-token: string # The value of the nextToken from the previous page.
 ]: nothing -> record<kind: string, member: table<accessInfo: record, etag: string, id: string, kind: string, layerInfo: record, recommendedInfo: record, saleInfo: record, searchInfo: record, selfLink: string, userInfo: record, volumeInfo: record>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($series_id == null) { error make --unspanned { msg: "required query parameter 'series_id' missing: pass --series-id" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "series_id" $series_id "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_token" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/series/membership/get" $qp $auth.query)
   let accept_val = "application/json"
@@ -1974,8 +1986,8 @@ export def "books-series-membership-get" [
 export def "books-bookshelves-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1993,19 +2005,19 @@ export def "books-bookshelves-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record<items: table<access: string, created: string, description: string, id: int, kind: string, selfLink: string, title: string, updated: string, volumeCount: int, volumesLastUpdated: string>, kind: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/books/v1/users/{user_id}/bookshelves") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2024,8 +2036,8 @@ export def "books-bookshelves-get" [
   user_id: string
   shelf: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2043,20 +2055,20 @@ export def "books-bookshelves-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record<access: string, created: string, description: string, id: int, kind: string, selfLink: string, title: string, updated: string, volumeCount: int, volumesLastUpdated: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   if ($shelf | is-empty) { error make --unspanned { msg: "path parameter 'shelf' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), shelf: (encode-path-segment $shelf)} | format pattern "/books/v1/users/{user_id}/bookshelves/{shelf}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2075,8 +2087,8 @@ export def "books-bookshelves-volumes-list" [
   user_id: string
   shelf: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2096,21 +2108,21 @@ export def "books-bookshelves-volumes-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --max-results: int # Maximum number of results to return
   --show-preorders: oneof<nothing, bool> # Set to true to show pre-ordered books. Defaults to false.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
   --start-index: int # Index of the first element to return (starts at 0)
 ]: nothing -> record<items: table<accessInfo: record, etag: string, id: string, kind: string, layerInfo: record, recommendedInfo: record, saleInfo: record, searchInfo: record, selfLink: string, userInfo: record, volumeInfo: record>, kind: string, totalItems: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   if ($shelf | is-empty) { error make --unspanned { msg: "path parameter 'shelf' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "showPreorders" $show_preorders "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "showPreorders" $show_preorders "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), shelf: (encode-path-segment $shelf)} | format pattern "/books/v1/users/{user_id}/bookshelves/{shelf}/volumes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "maxResults": $max_results, "showPreorders": $show_preorders, "source": $qp_source, "startIndex": $start_index} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "maxResults": $max_results, "showPreorders": $show_preorders, "source": $source, "startIndex": $start_index} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2127,8 +2139,8 @@ export def "books-bookshelves-volumes-list" [
 # operationId: books.volumes.list
 export def "books-volumes-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2146,7 +2158,7 @@ export def "books-volumes-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --q: string # Full-text search query string.
+  --q: string # Full-text search query string. (required)
   --download: string@download-completer # Restrict to volumes by download availability.
   --filter: string@filter-completer # Filter search results.
   --lang-restrict: string # Restrict results to books with this language code.
@@ -2158,19 +2170,20 @@ export def "books-volumes-list" [
   --print-type: string@print-type-completer # Restrict to books or magazines.
   --projection: string@projection-completer # Restrict information returned to a set of selected fields.
   --show-preorders: oneof<nothing, bool> # Set to true to show books available for preorder. Defaults to false.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
   --start-index: int # Index of the first result to return (starts at 0)
 ]: nothing -> record<items: table<accessInfo: record, etag: string, id: string, kind: string, layerInfo: record, recommendedInfo: record, saleInfo: record, searchInfo: record, selfLink: string, userInfo: record, volumeInfo: record>, kind: string, totalItems: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "download" $download "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "langRestrict" $lang_restrict "scalar") (serialize-qp "libraryRestrict" $library_restrict "scalar") (serialize-qp "maxAllowedMaturityRating" $max_allowed_maturity_rating "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "partner" $partner "scalar") (serialize-qp "printType" $print_type "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "showPreorders" $show_preorders "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "download" $download "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "langRestrict" $lang_restrict "scalar") (serialize-qp "libraryRestrict" $library_restrict "scalar") (serialize-qp "maxAllowedMaturityRating" $max_allowed_maturity_rating "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "partner" $partner "scalar") (serialize-qp "printType" $print_type "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "showPreorders" $show_preorders "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/volumes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "q": $q, "download": $download, "filter": $filter, "langRestrict": $lang_restrict, "libraryRestrict": $library_restrict, "maxAllowedMaturityRating": $max_allowed_maturity_rating, "maxResults": $max_results, "orderBy": $order_by, "partner": $partner, "printType": $print_type, "projection": $projection, "showPreorders": $show_preorders, "source": $qp_source, "startIndex": $start_index} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "q": $q, "download": $download, "filter": $filter, "langRestrict": $lang_restrict, "libraryRestrict": $library_restrict, "maxAllowedMaturityRating": $max_allowed_maturity_rating, "maxResults": $max_results, "orderBy": $order_by, "partner": $partner, "printType": $print_type, "projection": $projection, "showPreorders": $show_preorders, "source": $source, "startIndex": $start_index} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2187,8 +2200,8 @@ export def "books-volumes-list" [
 # operationId: books.volumes.mybooks.list
 export def "books-volumes-mybooks-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2211,19 +2224,19 @@ export def "books-volumes-mybooks-list" [
   --locale: string # ISO-639-1 language and ISO-3166-1 country code. Ex:'en_US'. Used for generating recommendations.
   --max-results: int # Maximum number of results to return.
   --processing-state: list<string> # The processing state of the user uploaded volumes to be returned. Applicable only if the UPLOADED is specified in the acquireMethod.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
   --start-index: int # Index of the first result to return (starts at 0)
 ]: nothing -> record<items: table<accessInfo: record, etag: string, id: string, kind: string, layerInfo: record, recommendedInfo: record, saleInfo: record, searchInfo: record, selfLink: string, userInfo: record, volumeInfo: record>, kind: string, totalItems: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "acquireMethod" $acquire_method "multi") (serialize-qp "country" $country "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "processingState" $processing_state "multi") (serialize-qp "source" $qp_source "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "acquireMethod" $acquire_method "multi") (serialize-qp "country" $country "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "processingState" $processing_state "multi") (serialize-qp "source" $source "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/volumes/mybooks" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "acquireMethod": $acquire_method, "country": $country, "locale": $locale, "maxResults": $max_results, "processingState": $processing_state, "source": $qp_source, "startIndex": $start_index} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "acquireMethod": $acquire_method, "country": $country, "locale": $locale, "maxResults": $max_results, "processingState": $processing_state, "source": $source, "startIndex": $start_index} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2240,8 +2253,8 @@ export def "books-volumes-mybooks-list" [
 # operationId: books.volumes.recommended.list
 export def "books-volumes-recommended-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2261,18 +2274,18 @@ export def "books-volumes-recommended-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --locale: string # ISO-639-1 language and ISO-3166-1 country code. Ex: 'en_US'. Used for generating recommendations.
   --max-allowed-maturity-rating: string@max-allowed-maturity-rating-completer # The maximum allowed maturity rating of returned recommendations. Books with a higher maturity rating are filtered out.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record<items: table<accessInfo: record, etag: string, id: string, kind: string, layerInfo: record, recommendedInfo: record, saleInfo: record, searchInfo: record, selfLink: string, userInfo: record, volumeInfo: record>, kind: string, totalItems: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxAllowedMaturityRating" $max_allowed_maturity_rating "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxAllowedMaturityRating" $max_allowed_maturity_rating "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/volumes/recommended" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "locale": $locale, "maxAllowedMaturityRating": $max_allowed_maturity_rating, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "locale": $locale, "maxAllowedMaturityRating": $max_allowed_maturity_rating, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2289,8 +2302,8 @@ export def "books-volumes-recommended-list" [
 # operationId: books.volumes.recommended.rate
 export def "books-volumes-recommended-rate" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2308,21 +2321,23 @@ export def "books-volumes-recommended-rate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --rating: string@rating-completer # Rating to be given to the volume.
-  --volume-id: string # ID of the source volume.
+  --rating: string@rating-completer # Rating to be given to the volume. (required)
+  --volume-id: string # ID of the source volume. (required)
   --locale: string # ISO-639-1 language and ISO-3166-1 country code. Ex: 'en_US'. Used for generating recommendations.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record<consistency_token: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "volumeId" $volume_id "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  if ($rating == null) { error make --unspanned { msg: "required query parameter 'rating' missing: pass --rating" } }
+  if ($volume_id == null) { error make --unspanned { msg: "required query parameter 'volumeId' missing: pass --volume-id" } }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "volumeId" $volume_id "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/volumes/recommended/rate" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "rating": $rating, "volumeId": $volume_id, "locale": $locale, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "rating": $rating, "volumeId": $volume_id, "locale": $locale, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -2339,8 +2354,8 @@ export def "books-volumes-recommended-rate" [
 # operationId: books.volumes.useruploaded.list
 export def "books-volumes-useruploaded-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2361,20 +2376,20 @@ export def "books-volumes-useruploaded-list" [
   --locale: string # ISO-639-1 language and ISO-3166-1 country code. Ex: 'en_US'. Used for generating recommendations.
   --max-results: int # Maximum number of results to return.
   --processing-state: list<string> # The processing state of the user uploaded volumes to be returned.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
   --start-index: int # Index of the first result to return (starts at 0)
   --volume-id: list<string> # The ids of the volumes to be returned. If not specified all that match the processingState are returned.
 ]: nothing -> record<items: table<accessInfo: record, etag: string, id: string, kind: string, layerInfo: record, recommendedInfo: record, saleInfo: record, searchInfo: record, selfLink: string, userInfo: record, volumeInfo: record>, kind: string, totalItems: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "processingState" $processing_state "multi") (serialize-qp "source" $qp_source "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "volumeId" $volume_id "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "processingState" $processing_state "multi") (serialize-qp "source" $source "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "volumeId" $volume_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/books/v1/volumes/useruploaded" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "locale": $locale, "maxResults": $max_results, "processingState": $processing_state, "source": $qp_source, "startIndex": $start_index, "volumeId": $volume_id} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "locale": $locale, "maxResults": $max_results, "processingState": $processing_state, "source": $source, "startIndex": $start_index, "volumeId": $volume_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2392,8 +2407,8 @@ export def "books-volumes-useruploaded-list" [
 export def "books-volumes-get" [
   volume_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2415,20 +2430,20 @@ export def "books-volumes-get" [
   --include-non-comics-series: oneof<nothing, bool> # Set to true to include non-comics series. Defaults to false.
   --partner: string # Brand results for partner ID.
   --projection: string@projection-completer # Restrict information returned to a set of selected fields.
-  --qp-source: string # string to identify the originator of this request.
+  --source: string # string to identify the originator of this request.
   --user-library-consistent-read: oneof<nothing, bool>
 ]: nothing -> record<accessInfo: record<accessViewStatus: string, country: string, downloadAccess: record<deviceAllowed: bool, downloadsAcquired: int, justAcquired: bool, kind: string, maxDownloadDevices: int, message: string, nonce: string, reasonCode: string, restricted: bool, signature: string, source: string, volumeId: string>, driveImportedContentLink: string, embeddable: bool, epub: record<acsTokenLink: string, downloadLink: string, isAvailable: bool>, explicitOfflineLicenseManagement: bool, pdf: record<acsTokenLink: string, downloadLink: string, isAvailable: bool>, publicDomain: bool, quoteSharingAllowed: bool, textToSpeechPermission: string, viewOrderUrl: string, viewability: string, webReaderLink: string>, etag: string, id: string, kind: string, layerInfo: record<layers: list<record>>, recommendedInfo: record<explanation: string>, saleInfo: record<buyLink: string, country: string, isEbook: bool, listPrice: record<amount: float, currencyCode: string>, offers: list<record>, onSaleDate: string, retailPrice: record<amount: float, currencyCode: string>, saleability: string>, searchInfo: record<textSnippet: string>, selfLink: string, userInfo: record<acquiredTime: string, acquisitionType: int, copy: record<allowedCharacterCount: int, limitType: string, remainingCharacterCount: int, updated: string>, entitlementType: int, familySharing: record<familyRole: string, isSharingAllowed: bool, isSharingDisabledByFop: bool>, isFamilySharedFromUser: bool, isFamilySharedToUser: bool, isFamilySharingAllowed: bool, isFamilySharingDisabledByFop: bool, isInMyBooks: bool, isPreordered: bool, isPurchased: bool, isUploaded: bool, readingPosition: record<epubCfiPosition: string, gbImagePosition: string, gbTextPosition: string, kind: string, pdfPosition: string, updated: string, volumeId: string>, rentalPeriod: record<endUtcSec: string, startUtcSec: string>, rentalState: string, review: record<author: record, content: string, date: string, fullTextUrl: string, kind: string, rating: string, source: record, title: string, type: string, volumeId: string>, updated: string, userUploadedVolumeInfo: record<processingState: string>>, volumeInfo: record<allowAnonLogging: bool, authors: list<string>, averageRating: float, canonicalVolumeLink: string, categories: list<string>, comicsContent: bool, contentVersion: string, description: string, dimensions: record<height: string, thickness: string, width: string>, imageLinks: record<extraLarge: string, large: string, medium: string, small: string, smallThumbnail: string, thumbnail: string>, industryIdentifiers: list<record>, infoLink: string, language: string, mainCategory: string, maturityRating: string, pageCount: int, panelizationSummary: record<containsEpubBubbles: bool, containsImageBubbles: bool, epubBubbleVersion: string, imageBubbleVersion: string>, previewLink: string, printType: string, printedPageCount: int, publishedDate: string, publisher: string, ratingsCount: int, readingModes: record<image: bool, text: bool>, samplePageCount: int, seriesInfo: record<bookDisplayNumber: string, kind: string, shortSeriesBookTitle: string, volumeSeries: list>, subtitle: string, title: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "includeNonComicsSeries" $include_non_comics_series "scalar") (serialize-qp "partner" $partner "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "user_library_consistent_read" $user_library_consistent_read "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "includeNonComicsSeries" $include_non_comics_series "scalar") (serialize-qp "partner" $partner "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "user_library_consistent_read" $user_library_consistent_read "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({volume_id: (encode-path-segment $volume_id)} | format pattern "/books/v1/volumes/{volume_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "country": $country, "includeNonComicsSeries": $include_non_comics_series, "partner": $partner, "projection": $projection, "source": $qp_source, "user_library_consistent_read": $user_library_consistent_read} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "country": $country, "includeNonComicsSeries": $include_non_comics_series, "partner": $partner, "projection": $projection, "source": $source, "user_library_consistent_read": $user_library_consistent_read} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2446,8 +2461,8 @@ export def "books-volumes-get" [
 export def "books-volumes-associated-list" [
   volume_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2468,19 +2483,19 @@ export def "books-volumes-associated-list" [
   --association: string@association-completer # Association type.
   --locale: string # ISO-639-1 language and ISO-3166-1 country code. Ex: 'en_US'. Used for generating recommendations.
   --max-allowed-maturity-rating: string@max-allowed-maturity-rating-completer # The maximum allowed maturity rating of returned recommendations. Books with a higher maturity rating are filtered out.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record<items: table<accessInfo: record, etag: string, id: string, kind: string, layerInfo: record, recommendedInfo: record, saleInfo: record, searchInfo: record, selfLink: string, userInfo: record, volumeInfo: record>, kind: string, totalItems: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "association" $association "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxAllowedMaturityRating" $max_allowed_maturity_rating "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "association" $association "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxAllowedMaturityRating" $max_allowed_maturity_rating "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({volume_id: (encode-path-segment $volume_id)} | format pattern "/books/v1/volumes/{volume_id}/associated") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "association": $association, "locale": $locale, "maxAllowedMaturityRating": $max_allowed_maturity_rating, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "association": $association, "locale": $locale, "maxAllowedMaturityRating": $max_allowed_maturity_rating, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2499,8 +2514,8 @@ export def "books-layers-volume-annotations-list" [
   volume_id: string
   layer_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2518,32 +2533,33 @@ export def "books-layers-volume-annotations-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --content-version: string # The content version for the requested volume.
+  --content-version: string # The content version for the requested volume. (required)
   --end-offset: string # The end offset to end retrieving data from.
   --end-position: string # The end position to end retrieving data from.
   --locale: string # The locale information for the data. ISO-639-1 language and ISO-3166-1 country code. Ex: 'en_US'.
   --max-results: int # Maximum number of results to return
   --page-token: string # The value of the nextToken from the previous page.
   --show-deleted: oneof<nothing, bool> # Set to true to return deleted annotations. updatedMin must be in the request to use this. Defaults to false.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
   --start-offset: string # The start offset to start retrieving data from.
   --start-position: string # The start position to start retrieving data from.
   --updated-max: string # RFC 3339 timestamp to restrict to items updated prior to this timestamp (exclusive).
   --updated-min: string # RFC 3339 timestamp to restrict to items updated since this timestamp (inclusive).
   --volume-annotations-version: string # The version of the volume annotations that you are requesting.
 ]: nothing -> record<items: table<annotationDataId: string, annotationDataLink: string, annotationType: string, contentRanges: record, data: string, deleted: bool, id: string, kind: string, layerId: string, pageIds: list, selectedText: string, selfLink: string, updated: string, volumeId: string>, kind: string, nextPageToken: string, totalItems: int, version: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
   if ($layer_id | is-empty) { error make --unspanned { msg: "path parameter 'layerId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "contentVersion" $content_version "scalar") (serialize-qp "endOffset" $end_offset "scalar") (serialize-qp "endPosition" $end_position "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "startOffset" $start_offset "scalar") (serialize-qp "startPosition" $start_position "scalar") (serialize-qp "updatedMax" $updated_max "scalar") (serialize-qp "updatedMin" $updated_min "scalar") (serialize-qp "volumeAnnotationsVersion" $volume_annotations_version "scalar")] | flatten | str join "&"
+  if ($content_version == null) { error make --unspanned { msg: "required query parameter 'contentVersion' missing: pass --content-version" } }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "contentVersion" $content_version "scalar") (serialize-qp "endOffset" $end_offset "scalar") (serialize-qp "endPosition" $end_position "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "startOffset" $start_offset "scalar") (serialize-qp "startPosition" $start_position "scalar") (serialize-qp "updatedMax" $updated_max "scalar") (serialize-qp "updatedMin" $updated_min "scalar") (serialize-qp "volumeAnnotationsVersion" $volume_annotations_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({volume_id: (encode-path-segment $volume_id), layer_id: (encode-path-segment $layer_id)} | format pattern "/books/v1/volumes/{volume_id}/layers/{layer_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "contentVersion": $content_version, "endOffset": $end_offset, "endPosition": $end_position, "locale": $locale, "maxResults": $max_results, "pageToken": $page_token, "showDeleted": $show_deleted, "source": $qp_source, "startOffset": $start_offset, "startPosition": $start_position, "updatedMax": $updated_max, "updatedMin": $updated_min, "volumeAnnotationsVersion": $volume_annotations_version} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "contentVersion": $content_version, "endOffset": $end_offset, "endPosition": $end_position, "locale": $locale, "maxResults": $max_results, "pageToken": $page_token, "showDeleted": $show_deleted, "source": $source, "startOffset": $start_offset, "startPosition": $start_position, "updatedMax": $updated_max, "updatedMin": $updated_min, "volumeAnnotationsVersion": $volume_annotations_version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2563,8 +2579,8 @@ export def "books-layers-volume-annotations-get" [
   layer_id: string
   annotation_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2583,21 +2599,21 @@ export def "books-layers-volume-annotations-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --locale: string # The locale information for the data. ISO-639-1 language and ISO-3166-1 country code. Ex: 'en_US'.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record<annotationDataId: string, annotationDataLink: string, annotationType: string, contentRanges: record<cfiRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>, contentVersion: string, gbImageRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>, gbTextRange: record<endOffset: string, endPosition: string, startOffset: string, startPosition: string>>, data: string, deleted: bool, id: string, kind: string, layerId: string, pageIds: list<string>, selectedText: string, selfLink: string, updated: string, volumeId: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
   if ($layer_id | is-empty) { error make --unspanned { msg: "path parameter 'layerId' must be non-empty" } }
   if ($annotation_id | is-empty) { error make --unspanned { msg: "path parameter 'annotationId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({volume_id: (encode-path-segment $volume_id), layer_id: (encode-path-segment $layer_id), annotation_id: (encode-path-segment $annotation_id)} | format pattern "/books/v1/volumes/{volume_id}/layers/{layer_id}/annotations/{annotation_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "locale": $locale, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "locale": $locale, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2616,8 +2632,8 @@ export def "books-layers-annotation-data-list" [
   volume_id: string
   layer_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2635,30 +2651,31 @@ export def "books-layers-annotation-data-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --content-version: string # The content version for the requested volume.
+  --content-version: string # The content version for the requested volume. (required)
   --annotation-data-id: list<string> # The list of Annotation Data Ids to retrieve. Pagination is ignored if this is set.
   --h: int # The requested pixel height for any images. If height is provided width must also be provided.
   --locale: string # The locale information for the data. ISO-639-1 language and ISO-3166-1 country code. Ex: 'en_US'.
   --max-results: int # Maximum number of results to return
   --page-token: string # The value of the nextToken from the previous page.
   --scale: int # The requested scale for the image.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
   --updated-max: string # RFC 3339 timestamp to restrict to items updated prior to this timestamp (exclusive).
   --updated-min: string # RFC 3339 timestamp to restrict to items updated since this timestamp (inclusive).
   --w: int # The requested pixel width for any images. If width is provided height must also be provided.
 ]: nothing -> record<items: table<annotationType: string, data: record, encodedData: string, id: string, kind: string, layerId: string, selfLink: string, updated: string, volumeId: string>, kind: string, nextPageToken: string, totalItems: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
   if ($layer_id | is-empty) { error make --unspanned { msg: "path parameter 'layerId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "contentVersion" $content_version "scalar") (serialize-qp "annotationDataId" $annotation_data_id "multi") (serialize-qp "h" $h "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "scale" $scale "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "updatedMax" $updated_max "scalar") (serialize-qp "updatedMin" $updated_min "scalar") (serialize-qp "w" $w "scalar")] | flatten | str join "&"
+  if ($content_version == null) { error make --unspanned { msg: "required query parameter 'contentVersion' missing: pass --content-version" } }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "contentVersion" $content_version "scalar") (serialize-qp "annotationDataId" $annotation_data_id "multi") (serialize-qp "h" $h "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "scale" $scale "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "updatedMax" $updated_max "scalar") (serialize-qp "updatedMin" $updated_min "scalar") (serialize-qp "w" $w "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({volume_id: (encode-path-segment $volume_id), layer_id: (encode-path-segment $layer_id)} | format pattern "/books/v1/volumes/{volume_id}/layers/{layer_id}/data") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "contentVersion": $content_version, "annotationDataId": $annotation_data_id, "h": $h, "locale": $locale, "maxResults": $max_results, "pageToken": $page_token, "scale": $scale, "source": $qp_source, "updatedMax": $updated_max, "updatedMin": $updated_min, "w": $w} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "contentVersion": $content_version, "annotationDataId": $annotation_data_id, "h": $h, "locale": $locale, "maxResults": $max_results, "pageToken": $page_token, "scale": $scale, "source": $source, "updatedMax": $updated_max, "updatedMin": $updated_min, "w": $w} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2678,8 +2695,8 @@ export def "books-layers-annotation-data-get" [
   layer_id: string
   annotation_data_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2697,27 +2714,28 @@ export def "books-layers-annotation-data-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --content-version: string # The content version for the volume you are trying to retrieve.
+  --content-version: string # The content version for the volume you are trying to retrieve. (required)
   --allow-web-definitions: oneof<nothing, bool> # For the dictionary layer. Whether or not to allow web definitions.
   --h: int # The requested pixel height for any images. If height is provided width must also be provided.
   --locale: string # The locale information for the data. ISO-639-1 language and ISO-3166-1 country code. Ex: 'en_US'.
   --scale: int # The requested scale for the image.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
   --w: int # The requested pixel width for any images. If width is provided height must also be provided.
 ]: nothing -> record<annotationType: string, data: record<common: record<title: string>, dict: record<source: record, words: list>, kind: string>, encodedData: string, id: string, kind: string, layerId: string, selfLink: string, updated: string, volumeId: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
   if ($layer_id | is-empty) { error make --unspanned { msg: "path parameter 'layerId' must be non-empty" } }
   if ($annotation_data_id | is-empty) { error make --unspanned { msg: "path parameter 'annotationDataId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "contentVersion" $content_version "scalar") (serialize-qp "allowWebDefinitions" $allow_web_definitions "scalar") (serialize-qp "h" $h "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "scale" $scale "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "w" $w "scalar")] | flatten | str join "&"
+  if ($content_version == null) { error make --unspanned { msg: "required query parameter 'contentVersion' missing: pass --content-version" } }
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "contentVersion" $content_version "scalar") (serialize-qp "allowWebDefinitions" $allow_web_definitions "scalar") (serialize-qp "h" $h "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "scale" $scale "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "w" $w "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({volume_id: (encode-path-segment $volume_id), layer_id: (encode-path-segment $layer_id), annotation_data_id: (encode-path-segment $annotation_data_id)} | format pattern "/books/v1/volumes/{volume_id}/layers/{layer_id}/data/{annotation_data_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "contentVersion": $content_version, "allowWebDefinitions": $allow_web_definitions, "h": $h, "locale": $locale, "scale": $scale, "source": $qp_source, "w": $w} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "contentVersion": $content_version, "allowWebDefinitions": $allow_web_definitions, "h": $h, "locale": $locale, "scale": $scale, "source": $source, "w": $w} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2735,8 +2753,8 @@ export def "books-layers-annotation-data-get" [
 export def "books-layers-list" [
   volume_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2757,19 +2775,19 @@ export def "books-layers-list" [
   --content-version: string # The content version for the requested volume.
   --max-results: int # Maximum number of results to return
   --page-token: string # The value of the nextToken from the previous page.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record<items: table<annotationCount: int, annotationTypes: list, annotationsDataLink: string, annotationsLink: string, contentVersion: string, dataCount: int, id: string, kind: string, layerId: string, selfLink: string, updated: string, volumeAnnotationsVersion: string, volumeId: string>, kind: string, totalItems: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "contentVersion" $content_version "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "contentVersion" $content_version "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({volume_id: (encode-path-segment $volume_id)} | format pattern "/books/v1/volumes/{volume_id}/layersummary") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "contentVersion": $content_version, "maxResults": $max_results, "pageToken": $page_token, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "contentVersion": $content_version, "maxResults": $max_results, "pageToken": $page_token, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2788,8 +2806,8 @@ export def "books-layers-get" [
   volume_id: string
   summary_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2808,20 +2826,20 @@ export def "books-layers-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --content-version: string # The content version for the requested volume.
-  --qp-source: string # String to identify the originator of this request.
+  --source: string # String to identify the originator of this request.
 ]: nothing -> record<annotationCount: int, annotationTypes: list<string>, annotationsDataLink: string, annotationsLink: string, contentVersion: string, dataCount: int, id: string, kind: string, layerId: string, selfLink: string, updated: string, volumeAnnotationsVersion: string, volumeId: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BOOKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BOOKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
   if ($summary_id | is-empty) { error make --unspanned { msg: "path parameter 'summaryId' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "contentVersion" $content_version "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "contentVersion" $content_version "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({volume_id: (encode-path-segment $volume_id), summary_id: (encode-path-segment $summary_id)} | format pattern "/books/v1/volumes/{volume_id}/layersummary/{summary_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "contentVersion": $content_version, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "contentVersion": $content_version, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: null

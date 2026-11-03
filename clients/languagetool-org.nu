@@ -224,12 +224,14 @@ export def "get-words" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Offset of where to start in the list of words. Defaults to 0.
   --limit: int # Maximum number of words to return. Defaults to 10.
-  --username: string # Your username as used to log in at languagetool.org.
-  --api-key: string # Your API key (format: password)
+  --username: string # Your username as used to log in at languagetool.org. (required)
+  --api-key: string # Your API key (required, format: password)
   --dicts: string # Comma-separated list of dictionaries to include words from; uses special default dictionary if this is unset
 ]: nothing -> record<words: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'apiKey' missing: pass --api-key" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "apiKey" $api_key "scalar") (serialize-qp "dicts" $dicts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/words" $qp $auth.query)
   let accept_val = "application/json"
