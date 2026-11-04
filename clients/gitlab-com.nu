@@ -1,4 +1,4 @@
-# Auto-generated client for Gitlab vv3
+# Auto-generated client for Gitlab v3
 # Source: https://api.apis.guru/v2/specs/gitlab.com/v3/swagger.json
 # Auth: --token flag or $env.GITLAB_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "private_header" => { {scheme: $scheme, headers: {PRIVATE_HEADER: $token_val}, query: "", location: "header"} }
+    "private_header" => { {scheme: $scheme, headers: {"PRIVATE_HEADER": $token_val}, query: "", location: "header"} }
     "query-private_token" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "private_token")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -165,6 +165,7 @@ def scope-completer-1 [] { ["branches" "running" "tags"] }
 def line-type-completer [] { ["new" "old"] }
 def encoding-completer [] { ["base64"] }
 def scope-completer-2 [] { ["active" "online" "paused" "shared" "specific"] }
+def service-slug-completer [] { ["asana" "assembla" "bamboo" "bugzilla" "buildkite" "builds-email" "campfire" "custom-issue-tracker" "drone-ci" "emails-on-push" "external-wiki" "flowdock" "gemnasium" "hipchat" "irker" "jira" "kubernetes" "mattermost" "mattermost-slash-commands" "pipelines-email" "pivotaltracker" "pushover" "redmine" "slack" "slack-slash-commands" "teamcity"] }
 def group-access-completer [] { ["10" "20" "30" "40"] }
 def state-completer-3 [] { ["canceled" "failed" "pending" "running" "success"] }
 def scope-completer-3 [] { ["active" "online" "paused"] }
@@ -244,9 +245,9 @@ export def "put-v3-application-settings" [
   --default-project-visibility: int@default-project-visibility-completer # The default project visibility
   --default-snippet-visibility: int@default-snippet-visibility-completer # The default snippet visibility
   --default-group-visibility: int@default-group-visibility-completer # The default group visibility
-  --restricted-visibility-levels: list # Selected levels cannot be used by non-admin users for projects or snippets. If the public level is restricted, user profiles are only visible to logged in users.
-  --import-sources: list@import-sources-completer # Enabled sources for code import during project creation. OmniAuth must be configured for GitHub, Bitbucket, and GitLab.com
-  --disabled-oauth-sign-in-sources: list # Disable certain OAuth sign-in sources
+  --restricted-visibility-levels: list<string> # Selected levels cannot be used by non-admin users for projects or snippets. If the public level is restricted, user profiles are only visible to logged in users.
+  --import-sources: list<string>@import-sources-completer # Enabled sources for code import during project creation. OmniAuth must be configured for GitHub, Bitbucket, and GitLab.com
+  --disabled-oauth-sign-in-sources: list<string> # Disable certain OAuth sign-in sources
   --enabled-git-access-protocol: string@enabled-git-access-protocol-completer # Allow only the selected protocols to be used for Git access.
   --gravatar-enabled: oneof<nothing, bool> # Flag indicating if the Gravatar service is enabled
   --default-projects-limit: int # The maximum number of personal projects
@@ -280,7 +281,7 @@ export def "put-v3-application-settings" [
   metrics_sample_interval: int # The sampling interval in seconds
   metrics_packet_size: int # The amount of points to store in a single UDP packet
   --sidekiq-throttling-enabled: oneof<nothing, bool> # Enable Sidekiq Job Throttling
-  sidekiq_throttling_queus: list # Choose which queues you wish to throttle
+  sidekiq_throttling_queus: list<string> # Choose which queues you wish to throttle
   sidekiq_throttling_factor: float # The factor by which the queues should be throttled. A value between 0.0 and 1.0, exclusive.
   --recaptcha-enabled: oneof<nothing, bool> # Helps prevent bots from creating accounts
   recaptcha_site_key: string # Generate site key at http://www.google.com/recaptcha
@@ -309,8 +310,9 @@ export def "put-v3-application-settings" [
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/application/settings" $auth.query)
-  let req_body = {"default_branch_protection": $default_branch_protection, "default_project_visibility": $default_project_visibility, "default_snippet_visibility": $default_snippet_visibility, "default_group_visibility": $default_group_visibility, "restricted_visibility_levels": $restricted_visibility_levels, "import_sources": $import_sources, "disabled_oauth_sign_in_sources": $disabled_oauth_sign_in_sources, "enabled_git_access_protocol": $enabled_git_access_protocol, "gravatar_enabled": $gravatar_enabled, "default_projects_limit": $default_projects_limit, "max_attachment_size": $max_attachment_size, "session_expire_delay": $session_expire_delay, "user_oauth_applications": $user_oauth_applications, "user_default_external": $user_default_external, "signup_enabled": $signup_enabled, "send_user_confirmation_email": $send_user_confirmation_email, "domain_whitelist": $domain_whitelist, "domain_blacklist_enabled": $domain_blacklist_enabled, "domain_blacklist": $domain_blacklist, "after_sign_up_text": $after_sign_up_text, "signin_enabled": $signin_enabled, "require_two_factor_authentication": $require_two_factor_authentication, "two_factor_grace_period": $two_factor_grace_period, "home_page_url": $home_page_url, "after_sign_out_path": $after_sign_out_path, "sign_in_text": $sign_in_text, "help_page_text": $help_page_text, "shared_runners_enabled": $shared_runners_enabled, "shared_runners_text": $shared_runners_text, "max_artifacts_size": $max_artifacts_size, "container_registry_token_expire_delay": $container_registry_token_expire_delay, "metrics_enabled": $metrics_enabled, "metrics_host": $metrics_host, "metrics_port": $metrics_port, "metrics_pool_size": $metrics_pool_size, "metrics_timeout": $metrics_timeout, "metrics_method_call_threshold": $metrics_method_call_threshold, "metrics_sample_interval": $metrics_sample_interval, "metrics_packet_size": $metrics_packet_size, "sidekiq_throttling_enabled": $sidekiq_throttling_enabled, "sidekiq_throttling_queus": $sidekiq_throttling_queus, "sidekiq_throttling_factor": $sidekiq_throttling_factor, "recaptcha_enabled": $recaptcha_enabled, "recaptcha_site_key": $recaptcha_site_key, "recaptcha_private_key": $recaptcha_private_key, "akismet_enabled": $akismet_enabled, "akismet_api_key": $akismet_api_key, "admin_notification_email": $admin_notification_email, "sentry_enabled": $sentry_enabled, "sentry_dsn": $sentry_dsn, "repository_storage": $repository_storage, "repository_checks_enabled": $repository_checks_enabled, "koding_enabled": $koding_enabled, "koding_url": $koding_url, "plantuml_enabled": $plantuml_enabled, "plantuml_url": $plantuml_url, "version_check_enabled": $version_check_enabled, "email_author_in_body": $email_author_in_body, "html_emails_enabled": $html_emails_enabled, "housekeeping_enabled": $housekeeping_enabled, "housekeeping_bitmaps_enabled": $housekeeping_bitmaps_enabled, "housekeeping_incremental_repack_period": $housekeeping_incremental_repack_period, "housekeeping_full_repack_period": $housekeeping_full_repack_period, "housekeeping_gc_period": $housekeeping_gc_period} | compact
+  let req_body = {"default_branch_protection": $default_branch_protection, "default_project_visibility": $default_project_visibility, "default_snippet_visibility": $default_snippet_visibility, "default_group_visibility": $default_group_visibility, "restricted_visibility_levels": (if ($restricted_visibility_levels | describe | str starts-with "list") { $restricted_visibility_levels | each { into string } | str join "," } else { $restricted_visibility_levels }), "import_sources": (if ($import_sources | describe | str starts-with "list") { $import_sources | each { into string } | str join "," } else { $import_sources }), "disabled_oauth_sign_in_sources": (if ($disabled_oauth_sign_in_sources | describe | str starts-with "list") { $disabled_oauth_sign_in_sources | each { into string } | str join "," } else { $disabled_oauth_sign_in_sources }), "enabled_git_access_protocol": $enabled_git_access_protocol, "gravatar_enabled": $gravatar_enabled, "default_projects_limit": $default_projects_limit, "max_attachment_size": $max_attachment_size, "session_expire_delay": $session_expire_delay, "user_oauth_applications": $user_oauth_applications, "user_default_external": $user_default_external, "signup_enabled": $signup_enabled, "send_user_confirmation_email": $send_user_confirmation_email, "domain_whitelist": $domain_whitelist, "domain_blacklist_enabled": $domain_blacklist_enabled, "domain_blacklist": $domain_blacklist, "after_sign_up_text": $after_sign_up_text, "signin_enabled": $signin_enabled, "require_two_factor_authentication": $require_two_factor_authentication, "two_factor_grace_period": $two_factor_grace_period, "home_page_url": $home_page_url, "after_sign_out_path": $after_sign_out_path, "sign_in_text": $sign_in_text, "help_page_text": $help_page_text, "shared_runners_enabled": $shared_runners_enabled, "shared_runners_text": $shared_runners_text, "max_artifacts_size": $max_artifacts_size, "container_registry_token_expire_delay": $container_registry_token_expire_delay, "metrics_enabled": $metrics_enabled, "metrics_host": $metrics_host, "metrics_port": $metrics_port, "metrics_pool_size": $metrics_pool_size, "metrics_timeout": $metrics_timeout, "metrics_method_call_threshold": $metrics_method_call_threshold, "metrics_sample_interval": $metrics_sample_interval, "metrics_packet_size": $metrics_packet_size, "sidekiq_throttling_enabled": $sidekiq_throttling_enabled, "sidekiq_throttling_queus": (if ($sidekiq_throttling_queus | describe | str starts-with "list") { $sidekiq_throttling_queus | each { into string } | str join "," } else { $sidekiq_throttling_queus }), "sidekiq_throttling_factor": $sidekiq_throttling_factor, "recaptcha_enabled": $recaptcha_enabled, "recaptcha_site_key": $recaptcha_site_key, "recaptcha_private_key": $recaptcha_private_key, "akismet_enabled": $akismet_enabled, "akismet_api_key": $akismet_api_key, "admin_notification_email": $admin_notification_email, "sentry_enabled": $sentry_enabled, "sentry_dsn": $sentry_dsn, "repository_storage": $repository_storage, "repository_checks_enabled": $repository_checks_enabled, "koding_enabled": $koding_enabled, "koding_url": $koding_url, "plantuml_enabled": $plantuml_enabled, "plantuml_url": $plantuml_url, "version_check_enabled": $version_check_enabled, "email_author_in_body": $email_author_in_body, "html_emails_enabled": $html_emails_enabled, "housekeeping_enabled": $housekeeping_enabled, "housekeeping_bitmaps_enabled": $housekeeping_bitmaps_enabled, "housekeeping_incremental_repack_period": $housekeeping_incremental_repack_period, "housekeeping_full_repack_period": $housekeeping_full_repack_period, "housekeeping_gc_period": $housekeeping_gc_period} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "housekeeping_bitmaps_enabled") == null) { error make --unspanned { msg: "required body field 'housekeeping_bitmaps_enabled' missing: pass --housekeeping-bitmaps-enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -628,20 +630,20 @@ export def "get-v3-groups" [
   --all-available: oneof<nothing, bool> # Show all group that you have access to
   --search: string # Search for a specific group
   --order-by: string@order-by-completer # Order by name or path (default: name)
-  --qp-sort: string@sort-completer # Sort by asc (ascending) or desc (descending) (default: asc)
+  --sort: string@sort-completer # Sort by asc (ascending) or desc (descending) (default: asc)
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
 ]: nothing -> record<avatar_url: string, description: string, id: string, lfs_enabled: string, name: string, path: string, request_access_enabled: string, statistics: string, visibility_level: string, web_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "statistics" $statistics "scalar") (serialize-qp "all_available" $all_available "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "statistics" $statistics "scalar") (serialize-qp "all_available" $all_available "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/groups" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"statistics": $statistics, "all_available": $all_available, "search": $search, "order_by": $order_by, "sort": $qp_sort, "page": $page, "per_page": $per_page} | compact)
+    query: ({"statistics": $statistics, "all_available": $all_available, "search": $search, "order_by": $order_by, "sort": $sort, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1027,21 +1029,21 @@ export def "get-v3-groups-id-issues" [
   --labels: string # Comma-separated list of label names
   --milestone: string # Return issues for a specific milestone
   --order-by: string@order-by-completer-1 # Return issues ordered by `created_at` or `updated_at` fields. (default: created_at)
-  --qp-sort: string@sort-completer # Return issues sorted in `asc` or `desc` order. (default: desc)
+  --sort: string@sort-completer # Return issues sorted in `asc` or `desc` order. (default: desc)
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
 ]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "milestone" $milestone "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "milestone" $milestone "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/groups/{id}/issues") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"state": $state, "labels": $labels, "milestone": $milestone, "order_by": $order_by, "sort": $qp_sort, "page": $page, "per_page": $per_page} | compact)
+    query: ({"state": $state, "labels": $labels, "milestone": $milestone, "order_by": $order_by, "sort": $sort, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1363,7 +1365,7 @@ export def "get-v3-groups-id-projects" [
   --visibility: string@visibility-completer # Limit by visibility
   --search: string # Return list of authorized projects matching the search criteria
   --order-by: string@order-by-completer-2 # Return projects ordered by field (default: created_at)
-  --qp-sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
+  --sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
   --simple: oneof<nothing, bool> # Return only the ID, URL, name, and path of each project
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
@@ -1371,14 +1373,14 @@ export def "get-v3-groups-id-projects" [
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "simple" $simple "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "simple" $simple "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/groups/{id}/projects") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"archived": $archived, "visibility": $visibility, "search": $search, "order_by": $order_by, "sort": $qp_sort, "simple": $simple, "page": $page, "per_page": $per_page} | compact)
+    query: ({"archived": $archived, "visibility": $visibility, "search": $search, "order_by": $order_by, "sort": $sort, "simple": $simple, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1825,20 +1827,20 @@ export def "get-v3-issues" [
   --labels: string # Comma-separated list of label names
   --milestone: string # Return issues for a specific milestone
   --order-by: string@order-by-completer-1 # Return issues ordered by `created_at` or `updated_at` fields. (default: created_at)
-  --qp-sort: string@sort-completer # Return issues sorted in `asc` or `desc` order. (default: desc)
+  --sort: string@sort-completer # Return issues sorted in `asc` or `desc` order. (default: desc)
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
 ]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "milestone" $milestone "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "milestone" $milestone "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/issues" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"state": $state, "labels": $labels, "milestone": $milestone, "order_by": $order_by, "sort": $qp_sort, "page": $page, "per_page": $per_page} | compact)
+    query: ({"state": $state, "labels": $labels, "milestone": $milestone, "order_by": $order_by, "sort": $sort, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2096,7 +2098,7 @@ export def "get-v3-projects" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --order-by: string@order-by-completer-2 # Return projects ordered by field (default: created_at)
-  --qp-sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
+  --sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
   --archived: oneof<nothing, bool> # Limit by archived status
   --visibility: string@visibility-completer # Limit by visibility
   --search: string # Return list of authorized projects matching the search criteria
@@ -2106,14 +2108,14 @@ export def "get-v3-projects" [
 ]: nothing -> record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/projects" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"order_by": $order_by, "sort": $qp_sort, "archived": $archived, "visibility": $visibility, "search": $search, "page": $page, "per_page": $per_page, "simple": $simple} | compact)
+    query: ({"order_by": $order_by, "sort": $sort, "archived": $archived, "visibility": $visibility, "search": $search, "page": $page, "per_page": $per_page, "simple": $simple} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2196,7 +2198,7 @@ export def "get-v3-projects-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --order-by: string@order-by-completer-2 # Return projects ordered by field (default: created_at)
-  --qp-sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
+  --sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
   --archived: oneof<nothing, bool> # Limit by archived status
   --visibility: string@visibility-completer # Limit by visibility
   --search: string # Return list of authorized projects matching the search criteria
@@ -2207,14 +2209,14 @@ export def "get-v3-projects-all" [
 ]: nothing -> record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar") (serialize-qp "statistics" $statistics "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar") (serialize-qp "statistics" $statistics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/projects/all" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"order_by": $order_by, "sort": $qp_sort, "archived": $archived, "visibility": $visibility, "search": $search, "page": $page, "per_page": $per_page, "simple": $simple, "statistics": $statistics} | compact)
+    query: ({"order_by": $order_by, "sort": $sort, "archived": $archived, "visibility": $visibility, "search": $search, "page": $page, "per_page": $per_page, "simple": $simple, "statistics": $statistics} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2281,7 +2283,7 @@ export def "get-v3-projects-owned" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --order-by: string@order-by-completer-2 # Return projects ordered by field (default: created_at)
-  --qp-sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
+  --sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
   --archived: oneof<nothing, bool> # Limit by archived status
   --visibility: string@visibility-completer # Limit by visibility
   --search: string # Return list of authorized projects matching the search criteria
@@ -2292,14 +2294,14 @@ export def "get-v3-projects-owned" [
 ]: nothing -> record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar") (serialize-qp "statistics" $statistics "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar") (serialize-qp "statistics" $statistics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/projects/owned" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"order_by": $order_by, "sort": $qp_sort, "archived": $archived, "visibility": $visibility, "search": $search, "page": $page, "per_page": $per_page, "simple": $simple, "statistics": $statistics} | compact)
+    query: ({"order_by": $order_by, "sort": $sort, "archived": $archived, "visibility": $visibility, "search": $search, "page": $page, "per_page": $per_page, "simple": $simple, "statistics": $statistics} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2326,21 +2328,21 @@ export def "get-v3-projects-search-query" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --order-by: string@order-by-completer-2 # Return projects ordered by field (default: created_at)
-  --qp-sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
+  --sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
 ]: nothing -> record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
-  let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/v3/projects/search/{query}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"order_by": $order_by, "sort": $qp_sort, "page": $page, "per_page": $per_page} | compact)
+    query: ({"order_by": $order_by, "sort": $sort, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2366,7 +2368,7 @@ export def "get-v3-projects-starred" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --order-by: string@order-by-completer-2 # Return projects ordered by field (default: created_at)
-  --qp-sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
+  --sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
   --archived: oneof<nothing, bool> # Limit by archived status
   --visibility: string@visibility-completer # Limit by visibility
   --search: string # Return list of authorized projects matching the search criteria
@@ -2376,14 +2378,14 @@ export def "get-v3-projects-starred" [
 ]: nothing -> record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/projects/starred" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"order_by": $order_by, "sort": $qp_sort, "archived": $archived, "visibility": $visibility, "search": $search, "page": $page, "per_page": $per_page, "simple": $simple} | compact)
+    query: ({"order_by": $order_by, "sort": $sort, "archived": $archived, "visibility": $visibility, "search": $search, "page": $page, "per_page": $per_page, "simple": $simple} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2468,7 +2470,7 @@ export def "get-v3-projects-visible" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --order-by: string@order-by-completer-2 # Return projects ordered by field (default: created_at)
-  --qp-sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
+  --sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
   --archived: oneof<nothing, bool> # Limit by archived status
   --visibility: string@visibility-completer # Limit by visibility
   --search: string # Return list of authorized projects matching the search criteria
@@ -2478,14 +2480,14 @@ export def "get-v3-projects-visible" [
 ]: nothing -> record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/projects/visible" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"order_by": $order_by, "sort": $qp_sort, "archived": $archived, "visibility": $visibility, "search": $search, "page": $page, "per_page": $per_page, "simple": $simple} | compact)
+    query: ({"order_by": $order_by, "sort": $sort, "archived": $archived, "visibility": $visibility, "search": $search, "page": $page, "per_page": $per_page, "simple": $simple} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2652,6 +2654,7 @@ export def "post-v3-projects-idref-reftrigger-builds" [
   let full_url = (build-url $base ({id: (encode-path-segment $id), ref: (encode-path-segment $ref)} | format pattern "/v3/projects/{id}/(ref/{ref}/)trigger/builds") $auth.query)
   let req_body = {"token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -3159,12 +3162,13 @@ export def "get-v3-projects-id-builds-artifacts-ref-name-download" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --job: string # The name for the build
+  --job: string # The name for the build (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($ref_name | is-empty) { error make --unspanned { msg: "path parameter 'ref_name' must be non-empty" } }
+  if ($job == null) { error make --unspanned { msg: "required query parameter 'job' missing: pass --job" } }
   let qp = [(serialize-qp "job" $job "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), ref_name: (encode-path-segment $ref_name)} | format pattern "/v3/projects/{id}/builds/artifacts/{ref_name}/download") $qp $auth.query)
   let accept_val = "application/json"
@@ -4311,21 +4315,21 @@ export def "get-v3-projects-id-issues" [
   --labels: string # Comma-separated list of label names
   --milestone: string # Return issues for a specific milestone
   --order-by: string@order-by-completer-1 # Return issues ordered by `created_at` or `updated_at` fields. (default: created_at)
-  --qp-sort: string@sort-completer # Return issues sorted in `asc` or `desc` order. (default: desc)
+  --sort: string@sort-completer # Return issues sorted in `asc` or `desc` order. (default: desc)
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
 ]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "iid" $iid "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "milestone" $milestone "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "iid" $iid "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "milestone" $milestone "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/issues") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"state": $state, "iid": $iid, "labels": $labels, "milestone": $milestone, "order_by": $order_by, "sort": $qp_sort, "page": $page, "per_page": $per_page} | compact)
+    query: ({"state": $state, "iid": $iid, "labels": $labels, "milestone": $milestone, "order_by": $order_by, "sort": $sort, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5661,11 +5665,12 @@ export def "delete-v3-projects-id-labels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # The name of the label to be deleted
+  --name: string # The name of the label to be deleted (required)
 ]: nothing -> record<closed_issues_count: string, color: string, description: string, id: string, name: string, open_issues_count: string, open_merge_requests_count: string, priority: string, subscribed: string> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/labels") $qp $auth.query)
   let accept_val = "application/json"
@@ -6554,21 +6559,21 @@ export def "get-v3-projects-id-merge-requests" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer-1 # Return opened, closed, merged, or all merge requests (default: all)
   --order-by: string@order-by-completer-1 # Return merge requests ordered by `created_at` or `updated_at` fields. (default: created_at)
-  --qp-sort: string@sort-completer # Return merge requests sorted in `asc` or `desc` order. (default: desc)
+  --sort: string@sort-completer # Return merge requests sorted in `asc` or `desc` order. (default: desc)
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
 ]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/merge_requests") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"state": $state, "order_by": $order_by, "sort": $qp_sort, "page": $page, "per_page": $per_page} | compact)
+    query: ({"state": $state, "order_by": $order_by, "sort": $sort, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -8526,12 +8531,13 @@ export def "get-v3-projects-id-repository-blobs-sha" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filepath: string # The path to the file to display
+  --filepath: string # The path to the file to display (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
+  if ($filepath == null) { error make --unspanned { msg: "required query parameter 'filepath' missing: pass --filepath" } }
   let qp = [(serialize-qp "filepath" $filepath "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), sha: (encode-path-segment $sha)} | format pattern "/v3/projects/{id}/repository/blobs/{sha}") $qp $auth.query)
   let accept_val = "application/json"
@@ -8855,7 +8861,7 @@ export def "post-v3-projects-id-repository-commits" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/commits") $auth.query)
-  let req_body = {"branch_name": $branch_name, "commit_message": $commit_message, "actions": $actions, "author_email": $author_email, "author_name": $author_name} | compact
+  let req_body = {"branch_name": $branch_name, "commit_message": $commit_message, "actions": (if ($actions | describe | str starts-with "list") { $actions | each { into string } | str join "," } else { $actions }), "author_email": $author_email, "author_name": $author_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8928,12 +8934,13 @@ export def "get-v3-projects-id-repository-commits-sha-blob" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filepath: string # The path to the file to display
+  --filepath: string # The path to the file to display (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
+  if ($filepath == null) { error make --unspanned { msg: "required query parameter 'filepath' missing: pass --filepath" } }
   let qp = [(serialize-qp "filepath" $filepath "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), sha: (encode-path-segment $sha)} | format pattern "/v3/projects/{id}/repository/commits/{sha}/blob") $qp $auth.query)
   let accept_val = "application/json"
@@ -9222,20 +9229,22 @@ export def "get-v3-projects-id-repository-compare" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # The commit, branch name, or tag name to start comparison
-  --qp-to: string # The commit, branch name, or tag name to stop comparison
+  --from: string # The commit, branch name, or tag name to start comparison (required)
+  --to: string # The commit, branch name, or tag name to stop comparison (required)
 ]: nothing -> record<commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, commits: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, compare_same_ref: string, compare_timeout: string, diffs: record<a_mode: string, b_mode: string, deleted_file: string, diff: string, new_file: string, new_path: string, old_path: string, renamed_file: string>> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/compare") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -9297,15 +9306,18 @@ export def "delete-v3-projects-id-repository-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --file-path: string # The path to new file. Ex. lib/class.rb
-  --branch-name: string # The name of branch
-  --commit-message: string # Commit Message
+  --file-path: string # The path to new file. Ex. lib/class.rb (required)
+  --branch-name: string # The name of branch (required)
+  --commit-message: string # Commit Message (required)
   --author-email: string # The email of the author
   --author-name: string # The name of the author
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($file_path == null) { error make --unspanned { msg: "required query parameter 'file_path' missing: pass --file-path" } }
+  if ($branch_name == null) { error make --unspanned { msg: "required query parameter 'branch_name' missing: pass --branch-name" } }
+  if ($commit_message == null) { error make --unspanned { msg: "required query parameter 'commit_message' missing: pass --commit-message" } }
   let qp = [(serialize-qp "file_path" $file_path "scalar") (serialize-qp "branch_name" $branch_name "scalar") (serialize-qp "commit_message" $commit_message "scalar") (serialize-qp "author_email" $author_email "scalar") (serialize-qp "author_name" $author_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/files") $qp $auth.query)
   let accept_val = "application/json"
@@ -9339,12 +9351,14 @@ export def "get-v3-projects-id-repository-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --file-path: string # The path to the file. Ex. lib/class.rb
-  --ref: string # The name of branch, tag, or commit
+  --file-path: string # The path to the file. Ex. lib/class.rb (required)
+  --ref: string # The name of branch, tag, or commit (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($file_path == null) { error make --unspanned { msg: "required query parameter 'file_path' missing: pass --file-path" } }
+  if ($ref == null) { error make --unspanned { msg: "required query parameter 'ref' missing: pass --ref" } }
   let qp = [(serialize-qp "file_path" $file_path "scalar") (serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/files") $qp $auth.query)
   let accept_val = "application/json"
@@ -10000,6 +10014,7 @@ export def "put-v3-projects-id-services-assembla" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/assembla") $auth.query)
   let req_body = {"token": $body_token, "subdomain": $subdomain, "push_events": $push_events} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -10135,6 +10150,7 @@ export def "put-v3-projects-id-services-buildkite" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/buildkite") $auth.query)
   let req_body = {"token": $body_token, "project_url": $project_url, "enable_ssl_verification": $enable_ssl_verification, "push_events": $push_events} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -10223,6 +10239,7 @@ export def "put-v3-projects-id-services-campfire" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/campfire") $auth.query)
   let req_body = {"token": $body_token, "subdomain": $subdomain, "room": $room, "push_events": $push_events} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -10315,6 +10332,7 @@ export def "put-v3-projects-id-services-drone-ci" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/drone-ci") $auth.query)
   let req_body = {"token": $body_token, "drone_url": $drone_url, "enable_ssl_verification": $enable_ssl_verification, "push_events": $push_events, "merge_request_events": $merge_request_events, "tag_push_events": $tag_push_events} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -10443,6 +10461,7 @@ export def "put-v3-projects-id-services-flowdock" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/flowdock") $auth.query)
   let req_body = {"token": $body_token, "push_events": $push_events} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -10486,6 +10505,7 @@ export def "put-v3-projects-id-services-gemnasium" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/gemnasium") $auth.query)
   let req_body = {"api_key": $api_key, "token": $body_token, "push_events": $push_events} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -10539,6 +10559,7 @@ export def "put-v3-projects-id-services-hipchat" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/hipchat") $auth.query)
   let req_body = {"token": $body_token, "room": $room, "color": $color, "notify": $notify, "api_version": $api_version, "server": $server, "push_events": $push_events, "issue_events": $issue_events, "confidential_issue_events": $confidential_issue_events, "merge_request_events": $merge_request_events, "note_events": $note_events, "tag_push_events": $tag_push_events, "build_events": $build_events} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -10676,6 +10697,7 @@ export def "put-v3-projects-id-services-kubernetes" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/kubernetes") $auth.query)
   let req_body = {"namespace": $namespace, "api_url": $api_url, "token": $body_token, "ca_pem": $ca_pem} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -10767,6 +10789,7 @@ export def "put-v3-projects-id-services-mattermost-slash-commands" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/mattermost-slash-commands") $auth.query)
   let req_body = {"token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -10808,6 +10831,7 @@ export def "post-v3-projects-id-services-mattermost-slash-commands-trigger" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/mattermost_slash_commands/trigger") $auth.query)
   let req_body = {"token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -10894,6 +10918,7 @@ export def "put-v3-projects-id-services-pivotaltracker" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/pivotaltracker") $auth.query)
   let req_body = {"token": $body_token, "restrict_to_branch": $restrict_to_branch, "push_events": $push_events} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -11078,6 +11103,7 @@ export def "put-v3-projects-id-services-slack-slash-commands" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/slack-slash-commands") $auth.query)
   let req_body = {"token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -11119,6 +11145,7 @@ export def "post-v3-projects-id-services-slack-slash-commands-trigger" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/slack_slash_commands/trigger") $auth.query)
   let req_body = {"token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -11187,7 +11214,7 @@ export def "put-v3-projects-id-services-teamcity" [
 # operationId: deleteV3ProjectsIdServicesServiceSlug
 export def "delete-v3-projects-id-services-service-slug" [
   id: int
-  service_slug: string
+  service_slug: string@service-slug-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11225,7 +11252,7 @@ export def "delete-v3-projects-id-services-service-slug" [
 # operationId: getV3ProjectsIdServicesServiceSlug
 export def "get-v3-projects-id-services-service-slug" [
   id: int
-  service_slug: string
+  service_slug: string@service-slug-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12459,8 +12486,8 @@ export def "post-v3-projects-id-uploads" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -12880,7 +12907,7 @@ export def "put-v3-runners-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the runner
   --active: oneof<nothing, bool> # The state of a runner
-  --tag-list: list # The list of tags for a runner
+  --tag-list: list<string> # The list of tags for a runner
   --run-untagged: oneof<nothing, bool> # Flag indicating the runner can execute untagged jobs
   --locked: oneof<nothing, bool> # Flag indicating the runner is locked
 ]: any -> record<active: string, architecture: string, contacted_at: string, description: string, id: string, is_shared: string, locked: string, name: string, platform: string, projects: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, revision: string, run_untagged: string, tag_list: string, token: string, version: string> {
@@ -12889,7 +12916,7 @@ export def "put-v3-runners-id" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/runners/{id}") $auth.query)
-  let req_body = {"description": $description, "active": $active, "tag_list": $tag_list, "run_untagged": $run_untagged, "locked": $locked} | compact
+  let req_body = {"description": $description, "active": $active, "tag_list": (if ($tag_list | describe | str starts-with "list") { $tag_list | each { into string } | str join "," } else { $tag_list }), "run_untagged": $run_untagged, "locked": $locked} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

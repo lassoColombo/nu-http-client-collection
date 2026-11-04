@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -194,10 +194,10 @@ export def "get-add-source-identifier-to-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --subscription-name: string # The name of the Amazon DocumentDB event notification subscription that you want to add a source identifier to.
-  --source-identifier: string # The identifier of the event source to be added: If the source type is an instance, a DBInstanceIdentifier must be provided. If the source type is a security group, a DBSecurityGroupName must be provided. If the source type is a parameter group, a DBParameterGroupName must be provided. If the source type is a snapshot, a DBSnapshotIdentifier must be provided.
-  --action: string@action-completer
-  --version: string@version-completer
+  --subscription-name: string # The name of the Amazon DocumentDB event notification subscription that you want to add a source identifier to. (required)
+  --source-identifier: string # The identifier of the event source to be added: If the source type is an instance, a DBInstanceIdentifier must be provided. If the source type is a security group, a DBSecurityGroupName must be provided. If the source type is a parameter group, a DBParameterGroupName must be provided. If the source type is a snapshot, a DBSnapshotIdentifier must be provided. (required)
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -205,9 +205,13 @@ export def "get-add-source-identifier-to-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
+]: nothing -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subscription_name == null) { error make --unspanned { msg: "required query parameter 'SubscriptionName' missing: pass --subscription-name" } }
+  if ($source_identifier == null) { error make --unspanned { msg: "required query parameter 'SourceIdentifier' missing: pass --source-identifier" } }
+  let action = ($action | default "AddSourceIdentifierToSubscription")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "SubscriptionName" $subscription_name "scalar") (serialize-qp "SourceIdentifier" $source_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -242,8 +246,8 @@ export def "post-add-source-identifier-to-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer
-  --version: string@version-completer
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -252,10 +256,12 @@ export def "post-add-source-identifier-to-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
+]: any -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "AddSourceIdentifierToSubscription")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -292,10 +298,10 @@ export def "get-add-tags-to-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-name: string # The Amazon DocumentDB resource that the tags are added to. This value is an Amazon Resource Name .
-  --tags: list # The tags to be assigned to the Amazon DocumentDB resource.
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --resource-name: string # The Amazon DocumentDB resource that the tags are added to. This value is an Amazon Resource Name . (required)
+  --tags: list # The tags to be assigned to the Amazon DocumentDB resource. (required)
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -306,6 +312,10 @@ export def "get-add-tags-to-resource" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_name == null) { error make --unspanned { msg: "required query parameter 'ResourceName' missing: pass --resource-name" } }
+  if ($tags == null) { error make --unspanned { msg: "required query parameter 'Tags' missing: pass --tags" } }
+  let action = ($action | default "AddTagsToResource")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "ResourceName" $resource_name "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -340,8 +350,8 @@ export def "post-add-tags-to-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -354,6 +364,8 @@ export def "post-add-tags-to-resource" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "AddTagsToResource")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -390,11 +402,11 @@ export def "get-apply-pending-maintenance-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-identifier: string # The Amazon Resource Name (ARN) of the resource that the pending maintenance action applies to.
-  --apply-action: string # The pending maintenance action to apply to this resource. Valid values: system-update, db-upgrade
-  --opt-in-type: string # A value that specifies the type of opt-in request or undoes an opt-in request. An opt-in request of type immediate can't be undone. Valid values: immediate - Apply the maintenance action immediately. next-maintenance - Apply the maintenance action during the next maintenance window for the resource. undo-opt-in - Cancel any existing next-maintenance opt-in requests.
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --resource-identifier: string # The Amazon Resource Name (ARN) of the resource that the pending maintenance action applies to. (required)
+  --apply-action: string # The pending maintenance action to apply to this resource. Valid values: system-update, db-upgrade (required)
+  --opt-in-type: string # A value that specifies the type of opt-in request or undoes an opt-in request. An opt-in request of type immediate can't be undone. Valid values: immediate - Apply the maintenance action immediately. next-maintenance - Apply the maintenance action during the next maintenance window for the resource. undo-opt-in - Cancel any existing next-maintenance opt-in requests. (required)
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -402,9 +414,14 @@ export def "get-apply-pending-maintenance-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ResourcePendingMaintenanceActions: record<ResourceIdentifier: record, PendingMaintenanceActionDetails: record>> {
+]: nothing -> record<ResourcePendingMaintenanceActions: record<ResourceIdentifier: string, PendingMaintenanceActionDetails: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_identifier == null) { error make --unspanned { msg: "required query parameter 'ResourceIdentifier' missing: pass --resource-identifier" } }
+  if ($apply_action == null) { error make --unspanned { msg: "required query parameter 'ApplyAction' missing: pass --apply-action" } }
+  if ($opt_in_type == null) { error make --unspanned { msg: "required query parameter 'OptInType' missing: pass --opt-in-type" } }
+  let action = ($action | default "ApplyPendingMaintenanceAction")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "ResourceIdentifier" $resource_identifier "scalar") (serialize-qp "ApplyAction" $apply_action "scalar") (serialize-qp "OptInType" $opt_in_type "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -439,8 +456,8 @@ export def "post-apply-pending-maintenance-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -449,10 +466,12 @@ export def "post-apply-pending-maintenance-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ResourcePendingMaintenanceActions: record<ResourceIdentifier: record, PendingMaintenanceActionDetails: record>> {
+]: any -> record<ResourcePendingMaintenanceActions: record<ResourceIdentifier: string, PendingMaintenanceActionDetails: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ApplyPendingMaintenanceAction")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -489,12 +508,12 @@ export def "get-copy-db-cluster-parameter-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --source-db-cluster-parameter-group-identifier: string # The identifier or Amazon Resource Name (ARN) for the source cluster parameter group. Constraints: Must specify a valid cluster parameter group. If the source cluster parameter group is in the same Amazon Web Services Region as the copy, specify a valid parameter group identifier; for example, my-db-cluster-param-group, or a valid ARN. If the source parameter group is in a different Amazon Web Services Region than the copy, specify a valid cluster parameter group ARN; for example, arn:aws:rds:us-east-1:123456789012:sample-cluster:sample-parameter-group.
-  --target-db-cluster-parameter-group-identifier: string # The identifier for the copied cluster parameter group. Constraints: Cannot be null, empty, or blank. Must contain from 1 to 255 letters, numbers, or hyphens. The first character must be a letter. Cannot end with a hyphen or contain two consecutive hyphens. Example: my-cluster-param-group1
-  --target-db-cluster-parameter-group-description: string # A description for the copied cluster parameter group.
+  --source-db-cluster-parameter-group-identifier: string # The identifier or Amazon Resource Name (ARN) for the source cluster parameter group. Constraints: Must specify a valid cluster parameter group. If the source cluster parameter group is in the same Amazon Web Services Region as the copy, specify a valid parameter group identifier; for example, my-db-cluster-param-group, or a valid ARN. If the source parameter group is in a different Amazon Web Services Region than the copy, specify a valid cluster parameter group ARN; for example, arn:aws:rds:us-east-1:123456789012:sample-cluster:sample-parameter-group. (required)
+  --target-db-cluster-parameter-group-identifier: string # The identifier for the copied cluster parameter group. Constraints: Cannot be null, empty, or blank. Must contain from 1 to 255 letters, numbers, or hyphens. The first character must be a letter. Cannot end with a hyphen or contain two consecutive hyphens. Example: my-cluster-param-group1 (required)
+  --target-db-cluster-parameter-group-description: string # A description for the copied cluster parameter group. (required)
   --tags: list # The tags that are to be assigned to the parameter group.
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -502,9 +521,14 @@ export def "get-copy-db-cluster-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBClusterParameterGroup: record<DBClusterParameterGroupName: record, DBParameterGroupFamily: record, Description: record, DBClusterParameterGroupArn: record>> {
+]: nothing -> record<DBClusterParameterGroup: record<DBClusterParameterGroupName: string, DBParameterGroupFamily: string, Description: string, DBClusterParameterGroupArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($source_db_cluster_parameter_group_identifier == null) { error make --unspanned { msg: "required query parameter 'SourceDBClusterParameterGroupIdentifier' missing: pass --source-db-cluster-parameter-group-identifier" } }
+  if ($target_db_cluster_parameter_group_identifier == null) { error make --unspanned { msg: "required query parameter 'TargetDBClusterParameterGroupIdentifier' missing: pass --target-db-cluster-parameter-group-identifier" } }
+  if ($target_db_cluster_parameter_group_description == null) { error make --unspanned { msg: "required query parameter 'TargetDBClusterParameterGroupDescription' missing: pass --target-db-cluster-parameter-group-description" } }
+  let action = ($action | default "CopyDBClusterParameterGroup")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "SourceDBClusterParameterGroupIdentifier" $source_db_cluster_parameter_group_identifier "scalar") (serialize-qp "TargetDBClusterParameterGroupIdentifier" $target_db_cluster_parameter_group_identifier "scalar") (serialize-qp "TargetDBClusterParameterGroupDescription" $target_db_cluster_parameter_group_description "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -539,8 +563,8 @@ export def "post-copy-db-cluster-parameter-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -549,10 +573,12 @@ export def "post-copy-db-cluster-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBClusterParameterGroup: record<DBClusterParameterGroupName: record, DBParameterGroupFamily: record, Description: record, DBClusterParameterGroupArn: record>> {
+]: any -> record<DBClusterParameterGroup: record<DBClusterParameterGroupName: string, DBParameterGroupFamily: string, Description: string, DBClusterParameterGroupArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CopyDBClusterParameterGroup")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -589,14 +615,14 @@ export def "get-copy-db-cluster-snapshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --source-db-cluster-snapshot-identifier: string # The identifier of the cluster snapshot to copy. This parameter is not case sensitive. Constraints: Must specify a valid system snapshot in the available state. If the source snapshot is in the same Amazon Web Services Region as the copy, specify a valid snapshot identifier. If the source snapshot is in a different Amazon Web Services Region than the copy, specify a valid cluster snapshot ARN. Example: my-cluster-snapshot1
-  --target-db-cluster-snapshot-identifier: string # The identifier of the new cluster snapshot to create from the source cluster snapshot. This parameter is not case sensitive. Constraints: Must contain from 1 to 63 letters, numbers, or hyphens. The first character must be a letter. Cannot end with a hyphen or contain two consecutive hyphens. Example: my-cluster-snapshot2
+  --source-db-cluster-snapshot-identifier: string # The identifier of the cluster snapshot to copy. This parameter is not case sensitive. Constraints: Must specify a valid system snapshot in the available state. If the source snapshot is in the same Amazon Web Services Region as the copy, specify a valid snapshot identifier. If the source snapshot is in a different Amazon Web Services Region than the copy, specify a valid cluster snapshot ARN. Example: my-cluster-snapshot1 (required)
+  --target-db-cluster-snapshot-identifier: string # The identifier of the new cluster snapshot to create from the source cluster snapshot. This parameter is not case sensitive. Constraints: Must contain from 1 to 63 letters, numbers, or hyphens. The first character must be a letter. Cannot end with a hyphen or contain two consecutive hyphens. Example: my-cluster-snapshot2 (required)
   --kms-key-id: string # The KMS key ID for an encrypted cluster snapshot. The KMS key ID is the Amazon Resource Name (ARN), KMS key identifier, or the KMS key alias for the KMS encryption key. If you copy an encrypted cluster snapshot from your Amazon Web Services account, you can specify a value for KmsKeyId to encrypt the copy with a new KMS encryption key. If you don't specify a value for KmsKeyId, then the copy of the cluster snapshot is encrypted with the same KMS key as the source cluster snapshot. If you copy an encrypted cluster snapshot that is shared from another Amazon Web Services account, then you must specify a value for KmsKeyId. To copy an encrypted cluster snapshot to another Amazon Web Services Region, set KmsKeyId to the KMS key ID that you want to use to encrypt the copy of the cluster snapshot in the destination Region. KMS encryption keys are specific to the Amazon Web Services Region that they are created in, and you can't use encryption keys from one Amazon Web Services Region in another Amazon Web Services Region. If you copy an unencrypted cluster snapshot and specify a value for the KmsKeyId parameter, an error is returned.
   --pre-signed-url: string # The URL that contains a Signature Version 4 signed request for theCopyDBClusterSnapshot API action in the Amazon Web Services Region that contains the source cluster snapshot to copy. You must use the PreSignedUrl parameter when copying a cluster snapshot from another Amazon Web Services Region. If you are using an Amazon Web Services SDK tool or the CLI, you can specify SourceRegion (or --source-region for the CLI) instead of specifying PreSignedUrl manually. Specifying SourceRegion autogenerates a pre-signed URL that is a valid request for the operation that can be executed in the source Amazon Web Services Region. The presigned URL must be a valid request for the CopyDBClusterSnapshot API action that can be executed in the source Amazon Web Services Region that contains the cluster snapshot to be copied. The presigned URL request must contain the following parameter values: SourceRegion - The ID of the region that contains the snapshot to be copied. SourceDBClusterSnapshotIdentifier - The identifier for the the encrypted cluster snapshot to be copied. This identifier must be in the Amazon Resource Name (ARN) format for the source Amazon Web Services Region. For example, if you are copying an encrypted cluster snapshot from the us-east-1 Amazon Web Services Region, then your SourceDBClusterSnapshotIdentifier looks something like the following: arn:aws:rds:us-east-1:12345678012:sample-cluster:sample-cluster-snapshot. TargetDBClusterSnapshotIdentifier - The identifier for the new cluster snapshot to be created. This parameter isn't case sensitive.
   --copy-tags: oneof<nothing, bool> # Set to true to copy all tags from the source cluster snapshot to the target cluster snapshot, and otherwise false. The default is false.
   --tags: list # The tags to be assigned to the cluster snapshot.
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -604,9 +630,13 @@ export def "get-copy-db-cluster-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBClusterSnapshot: record<AvailabilityZones: record, DBClusterSnapshotIdentifier: record, DBClusterIdentifier: record, SnapshotCreateTime: record, Engine: record, Status: record, Port: record, VpcId: record, ClusterCreateTime: record, MasterUsername: record, EngineVersion: record, SnapshotType: record, PercentProgress: record, StorageEncrypted: record, KmsKeyId: record, DBClusterSnapshotArn: record, SourceDBClusterSnapshotArn: record>> {
+]: nothing -> record<DBClusterSnapshot: record<AvailabilityZones: list<string>, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($source_db_cluster_snapshot_identifier == null) { error make --unspanned { msg: "required query parameter 'SourceDBClusterSnapshotIdentifier' missing: pass --source-db-cluster-snapshot-identifier" } }
+  if ($target_db_cluster_snapshot_identifier == null) { error make --unspanned { msg: "required query parameter 'TargetDBClusterSnapshotIdentifier' missing: pass --target-db-cluster-snapshot-identifier" } }
+  let action = ($action | default "CopyDBClusterSnapshot")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "SourceDBClusterSnapshotIdentifier" $source_db_cluster_snapshot_identifier "scalar") (serialize-qp "TargetDBClusterSnapshotIdentifier" $target_db_cluster_snapshot_identifier "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "PreSignedUrl" $pre_signed_url "scalar") (serialize-qp "CopyTags" $copy_tags "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -641,8 +671,8 @@ export def "post-copy-db-cluster-snapshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -651,10 +681,12 @@ export def "post-copy-db-cluster-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBClusterSnapshot: record<AvailabilityZones: record, DBClusterSnapshotIdentifier: record, DBClusterIdentifier: record, SnapshotCreateTime: record, Engine: record, Status: record, Port: record, VpcId: record, ClusterCreateTime: record, MasterUsername: record, EngineVersion: record, SnapshotType: record, PercentProgress: record, StorageEncrypted: record, KmsKeyId: record, DBClusterSnapshotArn: record, SourceDBClusterSnapshotArn: record>> {
+]: any -> record<DBClusterSnapshot: record<AvailabilityZones: list<string>, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CopyDBClusterSnapshot")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -693,11 +725,11 @@ export def "get-create-db-cluster" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --availability-zones: list # A list of Amazon EC2 Availability Zones that instances in the cluster can be created in.
   --backup-retention-period: int # The number of days for which automated backups are retained. You must specify a minimum value of 1. Default: 1 Constraints: Must be a value from 1 to 35.
-  --db-cluster-identifier: string # The cluster identifier. This parameter is stored as a lowercase string. Constraints: Must contain from 1 to 63 letters, numbers, or hyphens. The first character must be a letter. Cannot end with a hyphen or contain two consecutive hyphens. Example: my-cluster
+  --db-cluster-identifier: string # The cluster identifier. This parameter is stored as a lowercase string. Constraints: Must contain from 1 to 63 letters, numbers, or hyphens. The first character must be a letter. Cannot end with a hyphen or contain two consecutive hyphens. Example: my-cluster (required)
   --db-cluster-parameter-group-name: string # The name of the cluster parameter group to associate with this cluster.
   --vpc-security-group-ids: list # A list of EC2 VPC security groups to associate with this cluster.
   --db-subnet-group-name: string # A subnet group to associate with this cluster. Constraints: Must match the name of an existing DBSubnetGroup. Must not be default. Example: mySubnetgroup
-  --engine: string # The name of the database engine to be used for this cluster. Valid values: docdb
+  --engine: string # The name of the database engine to be used for this cluster. Valid values: docdb (required)
   --engine-version: string # The version number of the database engine to use. The --engine-version will default to the latest major engine version. For production workloads, we recommend explicitly declaring this parameter with the intended major engine version.
   --port: int # The port number on which the instances in the cluster accept connections.
   --master-username: string # The name of the master user for the cluster. Constraints: Must be from 1 to 63 letters or numbers. The first character must be a letter. Cannot be a reserved word for the chosen database engine.
@@ -711,8 +743,8 @@ export def "get-create-db-cluster" [
   --enable-cloudwatch-logs-exports: list # A list of log types that need to be enabled for exporting to Amazon CloudWatch Logs. You can enable audit logs or profiler logs. For more information, see Auditing Amazon DocumentDB Events (https://docs.aws.amazon.com/documentdb/latest/developerguide/event-auditing.html) and Profiling Amazon DocumentDB Operations (https://docs.aws.amazon.com/documentdb/latest/developerguide/profiling.html).
   --deletion-protection: oneof<nothing, bool> # Specifies whether this cluster can be deleted. If DeletionProtection is enabled, the cluster cannot be deleted unless it is modified and DeletionProtection is disabled. DeletionProtection protects clusters from being accidentally deleted.
   --global-cluster-identifier: string # The cluster identifier of the new global cluster.
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -720,9 +752,13 @@ export def "get-create-db-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBCluster: record<AvailabilityZones: record, BackupRetentionPeriod: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, CloneGroupId: record, ClusterCreateTime: record, EnabledCloudwatchLogsExports: record, DeletionProtection: record>> {
+]: nothing -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterIdentifier' missing: pass --db-cluster-identifier" } }
+  if ($engine == null) { error make --unspanned { msg: "required query parameter 'Engine' missing: pass --engine" } }
+  let action = ($action | default "CreateDBCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "AvailabilityZones" $availability_zones "multi") (serialize-qp "BackupRetentionPeriod" $backup_retention_period "scalar") (serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "MasterUsername" $master_username "scalar") (serialize-qp "MasterUserPassword" $master_user_password "scalar") (serialize-qp "PreferredBackupWindow" $preferred_backup_window "scalar") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "StorageEncrypted" $storage_encrypted "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "PreSignedUrl" $pre_signed_url "scalar") (serialize-qp "EnableCloudwatchLogsExports" $enable_cloudwatch_logs_exports "multi") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "GlobalClusterIdentifier" $global_cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -757,8 +793,8 @@ export def "post-create-db-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -767,10 +803,12 @@ export def "post-create-db-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBCluster: record<AvailabilityZones: record, BackupRetentionPeriod: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, CloneGroupId: record, ClusterCreateTime: record, EnabledCloudwatchLogsExports: record, DeletionProtection: record>> {
+]: any -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateDBCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -807,12 +845,12 @@ export def "get-create-db-cluster-parameter-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-cluster-parameter-group-name: string # The name of the cluster parameter group. Constraints: Must not match the name of an existing DBClusterParameterGroup. This value is stored as a lowercase string.
-  --db-parameter-group-family: string # The cluster parameter group family name.
-  --description: string # The description for the cluster parameter group.
+  --db-cluster-parameter-group-name: string # The name of the cluster parameter group. Constraints: Must not match the name of an existing DBClusterParameterGroup. This value is stored as a lowercase string. (required)
+  --db-parameter-group-family: string # The cluster parameter group family name. (required)
+  --description: string # The description for the cluster parameter group. (required)
   --tags: list # The tags to be assigned to the cluster parameter group.
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -820,9 +858,14 @@ export def "get-create-db-cluster-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBClusterParameterGroup: record<DBClusterParameterGroupName: record, DBParameterGroupFamily: record, Description: record, DBClusterParameterGroupArn: record>> {
+]: nothing -> record<DBClusterParameterGroup: record<DBClusterParameterGroupName: string, DBParameterGroupFamily: string, Description: string, DBClusterParameterGroupArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_cluster_parameter_group_name == null) { error make --unspanned { msg: "required query parameter 'DBClusterParameterGroupName' missing: pass --db-cluster-parameter-group-name" } }
+  if ($db_parameter_group_family == null) { error make --unspanned { msg: "required query parameter 'DBParameterGroupFamily' missing: pass --db-parameter-group-family" } }
+  if ($description == null) { error make --unspanned { msg: "required query parameter 'Description' missing: pass --description" } }
+  let action = ($action | default "CreateDBClusterParameterGroup")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "DBParameterGroupFamily" $db_parameter_group_family "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -857,8 +900,8 @@ export def "post-create-db-cluster-parameter-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -867,10 +910,12 @@ export def "post-create-db-cluster-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBClusterParameterGroup: record<DBClusterParameterGroupName: record, DBParameterGroupFamily: record, Description: record, DBClusterParameterGroupArn: record>> {
+]: any -> record<DBClusterParameterGroup: record<DBClusterParameterGroupName: string, DBParameterGroupFamily: string, Description: string, DBClusterParameterGroupArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateDBClusterParameterGroup")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -907,11 +952,11 @@ export def "get-create-db-cluster-snapshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-cluster-snapshot-identifier: string # The identifier of the cluster snapshot. This parameter is stored as a lowercase string. Constraints: Must contain from 1 to 63 letters, numbers, or hyphens. The first character must be a letter. Cannot end with a hyphen or contain two consecutive hyphens. Example: my-cluster-snapshot1
-  --db-cluster-identifier: string # The identifier of the cluster to create a snapshot for. This parameter is not case sensitive. Constraints: Must match the identifier of an existing DBCluster. Example: my-cluster
+  --db-cluster-snapshot-identifier: string # The identifier of the cluster snapshot. This parameter is stored as a lowercase string. Constraints: Must contain from 1 to 63 letters, numbers, or hyphens. The first character must be a letter. Cannot end with a hyphen or contain two consecutive hyphens. Example: my-cluster-snapshot1 (required)
+  --db-cluster-identifier: string # The identifier of the cluster to create a snapshot for. This parameter is not case sensitive. Constraints: Must match the identifier of an existing DBCluster. Example: my-cluster (required)
   --tags: list # The tags to be assigned to the cluster snapshot.
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -919,9 +964,13 @@ export def "get-create-db-cluster-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBClusterSnapshot: record<AvailabilityZones: record, DBClusterSnapshotIdentifier: record, DBClusterIdentifier: record, SnapshotCreateTime: record, Engine: record, Status: record, Port: record, VpcId: record, ClusterCreateTime: record, MasterUsername: record, EngineVersion: record, SnapshotType: record, PercentProgress: record, StorageEncrypted: record, KmsKeyId: record, DBClusterSnapshotArn: record, SourceDBClusterSnapshotArn: record>> {
+]: nothing -> record<DBClusterSnapshot: record<AvailabilityZones: list<string>, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_cluster_snapshot_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterSnapshotIdentifier' missing: pass --db-cluster-snapshot-identifier" } }
+  if ($db_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterIdentifier' missing: pass --db-cluster-identifier" } }
+  let action = ($action | default "CreateDBClusterSnapshot")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBClusterSnapshotIdentifier" $db_cluster_snapshot_identifier "scalar") (serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -956,8 +1005,8 @@ export def "post-create-db-cluster-snapshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -966,10 +1015,12 @@ export def "post-create-db-cluster-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBClusterSnapshot: record<AvailabilityZones: record, DBClusterSnapshotIdentifier: record, DBClusterIdentifier: record, SnapshotCreateTime: record, Engine: record, Status: record, Port: record, VpcId: record, ClusterCreateTime: record, MasterUsername: record, EngineVersion: record, SnapshotType: record, PercentProgress: record, StorageEncrypted: record, KmsKeyId: record, DBClusterSnapshotArn: record, SourceDBClusterSnapshotArn: record>> {
+]: any -> record<DBClusterSnapshot: record<AvailabilityZones: list<string>, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateDBClusterSnapshot")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1006,20 +1057,20 @@ export def "get-create-db-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-instance-identifier: string # The instance identifier. This parameter is stored as a lowercase string. Constraints: Must contain from 1 to 63 letters, numbers, or hyphens. The first character must be a letter. Cannot end with a hyphen or contain two consecutive hyphens. Example: mydbinstance
-  --db-instance-class: string # The compute and memory capacity of the instance; for example, db.r5.large.
-  --engine: string # The name of the database engine to be used for this instance. Valid value: docdb
+  --db-instance-identifier: string # The instance identifier. This parameter is stored as a lowercase string. Constraints: Must contain from 1 to 63 letters, numbers, or hyphens. The first character must be a letter. Cannot end with a hyphen or contain two consecutive hyphens. Example: mydbinstance (required)
+  --db-instance-class: string # The compute and memory capacity of the instance; for example, db.r5.large. (required)
+  --engine: string # The name of the database engine to be used for this instance. Valid value: docdb (required)
   --availability-zone: string # The Amazon EC2 Availability Zone that the instance is created in. Default: A random, system-chosen Availability Zone in the endpoint's Amazon Web Services Region. Example: us-east-1d
   --preferred-maintenance-window: string # The time range each week during which system maintenance can occur, in Universal Coordinated Time (UTC). Format: ddd:hh24:mi-ddd:hh24:mi The default is a 30-minute window selected at random from an 8-hour block of time for each Amazon Web Services Region, occurring on a random day of the week. Valid days: Mon, Tue, Wed, Thu, Fri, Sat, Sun Constraints: Minimum 30-minute window.
   --auto-minor-version-upgrade: oneof<nothing, bool> # This parameter does not apply to Amazon DocumentDB. Amazon DocumentDB does not perform minor version upgrades regardless of the value set. Default: false
   --tags: list # The tags to be assigned to the instance. You can assign up to 10 tags to an instance.
-  --db-cluster-identifier: string # The identifier of the cluster that the instance will belong to.
+  --db-cluster-identifier: string # The identifier of the cluster that the instance will belong to. (required)
   --copy-tags-to-snapshot: oneof<nothing, bool> # A value that indicates whether to copy tags from the DB instance to snapshots of the DB instance. By default, tags are not copied.
   --promotion-tier: int # A value that specifies the order in which an Amazon DocumentDB replica is promoted to the primary instance after a failure of the existing primary instance. Default: 1 Valid values: 0-15
   --enable-performance-insights: oneof<nothing, bool> # A value that indicates whether to enable Performance Insights for the DB Instance. For more information, see Using Amazon Performance Insights (https://docs.aws.amazon.com/documentdb/latest/developerguide/performance-insights.html).
   --performance-insights-kms-key-id: string # The KMS key identifier for encryption of Performance Insights data. The KMS key identifier is the key ARN, key ID, alias ARN, or alias name for the KMS key. If you do not specify a value for PerformanceInsightsKMSKeyId, then Amazon DocumentDB uses your default KMS key. There is a default KMS key for your Amazon Web Services account. Your Amazon Web Services account has a different default KMS key for each Amazon Web Services region.
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1027,9 +1078,15 @@ export def "get-create-db-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, VpcSecurityGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record>, LatestRestorableTime: record, EngineVersion: record, AutoMinorVersionUpgrade: record, PubliclyAccessible: record, StatusInfos: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, CopyTagsToSnapshot: record, PromotionTier: record, DBInstanceArn: record, EnabledCloudwatchLogsExports: record>> {
+]: nothing -> record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_instance_identifier == null) { error make --unspanned { msg: "required query parameter 'DBInstanceIdentifier' missing: pass --db-instance-identifier" } }
+  if ($db_instance_class == null) { error make --unspanned { msg: "required query parameter 'DBInstanceClass' missing: pass --db-instance-class" } }
+  if ($engine == null) { error make --unspanned { msg: "required query parameter 'Engine' missing: pass --engine" } }
+  if ($db_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterIdentifier' missing: pass --db-cluster-identifier" } }
+  let action = ($action | default "CreateDBInstance")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "DBInstanceClass" $db_instance_class "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "AvailabilityZone" $availability_zone "scalar") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "AutoMinorVersionUpgrade" $auto_minor_version_upgrade "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "CopyTagsToSnapshot" $copy_tags_to_snapshot "scalar") (serialize-qp "PromotionTier" $promotion_tier "scalar") (serialize-qp "EnablePerformanceInsights" $enable_performance_insights "scalar") (serialize-qp "PerformanceInsightsKMSKeyId" $performance_insights_kms_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1064,8 +1121,8 @@ export def "post-create-db-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1074,10 +1131,12 @@ export def "post-create-db-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, VpcSecurityGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record>, LatestRestorableTime: record, EngineVersion: record, AutoMinorVersionUpgrade: record, PubliclyAccessible: record, StatusInfos: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, CopyTagsToSnapshot: record, PromotionTier: record, DBInstanceArn: record, EnabledCloudwatchLogsExports: record>> {
+]: any -> record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateDBInstance")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1114,12 +1173,12 @@ export def "get-create-db-subnet-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-subnet-group-name: string # The name for the subnet group. This value is stored as a lowercase string. Constraints: Must contain no more than 255 letters, numbers, periods, underscores, spaces, or hyphens. Must not be default. Example: mySubnetgroup
-  --db-subnet-group-description: string # The description for the subnet group.
-  --subnet-ids: list # The Amazon EC2 subnet IDs for the subnet group.
+  --db-subnet-group-name: string # The name for the subnet group. This value is stored as a lowercase string. Constraints: Must contain no more than 255 letters, numbers, periods, underscores, spaces, or hyphens. Must not be default. Example: mySubnetgroup (required)
+  --db-subnet-group-description: string # The description for the subnet group. (required)
+  --subnet-ids: list # The Amazon EC2 subnet IDs for the subnet group. (required)
   --tags: list # The tags to be assigned to the subnet group.
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1127,9 +1186,14 @@ export def "get-create-db-subnet-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record>> {
+]: nothing -> record<DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list<record>, DBSubnetGroupArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_subnet_group_name == null) { error make --unspanned { msg: "required query parameter 'DBSubnetGroupName' missing: pass --db-subnet-group-name" } }
+  if ($db_subnet_group_description == null) { error make --unspanned { msg: "required query parameter 'DBSubnetGroupDescription' missing: pass --db-subnet-group-description" } }
+  if ($subnet_ids == null) { error make --unspanned { msg: "required query parameter 'SubnetIds' missing: pass --subnet-ids" } }
+  let action = ($action | default "CreateDBSubnetGroup")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "DBSubnetGroupDescription" $db_subnet_group_description "scalar") (serialize-qp "SubnetIds" $subnet_ids "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1164,8 +1228,8 @@ export def "post-create-db-subnet-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1174,10 +1238,12 @@ export def "post-create-db-subnet-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record>> {
+]: any -> record<DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list<record>, DBSubnetGroupArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateDBSubnetGroup")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1214,15 +1280,15 @@ export def "get-create-event-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --subscription-name: string # The name of the subscription. Constraints: The name must be fewer than 255 characters.
-  --sns-topic-arn: string # The Amazon Resource Name (ARN) of the SNS topic created for event notification. Amazon SNS creates the ARN when you create a topic and subscribe to it.
+  --subscription-name: string # The name of the subscription. Constraints: The name must be fewer than 255 characters. (required)
+  --sns-topic-arn: string # The Amazon Resource Name (ARN) of the SNS topic created for event notification. Amazon SNS creates the ARN when you create a topic and subscribe to it. (required)
   --source-type: string # The type of source that is generating the events. For example, if you want to be notified of events generated by an instance, you would set this parameter to db-instance. If this value is not specified, all events are returned. Valid values: db-instance, db-cluster, db-parameter-group, db-security-group, db-cluster-snapshot
   --event-categories: list # A list of event categories for a SourceType that you want to subscribe to.
   --source-ids: list # The list of identifiers of the event sources for which events are returned. If not specified, then all sources are included in the response. An identifier must begin with a letter and must contain only ASCII letters, digits, and hyphens; it can't end with a hyphen or contain two consecutive hyphens. Constraints: If SourceIds are provided, SourceType must also be provided. If the source type is an instance, a DBInstanceIdentifier must be provided. If the source type is a security group, a DBSecurityGroupName must be provided. If the source type is a parameter group, a DBParameterGroupName must be provided. If the source type is a snapshot, a DBSnapshotIdentifier must be provided.
   --enabled: oneof<nothing, bool> # A Boolean value; set to true to activate the subscription, set to false to create the subscription but not active it.
   --tags: list # The tags to be assigned to the event subscription.
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1230,9 +1296,13 @@ export def "get-create-event-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
+]: nothing -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subscription_name == null) { error make --unspanned { msg: "required query parameter 'SubscriptionName' missing: pass --subscription-name" } }
+  if ($sns_topic_arn == null) { error make --unspanned { msg: "required query parameter 'SnsTopicArn' missing: pass --sns-topic-arn" } }
+  let action = ($action | default "CreateEventSubscription")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "SubscriptionName" $subscription_name "scalar") (serialize-qp "SnsTopicArn" $sns_topic_arn "scalar") (serialize-qp "SourceType" $source_type "scalar") (serialize-qp "EventCategories" $event_categories "multi") (serialize-qp "SourceIds" $source_ids "multi") (serialize-qp "Enabled" $enabled "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1267,8 +1337,8 @@ export def "post-create-event-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1277,10 +1347,12 @@ export def "post-create-event-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
+]: any -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateEventSubscription")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1317,15 +1389,15 @@ export def "get-create-global-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --global-cluster-identifier: string # The cluster identifier of the new global cluster.
+  --global-cluster-identifier: string # The cluster identifier of the new global cluster. (required)
   --source-db-cluster-identifier: string # The Amazon Resource Name (ARN) to use as the primary cluster of the global cluster. This parameter is optional.
   --engine: string # The name of the database engine to be used for this cluster.
   --engine-version: string # The engine version of the global cluster.
   --deletion-protection: oneof<nothing, bool> # The deletion protection setting for the new global cluster. The global cluster can't be deleted when deletion protection is enabled.
   --database-name: string # The name for your database of up to 64 alpha-numeric characters. If you do not provide a name, Amazon DocumentDB will not create a database in the global cluster you are creating.
   --storage-encrypted: oneof<nothing, bool> # The storage encryption setting for the new global cluster.
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1333,9 +1405,12 @@ export def "get-create-global-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalCluster: record<GlobalClusterIdentifier: record, GlobalClusterResourceId: record, GlobalClusterArn: record, Status: record, Engine: record, EngineVersion: record, DatabaseName: record, StorageEncrypted: record, DeletionProtection: record, GlobalClusterMembers: record>> {
+]: nothing -> record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($global_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'GlobalClusterIdentifier' missing: pass --global-cluster-identifier" } }
+  let action = ($action | default "CreateGlobalCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "GlobalClusterIdentifier" $global_cluster_identifier "scalar") (serialize-qp "SourceDBClusterIdentifier" $source_db_cluster_identifier "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "DatabaseName" $database_name "scalar") (serialize-qp "StorageEncrypted" $storage_encrypted "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1370,8 +1445,8 @@ export def "post-create-global-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1380,10 +1455,12 @@ export def "post-create-global-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<GlobalCluster: record<GlobalClusterIdentifier: record, GlobalClusterResourceId: record, GlobalClusterArn: record, Status: record, Engine: record, EngineVersion: record, DatabaseName: record, StorageEncrypted: record, DeletionProtection: record, GlobalClusterMembers: record>> {
+]: any -> record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateGlobalCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1420,11 +1497,11 @@ export def "get-delete-db-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-cluster-identifier: string # The cluster identifier for the cluster to be deleted. This parameter isn't case sensitive. Constraints: Must match an existing DBClusterIdentifier.
+  --db-cluster-identifier: string # The cluster identifier for the cluster to be deleted. This parameter isn't case sensitive. Constraints: Must match an existing DBClusterIdentifier. (required)
   --skip-final-snapshot: oneof<nothing, bool> # Determines whether a final cluster snapshot is created before the cluster is deleted. If true is specified, no cluster snapshot is created. If false is specified, a cluster snapshot is created before the DB cluster is deleted. If SkipFinalSnapshot is false, you must specify a FinalDBSnapshotIdentifier parameter. Default: false
   --final-db-snapshot-identifier: string # The cluster snapshot identifier of the new cluster snapshot created when SkipFinalSnapshot is set to false. Specifying this parameter and also setting the SkipFinalShapshot parameter to true results in an error. Constraints: Must be from 1 to 255 letters, numbers, or hyphens. The first character must be a letter. Cannot end with a hyphen or contain two consecutive hyphens.
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1432,9 +1509,12 @@ export def "get-delete-db-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBCluster: record<AvailabilityZones: record, BackupRetentionPeriod: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, CloneGroupId: record, ClusterCreateTime: record, EnabledCloudwatchLogsExports: record, DeletionProtection: record>> {
+]: nothing -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterIdentifier' missing: pass --db-cluster-identifier" } }
+  let action = ($action | default "DeleteDBCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "SkipFinalSnapshot" $skip_final_snapshot "scalar") (serialize-qp "FinalDBSnapshotIdentifier" $final_db_snapshot_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1469,8 +1549,8 @@ export def "post-delete-db-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1479,10 +1559,12 @@ export def "post-delete-db-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBCluster: record<AvailabilityZones: record, BackupRetentionPeriod: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, CloneGroupId: record, ClusterCreateTime: record, EnabledCloudwatchLogsExports: record, DeletionProtection: record>> {
+]: any -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteDBCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1519,9 +1601,9 @@ export def "get-delete-db-cluster-parameter-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-cluster-parameter-group-name: string # The name of the cluster parameter group. Constraints: Must be the name of an existing cluster parameter group. You can't delete a default cluster parameter group. Cannot be associated with any clusters.
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --db-cluster-parameter-group-name: string # The name of the cluster parameter group. Constraints: Must be the name of an existing cluster parameter group. You can't delete a default cluster parameter group. Cannot be associated with any clusters. (required)
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1532,6 +1614,9 @@ export def "get-delete-db-cluster-parameter-group" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_cluster_parameter_group_name == null) { error make --unspanned { msg: "required query parameter 'DBClusterParameterGroupName' missing: pass --db-cluster-parameter-group-name" } }
+  let action = ($action | default "DeleteDBClusterParameterGroup")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1566,8 +1651,8 @@ export def "post-delete-db-cluster-parameter-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1580,6 +1665,8 @@ export def "post-delete-db-cluster-parameter-group" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteDBClusterParameterGroup")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1616,9 +1703,9 @@ export def "get-delete-db-cluster-snapshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-cluster-snapshot-identifier: string # The identifier of the cluster snapshot to delete. Constraints: Must be the name of an existing cluster snapshot in the available state.
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --db-cluster-snapshot-identifier: string # The identifier of the cluster snapshot to delete. Constraints: Must be the name of an existing cluster snapshot in the available state. (required)
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1626,9 +1713,12 @@ export def "get-delete-db-cluster-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBClusterSnapshot: record<AvailabilityZones: record, DBClusterSnapshotIdentifier: record, DBClusterIdentifier: record, SnapshotCreateTime: record, Engine: record, Status: record, Port: record, VpcId: record, ClusterCreateTime: record, MasterUsername: record, EngineVersion: record, SnapshotType: record, PercentProgress: record, StorageEncrypted: record, KmsKeyId: record, DBClusterSnapshotArn: record, SourceDBClusterSnapshotArn: record>> {
+]: nothing -> record<DBClusterSnapshot: record<AvailabilityZones: list<string>, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_cluster_snapshot_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterSnapshotIdentifier' missing: pass --db-cluster-snapshot-identifier" } }
+  let action = ($action | default "DeleteDBClusterSnapshot")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBClusterSnapshotIdentifier" $db_cluster_snapshot_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1663,8 +1753,8 @@ export def "post-delete-db-cluster-snapshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1673,10 +1763,12 @@ export def "post-delete-db-cluster-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBClusterSnapshot: record<AvailabilityZones: record, DBClusterSnapshotIdentifier: record, DBClusterIdentifier: record, SnapshotCreateTime: record, Engine: record, Status: record, Port: record, VpcId: record, ClusterCreateTime: record, MasterUsername: record, EngineVersion: record, SnapshotType: record, PercentProgress: record, StorageEncrypted: record, KmsKeyId: record, DBClusterSnapshotArn: record, SourceDBClusterSnapshotArn: record>> {
+]: any -> record<DBClusterSnapshot: record<AvailabilityZones: list<string>, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteDBClusterSnapshot")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1713,9 +1805,9 @@ export def "get-delete-db-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-instance-identifier: string # The instance identifier for the instance to be deleted. This parameter isn't case sensitive. Constraints: Must match the name of an existing instance.
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --db-instance-identifier: string # The instance identifier for the instance to be deleted. This parameter isn't case sensitive. Constraints: Must match the name of an existing instance. (required)
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1723,9 +1815,12 @@ export def "get-delete-db-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, VpcSecurityGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record>, LatestRestorableTime: record, EngineVersion: record, AutoMinorVersionUpgrade: record, PubliclyAccessible: record, StatusInfos: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, CopyTagsToSnapshot: record, PromotionTier: record, DBInstanceArn: record, EnabledCloudwatchLogsExports: record>> {
+]: nothing -> record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_instance_identifier == null) { error make --unspanned { msg: "required query parameter 'DBInstanceIdentifier' missing: pass --db-instance-identifier" } }
+  let action = ($action | default "DeleteDBInstance")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1760,8 +1855,8 @@ export def "post-delete-db-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1770,10 +1865,12 @@ export def "post-delete-db-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, VpcSecurityGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record>, LatestRestorableTime: record, EngineVersion: record, AutoMinorVersionUpgrade: record, PubliclyAccessible: record, StatusInfos: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, CopyTagsToSnapshot: record, PromotionTier: record, DBInstanceArn: record, EnabledCloudwatchLogsExports: record>> {
+]: any -> record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteDBInstance")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1810,9 +1907,9 @@ export def "get-delete-db-subnet-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-subnet-group-name: string # The name of the database subnet group to delete. You can't delete the default subnet group. Constraints: Must match the name of an existing DBSubnetGroup. Must not be default. Example: mySubnetgroup
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --db-subnet-group-name: string # The name of the database subnet group to delete. You can't delete the default subnet group. Constraints: Must match the name of an existing DBSubnetGroup. Must not be default. Example: mySubnetgroup (required)
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1823,6 +1920,9 @@ export def "get-delete-db-subnet-group" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_subnet_group_name == null) { error make --unspanned { msg: "required query parameter 'DBSubnetGroupName' missing: pass --db-subnet-group-name" } }
+  let action = ($action | default "DeleteDBSubnetGroup")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1857,8 +1957,8 @@ export def "post-delete-db-subnet-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1871,6 +1971,8 @@ export def "post-delete-db-subnet-group" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteDBSubnetGroup")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1907,9 +2009,9 @@ export def "get-delete-event-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --subscription-name: string # The name of the Amazon DocumentDB event notification subscription that you want to delete.
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --subscription-name: string # The name of the Amazon DocumentDB event notification subscription that you want to delete. (required)
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1917,9 +2019,12 @@ export def "get-delete-event-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
+]: nothing -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subscription_name == null) { error make --unspanned { msg: "required query parameter 'SubscriptionName' missing: pass --subscription-name" } }
+  let action = ($action | default "DeleteEventSubscription")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "SubscriptionName" $subscription_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1954,8 +2059,8 @@ export def "post-delete-event-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1964,10 +2069,12 @@ export def "post-delete-event-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
+]: any -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteEventSubscription")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2004,9 +2111,9 @@ export def "get-delete-global-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --global-cluster-identifier: string # The cluster identifier of the global cluster being deleted.
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --global-cluster-identifier: string # The cluster identifier of the global cluster being deleted. (required)
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2014,9 +2121,12 @@ export def "get-delete-global-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalCluster: record<GlobalClusterIdentifier: record, GlobalClusterResourceId: record, GlobalClusterArn: record, Status: record, Engine: record, EngineVersion: record, DatabaseName: record, StorageEncrypted: record, DeletionProtection: record, GlobalClusterMembers: record>> {
+]: nothing -> record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($global_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'GlobalClusterIdentifier' missing: pass --global-cluster-identifier" } }
+  let action = ($action | default "DeleteGlobalCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "GlobalClusterIdentifier" $global_cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2051,8 +2161,8 @@ export def "post-delete-global-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2061,10 +2171,12 @@ export def "post-delete-global-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<GlobalCluster: record<GlobalClusterIdentifier: record, GlobalClusterResourceId: record, GlobalClusterArn: record, Status: record, Engine: record, EngineVersion: record, DatabaseName: record, StorageEncrypted: record, DeletionProtection: record, GlobalClusterMembers: record>> {
+]: any -> record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteGlobalCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2105,8 +2217,8 @@ export def "get-describe-certificates" [
   --filters: list # This parameter is not currently supported.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a pagination token called a marker is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: Minimum: 20 Maximum: 100
   --marker: string # An optional pagination token provided by a previous DescribeCertificates request. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2114,9 +2226,11 @@ export def "get-describe-certificates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Certificates: record, Marker: record> {
+]: nothing -> record<Certificates: table<CertificateIdentifier: string, CertificateType: string, Thumbprint: string, ValidFrom: string, ValidTill: string, CertificateArn: string>, Marker: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeCertificates")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "CertificateIdentifier" $certificate_identifier "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2153,8 +2267,8 @@ export def "post-describe-certificates" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2163,10 +2277,12 @@ export def "post-describe-certificates" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Certificates: record, Marker: record> {
+]: any -> record<Certificates: table<CertificateIdentifier: string, CertificateType: string, Thumbprint: string, ValidFrom: string, ValidTill: string, CertificateArn: string>, Marker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeCertificates")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2207,8 +2323,8 @@ export def "get-describe-db-cluster-parameter-groups" [
   --filters: list # This parameter is not currently supported.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a pagination token (marker) is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: Minimum 20, maximum 100.
   --marker: string # An optional pagination token provided by a previous request. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2216,9 +2332,11 @@ export def "get-describe-db-cluster-parameter-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, DBClusterParameterGroups: record> {
+]: nothing -> record<Marker: string, DBClusterParameterGroups: table<DBClusterParameterGroupName: string, DBParameterGroupFamily: string, Description: string, DBClusterParameterGroupArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeDBClusterParameterGroups")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2255,8 +2373,8 @@ export def "post-describe-db-cluster-parameter-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2265,10 +2383,12 @@ export def "post-describe-db-cluster-parameter-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, DBClusterParameterGroups: record> {
+]: any -> record<Marker: string, DBClusterParameterGroups: table<DBClusterParameterGroupName: string, DBParameterGroupFamily: string, Description: string, DBClusterParameterGroupArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeDBClusterParameterGroups")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2305,13 +2425,13 @@ export def "get-describe-db-cluster-parameters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-cluster-parameter-group-name: string # The name of a specific cluster parameter group to return parameter details for. Constraints: If provided, must match the name of an existing DBClusterParameterGroup.
-  --qp-source: string # A value that indicates to return only parameters for a specific source. Parameter sources can be engine, service, or customer.
+  --db-cluster-parameter-group-name: string # The name of a specific cluster parameter group to return parameter details for. Constraints: If provided, must match the name of an existing DBClusterParameterGroup. (required)
+  --source: string # A value that indicates to return only parameters for a specific source. Parameter sources can be engine, service, or customer.
   --filters: list # This parameter is not currently supported.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a pagination token (marker) is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: Minimum 20, maximum 100.
   --marker: string # An optional pagination token provided by a previous request. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2319,10 +2439,13 @@ export def "get-describe-db-cluster-parameters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Parameters: record, Marker: record> {
+]: nothing -> record<Parameters: table<ParameterName: string, ParameterValue: string, Description: string, Source: string, ApplyType: string, DataType: string, AllowedValues: string, IsModifiable: bool, MinimumEngineVersion: string, ApplyMethod: string>, Marker: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "Source" $qp_source "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
+  if ($db_cluster_parameter_group_name == null) { error make --unspanned { msg: "required query parameter 'DBClusterParameterGroupName' missing: pass --db-cluster-parameter-group-name" } }
+  let action = ($action | default "DescribeDBClusterParameters")
+  let version = ($version | default "2014-10-31")
+  let qp = [(serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "Source" $source "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2331,7 +2454,7 @@ export def "get-describe-db-cluster-parameters" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"DBClusterParameterGroupName": $db_cluster_parameter_group_name, "Source": $qp_source, "Filters": $filters, "MaxRecords": $max_records, "Marker": $marker, "Action": $action, "Version": $version} | compact)
+    query: ({"DBClusterParameterGroupName": $db_cluster_parameter_group_name, "Source": $source, "Filters": $filters, "MaxRecords": $max_records, "Marker": $marker, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2358,8 +2481,8 @@ export def "post-describe-db-cluster-parameters" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2368,10 +2491,12 @@ export def "post-describe-db-cluster-parameters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Parameters: record, Marker: record> {
+]: any -> record<Parameters: table<ParameterName: string, ParameterValue: string, Description: string, Source: string, ApplyType: string, DataType: string, AllowedValues: string, IsModifiable: bool, MinimumEngineVersion: string, ApplyMethod: string>, Marker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeDBClusterParameters")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2408,9 +2533,9 @@ export def "get-describe-db-cluster-snapshot-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-cluster-snapshot-identifier: string # The identifier for the cluster snapshot to describe the attributes for.
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --db-cluster-snapshot-identifier: string # The identifier for the cluster snapshot to describe the attributes for. (required)
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2418,9 +2543,12 @@ export def "get-describe-db-cluster-snapshot-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: record, DBClusterSnapshotAttributes: record>> {
+]: nothing -> record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: string, DBClusterSnapshotAttributes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_cluster_snapshot_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterSnapshotIdentifier' missing: pass --db-cluster-snapshot-identifier" } }
+  let action = ($action | default "DescribeDBClusterSnapshotAttributes")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBClusterSnapshotIdentifier" $db_cluster_snapshot_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2455,8 +2583,8 @@ export def "post-describe-db-cluster-snapshot-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2465,10 +2593,12 @@ export def "post-describe-db-cluster-snapshot-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: record, DBClusterSnapshotAttributes: record>> {
+]: any -> record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: string, DBClusterSnapshotAttributes: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeDBClusterSnapshotAttributes")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2513,8 +2643,8 @@ export def "get-describe-db-cluster-snapshots" [
   --marker: string # An optional pagination token provided by a previous request. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
   --include-shared: oneof<nothing, bool> # Set to true to include shared manual cluster snapshots from other Amazon Web Services accounts that this Amazon Web Services account has been given permission to copy or restore, and otherwise false. The default is false.
   --include-public: oneof<nothing, bool> # Set to true to include manual cluster snapshots that are public and can be copied or restored by any Amazon Web Services account, and otherwise false. The default is false.
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2522,9 +2652,11 @@ export def "get-describe-db-cluster-snapshots" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, DBClusterSnapshots: record> {
+]: nothing -> record<Marker: string, DBClusterSnapshots: table<AvailabilityZones: list, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeDBClusterSnapshots")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "DBClusterSnapshotIdentifier" $db_cluster_snapshot_identifier "scalar") (serialize-qp "SnapshotType" $snapshot_type "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "IncludeShared" $include_shared "scalar") (serialize-qp "IncludePublic" $include_public "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2561,8 +2693,8 @@ export def "post-describe-db-cluster-snapshots" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2571,10 +2703,12 @@ export def "post-describe-db-cluster-snapshots" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, DBClusterSnapshots: record> {
+]: any -> record<Marker: string, DBClusterSnapshots: table<AvailabilityZones: list, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeDBClusterSnapshots")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2615,8 +2749,8 @@ export def "get-describe-db-clusters" [
   --filters: list # A filter that specifies one or more clusters to describe. Supported filters: db-cluster-id - Accepts cluster identifiers and cluster Amazon Resource Names (ARNs). The results list only includes information about the clusters identified by these ARNs.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a pagination token (marker) is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: Minimum 20, maximum 100.
   --marker: string # An optional pagination token provided by a previous request. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2624,9 +2758,11 @@ export def "get-describe-db-clusters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, DBClusters: record> {
+]: nothing -> record<Marker: string, DBClusters: table<AvailabilityZones: list, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list, DBClusterMembers: list, VpcSecurityGroups: list, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list, DeletionProtection: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeDBClusters")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2663,8 +2799,8 @@ export def "post-describe-db-clusters" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2673,10 +2809,12 @@ export def "post-describe-db-clusters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, DBClusters: record> {
+]: any -> record<Marker: string, DBClusters: table<AvailabilityZones: list, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list, DBClusterMembers: list, VpcSecurityGroups: list, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list, DeletionProtection: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeDBClusters")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2722,8 +2860,8 @@ export def "get-describe-db-engine-versions" [
   --default-only: oneof<nothing, bool> # Indicates that only the default version of the specified engine or engine and major version combination is returned.
   --list-supported-character-sets: oneof<nothing, bool> # If this parameter is specified and the requested engine supports the CharacterSetName parameter for CreateDBInstance, the response includes a list of supported character sets for each engine version.
   --list-supported-timezones: oneof<nothing, bool> # If this parameter is specified and the requested engine supports the TimeZone parameter for CreateDBInstance, the response includes a list of supported time zones for each engine version.
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2731,9 +2869,11 @@ export def "get-describe-db-engine-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, DBEngineVersions: record> {
+]: nothing -> record<Marker: string, DBEngineVersions: table<Engine: string, EngineVersion: string, DBParameterGroupFamily: string, DBEngineDescription: string, DBEngineVersionDescription: string, ValidUpgradeTarget: list, ExportableLogTypes: list, SupportsLogExportsToCloudwatchLogs: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeDBEngineVersions")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "DBParameterGroupFamily" $db_parameter_group_family "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "DefaultOnly" $default_only "scalar") (serialize-qp "ListSupportedCharacterSets" $list_supported_character_sets "scalar") (serialize-qp "ListSupportedTimezones" $list_supported_timezones "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2770,8 +2910,8 @@ export def "post-describe-db-engine-versions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2780,10 +2920,12 @@ export def "post-describe-db-engine-versions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, DBEngineVersions: record> {
+]: any -> record<Marker: string, DBEngineVersions: table<Engine: string, EngineVersion: string, DBParameterGroupFamily: string, DBEngineDescription: string, DBEngineVersionDescription: string, ValidUpgradeTarget: list, ExportableLogTypes: list, SupportsLogExportsToCloudwatchLogs: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeDBEngineVersions")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2824,8 +2966,8 @@ export def "get-describe-db-instances" [
   --filters: list # A filter that specifies one or more instances to describe. Supported filters: db-cluster-id - Accepts cluster identifiers and cluster Amazon Resource Names (ARNs). The results list includes only the information about the instances that are associated with the clusters that are identified by these ARNs. db-instance-id - Accepts instance identifiers and instance ARNs. The results list includes only the information about the instances that are identified by these ARNs.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a pagination token (marker) is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: Minimum 20, maximum 100.
   --marker: string # An optional pagination token provided by a previous request. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-26
-  --version: string@version-completer
+  --action: string@action-completer-26 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2833,9 +2975,11 @@ export def "get-describe-db-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, DBInstances: record> {
+]: nothing -> record<Marker: string, DBInstances: table<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list, AvailabilityZone: string, DBSubnetGroup: record, PreferredMaintenanceWindow: string, PendingModifiedValues: record, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeDBInstances")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2872,8 +3016,8 @@ export def "post-describe-db-instances" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-26
-  --version: string@version-completer
+  --action: string@action-completer-26 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2882,10 +3026,12 @@ export def "post-describe-db-instances" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, DBInstances: record> {
+]: any -> record<Marker: string, DBInstances: table<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list, AvailabilityZone: string, DBSubnetGroup: record, PreferredMaintenanceWindow: string, PendingModifiedValues: record, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeDBInstances")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2926,8 +3072,8 @@ export def "get-describe-db-subnet-groups" [
   --filters: list # This parameter is not currently supported.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a pagination token (marker) is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: Minimum 20, maximum 100.
   --marker: string # An optional pagination token provided by a previous request. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-27
-  --version: string@version-completer
+  --action: string@action-completer-27 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2935,9 +3081,11 @@ export def "get-describe-db-subnet-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, DBSubnetGroups: record> {
+]: nothing -> record<Marker: string, DBSubnetGroups: table<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeDBSubnetGroups")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2974,8 +3122,8 @@ export def "post-describe-db-subnet-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-27
-  --version: string@version-completer
+  --action: string@action-completer-27 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2984,10 +3132,12 @@ export def "post-describe-db-subnet-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, DBSubnetGroups: record> {
+]: any -> record<Marker: string, DBSubnetGroups: table<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeDBSubnetGroups")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3024,12 +3174,12 @@ export def "get-describe-engine-default-cluster-parameters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-parameter-group-family: string # The name of the cluster parameter group family to return the engine parameter information for.
+  --db-parameter-group-family: string # The name of the cluster parameter group family to return the engine parameter information for. (required)
   --filters: list # This parameter is not currently supported.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a pagination token (marker) is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: Minimum 20, maximum 100.
   --marker: string # An optional pagination token provided by a previous request. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-28
-  --version: string@version-completer
+  --action: string@action-completer-28 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3037,9 +3187,12 @@ export def "get-describe-engine-default-cluster-parameters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EngineDefaults: record<DBParameterGroupFamily: record, Marker: record, Parameters: record>> {
+]: nothing -> record<EngineDefaults: record<DBParameterGroupFamily: string, Marker: string, Parameters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_parameter_group_family == null) { error make --unspanned { msg: "required query parameter 'DBParameterGroupFamily' missing: pass --db-parameter-group-family" } }
+  let action = ($action | default "DescribeEngineDefaultClusterParameters")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBParameterGroupFamily" $db_parameter_group_family "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3074,8 +3227,8 @@ export def "post-describe-engine-default-cluster-parameters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-28
-  --version: string@version-completer
+  --action: string@action-completer-28 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3084,10 +3237,12 @@ export def "post-describe-engine-default-cluster-parameters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EngineDefaults: record<DBParameterGroupFamily: record, Marker: record, Parameters: record>> {
+]: any -> record<EngineDefaults: record<DBParameterGroupFamily: string, Marker: string, Parameters: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEngineDefaultClusterParameters")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3126,8 +3281,8 @@ export def "get-describe-event-categories" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --source-type: string # The type of source that is generating the events. Valid values: db-instance, db-parameter-group, db-security-group
   --filters: list # This parameter is not currently supported.
-  --action: string@action-completer-29
-  --version: string@version-completer
+  --action: string@action-completer-29 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3135,9 +3290,11 @@ export def "get-describe-event-categories" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventCategoriesMapList: record> {
+]: nothing -> record<EventCategoriesMapList: table<SourceType: string, EventCategories: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEventCategories")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "SourceType" $source_type "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3172,8 +3329,8 @@ export def "post-describe-event-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-29
-  --version: string@version-completer
+  --action: string@action-completer-29 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3182,10 +3339,12 @@ export def "post-describe-event-categories" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EventCategoriesMapList: record> {
+]: any -> record<EventCategoriesMapList: table<SourceType: string, EventCategories: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEventCategories")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3226,8 +3385,8 @@ export def "get-describe-event-subscriptions" [
   --filters: list # This parameter is not currently supported.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a pagination token (marker) is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: Minimum 20, maximum 100.
   --marker: string # An optional pagination token provided by a previous request. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-30
-  --version: string@version-completer
+  --action: string@action-completer-30 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3235,9 +3394,11 @@ export def "get-describe-event-subscriptions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, EventSubscriptionsList: record> {
+]: nothing -> record<Marker: string, EventSubscriptionsList: table<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list, EventCategoriesList: list, Enabled: bool, EventSubscriptionArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEventSubscriptions")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "SubscriptionName" $subscription_name "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3274,8 +3435,8 @@ export def "post-describe-event-subscriptions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-30
-  --version: string@version-completer
+  --action: string@action-completer-30 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3284,10 +3445,12 @@ export def "post-describe-event-subscriptions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, EventSubscriptionsList: record> {
+]: any -> record<Marker: string, EventSubscriptionsList: table<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list, EventCategoriesList: list, Enabled: bool, EventSubscriptionArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEventSubscriptions")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3333,8 +3496,8 @@ export def "get-describe-events" [
   --filters: list # This parameter is not currently supported.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a pagination token (marker) is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: Minimum 20, maximum 100.
   --marker: string # An optional pagination token provided by a previous request. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-31
-  --version: string@version-completer
+  --action: string@action-completer-31 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3342,9 +3505,11 @@ export def "get-describe-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, Events: record> {
+]: nothing -> record<Marker: string, Events: table<SourceIdentifier: string, SourceType: string, Message: string, EventCategories: list, Date: string, SourceArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEvents")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "SourceIdentifier" $source_identifier "scalar") (serialize-qp "SourceType" $source_type "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "Duration" $duration "scalar") (serialize-qp "EventCategories" $event_categories "multi") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3381,8 +3546,8 @@ export def "post-describe-events" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-31
-  --version: string@version-completer
+  --action: string@action-completer-31 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3391,10 +3556,12 @@ export def "post-describe-events" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, Events: record> {
+]: any -> record<Marker: string, Events: table<SourceIdentifier: string, SourceType: string, Message: string, EventCategories: list, Date: string, SourceArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEvents")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3435,8 +3602,8 @@ export def "get-describe-global-clusters" [
   --filters: list # A filter that specifies one or more global DB clusters to describe. Supported filters: db-cluster-id accepts cluster identifiers and cluster Amazon Resource Names (ARNs). The results list will only include information about the clusters identified by these ARNs.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a pagination token called a marker is included in the response so that you can retrieve the remaining results.
   --marker: string # An optional pagination token provided by a previous DescribeGlobalClusters request. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-32
-  --version: string@version-completer
+  --action: string@action-completer-32 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3444,9 +3611,11 @@ export def "get-describe-global-clusters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, GlobalClusters: record> {
+]: nothing -> record<Marker: string, GlobalClusters: table<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeGlobalClusters")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "GlobalClusterIdentifier" $global_cluster_identifier "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3483,8 +3652,8 @@ export def "post-describe-global-clusters" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-32
-  --version: string@version-completer
+  --action: string@action-completer-32 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3493,10 +3662,12 @@ export def "post-describe-global-clusters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, GlobalClusters: record> {
+]: any -> record<Marker: string, GlobalClusters: table<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeGlobalClusters")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3533,7 +3704,7 @@ export def "get-describe-orderable-db-instance-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --engine: string # The name of the engine to retrieve instance options for.
+  --engine: string # The name of the engine to retrieve instance options for. (required)
   --engine-version: string # The engine version filter value. Specify this parameter to show only the available offerings that match the specified engine version.
   --db-instance-class: string # The instance class filter value. Specify this parameter to show only the available offerings that match the specified instance class.
   --license-model: string # The license model filter value. Specify this parameter to show only the available offerings that match the specified license model.
@@ -3541,8 +3712,8 @@ export def "get-describe-orderable-db-instance-options" [
   --filters: list # This parameter is not currently supported.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a pagination token (marker) is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: Minimum 20, maximum 100.
   --marker: string # An optional pagination token provided by a previous request. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-33
-  --version: string@version-completer
+  --action: string@action-completer-33 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3550,9 +3721,12 @@ export def "get-describe-orderable-db-instance-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OrderableDBInstanceOptions: record, Marker: record> {
+]: nothing -> record<OrderableDBInstanceOptions: table<Engine: string, EngineVersion: string, DBInstanceClass: string, LicenseModel: string, AvailabilityZones: list, Vpc: bool>, Marker: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($engine == null) { error make --unspanned { msg: "required query parameter 'Engine' missing: pass --engine" } }
+  let action = ($action | default "DescribeOrderableDBInstanceOptions")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "DBInstanceClass" $db_instance_class "scalar") (serialize-qp "LicenseModel" $license_model "scalar") (serialize-qp "Vpc" $vpc "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3589,8 +3763,8 @@ export def "post-describe-orderable-db-instance-options" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-33
-  --version: string@version-completer
+  --action: string@action-completer-33 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3599,10 +3773,12 @@ export def "post-describe-orderable-db-instance-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<OrderableDBInstanceOptions: record, Marker: record> {
+]: any -> record<OrderableDBInstanceOptions: table<Engine: string, EngineVersion: string, DBInstanceClass: string, LicenseModel: string, AvailabilityZones: list, Vpc: bool>, Marker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeOrderableDBInstanceOptions")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3643,8 +3819,8 @@ export def "get-describe-pending-maintenance-actions" [
   --filters: list # A filter that specifies one or more resources to return pending maintenance actions for. Supported filters: db-cluster-id - Accepts cluster identifiers and cluster Amazon Resource Names (ARNs). The results list includes only pending maintenance actions for the clusters identified by these ARNs. db-instance-id - Accepts instance identifiers and instance ARNs. The results list includes only pending maintenance actions for the DB instances identified by these ARNs.
   --marker: string # An optional pagination token provided by a previous request. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a pagination token (marker) is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: Minimum 20, maximum 100.
-  --action: string@action-completer-34
-  --version: string@version-completer
+  --action: string@action-completer-34 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3652,9 +3828,11 @@ export def "get-describe-pending-maintenance-actions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PendingMaintenanceActions: record, Marker: record> {
+]: nothing -> record<PendingMaintenanceActions: table<ResourceIdentifier: string, PendingMaintenanceActionDetails: list>, Marker: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribePendingMaintenanceActions")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "ResourceIdentifier" $resource_identifier "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3691,8 +3869,8 @@ export def "post-describe-pending-maintenance-actions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-34
-  --version: string@version-completer
+  --action: string@action-completer-34 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3701,10 +3879,12 @@ export def "post-describe-pending-maintenance-actions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PendingMaintenanceActions: record, Marker: record> {
+]: any -> record<PendingMaintenanceActions: table<ResourceIdentifier: string, PendingMaintenanceActionDetails: list>, Marker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribePendingMaintenanceActions")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3743,8 +3923,8 @@ export def "get-failover-db-cluster" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --db-cluster-identifier: string # A cluster identifier to force a failover for. This parameter is not case sensitive. Constraints: Must match the identifier of an existing DBCluster.
   --target-db-instance-identifier: string # The name of the instance to promote to the primary instance. You must specify the instance identifier for an Amazon DocumentDB replica in the cluster. For example, mydbcluster-replica1.
-  --action: string@action-completer-35
-  --version: string@version-completer
+  --action: string@action-completer-35 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3752,9 +3932,11 @@ export def "get-failover-db-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBCluster: record<AvailabilityZones: record, BackupRetentionPeriod: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, CloneGroupId: record, ClusterCreateTime: record, EnabledCloudwatchLogsExports: record, DeletionProtection: record>> {
+]: nothing -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "FailoverDBCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "TargetDBInstanceIdentifier" $target_db_instance_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3789,8 +3971,8 @@ export def "post-failover-db-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-35
-  --version: string@version-completer
+  --action: string@action-completer-35 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3799,10 +3981,12 @@ export def "post-failover-db-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBCluster: record<AvailabilityZones: record, BackupRetentionPeriod: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, CloneGroupId: record, ClusterCreateTime: record, EnabledCloudwatchLogsExports: record, DeletionProtection: record>> {
+]: any -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "FailoverDBCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3839,10 +4023,10 @@ export def "get-list-tags-for-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-name: string # The Amazon DocumentDB resource with tags to be listed. This value is an Amazon Resource Name (ARN).
+  --resource-name: string # The Amazon DocumentDB resource with tags to be listed. This value is an Amazon Resource Name (ARN). (required)
   --filters: list # This parameter is not currently supported.
-  --action: string@action-completer-36
-  --version: string@version-completer
+  --action: string@action-completer-36 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3850,9 +4034,12 @@ export def "get-list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TagList: record> {
+]: nothing -> record<TagList: table<Key: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_name == null) { error make --unspanned { msg: "required query parameter 'ResourceName' missing: pass --resource-name" } }
+  let action = ($action | default "ListTagsForResource")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "ResourceName" $resource_name "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3887,8 +4074,8 @@ export def "post-list-tags-for-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-36
-  --version: string@version-completer
+  --action: string@action-completer-36 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3897,10 +4084,12 @@ export def "post-list-tags-for-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TagList: record> {
+]: any -> record<TagList: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListTagsForResource")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3937,7 +4126,7 @@ export def "get-modify-db-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-cluster-identifier: string # The cluster identifier for the cluster that is being modified. This parameter is not case sensitive. Constraints: Must match the identifier of an existing DBCluster.
+  --db-cluster-identifier: string # The cluster identifier for the cluster that is being modified. This parameter is not case sensitive. Constraints: Must match the identifier of an existing DBCluster. (required)
   --new-db-cluster-identifier: string # The new cluster identifier for the cluster when renaming a cluster. This value is stored as a lowercase string. Constraints: Must contain from 1 to 63 letters, numbers, or hyphens. The first character must be a letter. Cannot end with a hyphen or contain two consecutive hyphens. Example: my-cluster2
   --apply-immediately: oneof<nothing, bool> # A value that specifies whether the changes in this request and any pending changes are asynchronously applied as soon as possible, regardless of the PreferredMaintenanceWindow setting for the cluster. If this parameter is set to false, changes to the cluster are applied during the next maintenance window. The ApplyImmediately parameter affects only the NewDBClusterIdentifier and MasterUserPassword values. If you set this parameter value to false, the changes to the NewDBClusterIdentifier and MasterUserPassword values are applied during the next maintenance window. All other changes are applied immediately, regardless of the value of the ApplyImmediately parameter. Default: false
   --backup-retention-period: int # The number of days for which automated backups are retained. You must specify a minimum value of 1. Default: 1 Constraints: Must be a value from 1 to 35.
@@ -3950,8 +4139,8 @@ export def "get-modify-db-cluster" [
   --cloudwatch-logs-export-configuration: record # The configuration setting for the log types to be enabled for export to Amazon CloudWatch Logs for a specific instance or cluster. The EnableLogTypes and DisableLogTypes arrays determine which logs are exported (or not exported) to CloudWatch Logs.
   --engine-version: string # The version number of the database engine to which you want to upgrade. Modifying engine version is not supported on Amazon DocumentDB.
   --deletion-protection: oneof<nothing, bool> # Specifies whether this cluster can be deleted. If DeletionProtection is enabled, the cluster cannot be deleted unless it is modified and DeletionProtection is disabled. DeletionProtection protects clusters from being accidentally deleted.
-  --action: string@action-completer-37
-  --version: string@version-completer
+  --action: string@action-completer-37 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3959,9 +4148,12 @@ export def "get-modify-db-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBCluster: record<AvailabilityZones: record, BackupRetentionPeriod: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, CloneGroupId: record, ClusterCreateTime: record, EnabledCloudwatchLogsExports: record, DeletionProtection: record>> {
+]: nothing -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterIdentifier' missing: pass --db-cluster-identifier" } }
+  let action = ($action | default "ModifyDBCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "NewDBClusterIdentifier" $new_db_cluster_identifier "scalar") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "BackupRetentionPeriod" $backup_retention_period "scalar") (serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "Port" $port "scalar") (serialize-qp "MasterUserPassword" $master_user_password "scalar") (serialize-qp "PreferredBackupWindow" $preferred_backup_window "scalar") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "CloudwatchLogsExportConfiguration" $cloudwatch_logs_export_configuration "multi") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3996,8 +4188,8 @@ export def "post-modify-db-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-37
-  --version: string@version-completer
+  --action: string@action-completer-37 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4006,10 +4198,12 @@ export def "post-modify-db-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBCluster: record<AvailabilityZones: record, BackupRetentionPeriod: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, CloneGroupId: record, ClusterCreateTime: record, EnabledCloudwatchLogsExports: record, DeletionProtection: record>> {
+]: any -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ModifyDBCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4046,10 +4240,10 @@ export def "get-modify-db-cluster-parameter-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-cluster-parameter-group-name: string # The name of the cluster parameter group to modify.
-  --parameters: list # A list of parameters in the cluster parameter group to modify.
-  --action: string@action-completer-38
-  --version: string@version-completer
+  --db-cluster-parameter-group-name: string # The name of the cluster parameter group to modify. (required)
+  --parameters: list # A list of parameters in the cluster parameter group to modify. (required)
+  --action: string@action-completer-38 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4057,9 +4251,13 @@ export def "get-modify-db-cluster-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBClusterParameterGroupName: record> {
+]: nothing -> record<DBClusterParameterGroupName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_cluster_parameter_group_name == null) { error make --unspanned { msg: "required query parameter 'DBClusterParameterGroupName' missing: pass --db-cluster-parameter-group-name" } }
+  if ($parameters == null) { error make --unspanned { msg: "required query parameter 'Parameters' missing: pass --parameters" } }
+  let action = ($action | default "ModifyDBClusterParameterGroup")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "Parameters" $parameters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4094,8 +4292,8 @@ export def "post-modify-db-cluster-parameter-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-38
-  --version: string@version-completer
+  --action: string@action-completer-38 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4104,10 +4302,12 @@ export def "post-modify-db-cluster-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBClusterParameterGroupName: record> {
+]: any -> record<DBClusterParameterGroupName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ModifyDBClusterParameterGroup")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4144,12 +4344,12 @@ export def "get-modify-db-cluster-snapshot-attribute" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-cluster-snapshot-identifier: string # The identifier for the cluster snapshot to modify the attributes for.
-  --attribute-name: string # The name of the cluster snapshot attribute to modify. To manage authorization for other Amazon Web Services accounts to copy or restore a manual cluster snapshot, set this value to restore.
+  --db-cluster-snapshot-identifier: string # The identifier for the cluster snapshot to modify the attributes for. (required)
+  --attribute-name: string # The name of the cluster snapshot attribute to modify. To manage authorization for other Amazon Web Services accounts to copy or restore a manual cluster snapshot, set this value to restore. (required)
   --values-to-add: list # A list of cluster snapshot attributes to add to the attribute specified by AttributeName. To authorize other Amazon Web Services accounts to copy or restore a manual cluster snapshot, set this list to include one or more Amazon Web Services account IDs. To make the manual cluster snapshot restorable by any Amazon Web Services account, set it to all. Do not add the all value for any manual cluster snapshots that contain private information that you don't want to be available to all Amazon Web Services accounts.
   --values-to-remove: list # A list of cluster snapshot attributes to remove from the attribute specified by AttributeName. To remove authorization for other Amazon Web Services accounts to copy or restore a manual cluster snapshot, set this list to include one or more Amazon Web Services account identifiers. To remove authorization for any Amazon Web Services account to copy or restore the cluster snapshot, set it to all . If you specify all, an Amazon Web Services account whose account ID is explicitly added to the restore attribute can still copy or restore a manual cluster snapshot.
-  --action: string@action-completer-39
-  --version: string@version-completer
+  --action: string@action-completer-39 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4157,9 +4357,13 @@ export def "get-modify-db-cluster-snapshot-attribute" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: record, DBClusterSnapshotAttributes: record>> {
+]: nothing -> record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: string, DBClusterSnapshotAttributes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_cluster_snapshot_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterSnapshotIdentifier' missing: pass --db-cluster-snapshot-identifier" } }
+  if ($attribute_name == null) { error make --unspanned { msg: "required query parameter 'AttributeName' missing: pass --attribute-name" } }
+  let action = ($action | default "ModifyDBClusterSnapshotAttribute")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBClusterSnapshotIdentifier" $db_cluster_snapshot_identifier "scalar") (serialize-qp "AttributeName" $attribute_name "scalar") (serialize-qp "ValuesToAdd" $values_to_add "multi") (serialize-qp "ValuesToRemove" $values_to_remove "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4194,8 +4398,8 @@ export def "post-modify-db-cluster-snapshot-attribute" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-39
-  --version: string@version-completer
+  --action: string@action-completer-39 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4204,10 +4408,12 @@ export def "post-modify-db-cluster-snapshot-attribute" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: record, DBClusterSnapshotAttributes: record>> {
+]: any -> record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: string, DBClusterSnapshotAttributes: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ModifyDBClusterSnapshotAttribute")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4244,7 +4450,7 @@ export def "get-modify-db-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-instance-identifier: string # The instance identifier. This value is stored as a lowercase string. Constraints: Must match the identifier of an existing DBInstance.
+  --db-instance-identifier: string # The instance identifier. This value is stored as a lowercase string. Constraints: Must match the identifier of an existing DBInstance. (required)
   --db-instance-class: string # The new compute and memory capacity of the instance; for example, db.r5.large. Not all instance classes are available in all Amazon Web Services Regions. If you modify the instance class, an outage occurs during the change. The change is applied during the next maintenance window, unless ApplyImmediately is specified as true for this request. Default: Uses existing setting.
   --apply-immediately: oneof<nothing, bool> # Specifies whether the modifications in this request and any pending modifications are asynchronously applied as soon as possible, regardless of the PreferredMaintenanceWindow setting for the instance. If this parameter is set to false, changes to the instance are applied during the next maintenance window. Some parameter changes can cause an outage and are applied on the next reboot. Default: false
   --preferred-maintenance-window: string # The weekly time range (in UTC) during which system maintenance can occur, which might result in an outage. Changing this parameter doesn't result in an outage except in the following situation, and the change is asynchronously applied as soon as possible. If there are pending actions that cause a reboot, and the maintenance window is changed to include the current time, changing this parameter causes a reboot of the instance. If you are moving this window to the current time, there must be at least 30 minutes between the current time and end of the window to ensure that pending changes are applied. Default: Uses existing setting. Format: ddd:hh24:mi-ddd:hh24:mi Valid days: Mon, Tue, Wed, Thu, Fri, Sat, Sun Constraints: Must be at least 30 minutes.
@@ -4255,8 +4461,8 @@ export def "get-modify-db-instance" [
   --promotion-tier: int # A value that specifies the order in which an Amazon DocumentDB replica is promoted to the primary instance after a failure of the existing primary instance. Default: 1 Valid values: 0-15
   --enable-performance-insights: oneof<nothing, bool> # A value that indicates whether to enable Performance Insights for the DB Instance. For more information, see Using Amazon Performance Insights (https://docs.aws.amazon.com/documentdb/latest/developerguide/performance-insights.html).
   --performance-insights-kms-key-id: string # The KMS key identifier for encryption of Performance Insights data. The KMS key identifier is the key ARN, key ID, alias ARN, or alias name for the KMS key. If you do not specify a value for PerformanceInsightsKMSKeyId, then Amazon DocumentDB uses your default KMS key. There is a default KMS key for your Amazon Web Services account. Your Amazon Web Services account has a different default KMS key for each Amazon Web Services region.
-  --action: string@action-completer-40
-  --version: string@version-completer
+  --action: string@action-completer-40 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4264,9 +4470,12 @@ export def "get-modify-db-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, VpcSecurityGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record>, LatestRestorableTime: record, EngineVersion: record, AutoMinorVersionUpgrade: record, PubliclyAccessible: record, StatusInfos: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, CopyTagsToSnapshot: record, PromotionTier: record, DBInstanceArn: record, EnabledCloudwatchLogsExports: record>> {
+]: nothing -> record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_instance_identifier == null) { error make --unspanned { msg: "required query parameter 'DBInstanceIdentifier' missing: pass --db-instance-identifier" } }
+  let action = ($action | default "ModifyDBInstance")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "DBInstanceClass" $db_instance_class "scalar") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "AutoMinorVersionUpgrade" $auto_minor_version_upgrade "scalar") (serialize-qp "NewDBInstanceIdentifier" $new_db_instance_identifier "scalar") (serialize-qp "CACertificateIdentifier" $ca_certificate_identifier "scalar") (serialize-qp "CopyTagsToSnapshot" $copy_tags_to_snapshot "scalar") (serialize-qp "PromotionTier" $promotion_tier "scalar") (serialize-qp "EnablePerformanceInsights" $enable_performance_insights "scalar") (serialize-qp "PerformanceInsightsKMSKeyId" $performance_insights_kms_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4301,8 +4510,8 @@ export def "post-modify-db-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-40
-  --version: string@version-completer
+  --action: string@action-completer-40 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4311,10 +4520,12 @@ export def "post-modify-db-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, VpcSecurityGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record>, LatestRestorableTime: record, EngineVersion: record, AutoMinorVersionUpgrade: record, PubliclyAccessible: record, StatusInfos: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, CopyTagsToSnapshot: record, PromotionTier: record, DBInstanceArn: record, EnabledCloudwatchLogsExports: record>> {
+]: any -> record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ModifyDBInstance")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4351,11 +4562,11 @@ export def "get-modify-db-subnet-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-subnet-group-name: string # The name for the subnet group. This value is stored as a lowercase string. You can't modify the default subnet group. Constraints: Must match the name of an existing DBSubnetGroup. Must not be default. Example: mySubnetgroup
+  --db-subnet-group-name: string # The name for the subnet group. This value is stored as a lowercase string. You can't modify the default subnet group. Constraints: Must match the name of an existing DBSubnetGroup. Must not be default. Example: mySubnetgroup (required)
   --db-subnet-group-description: string # The description for the subnet group.
-  --subnet-ids: list # The Amazon EC2 subnet IDs for the subnet group.
-  --action: string@action-completer-41
-  --version: string@version-completer
+  --subnet-ids: list # The Amazon EC2 subnet IDs for the subnet group. (required)
+  --action: string@action-completer-41 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4363,9 +4574,13 @@ export def "get-modify-db-subnet-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record>> {
+]: nothing -> record<DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list<record>, DBSubnetGroupArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_subnet_group_name == null) { error make --unspanned { msg: "required query parameter 'DBSubnetGroupName' missing: pass --db-subnet-group-name" } }
+  if ($subnet_ids == null) { error make --unspanned { msg: "required query parameter 'SubnetIds' missing: pass --subnet-ids" } }
+  let action = ($action | default "ModifyDBSubnetGroup")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "DBSubnetGroupDescription" $db_subnet_group_description "scalar") (serialize-qp "SubnetIds" $subnet_ids "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4400,8 +4615,8 @@ export def "post-modify-db-subnet-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-41
-  --version: string@version-completer
+  --action: string@action-completer-41 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4410,10 +4625,12 @@ export def "post-modify-db-subnet-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record>> {
+]: any -> record<DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list<record>, DBSubnetGroupArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ModifyDBSubnetGroup")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4450,13 +4667,13 @@ export def "get-modify-event-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --subscription-name: string # The name of the Amazon DocumentDB event notification subscription.
+  --subscription-name: string # The name of the Amazon DocumentDB event notification subscription. (required)
   --sns-topic-arn: string # The Amazon Resource Name (ARN) of the SNS topic created for event notification. The ARN is created by Amazon SNS when you create a topic and subscribe to it.
   --source-type: string # The type of source that is generating the events. For example, if you want to be notified of events generated by an instance, set this parameter to db-instance. If this value is not specified, all events are returned. Valid values: db-instance, db-parameter-group, db-security-group
   --event-categories: list # A list of event categories for a SourceType that you want to subscribe to.
   --enabled: oneof<nothing, bool> # A Boolean value; set to true to activate the subscription.
-  --action: string@action-completer-42
-  --version: string@version-completer
+  --action: string@action-completer-42 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4464,9 +4681,12 @@ export def "get-modify-event-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
+]: nothing -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subscription_name == null) { error make --unspanned { msg: "required query parameter 'SubscriptionName' missing: pass --subscription-name" } }
+  let action = ($action | default "ModifyEventSubscription")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "SubscriptionName" $subscription_name "scalar") (serialize-qp "SnsTopicArn" $sns_topic_arn "scalar") (serialize-qp "SourceType" $source_type "scalar") (serialize-qp "EventCategories" $event_categories "multi") (serialize-qp "Enabled" $enabled "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4501,8 +4721,8 @@ export def "post-modify-event-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-42
-  --version: string@version-completer
+  --action: string@action-completer-42 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4511,10 +4731,12 @@ export def "post-modify-event-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
+]: any -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ModifyEventSubscription")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4551,11 +4773,11 @@ export def "get-modify-global-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --global-cluster-identifier: string # The identifier for the global cluster being modified. This parameter isn't case-sensitive. Constraints: Must match the identifier of an existing global cluster.
+  --global-cluster-identifier: string # The identifier for the global cluster being modified. This parameter isn't case-sensitive. Constraints: Must match the identifier of an existing global cluster. (required)
   --new-global-cluster-identifier: string # The new identifier for a global cluster when you modify a global cluster. This value is stored as a lowercase string. Must contain from 1 to 63 letters, numbers, or hyphens The first character must be a letter Can't end with a hyphen or contain two consecutive hyphens Example: my-cluster2
   --deletion-protection: oneof<nothing, bool> # Indicates if the global cluster has deletion protection enabled. The global cluster can't be deleted when deletion protection is enabled.
-  --action: string@action-completer-43
-  --version: string@version-completer
+  --action: string@action-completer-43 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4563,9 +4785,12 @@ export def "get-modify-global-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalCluster: record<GlobalClusterIdentifier: record, GlobalClusterResourceId: record, GlobalClusterArn: record, Status: record, Engine: record, EngineVersion: record, DatabaseName: record, StorageEncrypted: record, DeletionProtection: record, GlobalClusterMembers: record>> {
+]: nothing -> record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($global_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'GlobalClusterIdentifier' missing: pass --global-cluster-identifier" } }
+  let action = ($action | default "ModifyGlobalCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "GlobalClusterIdentifier" $global_cluster_identifier "scalar") (serialize-qp "NewGlobalClusterIdentifier" $new_global_cluster_identifier "scalar") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4600,8 +4825,8 @@ export def "post-modify-global-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-43
-  --version: string@version-completer
+  --action: string@action-completer-43 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4610,10 +4835,12 @@ export def "post-modify-global-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<GlobalCluster: record<GlobalClusterIdentifier: record, GlobalClusterResourceId: record, GlobalClusterArn: record, Status: record, Engine: record, EngineVersion: record, DatabaseName: record, StorageEncrypted: record, DeletionProtection: record, GlobalClusterMembers: record>> {
+]: any -> record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ModifyGlobalCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4650,10 +4877,10 @@ export def "get-reboot-db-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-instance-identifier: string # The instance identifier. This parameter is stored as a lowercase string. Constraints: Must match the identifier of an existing DBInstance.
+  --db-instance-identifier: string # The instance identifier. This parameter is stored as a lowercase string. Constraints: Must match the identifier of an existing DBInstance. (required)
   --force-failover: oneof<nothing, bool> # When true, the reboot is conducted through a Multi-AZ failover. Constraint: You can't specify true if the instance is not configured for Multi-AZ.
-  --action: string@action-completer-44
-  --version: string@version-completer
+  --action: string@action-completer-44 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4661,9 +4888,12 @@ export def "get-reboot-db-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, VpcSecurityGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record>, LatestRestorableTime: record, EngineVersion: record, AutoMinorVersionUpgrade: record, PubliclyAccessible: record, StatusInfos: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, CopyTagsToSnapshot: record, PromotionTier: record, DBInstanceArn: record, EnabledCloudwatchLogsExports: record>> {
+]: nothing -> record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_instance_identifier == null) { error make --unspanned { msg: "required query parameter 'DBInstanceIdentifier' missing: pass --db-instance-identifier" } }
+  let action = ($action | default "RebootDBInstance")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "ForceFailover" $force_failover "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4698,8 +4928,8 @@ export def "post-reboot-db-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-44
-  --version: string@version-completer
+  --action: string@action-completer-44 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4708,10 +4938,12 @@ export def "post-reboot-db-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, VpcSecurityGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record>, LatestRestorableTime: record, EngineVersion: record, AutoMinorVersionUpgrade: record, PubliclyAccessible: record, StatusInfos: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, CopyTagsToSnapshot: record, PromotionTier: record, DBInstanceArn: record, EnabledCloudwatchLogsExports: record>> {
+]: any -> record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RebootDBInstance")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4748,10 +4980,10 @@ export def "get-remove-from-global-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --global-cluster-identifier: string # The cluster identifier to detach from the Amazon DocumentDB global cluster.
-  --db-cluster-identifier: string # The Amazon Resource Name (ARN) identifying the cluster that was detached from the Amazon DocumentDB global cluster.
-  --action: string@action-completer-45
-  --version: string@version-completer
+  --global-cluster-identifier: string # The cluster identifier to detach from the Amazon DocumentDB global cluster. (required)
+  --db-cluster-identifier: string # The Amazon Resource Name (ARN) identifying the cluster that was detached from the Amazon DocumentDB global cluster. (required)
+  --action: string@action-completer-45 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4759,9 +4991,13 @@ export def "get-remove-from-global-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalCluster: record<GlobalClusterIdentifier: record, GlobalClusterResourceId: record, GlobalClusterArn: record, Status: record, Engine: record, EngineVersion: record, DatabaseName: record, StorageEncrypted: record, DeletionProtection: record, GlobalClusterMembers: record>> {
+]: nothing -> record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($global_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'GlobalClusterIdentifier' missing: pass --global-cluster-identifier" } }
+  if ($db_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'DbClusterIdentifier' missing: pass --db-cluster-identifier" } }
+  let action = ($action | default "RemoveFromGlobalCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "GlobalClusterIdentifier" $global_cluster_identifier "scalar") (serialize-qp "DbClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4796,8 +5032,8 @@ export def "post-remove-from-global-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-45
-  --version: string@version-completer
+  --action: string@action-completer-45 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4806,10 +5042,12 @@ export def "post-remove-from-global-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<GlobalCluster: record<GlobalClusterIdentifier: record, GlobalClusterResourceId: record, GlobalClusterArn: record, Status: record, Engine: record, EngineVersion: record, DatabaseName: record, StorageEncrypted: record, DeletionProtection: record, GlobalClusterMembers: record>> {
+]: any -> record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RemoveFromGlobalCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4846,10 +5084,10 @@ export def "get-remove-source-identifier-from-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --subscription-name: string # The name of the Amazon DocumentDB event notification subscription that you want to remove a source identifier from.
-  --source-identifier: string # The source identifier to be removed from the subscription, such as the instance identifier for an instance, or the name of a security group.
-  --action: string@action-completer-46
-  --version: string@version-completer
+  --subscription-name: string # The name of the Amazon DocumentDB event notification subscription that you want to remove a source identifier from. (required)
+  --source-identifier: string # The source identifier to be removed from the subscription, such as the instance identifier for an instance, or the name of a security group. (required)
+  --action: string@action-completer-46 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4857,9 +5095,13 @@ export def "get-remove-source-identifier-from-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
+]: nothing -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subscription_name == null) { error make --unspanned { msg: "required query parameter 'SubscriptionName' missing: pass --subscription-name" } }
+  if ($source_identifier == null) { error make --unspanned { msg: "required query parameter 'SourceIdentifier' missing: pass --source-identifier" } }
+  let action = ($action | default "RemoveSourceIdentifierFromSubscription")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "SubscriptionName" $subscription_name "scalar") (serialize-qp "SourceIdentifier" $source_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4894,8 +5136,8 @@ export def "post-remove-source-identifier-from-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-46
-  --version: string@version-completer
+  --action: string@action-completer-46 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4904,10 +5146,12 @@ export def "post-remove-source-identifier-from-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
+]: any -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RemoveSourceIdentifierFromSubscription")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4944,10 +5188,10 @@ export def "get-remove-tags-from-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-name: string # The Amazon DocumentDB resource that the tags are removed from. This value is an Amazon Resource Name (ARN).
-  --tag-keys: list # The tag key (name) of the tag to be removed.
-  --action: string@action-completer-47
-  --version: string@version-completer
+  --resource-name: string # The Amazon DocumentDB resource that the tags are removed from. This value is an Amazon Resource Name (ARN). (required)
+  --tag-keys: list # The tag key (name) of the tag to be removed. (required)
+  --action: string@action-completer-47 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4958,6 +5202,10 @@ export def "get-remove-tags-from-resource" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_name == null) { error make --unspanned { msg: "required query parameter 'ResourceName' missing: pass --resource-name" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'TagKeys' missing: pass --tag-keys" } }
+  let action = ($action | default "RemoveTagsFromResource")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "ResourceName" $resource_name "scalar") (serialize-qp "TagKeys" $tag_keys "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -4992,8 +5240,8 @@ export def "post-remove-tags-from-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-47
-  --version: string@version-completer
+  --action: string@action-completer-47 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5006,6 +5254,8 @@ export def "post-remove-tags-from-resource" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RemoveTagsFromResource")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5042,11 +5292,11 @@ export def "get-reset-db-cluster-parameter-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-cluster-parameter-group-name: string # The name of the cluster parameter group to reset.
+  --db-cluster-parameter-group-name: string # The name of the cluster parameter group to reset. (required)
   --reset-all-parameters: oneof<nothing, bool> # A value that is set to true to reset all parameters in the cluster parameter group to their default values, and false otherwise. You can't use this parameter if there is a list of parameter names specified for the Parameters parameter.
   --parameters: list # A list of parameter names in the cluster parameter group to reset to the default values. You can't use this parameter if the ResetAllParameters parameter is set to true.
-  --action: string@action-completer-48
-  --version: string@version-completer
+  --action: string@action-completer-48 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5054,9 +5304,12 @@ export def "get-reset-db-cluster-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBClusterParameterGroupName: record> {
+]: nothing -> record<DBClusterParameterGroupName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_cluster_parameter_group_name == null) { error make --unspanned { msg: "required query parameter 'DBClusterParameterGroupName' missing: pass --db-cluster-parameter-group-name" } }
+  let action = ($action | default "ResetDBClusterParameterGroup")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "ResetAllParameters" $reset_all_parameters "scalar") (serialize-qp "Parameters" $parameters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5091,8 +5344,8 @@ export def "post-reset-db-cluster-parameter-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-48
-  --version: string@version-completer
+  --action: string@action-completer-48 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5101,10 +5354,12 @@ export def "post-reset-db-cluster-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBClusterParameterGroupName: record> {
+]: any -> record<DBClusterParameterGroupName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ResetDBClusterParameterGroup")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5142,9 +5397,9 @@ export def "get-restore-db-cluster-from-snapshot" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --availability-zones: list # Provides the list of Amazon EC2 Availability Zones that instances in the restored DB cluster can be created in.
-  --db-cluster-identifier: string # The name of the cluster to create from the snapshot or cluster snapshot. This parameter isn't case sensitive. Constraints: Must contain from 1 to 63 letters, numbers, or hyphens. The first character must be a letter. Cannot end with a hyphen or contain two consecutive hyphens. Example: my-snapshot-id
-  --snapshot-identifier: string # The identifier for the snapshot or cluster snapshot to restore from. You can use either the name or the Amazon Resource Name (ARN) to specify a cluster snapshot. However, you can use only the ARN to specify a snapshot. Constraints: Must match the identifier of an existing snapshot.
-  --engine: string # The database engine to use for the new cluster. Default: The same as source. Constraint: Must be compatible with the engine of the source.
+  --db-cluster-identifier: string # The name of the cluster to create from the snapshot or cluster snapshot. This parameter isn't case sensitive. Constraints: Must contain from 1 to 63 letters, numbers, or hyphens. The first character must be a letter. Cannot end with a hyphen or contain two consecutive hyphens. Example: my-snapshot-id (required)
+  --snapshot-identifier: string # The identifier for the snapshot or cluster snapshot to restore from. You can use either the name or the Amazon Resource Name (ARN) to specify a cluster snapshot. However, you can use only the ARN to specify a snapshot. Constraints: Must match the identifier of an existing snapshot. (required)
+  --engine: string # The database engine to use for the new cluster. Default: The same as source. Constraint: Must be compatible with the engine of the source. (required)
   --engine-version: string # The version of the database engine to use for the new cluster.
   --port: int # The port number on which the new cluster accepts connections. Constraints: Must be a value from 1150 to 65535. Default: The same port as the original cluster.
   --db-subnet-group-name: string # The name of the subnet group to use for the new cluster. Constraints: If provided, must match the name of an existing DBSubnetGroup. Example: mySubnetgroup
@@ -5154,8 +5409,8 @@ export def "get-restore-db-cluster-from-snapshot" [
   --enable-cloudwatch-logs-exports: list # A list of log types that must be enabled for exporting to Amazon CloudWatch Logs.
   --deletion-protection: oneof<nothing, bool> # Specifies whether this cluster can be deleted. If DeletionProtection is enabled, the cluster cannot be deleted unless it is modified and DeletionProtection is disabled. DeletionProtection protects clusters from being accidentally deleted.
   --db-cluster-parameter-group-name: string # The name of the DB cluster parameter group to associate with this DB cluster. Type: String. Required: No. If this argument is omitted, the default DB cluster parameter group is used. If supplied, must match the name of an existing default DB cluster parameter group. The string must consist of from 1 to 255 letters, numbers or hyphens. Its first character must be a letter, and it cannot end with a hyphen or contain two consecutive hyphens.
-  --action: string@action-completer-49
-  --version: string@version-completer
+  --action: string@action-completer-49 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5163,9 +5418,14 @@ export def "get-restore-db-cluster-from-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBCluster: record<AvailabilityZones: record, BackupRetentionPeriod: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, CloneGroupId: record, ClusterCreateTime: record, EnabledCloudwatchLogsExports: record, DeletionProtection: record>> {
+]: nothing -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterIdentifier' missing: pass --db-cluster-identifier" } }
+  if ($snapshot_identifier == null) { error make --unspanned { msg: "required query parameter 'SnapshotIdentifier' missing: pass --snapshot-identifier" } }
+  if ($engine == null) { error make --unspanned { msg: "required query parameter 'Engine' missing: pass --engine" } }
+  let action = ($action | default "RestoreDBClusterFromSnapshot")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "AvailabilityZones" $availability_zones "multi") (serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "SnapshotIdentifier" $snapshot_identifier "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "EnableCloudwatchLogsExports" $enable_cloudwatch_logs_exports "multi") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5200,8 +5460,8 @@ export def "post-restore-db-cluster-from-snapshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-49
-  --version: string@version-completer
+  --action: string@action-completer-49 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5210,10 +5470,12 @@ export def "post-restore-db-cluster-from-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBCluster: record<AvailabilityZones: record, BackupRetentionPeriod: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, CloneGroupId: record, ClusterCreateTime: record, EnabledCloudwatchLogsExports: record, DeletionProtection: record>> {
+]: any -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RestoreDBClusterFromSnapshot")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5250,9 +5512,9 @@ export def "get-restore-db-cluster-to-point-in-time" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-cluster-identifier: string # The name of the new cluster to be created. Constraints: Must contain from 1 to 63 letters, numbers, or hyphens. The first character must be a letter. Cannot end with a hyphen or contain two consecutive hyphens.
+  --db-cluster-identifier: string # The name of the new cluster to be created. Constraints: Must contain from 1 to 63 letters, numbers, or hyphens. The first character must be a letter. Cannot end with a hyphen or contain two consecutive hyphens. (required)
   --restore-type: string # The type of restore to be performed. You can specify one of the following values: full-copy - The new DB cluster is restored as a full copy of the source DB cluster. copy-on-write - The new DB cluster is restored as a clone of the source DB cluster. Constraints: You can't specify copy-on-write if the engine version of the source DB cluster is earlier than 1.11. If you don't specify a RestoreType value, then the new DB cluster is restored as a full copy of the source DB cluster.
-  --source-db-cluster-identifier: string # The identifier of the source cluster from which to restore. Constraints: Must match the identifier of an existing DBCluster.
+  --source-db-cluster-identifier: string # The identifier of the source cluster from which to restore. Constraints: Must match the identifier of an existing DBCluster. (required)
   --restore-to-time: string # The date and time to restore the cluster to. Valid values: A time in Universal Coordinated Time (UTC) format. Constraints: Must be before the latest restorable time for the instance. Must be specified if the UseLatestRestorableTime parameter is not provided. Cannot be specified if the UseLatestRestorableTime parameter is true. Cannot be specified if the RestoreType parameter is copy-on-write. Example: 2015-03-07T23:45:00Z (format: date-time)
   --use-latest-restorable-time: oneof<nothing, bool> # A value that is set to true to restore the cluster to the latest restorable backup time, and false otherwise. Default: false Constraints: Cannot be specified if the RestoreToTime parameter is provided.
   --port: int # The port number on which the new cluster accepts connections. Constraints: Must be a value from 1150 to 65535. Default: The default port for the engine.
@@ -5262,8 +5524,8 @@ export def "get-restore-db-cluster-to-point-in-time" [
   --kms-key-id: string # The KMS key identifier to use when restoring an encrypted cluster from an encrypted cluster. The KMS key identifier is the Amazon Resource Name (ARN) for the KMS encryption key. If you are restoring a cluster with the same Amazon Web Services account that owns the KMS encryption key used to encrypt the new cluster, then you can use the KMS key alias instead of the ARN for the KMS encryption key. You can restore to a new cluster and encrypt the new cluster with an KMS key that is different from the KMS key used to encrypt the source cluster. The new DB cluster is encrypted with the KMS key identified by the KmsKeyId parameter. If you do not specify a value for the KmsKeyId parameter, then the following occurs: If the cluster is encrypted, then the restored cluster is encrypted using the KMS key that was used to encrypt the source cluster. If the cluster is not encrypted, then the restored cluster is not encrypted. If DBClusterIdentifier refers to a cluster that is not encrypted, then the restore request is rejected.
   --enable-cloudwatch-logs-exports: list # A list of log types that must be enabled for exporting to Amazon CloudWatch Logs.
   --deletion-protection: oneof<nothing, bool> # Specifies whether this cluster can be deleted. If DeletionProtection is enabled, the cluster cannot be deleted unless it is modified and DeletionProtection is disabled. DeletionProtection protects clusters from being accidentally deleted.
-  --action: string@action-completer-50
-  --version: string@version-completer
+  --action: string@action-completer-50 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5271,9 +5533,13 @@ export def "get-restore-db-cluster-to-point-in-time" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBCluster: record<AvailabilityZones: record, BackupRetentionPeriod: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, CloneGroupId: record, ClusterCreateTime: record, EnabledCloudwatchLogsExports: record, DeletionProtection: record>> {
+]: nothing -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterIdentifier' missing: pass --db-cluster-identifier" } }
+  if ($source_db_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'SourceDBClusterIdentifier' missing: pass --source-db-cluster-identifier" } }
+  let action = ($action | default "RestoreDBClusterToPointInTime")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "RestoreType" $restore_type "scalar") (serialize-qp "SourceDBClusterIdentifier" $source_db_cluster_identifier "scalar") (serialize-qp "RestoreToTime" $restore_to_time "scalar") (serialize-qp "UseLatestRestorableTime" $use_latest_restorable_time "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "EnableCloudwatchLogsExports" $enable_cloudwatch_logs_exports "multi") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5308,8 +5574,8 @@ export def "post-restore-db-cluster-to-point-in-time" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-50
-  --version: string@version-completer
+  --action: string@action-completer-50 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5318,10 +5584,12 @@ export def "post-restore-db-cluster-to-point-in-time" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBCluster: record<AvailabilityZones: record, BackupRetentionPeriod: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, CloneGroupId: record, ClusterCreateTime: record, EnabledCloudwatchLogsExports: record, DeletionProtection: record>> {
+]: any -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RestoreDBClusterToPointInTime")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5358,9 +5626,9 @@ export def "get-start-db-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-cluster-identifier: string # The identifier of the cluster to restart. Example: docdb-2019-05-28-15-24-52
-  --action: string@action-completer-51
-  --version: string@version-completer
+  --db-cluster-identifier: string # The identifier of the cluster to restart. Example: docdb-2019-05-28-15-24-52 (required)
+  --action: string@action-completer-51 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5368,9 +5636,12 @@ export def "get-start-db-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBCluster: record<AvailabilityZones: record, BackupRetentionPeriod: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, CloneGroupId: record, ClusterCreateTime: record, EnabledCloudwatchLogsExports: record, DeletionProtection: record>> {
+]: nothing -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterIdentifier' missing: pass --db-cluster-identifier" } }
+  let action = ($action | default "StartDBCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5405,8 +5676,8 @@ export def "post-start-db-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-51
-  --version: string@version-completer
+  --action: string@action-completer-51 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5415,10 +5686,12 @@ export def "post-start-db-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBCluster: record<AvailabilityZones: record, BackupRetentionPeriod: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, CloneGroupId: record, ClusterCreateTime: record, EnabledCloudwatchLogsExports: record, DeletionProtection: record>> {
+]: any -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "StartDBCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5455,9 +5728,9 @@ export def "get-stop-db-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --db-cluster-identifier: string # The identifier of the cluster to stop. Example: docdb-2019-05-28-15-24-52
-  --action: string@action-completer-52
-  --version: string@version-completer
+  --db-cluster-identifier: string # The identifier of the cluster to stop. Example: docdb-2019-05-28-15-24-52 (required)
+  --action: string@action-completer-52 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5465,9 +5738,12 @@ export def "get-stop-db-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBCluster: record<AvailabilityZones: record, BackupRetentionPeriod: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, CloneGroupId: record, ClusterCreateTime: record, EnabledCloudwatchLogsExports: record, DeletionProtection: record>> {
+]: nothing -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($db_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterIdentifier' missing: pass --db-cluster-identifier" } }
+  let action = ($action | default "StopDBCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5502,8 +5778,8 @@ export def "post-stop-db-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-52
-  --version: string@version-completer
+  --action: string@action-completer-52 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5512,10 +5788,12 @@ export def "post-stop-db-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBCluster: record<AvailabilityZones: record, BackupRetentionPeriod: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, CloneGroupId: record, ClusterCreateTime: record, EnabledCloudwatchLogsExports: record, DeletionProtection: record>> {
+]: any -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "StopDBCluster")
+  let version = ($version | default "2014-10-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body

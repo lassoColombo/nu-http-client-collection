@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -3501,7 +3501,7 @@ export def "apps-get-collection" [
   --filter-app-store-versions: list<string> # filter by id(s) of related 'appStoreVersions'
   --filter-id: list<string> # filter by id(s)
   --exists-game-center-enabled-versions: list<string> # filter by existence or non-existence of related 'gameCenterEnabledVersions'
-  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
@@ -3533,14 +3533,14 @@ export def "apps-get-collection" [
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[appStoreVersions.appStoreState]" $filter_app_store_versions_app_store_state "csv") (serialize-qp "filter[appStoreVersions.platform]" $filter_app_store_versions_platform "csv") (serialize-qp "filter[bundleId]" $filter_bundle_id "csv") (serialize-qp "filter[name]" $filter_name "csv") (serialize-qp "filter[sku]" $filter_sku "csv") (serialize-qp "filter[appStoreVersions]" $filter_app_store_versions "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "exists[gameCenterEnabledVersions]" $exists_game_center_enabled_versions "csv") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[betaGroups]" $fields_beta_groups "csv") (serialize-qp "fields[perfPowerMetrics]" $fields_perf_power_metrics "csv") (serialize-qp "fields[appInfos]" $fields_app_infos "csv") (serialize-qp "fields[appPreOrders]" $fields_app_pre_orders "csv") (serialize-qp "fields[preReleaseVersions]" $fields_pre_release_versions "csv") (serialize-qp "fields[appPrices]" $fields_app_prices "csv") (serialize-qp "fields[inAppPurchases]" $fields_in_app_purchases "csv") (serialize-qp "fields[betaAppReviewDetails]" $fields_beta_app_review_details "csv") (serialize-qp "fields[territories]" $fields_territories "csv") (serialize-qp "fields[gameCenterEnabledVersions]" $fields_game_center_enabled_versions "csv") (serialize-qp "fields[appStoreVersions]" $fields_app_store_versions "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "fields[betaAppLocalizations]" $fields_beta_app_localizations "csv") (serialize-qp "fields[betaLicenseAgreements]" $fields_beta_license_agreements "csv") (serialize-qp "fields[endUserLicenseAgreements]" $fields_end_user_license_agreements "csv") (serialize-qp "limit[appInfos]" $limit_app_infos "scalar") (serialize-qp "limit[appStoreVersions]" $limit_app_store_versions "scalar") (serialize-qp "limit[availableTerritories]" $limit_available_territories "scalar") (serialize-qp "limit[betaAppLocalizations]" $limit_beta_app_localizations "scalar") (serialize-qp "limit[betaGroups]" $limit_beta_groups "scalar") (serialize-qp "limit[builds]" $limit_builds "scalar") (serialize-qp "limit[gameCenterEnabledVersions]" $limit_game_center_enabled_versions "scalar") (serialize-qp "limit[inAppPurchases]" $limit_in_app_purchases "scalar") (serialize-qp "limit[preReleaseVersions]" $limit_pre_release_versions "scalar") (serialize-qp "limit[prices]" $limit_prices "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[appStoreVersions.appStoreState]" $filter_app_store_versions_app_store_state "csv") (serialize-qp "filter[appStoreVersions.platform]" $filter_app_store_versions_platform "csv") (serialize-qp "filter[bundleId]" $filter_bundle_id "csv") (serialize-qp "filter[name]" $filter_name "csv") (serialize-qp "filter[sku]" $filter_sku "csv") (serialize-qp "filter[appStoreVersions]" $filter_app_store_versions "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "exists[gameCenterEnabledVersions]" $exists_game_center_enabled_versions "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[betaGroups]" $fields_beta_groups "csv") (serialize-qp "fields[perfPowerMetrics]" $fields_perf_power_metrics "csv") (serialize-qp "fields[appInfos]" $fields_app_infos "csv") (serialize-qp "fields[appPreOrders]" $fields_app_pre_orders "csv") (serialize-qp "fields[preReleaseVersions]" $fields_pre_release_versions "csv") (serialize-qp "fields[appPrices]" $fields_app_prices "csv") (serialize-qp "fields[inAppPurchases]" $fields_in_app_purchases "csv") (serialize-qp "fields[betaAppReviewDetails]" $fields_beta_app_review_details "csv") (serialize-qp "fields[territories]" $fields_territories "csv") (serialize-qp "fields[gameCenterEnabledVersions]" $fields_game_center_enabled_versions "csv") (serialize-qp "fields[appStoreVersions]" $fields_app_store_versions "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "fields[betaAppLocalizations]" $fields_beta_app_localizations "csv") (serialize-qp "fields[betaLicenseAgreements]" $fields_beta_license_agreements "csv") (serialize-qp "fields[endUserLicenseAgreements]" $fields_end_user_license_agreements "csv") (serialize-qp "limit[appInfos]" $limit_app_infos "scalar") (serialize-qp "limit[appStoreVersions]" $limit_app_store_versions "scalar") (serialize-qp "limit[availableTerritories]" $limit_available_territories "scalar") (serialize-qp "limit[betaAppLocalizations]" $limit_beta_app_localizations "scalar") (serialize-qp "limit[betaGroups]" $limit_beta_groups "scalar") (serialize-qp "limit[builds]" $limit_builds "scalar") (serialize-qp "limit[gameCenterEnabledVersions]" $limit_game_center_enabled_versions "scalar") (serialize-qp "limit[inAppPurchases]" $limit_in_app_purchases "scalar") (serialize-qp "limit[preReleaseVersions]" $limit_pre_release_versions "scalar") (serialize-qp "limit[prices]" $limit_prices "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/apps" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter[appStoreVersions.appStoreState]": $filter_app_store_versions_app_store_state, "filter[appStoreVersions.platform]": $filter_app_store_versions_platform, "filter[bundleId]": $filter_bundle_id, "filter[name]": $filter_name, "filter[sku]": $filter_sku, "filter[appStoreVersions]": $filter_app_store_versions, "filter[id]": $filter_id, "exists[gameCenterEnabledVersions]": $exists_game_center_enabled_versions, "sort": $qp_sort, "fields[apps]": $fields_apps, "limit": $limit, "include": $include, "fields[betaGroups]": $fields_beta_groups, "fields[perfPowerMetrics]": $fields_perf_power_metrics, "fields[appInfos]": $fields_app_infos, "fields[appPreOrders]": $fields_app_pre_orders, "fields[preReleaseVersions]": $fields_pre_release_versions, "fields[appPrices]": $fields_app_prices, "fields[inAppPurchases]": $fields_in_app_purchases, "fields[betaAppReviewDetails]": $fields_beta_app_review_details, "fields[territories]": $fields_territories, "fields[gameCenterEnabledVersions]": $fields_game_center_enabled_versions, "fields[appStoreVersions]": $fields_app_store_versions, "fields[builds]": $fields_builds, "fields[betaAppLocalizations]": $fields_beta_app_localizations, "fields[betaLicenseAgreements]": $fields_beta_license_agreements, "fields[endUserLicenseAgreements]": $fields_end_user_license_agreements, "limit[appInfos]": $limit_app_infos, "limit[appStoreVersions]": $limit_app_store_versions, "limit[availableTerritories]": $limit_available_territories, "limit[betaAppLocalizations]": $limit_beta_app_localizations, "limit[betaGroups]": $limit_beta_groups, "limit[builds]": $limit_builds, "limit[gameCenterEnabledVersions]": $limit_game_center_enabled_versions, "limit[inAppPurchases]": $limit_in_app_purchases, "limit[preReleaseVersions]": $limit_pre_release_versions, "limit[prices]": $limit_prices} | compact)
+    query: ({"filter[appStoreVersions.appStoreState]": $filter_app_store_versions_app_store_state, "filter[appStoreVersions.platform]": $filter_app_store_versions_platform, "filter[bundleId]": $filter_bundle_id, "filter[name]": $filter_name, "filter[sku]": $filter_sku, "filter[appStoreVersions]": $filter_app_store_versions, "filter[id]": $filter_id, "exists[gameCenterEnabledVersions]": $exists_game_center_enabled_versions, "sort": $sort, "fields[apps]": $fields_apps, "limit": $limit, "include": $include, "fields[betaGroups]": $fields_beta_groups, "fields[perfPowerMetrics]": $fields_perf_power_metrics, "fields[appInfos]": $fields_app_infos, "fields[appPreOrders]": $fields_app_pre_orders, "fields[preReleaseVersions]": $fields_pre_release_versions, "fields[appPrices]": $fields_app_prices, "fields[inAppPurchases]": $fields_in_app_purchases, "fields[betaAppReviewDetails]": $fields_beta_app_review_details, "fields[territories]": $fields_territories, "fields[gameCenterEnabledVersions]": $fields_game_center_enabled_versions, "fields[appStoreVersions]": $fields_app_store_versions, "fields[builds]": $fields_builds, "fields[betaAppLocalizations]": $fields_beta_app_localizations, "fields[betaLicenseAgreements]": $fields_beta_license_agreements, "fields[endUserLicenseAgreements]": $fields_end_user_license_agreements, "limit[appInfos]": $limit_app_infos, "limit[appStoreVersions]": $limit_app_store_versions, "limit[availableTerritories]": $limit_available_territories, "limit[betaAppLocalizations]": $limit_beta_app_localizations, "limit[betaGroups]": $limit_beta_groups, "limit[builds]": $limit_builds, "limit[gameCenterEnabledVersions]": $limit_game_center_enabled_versions, "limit[inAppPurchases]": $limit_in_app_purchases, "limit[preReleaseVersions]": $limit_pre_release_versions, "limit[prices]": $limit_prices} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4029,7 +4029,7 @@ export def "apps-game-center-enabled-versions-get-to-many-related" [
   --filter-platform: list<string> # filter by attribute 'platform'
   --filter-version-string: list<string> # filter by attribute 'versionString'
   --filter-id: list<string> # filter by id(s)
-  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
   --fields-game-center-enabled-versions: list<string> # the fields to include for returned resources of type gameCenterEnabledVersions
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
@@ -4038,14 +4038,14 @@ export def "apps-game-center-enabled-versions-get-to-many-related" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "filter[platform]" $filter_platform "csv") (serialize-qp "filter[versionString]" $filter_version_string "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "fields[gameCenterEnabledVersions]" $fields_game_center_enabled_versions "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[platform]" $filter_platform "csv") (serialize-qp "filter[versionString]" $filter_version_string "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[gameCenterEnabledVersions]" $fields_game_center_enabled_versions "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}/gameCenterEnabledVersions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter[platform]": $filter_platform, "filter[versionString]": $filter_version_string, "filter[id]": $filter_id, "sort": $qp_sort, "fields[gameCenterEnabledVersions]": $fields_game_center_enabled_versions, "fields[apps]": $fields_apps, "limit": $limit, "include": $include} | compact)
+    query: ({"filter[platform]": $filter_platform, "filter[versionString]": $filter_version_string, "filter[id]": $filter_id, "sort": $sort, "fields[gameCenterEnabledVersions]": $fields_game_center_enabled_versions, "fields[apps]": $fields_apps, "limit": $limit, "include": $include} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4072,7 +4072,7 @@ export def "apps-in-app-purchases-get-to-many-related" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter-in-app-purchase-type: list<string> # filter by attribute 'inAppPurchaseType'
   --filter-can-be-submitted: list<string> # filter by canBeSubmitted
-  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
   --fields-in-app-purchases: list<string> # the fields to include for returned resources of type inAppPurchases
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
@@ -4081,14 +4081,14 @@ export def "apps-in-app-purchases-get-to-many-related" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "filter[inAppPurchaseType]" $filter_in_app_purchase_type "csv") (serialize-qp "filter[canBeSubmitted]" $filter_can_be_submitted "csv") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "fields[inAppPurchases]" $fields_in_app_purchases "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[inAppPurchaseType]" $filter_in_app_purchase_type "csv") (serialize-qp "filter[canBeSubmitted]" $filter_can_be_submitted "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[inAppPurchases]" $fields_in_app_purchases "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}/inAppPurchases") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter[inAppPurchaseType]": $filter_in_app_purchase_type, "filter[canBeSubmitted]": $filter_can_be_submitted, "sort": $qp_sort, "fields[inAppPurchases]": $fields_in_app_purchases, "fields[apps]": $fields_apps, "limit": $limit, "include": $include} | compact)
+    query: ({"filter[inAppPurchaseType]": $filter_in_app_purchase_type, "filter[canBeSubmitted]": $filter_can_be_submitted, "sort": $sort, "fields[inAppPurchases]": $fields_in_app_purchases, "fields[apps]": $fields_apps, "limit": $limit, "include": $include} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4536,7 +4536,7 @@ export def "beta-app-review-details-get-collection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-app: list<string> # filter by id(s) of related 'app'
+  --filter-app: list<string> # filter by id(s) of related 'app' (required)
   --fields-beta-app-review-details: list<string> # the fields to include for returned resources of type betaAppReviewDetails
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
@@ -4544,6 +4544,7 @@ export def "beta-app-review-details-get-collection" [
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filter_app == null) { error make --unspanned { msg: "required query parameter 'filter[app]' missing: pass --filter-app" } }
   let qp = [(serialize-qp "filter[app]" $filter_app "csv") (serialize-qp "fields[betaAppReviewDetails]" $fields_beta_app_review_details "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[apps]" $fields_apps "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/betaAppReviewDetails" $qp $auth.query)
   let accept_val = "application/json"
@@ -4692,7 +4693,7 @@ export def "beta-app-review-submissions-get-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter-beta-review-state: list<string> # filter by attribute 'betaReviewState'
-  --filter-build: list<string> # filter by id(s) of related 'build'
+  --filter-build: list<string> # filter by id(s) of related 'build' (required)
   --fields-beta-app-review-submissions: list<string> # the fields to include for returned resources of type betaAppReviewSubmissions
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
@@ -4700,6 +4701,7 @@ export def "beta-app-review-submissions-get-collection" [
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filter_build == null) { error make --unspanned { msg: "required query parameter 'filter[build]' missing: pass --filter-build" } }
   let qp = [(serialize-qp "filter[betaReviewState]" $filter_beta_review_state "csv") (serialize-qp "filter[build]" $filter_build "csv") (serialize-qp "fields[betaAppReviewSubmissions]" $fields_beta_app_review_submissions "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[builds]" $fields_builds "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/betaAppReviewSubmissions" $qp $auth.query)
   let accept_val = "application/json"
@@ -5082,7 +5084,7 @@ export def "beta-groups-get-collection" [
   --filter-app: list<string> # filter by id(s) of related 'app'
   --filter-builds: list<string> # filter by id(s) of related 'builds'
   --filter-id: list<string> # filter by id(s)
-  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
   --fields-beta-groups: list<string> # the fields to include for returned resources of type betaGroups
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
@@ -5094,14 +5096,14 @@ export def "beta-groups-get-collection" [
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[isInternalGroup]" $filter_is_internal_group "csv") (serialize-qp "filter[name]" $filter_name "csv") (serialize-qp "filter[publicLink]" $filter_public_link "csv") (serialize-qp "filter[publicLinkEnabled]" $filter_public_link_enabled "csv") (serialize-qp "filter[publicLinkLimitEnabled]" $filter_public_link_limit_enabled "csv") (serialize-qp "filter[app]" $filter_app "csv") (serialize-qp "filter[builds]" $filter_builds "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "fields[betaGroups]" $fields_beta_groups "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "fields[betaTesters]" $fields_beta_testers "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[betaTesters]" $limit_beta_testers "scalar") (serialize-qp "limit[builds]" $limit_builds "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[isInternalGroup]" $filter_is_internal_group "csv") (serialize-qp "filter[name]" $filter_name "csv") (serialize-qp "filter[publicLink]" $filter_public_link "csv") (serialize-qp "filter[publicLinkEnabled]" $filter_public_link_enabled "csv") (serialize-qp "filter[publicLinkLimitEnabled]" $filter_public_link_limit_enabled "csv") (serialize-qp "filter[app]" $filter_app "csv") (serialize-qp "filter[builds]" $filter_builds "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[betaGroups]" $fields_beta_groups "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "fields[betaTesters]" $fields_beta_testers "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[betaTesters]" $limit_beta_testers "scalar") (serialize-qp "limit[builds]" $limit_builds "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/betaGroups" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter[isInternalGroup]": $filter_is_internal_group, "filter[name]": $filter_name, "filter[publicLink]": $filter_public_link, "filter[publicLinkEnabled]": $filter_public_link_enabled, "filter[publicLinkLimitEnabled]": $filter_public_link_limit_enabled, "filter[app]": $filter_app, "filter[builds]": $filter_builds, "filter[id]": $filter_id, "sort": $qp_sort, "fields[betaGroups]": $fields_beta_groups, "limit": $limit, "include": $include, "fields[builds]": $fields_builds, "fields[betaTesters]": $fields_beta_testers, "fields[apps]": $fields_apps, "limit[betaTesters]": $limit_beta_testers, "limit[builds]": $limit_builds} | compact)
+    query: ({"filter[isInternalGroup]": $filter_is_internal_group, "filter[name]": $filter_name, "filter[publicLink]": $filter_public_link, "filter[publicLinkEnabled]": $filter_public_link_enabled, "filter[publicLinkLimitEnabled]": $filter_public_link_limit_enabled, "filter[app]": $filter_app, "filter[builds]": $filter_builds, "filter[id]": $filter_id, "sort": $sort, "fields[betaGroups]": $fields_beta_groups, "limit": $limit, "include": $include, "fields[builds]": $fields_builds, "fields[betaTesters]": $fields_beta_testers, "fields[apps]": $fields_apps, "limit[betaTesters]": $limit_beta_testers, "limit[builds]": $limit_builds} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5828,7 +5830,7 @@ export def "beta-testers-get-collection" [
   --filter-apps: list<string> # filter by id(s) of related 'apps'
   --filter-beta-groups: list<string> # filter by id(s) of related 'betaGroups'
   --filter-builds: list<string> # filter by id(s) of related 'builds'
-  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
   --fields-beta-testers: list<string> # the fields to include for returned resources of type betaTesters
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
@@ -5841,14 +5843,14 @@ export def "beta-testers-get-collection" [
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[email]" $filter_email "csv") (serialize-qp "filter[firstName]" $filter_first_name "csv") (serialize-qp "filter[inviteType]" $filter_invite_type "csv") (serialize-qp "filter[lastName]" $filter_last_name "csv") (serialize-qp "filter[apps]" $filter_apps "csv") (serialize-qp "filter[betaGroups]" $filter_beta_groups "csv") (serialize-qp "filter[builds]" $filter_builds "csv") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "fields[betaTesters]" $fields_beta_testers "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[betaGroups]" $fields_beta_groups "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[apps]" $limit_apps "scalar") (serialize-qp "limit[betaGroups]" $limit_beta_groups "scalar") (serialize-qp "limit[builds]" $limit_builds "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[email]" $filter_email "csv") (serialize-qp "filter[firstName]" $filter_first_name "csv") (serialize-qp "filter[inviteType]" $filter_invite_type "csv") (serialize-qp "filter[lastName]" $filter_last_name "csv") (serialize-qp "filter[apps]" $filter_apps "csv") (serialize-qp "filter[betaGroups]" $filter_beta_groups "csv") (serialize-qp "filter[builds]" $filter_builds "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[betaTesters]" $fields_beta_testers "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[betaGroups]" $fields_beta_groups "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[apps]" $limit_apps "scalar") (serialize-qp "limit[betaGroups]" $limit_beta_groups "scalar") (serialize-qp "limit[builds]" $limit_builds "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/betaTesters" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter[email]": $filter_email, "filter[firstName]": $filter_first_name, "filter[inviteType]": $filter_invite_type, "filter[lastName]": $filter_last_name, "filter[apps]": $filter_apps, "filter[betaGroups]": $filter_beta_groups, "filter[builds]": $filter_builds, "sort": $qp_sort, "fields[betaTesters]": $fields_beta_testers, "limit": $limit, "include": $include, "fields[betaGroups]": $fields_beta_groups, "fields[builds]": $fields_builds, "fields[apps]": $fields_apps, "limit[apps]": $limit_apps, "limit[betaGroups]": $limit_beta_groups, "limit[builds]": $limit_builds} | compact)
+    query: ({"filter[email]": $filter_email, "filter[firstName]": $filter_first_name, "filter[inviteType]": $filter_invite_type, "filter[lastName]": $filter_last_name, "filter[apps]": $filter_apps, "filter[betaGroups]": $filter_beta_groups, "filter[builds]": $filter_builds, "sort": $sort, "fields[betaTesters]": $fields_beta_testers, "limit": $limit, "include": $include, "fields[betaGroups]": $fields_beta_groups, "fields[builds]": $fields_builds, "fields[apps]": $fields_apps, "limit[apps]": $limit_apps, "limit[betaGroups]": $limit_beta_groups, "limit[builds]": $limit_builds} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -6620,7 +6622,7 @@ export def "builds-get-collection" [
   --filter-beta-groups: list<string> # filter by id(s) of related 'betaGroups'
   --filter-pre-release-version: list<string> # filter by id(s) of related 'preReleaseVersion'
   --filter-id: list<string> # filter by id(s)
-  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
   --fields-builds: list<string> # the fields to include for returned resources of type builds
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
@@ -6641,14 +6643,14 @@ export def "builds-get-collection" [
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[betaAppReviewSubmission.betaReviewState]" $filter_beta_app_review_submission_beta_review_state "csv") (serialize-qp "filter[expired]" $filter_expired "csv") (serialize-qp "filter[preReleaseVersion.platform]" $filter_pre_release_version_platform "csv") (serialize-qp "filter[preReleaseVersion.version]" $filter_pre_release_version_version "csv") (serialize-qp "filter[processingState]" $filter_processing_state "csv") (serialize-qp "filter[usesNonExemptEncryption]" $filter_uses_non_exempt_encryption "csv") (serialize-qp "filter[version]" $filter_version "csv") (serialize-qp "filter[app]" $filter_app "csv") (serialize-qp "filter[appStoreVersion]" $filter_app_store_version "csv") (serialize-qp "filter[betaGroups]" $filter_beta_groups "csv") (serialize-qp "filter[preReleaseVersion]" $filter_pre_release_version "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[appEncryptionDeclarations]" $fields_app_encryption_declarations "csv") (serialize-qp "fields[betaAppReviewSubmissions]" $fields_beta_app_review_submissions "csv") (serialize-qp "fields[buildBetaDetails]" $fields_build_beta_details "csv") (serialize-qp "fields[buildIcons]" $fields_build_icons "csv") (serialize-qp "fields[perfPowerMetrics]" $fields_perf_power_metrics "csv") (serialize-qp "fields[preReleaseVersions]" $fields_pre_release_versions "csv") (serialize-qp "fields[appStoreVersions]" $fields_app_store_versions "csv") (serialize-qp "fields[diagnosticSignatures]" $fields_diagnostic_signatures "csv") (serialize-qp "fields[betaTesters]" $fields_beta_testers "csv") (serialize-qp "fields[betaBuildLocalizations]" $fields_beta_build_localizations "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[betaBuildLocalizations]" $limit_beta_build_localizations "scalar") (serialize-qp "limit[icons]" $limit_icons "scalar") (serialize-qp "limit[individualTesters]" $limit_individual_testers "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[betaAppReviewSubmission.betaReviewState]" $filter_beta_app_review_submission_beta_review_state "csv") (serialize-qp "filter[expired]" $filter_expired "csv") (serialize-qp "filter[preReleaseVersion.platform]" $filter_pre_release_version_platform "csv") (serialize-qp "filter[preReleaseVersion.version]" $filter_pre_release_version_version "csv") (serialize-qp "filter[processingState]" $filter_processing_state "csv") (serialize-qp "filter[usesNonExemptEncryption]" $filter_uses_non_exempt_encryption "csv") (serialize-qp "filter[version]" $filter_version "csv") (serialize-qp "filter[app]" $filter_app "csv") (serialize-qp "filter[appStoreVersion]" $filter_app_store_version "csv") (serialize-qp "filter[betaGroups]" $filter_beta_groups "csv") (serialize-qp "filter[preReleaseVersion]" $filter_pre_release_version "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[appEncryptionDeclarations]" $fields_app_encryption_declarations "csv") (serialize-qp "fields[betaAppReviewSubmissions]" $fields_beta_app_review_submissions "csv") (serialize-qp "fields[buildBetaDetails]" $fields_build_beta_details "csv") (serialize-qp "fields[buildIcons]" $fields_build_icons "csv") (serialize-qp "fields[perfPowerMetrics]" $fields_perf_power_metrics "csv") (serialize-qp "fields[preReleaseVersions]" $fields_pre_release_versions "csv") (serialize-qp "fields[appStoreVersions]" $fields_app_store_versions "csv") (serialize-qp "fields[diagnosticSignatures]" $fields_diagnostic_signatures "csv") (serialize-qp "fields[betaTesters]" $fields_beta_testers "csv") (serialize-qp "fields[betaBuildLocalizations]" $fields_beta_build_localizations "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[betaBuildLocalizations]" $limit_beta_build_localizations "scalar") (serialize-qp "limit[icons]" $limit_icons "scalar") (serialize-qp "limit[individualTesters]" $limit_individual_testers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/builds" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter[betaAppReviewSubmission.betaReviewState]": $filter_beta_app_review_submission_beta_review_state, "filter[expired]": $filter_expired, "filter[preReleaseVersion.platform]": $filter_pre_release_version_platform, "filter[preReleaseVersion.version]": $filter_pre_release_version_version, "filter[processingState]": $filter_processing_state, "filter[usesNonExemptEncryption]": $filter_uses_non_exempt_encryption, "filter[version]": $filter_version, "filter[app]": $filter_app, "filter[appStoreVersion]": $filter_app_store_version, "filter[betaGroups]": $filter_beta_groups, "filter[preReleaseVersion]": $filter_pre_release_version, "filter[id]": $filter_id, "sort": $qp_sort, "fields[builds]": $fields_builds, "limit": $limit, "include": $include, "fields[appEncryptionDeclarations]": $fields_app_encryption_declarations, "fields[betaAppReviewSubmissions]": $fields_beta_app_review_submissions, "fields[buildBetaDetails]": $fields_build_beta_details, "fields[buildIcons]": $fields_build_icons, "fields[perfPowerMetrics]": $fields_perf_power_metrics, "fields[preReleaseVersions]": $fields_pre_release_versions, "fields[appStoreVersions]": $fields_app_store_versions, "fields[diagnosticSignatures]": $fields_diagnostic_signatures, "fields[betaTesters]": $fields_beta_testers, "fields[betaBuildLocalizations]": $fields_beta_build_localizations, "fields[apps]": $fields_apps, "limit[betaBuildLocalizations]": $limit_beta_build_localizations, "limit[icons]": $limit_icons, "limit[individualTesters]": $limit_individual_testers} | compact)
+    query: ({"filter[betaAppReviewSubmission.betaReviewState]": $filter_beta_app_review_submission_beta_review_state, "filter[expired]": $filter_expired, "filter[preReleaseVersion.platform]": $filter_pre_release_version_platform, "filter[preReleaseVersion.version]": $filter_pre_release_version_version, "filter[processingState]": $filter_processing_state, "filter[usesNonExemptEncryption]": $filter_uses_non_exempt_encryption, "filter[version]": $filter_version, "filter[app]": $filter_app, "filter[appStoreVersion]": $filter_app_store_version, "filter[betaGroups]": $filter_beta_groups, "filter[preReleaseVersion]": $filter_pre_release_version, "filter[id]": $filter_id, "sort": $sort, "fields[builds]": $fields_builds, "limit": $limit, "include": $include, "fields[appEncryptionDeclarations]": $fields_app_encryption_declarations, "fields[betaAppReviewSubmissions]": $fields_beta_app_review_submissions, "fields[buildBetaDetails]": $fields_build_beta_details, "fields[buildIcons]": $fields_build_icons, "fields[perfPowerMetrics]": $fields_perf_power_metrics, "fields[preReleaseVersions]": $fields_pre_release_versions, "fields[appStoreVersions]": $fields_app_store_versions, "fields[diagnosticSignatures]": $fields_diagnostic_signatures, "fields[betaTesters]": $fields_beta_testers, "fields[betaBuildLocalizations]": $fields_beta_build_localizations, "fields[apps]": $fields_apps, "limit[betaBuildLocalizations]": $limit_beta_build_localizations, "limit[icons]": $limit_icons, "limit[individualTesters]": $limit_individual_testers} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -7568,7 +7570,7 @@ export def "bundle-ids-get-collection" [
   --filter-platform: list<string> # filter by attribute 'platform'
   --filter-seed-id: list<string> # filter by attribute 'seedId'
   --filter-id: list<string> # filter by id(s)
-  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
   --fields-bundle-ids: list<string> # the fields to include for returned resources of type bundleIds
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
@@ -7580,14 +7582,14 @@ export def "bundle-ids-get-collection" [
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[identifier]" $filter_identifier "csv") (serialize-qp "filter[name]" $filter_name "csv") (serialize-qp "filter[platform]" $filter_platform "csv") (serialize-qp "filter[seedId]" $filter_seed_id "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "fields[bundleIds]" $fields_bundle_ids "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[bundleIdCapabilities]" $fields_bundle_id_capabilities "csv") (serialize-qp "fields[profiles]" $fields_profiles "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[bundleIdCapabilities]" $limit_bundle_id_capabilities "scalar") (serialize-qp "limit[profiles]" $limit_profiles "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[identifier]" $filter_identifier "csv") (serialize-qp "filter[name]" $filter_name "csv") (serialize-qp "filter[platform]" $filter_platform "csv") (serialize-qp "filter[seedId]" $filter_seed_id "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[bundleIds]" $fields_bundle_ids "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[bundleIdCapabilities]" $fields_bundle_id_capabilities "csv") (serialize-qp "fields[profiles]" $fields_profiles "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[bundleIdCapabilities]" $limit_bundle_id_capabilities "scalar") (serialize-qp "limit[profiles]" $limit_profiles "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/bundleIds" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter[identifier]": $filter_identifier, "filter[name]": $filter_name, "filter[platform]": $filter_platform, "filter[seedId]": $filter_seed_id, "filter[id]": $filter_id, "sort": $qp_sort, "fields[bundleIds]": $fields_bundle_ids, "limit": $limit, "include": $include, "fields[bundleIdCapabilities]": $fields_bundle_id_capabilities, "fields[profiles]": $fields_profiles, "fields[apps]": $fields_apps, "limit[bundleIdCapabilities]": $limit_bundle_id_capabilities, "limit[profiles]": $limit_profiles} | compact)
+    query: ({"filter[identifier]": $filter_identifier, "filter[name]": $filter_name, "filter[platform]": $filter_platform, "filter[seedId]": $filter_seed_id, "filter[id]": $filter_id, "sort": $sort, "fields[bundleIds]": $fields_bundle_ids, "limit": $limit, "include": $include, "fields[bundleIdCapabilities]": $fields_bundle_id_capabilities, "fields[profiles]": $fields_profiles, "fields[apps]": $fields_apps, "limit[bundleIdCapabilities]": $limit_bundle_id_capabilities, "limit[profiles]": $limit_profiles} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -7884,20 +7886,20 @@ export def "certificates-get-collection" [
   --filter-display-name: list<string> # filter by attribute 'displayName'
   --filter-serial-number: list<string> # filter by attribute 'serialNumber'
   --filter-id: list<string> # filter by id(s)
-  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
   --fields-certificates: list<string> # the fields to include for returned resources of type certificates
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[certificateType]" $filter_certificate_type "csv") (serialize-qp "filter[displayName]" $filter_display_name "csv") (serialize-qp "filter[serialNumber]" $filter_serial_number "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "fields[certificates]" $fields_certificates "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[certificateType]" $filter_certificate_type "csv") (serialize-qp "filter[displayName]" $filter_display_name "csv") (serialize-qp "filter[serialNumber]" $filter_serial_number "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[certificates]" $fields_certificates "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/certificates" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter[certificateType]": $filter_certificate_type, "filter[displayName]": $filter_display_name, "filter[serialNumber]": $filter_serial_number, "filter[id]": $filter_id, "sort": $qp_sort, "fields[certificates]": $fields_certificates, "limit": $limit} | compact)
+    query: ({"filter[certificateType]": $filter_certificate_type, "filter[displayName]": $filter_display_name, "filter[serialNumber]": $filter_serial_number, "filter[id]": $filter_id, "sort": $sort, "fields[certificates]": $fields_certificates, "limit": $limit} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -8036,20 +8038,20 @@ export def "devices-get-collection" [
   --filter-status: list<string> # filter by attribute 'status'
   --filter-udid: list<string> # filter by attribute 'udid'
   --filter-id: list<string> # filter by id(s)
-  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
   --fields-devices: list<string> # the fields to include for returned resources of type devices
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[name]" $filter_name "csv") (serialize-qp "filter[platform]" $filter_platform "csv") (serialize-qp "filter[status]" $filter_status "csv") (serialize-qp "filter[udid]" $filter_udid "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "fields[devices]" $fields_devices "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[name]" $filter_name "csv") (serialize-qp "filter[platform]" $filter_platform "csv") (serialize-qp "filter[status]" $filter_status "csv") (serialize-qp "filter[udid]" $filter_udid "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[devices]" $fields_devices "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/devices" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter[name]": $filter_name, "filter[platform]": $filter_platform, "filter[status]": $filter_status, "filter[udid]": $filter_udid, "filter[id]": $filter_id, "sort": $qp_sort, "fields[devices]": $fields_devices, "limit": $limit} | compact)
+    query: ({"filter[name]": $filter_name, "filter[platform]": $filter_platform, "filter[status]": $filter_status, "filter[udid]": $filter_udid, "filter[id]": $filter_id, "sort": $sort, "fields[devices]": $fields_devices, "limit": $limit} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -8416,13 +8418,17 @@ export def "finance-reports-get-collection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-region-code: list<string> # filter by attribute 'regionCode'
-  --filter-report-date: list<string> # filter by attribute 'reportDate'
-  --filter-report-type: list<string> # filter by attribute 'reportType'
-  --filter-vendor-number: list<string> # filter by attribute 'vendorNumber'
+  --filter-region-code: list<string> # filter by attribute 'regionCode' (required)
+  --filter-report-date: list<string> # filter by attribute 'reportDate' (required)
+  --filter-report-type: list<string> # filter by attribute 'reportType' (required)
+  --filter-vendor-number: list<string> # filter by attribute 'vendorNumber' (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filter_region_code == null) { error make --unspanned { msg: "required query parameter 'filter[regionCode]' missing: pass --filter-region-code" } }
+  if ($filter_report_date == null) { error make --unspanned { msg: "required query parameter 'filter[reportDate]' missing: pass --filter-report-date" } }
+  if ($filter_report_type == null) { error make --unspanned { msg: "required query parameter 'filter[reportType]' missing: pass --filter-report-type" } }
+  if ($filter_vendor_number == null) { error make --unspanned { msg: "required query parameter 'filter[vendorNumber]' missing: pass --filter-vendor-number" } }
   let qp = [(serialize-qp "filter[regionCode]" $filter_region_code "csv") (serialize-qp "filter[reportDate]" $filter_report_date "csv") (serialize-qp "filter[reportType]" $filter_report_type "csv") (serialize-qp "filter[vendorNumber]" $filter_vendor_number "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/financeReports" $qp $auth.query)
   let accept_val = "gzip"
@@ -8459,7 +8465,7 @@ export def "game-center-enabled-versions-compatible-versions-get-to-many-related
   --filter-version-string: list<string> # filter by attribute 'versionString'
   --filter-app: list<string> # filter by id(s) of related 'app'
   --filter-id: list<string> # filter by id(s)
-  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
   --fields-game-center-enabled-versions: list<string> # the fields to include for returned resources of type gameCenterEnabledVersions
   --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
@@ -8468,14 +8474,14 @@ export def "game-center-enabled-versions-compatible-versions-get-to-many-related
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "filter[platform]" $filter_platform "csv") (serialize-qp "filter[versionString]" $filter_version_string "csv") (serialize-qp "filter[app]" $filter_app "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "fields[gameCenterEnabledVersions]" $fields_game_center_enabled_versions "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[platform]" $filter_platform "csv") (serialize-qp "filter[versionString]" $filter_version_string "csv") (serialize-qp "filter[app]" $filter_app "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[gameCenterEnabledVersions]" $fields_game_center_enabled_versions "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/gameCenterEnabledVersions/{id}/compatibleVersions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter[platform]": $filter_platform, "filter[versionString]": $filter_version_string, "filter[app]": $filter_app, "filter[id]": $filter_id, "sort": $qp_sort, "fields[gameCenterEnabledVersions]": $fields_game_center_enabled_versions, "fields[apps]": $fields_apps, "limit": $limit, "include": $include} | compact)
+    query: ({"filter[platform]": $filter_platform, "filter[versionString]": $filter_version_string, "filter[app]": $filter_app, "filter[id]": $filter_id, "sort": $sort, "fields[gameCenterEnabledVersions]": $fields_game_center_enabled_versions, "fields[apps]": $fields_apps, "limit": $limit, "include": $include} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -8814,7 +8820,7 @@ export def "pre-release-versions-get-collection" [
   --filter-version: list<string> # filter by attribute 'version'
   --filter-app: list<string> # filter by id(s) of related 'app'
   --filter-builds: list<string> # filter by id(s) of related 'builds'
-  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
   --fields-pre-release-versions: list<string> # the fields to include for returned resources of type preReleaseVersions
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
@@ -8824,14 +8830,14 @@ export def "pre-release-versions-get-collection" [
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[builds.expired]" $filter_builds_expired "csv") (serialize-qp "filter[builds.processingState]" $filter_builds_processing_state "csv") (serialize-qp "filter[platform]" $filter_platform "csv") (serialize-qp "filter[version]" $filter_version "csv") (serialize-qp "filter[app]" $filter_app "csv") (serialize-qp "filter[builds]" $filter_builds "csv") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "fields[preReleaseVersions]" $fields_pre_release_versions "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[builds]" $limit_builds "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[builds.expired]" $filter_builds_expired "csv") (serialize-qp "filter[builds.processingState]" $filter_builds_processing_state "csv") (serialize-qp "filter[platform]" $filter_platform "csv") (serialize-qp "filter[version]" $filter_version "csv") (serialize-qp "filter[app]" $filter_app "csv") (serialize-qp "filter[builds]" $filter_builds "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[preReleaseVersions]" $fields_pre_release_versions "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[builds]" $limit_builds "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/preReleaseVersions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter[builds.expired]": $filter_builds_expired, "filter[builds.processingState]": $filter_builds_processing_state, "filter[platform]": $filter_platform, "filter[version]": $filter_version, "filter[app]": $filter_app, "filter[builds]": $filter_builds, "sort": $qp_sort, "fields[preReleaseVersions]": $fields_pre_release_versions, "limit": $limit, "include": $include, "fields[builds]": $fields_builds, "fields[apps]": $fields_apps, "limit[builds]": $limit_builds} | compact)
+    query: ({"filter[builds.expired]": $filter_builds_expired, "filter[builds.processingState]": $filter_builds_processing_state, "filter[platform]": $filter_platform, "filter[version]": $filter_version, "filter[app]": $filter_app, "filter[builds]": $filter_builds, "sort": $sort, "fields[preReleaseVersions]": $fields_pre_release_versions, "limit": $limit, "include": $include, "fields[builds]": $fields_builds, "fields[apps]": $fields_apps, "limit[builds]": $limit_builds} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -8975,7 +8981,7 @@ export def "profiles-get-collection" [
   --filter-profile-state: list<string> # filter by attribute 'profileState'
   --filter-profile-type: list<string> # filter by attribute 'profileType'
   --filter-id: list<string> # filter by id(s)
-  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
   --fields-profiles: list<string> # the fields to include for returned resources of type profiles
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
@@ -8987,14 +8993,14 @@ export def "profiles-get-collection" [
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[name]" $filter_name "csv") (serialize-qp "filter[profileState]" $filter_profile_state "csv") (serialize-qp "filter[profileType]" $filter_profile_type "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "fields[profiles]" $fields_profiles "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[certificates]" $fields_certificates "csv") (serialize-qp "fields[devices]" $fields_devices "csv") (serialize-qp "fields[bundleIds]" $fields_bundle_ids "csv") (serialize-qp "limit[certificates]" $limit_certificates "scalar") (serialize-qp "limit[devices]" $limit_devices "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[name]" $filter_name "csv") (serialize-qp "filter[profileState]" $filter_profile_state "csv") (serialize-qp "filter[profileType]" $filter_profile_type "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[profiles]" $fields_profiles "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[certificates]" $fields_certificates "csv") (serialize-qp "fields[devices]" $fields_devices "csv") (serialize-qp "fields[bundleIds]" $fields_bundle_ids "csv") (serialize-qp "limit[certificates]" $limit_certificates "scalar") (serialize-qp "limit[devices]" $limit_devices "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/profiles" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter[name]": $filter_name, "filter[profileState]": $filter_profile_state, "filter[profileType]": $filter_profile_type, "filter[id]": $filter_id, "sort": $qp_sort, "fields[profiles]": $fields_profiles, "limit": $limit, "include": $include, "fields[certificates]": $fields_certificates, "fields[devices]": $fields_devices, "fields[bundleIds]": $fields_bundle_ids, "limit[certificates]": $limit_certificates, "limit[devices]": $limit_devices} | compact)
+    query: ({"filter[name]": $filter_name, "filter[profileState]": $filter_profile_state, "filter[profileType]": $filter_profile_type, "filter[id]": $filter_id, "sort": $sort, "fields[profiles]": $fields_profiles, "limit": $limit, "include": $include, "fields[certificates]": $fields_certificates, "fields[devices]": $fields_devices, "fields[bundleIds]": $fields_bundle_ids, "limit[certificates]": $limit_certificates, "limit[devices]": $limit_devices} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -9398,15 +9404,19 @@ export def "sales-reports-get-collection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-frequency: list<string> # filter by attribute 'frequency'
+  --filter-frequency: list<string> # filter by attribute 'frequency' (required)
   --filter-report-date: list<string> # filter by attribute 'reportDate'
-  --filter-report-sub-type: list<string> # filter by attribute 'reportSubType'
-  --filter-report-type: list<string> # filter by attribute 'reportType'
-  --filter-vendor-number: list<string> # filter by attribute 'vendorNumber'
+  --filter-report-sub-type: list<string> # filter by attribute 'reportSubType' (required)
+  --filter-report-type: list<string> # filter by attribute 'reportType' (required)
+  --filter-vendor-number: list<string> # filter by attribute 'vendorNumber' (required)
   --filter-version: list<string> # filter by attribute 'version'
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filter_frequency == null) { error make --unspanned { msg: "required query parameter 'filter[frequency]' missing: pass --filter-frequency" } }
+  if ($filter_report_sub_type == null) { error make --unspanned { msg: "required query parameter 'filter[reportSubType]' missing: pass --filter-report-sub-type" } }
+  if ($filter_report_type == null) { error make --unspanned { msg: "required query parameter 'filter[reportType]' missing: pass --filter-report-type" } }
+  if ($filter_vendor_number == null) { error make --unspanned { msg: "required query parameter 'filter[vendorNumber]' missing: pass --filter-vendor-number" } }
   let qp = [(serialize-qp "filter[frequency]" $filter_frequency "csv") (serialize-qp "filter[reportDate]" $filter_report_date "csv") (serialize-qp "filter[reportSubType]" $filter_report_sub_type "csv") (serialize-qp "filter[reportType]" $filter_report_type "csv") (serialize-qp "filter[vendorNumber]" $filter_vendor_number "csv") (serialize-qp "filter[version]" $filter_version "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/salesReports" $qp $auth.query)
   let accept_val = "gzip"
@@ -9477,7 +9487,7 @@ export def "user-invitations-get-collection" [
   --filter-email: list<string> # filter by attribute 'email'
   --filter-roles: list<string> # filter by attribute 'roles'
   --filter-visible-apps: list<string> # filter by id(s) of related 'visibleApps'
-  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
   --fields-user-invitations: list<string> # the fields to include for returned resources of type userInvitations
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
@@ -9486,14 +9496,14 @@ export def "user-invitations-get-collection" [
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[email]" $filter_email "csv") (serialize-qp "filter[roles]" $filter_roles "csv") (serialize-qp "filter[visibleApps]" $filter_visible_apps "csv") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "fields[userInvitations]" $fields_user_invitations "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[visibleApps]" $limit_visible_apps "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[email]" $filter_email "csv") (serialize-qp "filter[roles]" $filter_roles "csv") (serialize-qp "filter[visibleApps]" $filter_visible_apps "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[userInvitations]" $fields_user_invitations "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[visibleApps]" $limit_visible_apps "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/userInvitations" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter[email]": $filter_email, "filter[roles]": $filter_roles, "filter[visibleApps]": $filter_visible_apps, "sort": $qp_sort, "fields[userInvitations]": $fields_user_invitations, "limit": $limit, "include": $include, "fields[apps]": $fields_apps, "limit[visibleApps]": $limit_visible_apps} | compact)
+    query: ({"filter[email]": $filter_email, "filter[roles]": $filter_roles, "filter[visibleApps]": $filter_visible_apps, "sort": $sort, "fields[userInvitations]": $fields_user_invitations, "limit": $limit, "include": $include, "fields[apps]": $fields_apps, "limit[visibleApps]": $limit_visible_apps} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -9671,7 +9681,7 @@ export def "users-get-collection" [
   --filter-roles: list<string> # filter by attribute 'roles'
   --filter-username: list<string> # filter by attribute 'username'
   --filter-visible-apps: list<string> # filter by id(s) of related 'visibleApps'
-  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
   --fields-users: list<string> # the fields to include for returned resources of type users
   --limit: int # maximum resources per page
   --include: list<string> # comma-separated list of relationships to include
@@ -9680,14 +9690,14 @@ export def "users-get-collection" [
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[roles]" $filter_roles "csv") (serialize-qp "filter[username]" $filter_username "csv") (serialize-qp "filter[visibleApps]" $filter_visible_apps "csv") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "fields[users]" $fields_users "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[visibleApps]" $limit_visible_apps "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[roles]" $filter_roles "csv") (serialize-qp "filter[username]" $filter_username "csv") (serialize-qp "filter[visibleApps]" $filter_visible_apps "csv") (serialize-qp "sort" $sort "csv") (serialize-qp "fields[users]" $fields_users "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[visibleApps]" $limit_visible_apps "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/users" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter[roles]": $filter_roles, "filter[username]": $filter_username, "filter[visibleApps]": $filter_visible_apps, "sort": $qp_sort, "fields[users]": $fields_users, "limit": $limit, "include": $include, "fields[apps]": $fields_apps, "limit[visibleApps]": $limit_visible_apps} | compact)
+    query: ({"filter[roles]": $filter_roles, "filter[username]": $filter_username, "filter[visibleApps]": $filter_visible_apps, "sort": $sort, "fields[users]": $fields_users, "limit": $limit, "include": $include, "fields[apps]": $fields_apps, "limit[visibleApps]": $limit_visible_apps} | compact)
     headers: $auth.headers
     body: null
     content_type: null
